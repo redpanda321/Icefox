@@ -1,0 +1,96 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>Test for XMLHttpRequest</title>
+  <script type="text/javascript" src="/MochiKit/packed.js"></script>
+  <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>        
+  <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
+</head>
+<body>
+<p id="display"></p>
+<div id="content" style="display: none">
+  
+</div>
+<pre id="test">
+<script class="testbody" type="text/javascript">
+
+var path = "/tests/content/base/test/";
+
+var passFiles = [['file_XHR_pass1.xml', 'GET'],
+                 ['file_XHR_pass2.txt', 'GET'],
+                 ['file_XHR_pass3.txt', 'GET'],
+                 ];
+
+var failFiles = [['//example.com' + path + 'file_XHR_pass1.xml', 'GET'],
+                 ['ftp://localhost' + path + 'file_XHR_pass1.xml', 'GET'],
+                 ['file_XHR_fail1.txt', 'GET'],
+                 ];
+
+for (i = 0; i < passFiles.length; ++i) {
+  xhr = new XMLHttpRequest();
+  xhr.open(passFiles[i][1], passFiles[i][0], false); 
+  xhr.send(null);
+  is(xhr.status, 200, "wrong status");
+  if (xhr.responseXML) {
+    is((new XMLSerializer()).serializeToString(xhr.responseXML.documentElement),
+       "<res>hello</res>",
+       "wrong response");
+  }
+  else {
+    is(xhr.responseText, "hello pass\n", "wrong response");
+  }
+}
+
+for (i = 0; i < failFiles.length; ++i) {
+  xhr = new XMLHttpRequest();
+  didthrow = false;
+  try {
+    xhr.open(failFiles[i][1], failFiles[i][0], false); 
+    xhr.send(null);
+  }
+  catch (e) {
+    didthrow = true;
+  }
+  if (!didthrow) {
+    is(xhr.status, 301, "wrong status");
+    is(xhr.responseText, "redirect file\n", "wrong response");
+  }
+  else {
+    ok(1, "should have thrown or given incorrect result");
+  }
+}
+
+// test mozResponseArrayBuffer
+
+// with a simple text file
+xhr = new XMLHttpRequest();
+xhr.open("GET", 'file_XHR_pass2.txt', false); 
+xhr.send(null);
+is(xhr.status, 200, "wrong status");
+ab = xhr.mozResponseArrayBuffer;
+ok(ab != null, "should have a non-null arraybuffer");
+is(ab.byteLength, "hello pass\n".length, "wrong arraybuffer byteLength");
+
+u8v = new Uint8Array(ab);
+ok(String.fromCharCode([u8v[0], u8v[1], u8v[2], u8v[3], u8v[4]]), "hello", "wrong values");
+
+// with a binary file
+xhr = new XMLHttpRequest();
+xhr.open("GET", 'file_XHR_binary1.bin', false); 
+xhr.send(null)
+is(xhr.status, 200, "wrong status");
+ab = xhr.mozResponseArrayBuffer;
+ok(ab != null, "should have a non-null arraybuffer");
+is(ab.byteLength, 12, "wrong arraybuffer byteLength");
+
+u8v = new Uint8Array(ab);
+i32v = new Int32Array(ab);
+u32v = new Uint32Array(ab, 8);
+ok(u8v[0] == 0xaa && u8v[1] == 0xee && u8v[2] == 0x00 && u8v[3] == 0x03, "wrong initial 4 bytes");
+is(i32v[1], -1, "wrong value, expected -1 (0xffffffff)");
+is(u32v[0], 0xbbbbbbbb, "wrong value, expected 0xbbbbbbbb");
+
+</script>
+</pre>
+</body>
+</html>

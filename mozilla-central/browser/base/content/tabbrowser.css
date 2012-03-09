@@ -1,0 +1,26 @@
+.tabbrowser-tabbox {
+  -moz-binding: url("chrome://browser/content/tabbrowser.xml#tabbrowser-tabbox");
+}
+
+.tabbrowser-arrowscrollbox {
+  -moz-binding: url("chrome://browser/content/tabbrowser.xml#tabbrowser-arrowscrollbox");
+}
+
+.tab-close-button {
+  -moz-binding: url("chrome://browser/content/tabbrowser.xml#tabbrowser-close-tab-button");
+  display: none;
+}
+
+.tabbrowser-tabs:not([closebuttons="noclose"]):not([closebuttons="closeatend"]) > .tabbrowser-tab[selected="true"]:not([pinned]) > .tab-close-button,
+.tabbrowser-tabs[closebuttons="alltabs"] > .tabbrowser-tab:not([pinned]) > .tab-close-button {
+  display: -moz-box;
+}
+
+tabpanels {
+  background-color: white;
+}
+
+.tab-drop-indicator {
+  position: relative;
+  z-index: 1;
+}

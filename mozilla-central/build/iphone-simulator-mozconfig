@@ -1,0 +1,33 @@
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/../iphone-simulator-debug
+mk_add_options MOZ_MAKE_FLAGS="-j6"
+ac_add_options --enable-application=browser
+ac_add_options --enable-debug
+ac_add_options --disable-optimize
+
+export CROSS_COMPILE=1
+export CC="/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/bin/gcc-4.2 -arch i386 -miphoneos-version-min=4.0"
+export CXX="/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/bin/g++-4.2 -arch i386 -miphoneos-version-min=4.0"
+export CPP="/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/bin/cpp-4.2 -arch i386"
+export LD="/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/bin/ld -arch i386"
+export AR=/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/bin/ar
+export AS="/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/bin/as -arch i386"
+export STRIP=/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/bin/strip
+
+export PKG_CONFIG_PATH=/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator4.0.sdk/usr/lib/pkgconfig/
+
+ac_add_options --with-macos-sdk=/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator4.0.sdk
+ac_add_options --target=i386-apple-darwin9
+
+#XXX: should make these defaults
+ac_add_options --disable-printing
+ac_add_options --disable-plugins
+ac_add_options --disable-necko-wifi
+ac_add_options --disable-negotiateauth
+ac_add_options --disable-ogg
+ac_add_options --disable-wave
+ac_add_options --disable-webm
+ac_add_options --disable-ipc
+ac_add_options --disable-updater
+ac_add_options --disable-crashreporter
+#ac_add_options --disable-tests
+export SKIP_LIBREG=1

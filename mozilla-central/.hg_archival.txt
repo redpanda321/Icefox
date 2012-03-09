@@ -1,0 +1,7 @@
+repo: 8ba995b74e18334ab3707f27e9eb8f4e37ba3d29
+node: ef3410122ad9a4f082299b72060281c8355f6378
+branch: default
+latesttag: SEAMONKEY_2_1a3_BUILD1
+latesttag: SEAMONKEY_2_1a3_BUILD2
+latesttag: SEAMONKEY_2_1a3_RELEASE
+latesttagdistance: 810
