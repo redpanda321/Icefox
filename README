@@ -1,3 +1,5 @@
+ port firefox to ios4 device
+
 1,require
 
   xcode ( only  iPhoneOS4.0.sdk can run! be careful !)
@@ -10,16 +12,27 @@
 
 3,for simulator 
 
+   chmod -R a+x /Icefox/mozilla-central
    cd /Icefox/mozilla-central
    cp ./build/iphone-simulator-mozconfig .mozconfig
    make -f client.mk build
+   cd ../iphone-simulator-debug
+   make package
+   iphonesim launch /Icefox/iphone-simulator-debug/dist/firefox/TumucumaqueDebug.app
+   
 
 
 4,for  device 
 
+   chmod -R a+x /Icefox/mozilla-central
    cd /Icefox/mozilla-central
    cp ./build/iphone-device-mozconfig .mozconfig
    make -f client.mk build
+   cd ../iphone-device-debug
+   make package
+   gdb  /Icefox/iphone-device-debug/dist/firefox/TumucumaqueDebug.app
+   gdb run
+   
 
 5, todo
 
