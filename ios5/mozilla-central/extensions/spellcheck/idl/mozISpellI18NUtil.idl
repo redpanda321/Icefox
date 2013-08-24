@@ -1,0 +1,47 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "nsISupports.idl"
+
+[scriptable, uuid(B075D5DC-1DF1-441A-BEBF-680D8CAAA19C)]
+
+/**
+ * This interface contains various I18N related code used in various places by the spell checker.
+ */
+
+interface mozISpellI18NUtil : nsISupports {
+
+    const PRUint32 kCheck=0;
+    const PRUint32 kSuggest=1;
+
+   /**
+    * The language being used to check spelling
+    */
+    readonly attribute wstring language;
+    
+   /**
+    * Given a word return a list of possible root forms of that word
+    */
+    void getRootForm(in wstring word,
+                     in PRUint32 type,
+                     [array, size_is(count)] out wstring words,
+                     out PRUint32 count);
+    
+   /**
+    * Given a word return a list of possible root forms of that word
+    */
+    void fromRootForm(in wstring word,
+                      [array, size_is(icount)] in wstring iwords,
+                      in PRUint32 icount,
+                      [array, size_is(ocount)] out wstring owords,
+                      out PRUint32 ocount);
+    
+    /**
+     * Given a unicode string and an offset, find the beginning and end of the
+     * next word. begin and end are -1 if there are no words remaining in the 
+     * string. This should really be folded into the Line/WordBreaker.
+     */
+    void findNextWord(in wstring word, in PRUint32 length, in PRUint32 offset, out PRInt32 begin, out PRInt32 end); 
+};

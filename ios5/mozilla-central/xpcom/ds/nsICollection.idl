@@ -1,0 +1,59 @@
+/* -*- Mode: IDL; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "nsISerializable.idl"
+#include "nsIEnumerator.idl"
+
+[scriptable, uuid(83b6019c-cbc4-11d2-8cca-0060b0fc14a3)]
+interface nsICollection : nsISerializable
+{
+
+  PRUint32 Count();
+  nsISupports GetElementAt(in PRUint32 index);
+  void QueryElementAt(in PRUint32 index, in nsIIDRef uuid, 
+                      [iid_is(uuid),retval] out nsQIResult result);
+  void SetElementAt(in PRUint32 index, in nsISupports item);
+  void AppendElement(in nsISupports item);
+  void RemoveElement(in nsISupports item);
+
+  nsIEnumerator Enumerate();
+
+  void Clear();
+
+};
+
+%{C++
+
+#ifndef nsCOMPtr_h__
+#include "nsCOMPtr.h"
+#endif
+
+class nsQueryElementAt : public nsCOMPtr_helper
+  {
+    public:
+      nsQueryElementAt( nsICollection* aCollection, PRUint32 aIndex, nsresult* aErrorPtr )
+          : mCollection(aCollection),
+            mIndex(aIndex),
+            mErrorPtr(aErrorPtr)
+        {
+          // nothing else to do here
+        }
+
+      virtual nsresult NS_FASTCALL operator()( const nsIID& aIID, void** ) const;
+
+    private:
+      nsICollection*  mCollection;
+      PRUint32        mIndex;
+      nsresult*       mErrorPtr;
+  };
+
+inline
+const nsQueryElementAt
+do_QueryElementAt( nsICollection* aCollection, PRUint32 aIndex, nsresult* aErrorPtr = 0 )
+  {
+    return nsQueryElementAt(aCollection, aIndex, aErrorPtr);
+  }
+
+%}

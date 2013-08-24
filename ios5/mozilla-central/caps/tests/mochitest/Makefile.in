@@ -1,0 +1,27 @@
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+DEPTH		= ../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+relativesrcdir  = caps/tests/mochitest
+
+include $(DEPTH)/config/autoconf.mk
+
+MOCHITEST_FILES = 	test_bug423375.html \
+                test_bug246699.html \
+                test_bug292789.html \
+                test_bug470804.html \
+                test_disallowInheritPrincipal.html \
+                $(NULL)
+
+test_bug292789.html : % : %.in
+	$(PYTHON) $(topsrcdir)/config/Preprocessor.py \
+	     $(AUTOMATION_PPARGS) $(DEFINES) $(ACDEFINES) $< > $@
+
+GARBAGE += test_bug292789.html
+
+include $(topsrcdir)/config/rules.mk

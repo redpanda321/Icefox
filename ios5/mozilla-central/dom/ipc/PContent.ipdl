@@ -1,0 +1,214 @@
+/* -*- Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil; tab-width: 8 -*- */
+/* vim: set sw=4 ts=8 et tw=80 ft=cpp : */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+include protocol PAudio;
+include protocol PBrowser;
+include protocol PCrashReporter;
+include protocol PExternalHelperApp;
+include protocol PHal;
+include protocol PMemoryReportRequest;
+include protocol PNecko;
+include protocol PSms;
+include protocol PStorage;
+include protocol PTestShell;
+
+include "mozilla/chrome/RegistryMessageUtils.h";
+include "mozilla/net/NeckoMessageUtils.h";
+include "mozilla/dom/TabMessageUtils.h";
+
+include "nsGeoPositionIPCSerialiser.h";
+include "PPrefTuple.h";
+
+using GeoPosition;
+using PrefTuple;
+
+using ChromePackage;
+using ResourceMapping;
+using OverrideMapping;
+using IPC::URI;
+using IPC::Permission;
+using mozilla::null_t;
+using mozilla::dom::NativeThreadId;
+using gfxIntSize;
+
+namespace mozilla {
+namespace dom {
+
+// Data required to clone an existing DOMStorageImpl in the parent
+struct StorageClone
+{
+    // Existing cross-process storage actor to clone
+    PStorage actor;
+    // Result of calling IsCallerSecure() in the child
+    bool callerSecure;
+};
+
+// When creating a new PStorage protocol, an existing one can be
+// cloned (see nsDOMStorage2::Clone)
+union StorageConstructData
+{
+    null_t;
+    StorageClone;
+};
+
+struct FontListEntry {
+    nsString  familyName;
+    nsString  faceName;
+    nsCString filepath;
+    PRUint16  weight;
+    PRInt16   stretch;
+    PRUint8   italic;
+    PRUint8   index;
+};
+
+rpc protocol PContent
+{
+    manages PAudio;
+    manages PBrowser;
+    manages PCrashReporter;
+    manages PExternalHelperApp;
+    manages PHal;
+    manages PMemoryReportRequest;
+    manages PNecko;
+    manages PSms;
+    manages PStorage;
+    manages PTestShell;
+
+both:
+    // Depending on exactly how the new browser is being created, it might be
+    // created from either the child or parent process!
+    //
+    // The child creates the PBrowser as part of
+    // TabChild::BrowserFrameProvideWindow, and the parent creates the PBrowser
+    // as part of ContentParent::CreateTab.
+    async PBrowser(PRUint32 chromeFlags, bool isBrowserFrame);
+
+child:
+    PMemoryReportRequest();
+
+    PTestShell();
+
+    RegisterChrome(ChromePackage[] packages, ResourceMapping[] resources,
+                   OverrideMapping[] overrides, nsCString locale);
+
+    async SetOffline(bool offline);
+
+    async NotifyVisited(URI uri);
+
+    PreferenceUpdate(PrefTuple pref);
+    ClearUserPreference(nsCString prefName);
+
+    NotifyAlertsObserver(nsCString topic, nsString data);
+
+    GeolocationUpdate(GeoPosition somewhere);
+
+    // nsIPermissionManager messages
+    AddPermission(Permission permission);
+
+    ScreenSizeChanged(gfxIntSize size);
+
+    FlushMemory(nsString reason);
+
+    GarbageCollect();
+    CycleCollect();
+    
+    /**
+     * Start accessibility engine in content process.
+     */
+    ActivateA11y();
+
+    AppInfo(nsCString version, nsCString buildID);
+
+    SetID(PRUint64 id);
+
+    // Notify child that last-pb-context-exited notification was observed
+    LastPrivateDocShellDestroyed();
+
+parent:
+    PAudio(PRInt32 aNumChannels, PRInt32 aRate, PRInt32 aFormat);
+
+    sync PCrashReporter(NativeThreadId tid, PRUint32 processType);
+
+    PHal();
+
+    PNecko();
+
+    PSms();
+    
+    PStorage(StorageConstructData data);
+
+    // Services remoting
+
+    async StartVisitedQuery(URI uri);
+    async VisitURI(URI uri, URI referrer, PRUint32 flags);
+    async SetURITitle(URI uri, nsString title);
+    
+    // filepicker remoting
+    sync ShowFilePicker(PRInt16 mode, PRInt16 selectedType, bool addToRecentDocs,
+                        nsString title, nsString defaultFile, nsString defaultExtension,
+                        nsString[] filters, nsString[] filterNames)
+        returns (nsString[] files, PRInt16 retValue, nsresult result);
+
+    async LoadURIExternal(URI uri);
+
+    // PrefService message
+    sync ReadPrefsArray() returns (PrefTuple[] retValue);
+
+    sync ReadFontList() returns (FontListEntry[] retValue);
+
+    sync SyncMessage(nsString aMessage, nsString aJSON)
+      returns (nsString[] retval);
+
+    ShowAlertNotification(nsString imageUrl, 
+                          nsString title, 
+                          nsString text, 
+                          bool textClickable,
+                          nsString cookie,
+                          nsString name);
+
+    PExternalHelperApp(URI uri, nsCString aMimeContentType,
+                       nsCString aContentDisposition, bool aForceSave,
+                       PRInt64 aContentLength, URI aReferrer);
+    
+    AddGeolocationListener();
+    RemoveGeolocationListener();
+
+    ConsoleMessage(nsString message);
+    ScriptError(nsString message, nsString sourceName, nsString sourceLine,
+                PRUint32 lineNumber, PRUint32 colNumber, PRUint32 flags,
+                nsCString category); 
+
+    // nsIPermissionManager messages
+    sync ReadPermissions() returns (Permission[] permissions);
+
+    // These clipboard methods are only really used on Android since
+    // the clipboard is not available in the content process.
+    SetClipboardText(nsString text, PRInt32 whichClipboard);
+    sync GetClipboardText(PRInt32 whichClipboard)
+        returns (nsString text);
+    EmptyClipboard();
+    sync ClipboardHasText()
+        returns (bool hasText);
+
+    sync GetSystemColors(PRUint32 colorsCount)
+        returns (PRUint32[] colors);
+
+    sync GetIconForExtension(nsCString aFileExt, PRUint32 aIconSize)
+        returns (PRUint8[] bits);
+
+    sync GetShowPasswordSetting()
+        returns (bool showPassword);
+
+    // Notify the parent of the presence or absence of private docshells
+    PrivateDocShellsExist(bool aExist);
+
+both:
+     AsyncMessage(nsString aMessage, nsString aJSON);
+
+};
+
+}
+}

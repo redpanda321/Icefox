@@ -1,0 +1,15 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "nsISupports.idl"
+#include "nsIDOMEvent.idl"
+
+interface nsIDOMMozSmsMessage;
+
+[scriptable, builtinclass, uuid(6db4d0d3-6708-47e8-be0f-06e4cdc0b062)]
+interface nsIDOMMozSmsEvent : nsIDOMEvent
+{
+  [binaryname(MessageMoz)]
+  readonly attribute nsIDOMMozSmsMessage message;
+};

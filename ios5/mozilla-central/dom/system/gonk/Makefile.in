@@ -1,0 +1,76 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at http://mozilla.org/MPL/2.0/.
+
+DEPTH            = ../../..
+topsrcdir        = @top_srcdir@
+srcdir           = @srcdir@
+VPATH            = @srcdir@
+
+relativesrcdir   = dom/system/gonk
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE           = dom
+LIBRARY_NAME     = domsystemgonk_s
+XPIDL_MODULE     = dom_system_gonk
+LIBXUL_LIBRARY   = 1
+FORCE_STATIC_LIB = 1
+
+include $(topsrcdir)/dom/dom-config.mk
+
+CPPSRCS = \
+  SystemWorkerManager.cpp \
+  $(NULL)
+
+XPIDLSRCS = \
+  nsIAudioManager.idl \
+  nsINetworkManager.idl \
+  nsIRadioInterfaceLayer.idl \
+  nsIWorkerHolder.idl \
+  $(NULL)
+
+LOCAL_INCLUDES = \
+  -I$(topsrcdir)/dom/base \
+  -I$(topsrcdir)/dom/src/geolocation \
+  -I$(topsrcdir)/dom/telephony \
+  -I$(topsrcdir)/dom/wifi \
+  -I$(topsrcdir)/dom/bluetooth \
+  -I$(topsrcdir)/content/events/src \
+  $(NULL)
+
+ifeq (gonk,$(MOZ_WIDGET_TOOLKIT))
+CPPSRCS += \
+  AudioManager.cpp \
+  AutoMounter.cpp \
+  AutoMounterSetting.cpp \
+  GonkGPSGeolocationProvider.cpp \
+  Volume.cpp \
+  VolumeCommand.cpp \
+  VolumeManager.cpp \
+  $(NULL)
+# for our local copy of AudioSystem.h
+LOCAL_INCLUDES += -I$(topsrcdir)/media/libsydneyaudio/src
+endif
+
+EXTRA_COMPONENTS = \
+  NetworkManager.manifest \
+  NetworkManager.js \
+  RadioInterfaceLayer.manifest \
+  RadioInterfaceLayer.js \
+  RILContentHelper.js \
+  $(NULL)
+
+EXTRA_JS_MODULES = \
+  net_worker.js \
+  ril_consts.js \
+  ril_worker.js \
+  systemlibs.js \
+  $(NULL)
+
+ifdef ENABLE_TESTS
+XPCSHELL_TESTS = tests
+endif
+
+include $(topsrcdir)/config/rules.mk
+include $(topsrcdir)/ipc/chromium/chromium-config.mk

@@ -1,0 +1,31 @@
+/* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*-
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "nsISupports.idl"
+/*
+ *	This defines the interface for a test object.
+ *
+ */
+
+[scriptable, uuid(29e950a0-0134-44bc-b947-5e0ee95c8f7e)]
+interface nsIXPCTestObjectReadOnly : nsISupports {
+	readonly attribute string  strReadOnly;
+	readonly attribute boolean boolReadOnly;
+	readonly attribute short   shortReadOnly;
+	readonly attribute long    longReadOnly;
+	readonly attribute float   floatReadOnly;
+	readonly attribute char    charReadOnly;
+};
+
+[scriptable, uuid(492609a7-2582-436b-b0ef-92e29bb9e143)]
+interface nsIXPCTestObjectReadWrite : nsISupports {
+	attribute string  stringProperty;
+	attribute boolean booleanProperty;
+	attribute short   shortProperty;
+	attribute long    longProperty;
+	attribute float   floatProperty;
+	attribute char    charProperty;
+};

@@ -1,0 +1,54 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+DEPTH     = ../../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+relativesrcdir  = browser/devtools/highlighter/test
+
+include $(DEPTH)/config/autoconf.mk
+include $(topsrcdir)/config/rules.mk
+
+_BROWSER_FILES = \
+		browser_inspector_initialization.js \
+		browser_inspector_treeSelection.js \
+		browser_inspector_highlighter.js \
+		browser_inspector_iframeTest.js \
+		browser_inspector_scrolling.js \
+		browser_inspector_tab_switch.js \
+		browser_inspector_treePanel_output.js \
+		browser_inspector_treePanel_input.html \
+		browser_inspector_treePanel_result.html \
+		browser_inspector_bug_665880.js \
+		browser_inspector_bug_674871.js \
+		browser_inspector_editor.js \
+		browser_inspector_editor_name.js \
+		browser_inspector_bug_566084_location_changed.js \
+		browser_inspector_infobar.js \
+		browser_inspector_bug_690361.js \
+		browser_inspector_bug_672902_keyboard_shortcuts.js \
+		browser_inspector_keybindings.js \
+		browser_inspector_breadcrumbs.html \
+		browser_inspector_breadcrumbs.js \
+		browser_inspector_bug_699308_iframe_navigation.js \
+		browser_inspector_changes.js \
+		browser_inspector_ruleviewstore.js \
+		browser_inspector_invalidate.js \
+		browser_inspector_sidebarstate.js \
+		browser_inspector_treePanel_menu.js \
+		browser_inspector_pseudoclass_lock.js \
+		browser_inspector_pseudoClass_menu.js \
+		browser_inspector_destroyselection.html \
+		browser_inspector_destroyselection.js \
+		browser_inspector_treePanel_navigation.html \
+		browser_inspector_treePanel_navigation.js \
+		head.js \
+		$(NULL)
+
+# Disabled due to constant failures
+# 		browser_inspector_treePanel_click.js \
+
+libs::	$(_BROWSER_FILES)
+	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/browser/$(relativesrcdir)

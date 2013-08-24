@@ -1,0 +1,126 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "domstubs.idl"
+#include "nsIDOMEvent.idl"
+#include "nsIDOMEventTarget.idl"
+
+interface nsIDOMDOMRequest;
+interface nsIArray;
+
+[scriptable, uuid(9583b825-46b1-4e8f-bb48-9fed660a95e6)]
+interface mozIDOMApplication  : nsISupports
+{
+  readonly attribute jsval manifest;
+  readonly attribute DOMString manifestURL;
+  readonly attribute jsval receipts; /* an array of strings */
+  readonly attribute DOMString origin;
+  readonly attribute DOMString installOrigin;
+  readonly attribute unsigned long long installTime;
+
+  /* 
+   * The current progress when downloading an offline cache.
+   */
+  readonly attribute double progress;
+
+  /*
+   * The application status :
+   * "installed"   : The app is in the registry, but we have no offline cache.
+   * "downlading"  : We are downloading the offline cache.
+   * "cached"      : We are done with the offline cache download.
+   * "cache-error" : An error occured while downloading the offline-cache.
+   */
+  readonly attribute DOMString status;
+
+  /*
+   * fires a nsIDOMApplicationEvent when a change in appcache download or status happens
+   */
+  attribute nsIDOMEventListener onprogress;
+
+  /* startPoint will be used when several launch_path exists for an app */
+  nsIDOMDOMRequest launch([optional] in DOMString startPoint);
+  nsIDOMDOMRequest uninstall();
+};
+
+[scriptable, builtinclass, uuid(8f2bfba8-f10e-4f63-a5e0-7a7056e1dbe6)]
+interface nsIDOMMozApplicationEvent : nsIDOMEvent
+{
+  readonly attribute mozIDOMApplication application;
+
+  [noscript] void initMozApplicationEvent(in DOMString aType,
+                                          in boolean aCanBubble,
+                                          in boolean aCancelable,
+                                          in mozIDOMApplication aApplication);
+};
+
+dictionary MozApplicationEventInit : EventInit
+{
+  mozIDOMApplication application;
+};
+
+[scriptable, uuid(bd304874-d532-4e13-8034-544211445583)]
+interface mozIDOMApplicationMgmt : nsISupports
+{
+  /**
+   * the request will return the all the applications installed. Only accessible
+   * to privileged callers.
+   */
+  nsIDOMDOMRequest getAll();
+
+  /**
+   * event listener to get notified of application installs. Only settable by
+   * privileged callers.
+   * the event will be a mozIDOMApplicationEvent
+   */
+  attribute nsIDOMEventListener oninstall;
+
+  /**
+   * event listener to get notified of application uninstalls. Only settable by
+   * privileged callers.
+   * the event will be a mozIDOMApplicationEvent
+   */
+  attribute nsIDOMEventListener onuninstall;
+};
+
+[scriptable, uuid(6e3d4cf8-ad45-4a8d-8f94-4527ec68673c)]
+interface mozIDOMApplicationRegistry : nsISupports
+{
+  /**
+   * Install a web app.
+   *
+   * @param manifestUrl : the URL of the webapps manifest.
+   * @param parameters  : A structure with optional information.
+   *                      { receipts: ... } will be used to specify the payment receipts for this installation.
+   * @returns           : A DOMRequest object, returning the app object in |result| if install succeeds.
+   */
+  nsIDOMDOMRequest install(in DOMString manifestUrl, [optional] in jsval parameters);
+
+  /**
+   * the request will return the application currently installed, or null.
+   */
+  nsIDOMDOMRequest getSelf();
+
+  /**
+   * the request will return the applications installed from this origin, or null.
+   */
+  nsIDOMDOMRequest getInstalled();
+
+  /**
+   * the request will return the applications acquired from this origin but which
+   * are not launchable (e.g. by not being natively installed), or null.
+   */
+  nsIDOMDOMRequest getNotInstalled();
+
+  /**
+   * Install a packaged web app.
+   *
+   * @param packageUrl : the URL of the webapps manifest.
+   * @param parameters : A structure with optional information.
+   *                     { receipts: ... } will be used to specify the payment receipts for this installation.
+   * @returns          : A DOMRequest object, returning the app object in |result| if install succeeds.
+   */
+  nsIDOMDOMRequest installPackage(in DOMString packageUrl, [optional] in jsval parameters);
+
+  readonly attribute mozIDOMApplicationMgmt mgmt;
+};

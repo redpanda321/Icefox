@@ -1,0 +1,51 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+include protocol PNecko;
+
+include "mozilla/net/NeckoMessageUtils.h";
+
+using IPC::URI;
+
+namespace mozilla {
+namespace net {
+
+//-------------------------------------------------------------------
+protocol PWyciwygChannel
+{
+  manager PNecko;
+
+parent:
+  __delete__();
+
+  Init(URI uri);
+  AsyncOpen(URI      originalURI,
+            PRUint32 loadFlags,
+            bool     usingPrivateBrowsing);
+
+  // methods corresponding to those of nsIWyciwygChannel
+  WriteToCacheEntry(nsString data);
+  CloseCacheEntry(nsresult reason);
+  SetCharsetAndSource(PRInt32 source, nsCString charset);
+  SetSecurityInfo(nsCString securityInfo);
+  Cancel(nsresult status);
+
+child:
+  OnStartRequest(nsresult  statusCode,
+                 PRInt32   contentLength,
+                 PRInt32   source,
+                 nsCString charset,
+                 nsCString securityInfo);
+
+  OnDataAvailable(nsCString data,
+                  PRUint32  offset);
+
+  OnStopRequest(nsresult statusCode);
+
+  CancelEarly(nsresult statusCode);
+};
+
+
+} // namespace net
+} // namespace mozilla

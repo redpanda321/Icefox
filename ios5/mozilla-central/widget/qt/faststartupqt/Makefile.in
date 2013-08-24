@@ -1,0 +1,50 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+DEPTH = ../../..
+topsrcdir = @top_srcdir@
+srcdir = @srcdir@
+VPATH = @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE = faststartupqt
+LIBRARY_NAME = faststartupqt
+DIST_INSTALL = 1
+FORCE_STATIC_LIB = 1
+STL_FLAGS=
+
+EXTRA_DSO_LDOPTS = \
+	$(XPCOM_GLUE_LDOPTS) \
+	$(XPCOM_FROZEN_LDOPTS) \
+	$(MOZ_QT_LIBS) \
+	$(NULL)
+
+LOCAL_INCLUDES += -I$(topsrcdir)/xpcom/build
+
+GARBAGE += moziqwidget.h nsQAppInstance.h nsQAppInstance.cpp
+export:: $(topsrcdir)/widget/qt/moziqwidget.h $(topsrcdir)/toolkit/xre/nsQAppInstance.h $(topsrcdir)/toolkit/xre/nsQAppInstance.cpp
+	$(INSTALL) $^ .
+
+MOCSRCS = \
+	moc_moziqwidget.cpp \
+	moc_nsFastStartupQt.cpp \
+	$(NULL)
+
+LOCAL_INCLUDES += \
+	$(MOZ_QT_CFLAGS) \
+	$(MOZ_PLATFORM_MAEMO_CFLAGS) \
+	$(NULL)
+
+CPPSRCS += \
+	$(MOCSRCS) \
+	mozqwidgetfast.cpp \
+	nsFastStartupQt.cpp \
+	nsQAppInstance.cpp \
+	$(NULL)
+
+DEFINES += -DLIBRARY_FILENAME="$(SHARED_LIBRARY)" -DMOZ_NO_MOZALLOC -DXPCOM_GLUE
+
+include $(topsrcdir)/config/rules.mk
+

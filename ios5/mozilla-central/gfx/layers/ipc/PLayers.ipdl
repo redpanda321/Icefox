@@ -1,0 +1,289 @@
+/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
+ * vim: sw=2 ts=8 et :
+ */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+include protocol PCompositor;
+include protocol PGrallocBuffer;
+include protocol PLayer;
+include protocol PRenderFrame;
+
+include "gfxipc/ShadowLayerUtils.h";
+
+using gfx3DMatrix;
+using gfxIntSize;
+using gfxPoint;
+using gfxRGBA;
+using nsIntPoint;
+using nsIntRect;
+using nsIntRegion;
+using nsIntSize;
+using mozilla::gfxContentType;
+using mozilla::GraphicsFilterType;
+using mozilla::layers::FrameMetrics;
+using mozilla::layers::MagicGrallocBufferHandle;
+using mozilla::layers::SurfaceDescriptorX11;
+using mozilla::null_t;
+using mozilla::WindowsHandle;
+using gfxImageFormat;
+
+/**
+ * The layers protocol is spoken between thread contexts that manage
+ * layer (sub)trees.  The protocol comprises atomically publishing
+ * layer subtrees to a "shadow" thread context (which grafts the
+ * subtree into its own tree), and atomically updating a published
+ * subtree.  ("Atomic" in this sense is wrt painting.)
+ */
+
+namespace mozilla {
+namespace layers {
+
+// Create a shadow layer for |layer|
+struct OpCreateThebesLayer     { PLayer layer; };
+struct OpCreateContainerLayer  { PLayer layer; };
+struct OpCreateImageLayer      { PLayer layer; };
+struct OpCreateColorLayer      { PLayer layer; };
+struct OpCreateCanvasLayer     { PLayer layer; };
+
+union MaybeMagicGrallocBufferHandle {
+  MagicGrallocBufferHandle;
+  null_t;
+};
+
+struct SurfaceDescriptorD3D10 {
+  WindowsHandle handle;
+};
+
+struct SurfaceDescriptorGralloc {
+  PGrallocBuffer buffer;
+};
+
+struct SurfaceDescriptorNetworked {
+    gfxIntSize size;
+    uint32 id;
+};
+
+union SurfaceDescriptor {
+  Shmem;
+  SurfaceDescriptorD3D10;
+  SurfaceDescriptorGralloc;
+  SurfaceDescriptorX11;
+  SurfaceDescriptorNetworked;
+};
+
+struct YUVImage {
+  SurfaceDescriptor Ydata;
+  SurfaceDescriptor Udata;
+  SurfaceDescriptor Vdata;
+  nsIntRect picture;
+};
+
+struct NetworkPNG {
+    nsString mystring;
+    uint32 numregions;
+    uint32[] sizes;
+    uint8_t[] data;
+
+};
+
+
+union SharedImage {
+  SurfaceDescriptor;
+  YUVImage;
+  null_t;
+};
+
+
+
+struct ThebesBuffer {
+  SurfaceDescriptor buffer;
+  nsIntRect rect;
+  nsIntPoint rotation; 
+};
+union OptionalThebesBuffer { ThebesBuffer; null_t; };
+
+union CanvasSurface {
+  SurfaceDescriptor;
+  null_t;
+};
+
+// Change a layer's attributes
+struct CommonLayerAttributes {
+  nsIntRegion visibleRegion;
+  gfx3DMatrix transform;
+  PRUint32 contentFlags;
+  float opacity;
+  bool useClipRect;
+  nsIntRect clipRect;
+  bool isFixedPosition;
+  gfxPoint fixedPositionAnchor;
+  nullable PLayer maskLayer;
+};
+
+struct ThebesLayerAttributes {
+  nsIntRegion validRegion;
+};
+struct ContainerLayerAttributes{ FrameMetrics metrics; };
+struct ColorLayerAttributes    { gfxRGBA color; };
+struct CanvasLayerAttributes   { GraphicsFilterType filter; };
+struct ImageLayerAttributes    {
+  GraphicsFilterType filter;
+  bool forceSingleTile;
+};
+
+union SpecificLayerAttributes {
+  null_t;
+  ThebesLayerAttributes;
+  ContainerLayerAttributes;
+  ColorLayerAttributes;
+  CanvasLayerAttributes;
+  ImageLayerAttributes;
+};
+
+struct LayerAttributes {
+  CommonLayerAttributes common;
+  SpecificLayerAttributes specific;
+};
+
+struct OpSetLayerAttributes {
+  PLayer layer;
+  LayerAttributes attrs;
+};
+
+
+// Monkey with the tree structure
+struct OpSetRoot      { PLayer root; };
+struct OpInsertAfter  { PLayer container; PLayer childLayer; PLayer after; };
+struct OpAppendChild  { PLayer container; PLayer childLayer; };
+struct OpRemoveChild  { PLayer container; PLayer childLayer; };
+
+
+// Paint (buffer update)
+struct OpPaintThebesBuffer {
+  PLayer layer;
+  ThebesBuffer newFrontBuffer;
+  nsIntRegion updatedRegion;
+};
+
+struct OpPaintTiledLayerBuffer {
+  PLayer layer;
+  // Bug 747811
+  // FIXME: We need to support sharing tile across process.
+  uintptr_t tiledLayerBuffer;
+};
+
+struct OpPaintThebesBufferNet {
+  PLayer layer;
+  ThebesBuffer newFrontBuffer;
+  nsIntRegion updatedRegion;
+  uint32 numregions;
+  uint32[] sizes;
+  uint8[] data;
+  bool didSelfCopy;
+};	
+
+
+struct OpPaintCanvas  {
+  PLayer layer;
+  CanvasSurface newFrontBuffer;
+  bool needYFlip;
+};
+
+struct OpPaintImage  {
+  PLayer layer;
+  SharedImage newFrontBuffer;
+};
+
+
+struct OpDestroySurface  {
+  SurfaceDescriptor surface;
+};
+
+// A unit of a changeset; a set of these comprise a changeset
+union Edit {
+  OpCreateThebesLayer;
+  OpCreateContainerLayer;
+  OpCreateImageLayer;
+  OpCreateColorLayer;
+  OpCreateCanvasLayer;
+
+  OpDestroySurface;
+
+  OpSetLayerAttributes;
+
+  OpSetRoot;
+  OpInsertAfter;
+  OpAppendChild;
+  OpRemoveChild;
+
+  OpPaintThebesBuffer;
+  OpPaintThebesBufferNet;
+  OpPaintTiledLayerBuffer;
+  OpPaintCanvas;
+  OpPaintImage;
+};
+
+
+// Replies to operations
+struct OpBufferSwap   { PLayer layer; CanvasSurface newBackBuffer; };
+
+struct OpImageSwap { PLayer layer; SharedImage newBackImage; };
+
+struct OpThebesBufferSwap {
+  PLayer layer;
+  OptionalThebesBuffer newBackBuffer;
+  nsIntRegion newValidRegion;
+  // If the parent took the child's old back buffer and returned its
+  // old front buffer, |readOnlyFrontBuffer| may (if non-null) contain
+  // the child's old back buffer (parent's new front buffer).  This
+  // buffer can be used to read back the newly updated region into the
+  // child's new back buffer.  This buffer must be considered
+  // read-only, but sadly that's not enforced.
+  OptionalThebesBuffer readOnlyFrontBuffer;
+  nsIntRegion frontUpdatedRegion;
+};
+
+// Unit of a "changeset reply".  This is a weird abstraction, probably
+// only to be used for buffer swapping.
+union EditReply {
+  OpBufferSwap;
+  OpThebesBufferSwap;
+  OpImageSwap;
+};
+
+
+sync protocol PLayers {
+  manager PRenderFrame or PCompositor;
+  manages PGrallocBuffer;
+  manages PLayer;
+
+parent:
+  /**
+   * Only the parent side has privileges to allocate the buffer.
+   * Allocation may fail (pmem is a scarce resource), and if so null_t
+   * is returned.
+   */
+  sync PGrallocBuffer(gfxIntSize size, gfxContentType content)
+    returns (MaybeMagicGrallocBufferHandle handle);
+  async PLayer();
+
+  // The isFirstPaint flag can be used to indicate that this is the first update
+  // for a particular document.
+  sync Update(Edit[] cset, bool isFirstPaint)
+    returns (EditReply[] reply);
+
+  // Composite the layer tree to the given surface, and return the surface.
+  sync DrawToSurface(SurfaceDescriptor surfaceIn)
+    returns (SurfaceDescriptor surfaceOut);
+
+  // We don't need to send a sync transaction if
+  // no transaction operate require a swap.
+  async UpdateNoSwap(Edit[] cset, bool isFirstPaint);
+
+  async __delete__();
+};
+
+} // namespace layers
+} // namespace mozilla

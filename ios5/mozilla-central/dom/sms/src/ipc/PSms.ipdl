@@ -1,0 +1,109 @@
+/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+/* vim: set sw=2 ts=8 et ft=cpp : */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+include protocol PContent;
+include "mozilla/dom/sms/Types.h";
+
+using DeliveryState;
+using ReadState;
+
+namespace mozilla {
+namespace dom {
+namespace sms {
+
+struct SmsMessageData {
+  PRInt32       id;
+  DeliveryState delivery;
+  nsString      sender;
+  nsString      receiver;
+  nsString      body;
+  PRUint64      timestamp; // ms since epoch.
+  bool          read;
+};
+
+struct SmsFilterData {
+  PRUint64      startDate;
+  PRUint64      endDate;
+  nsString[]    numbers;
+  DeliveryState delivery;
+  ReadState     read;  
+};
+
+sync protocol PSms {
+    manager PContent;
+
+child:
+    NotifyReceivedMessage(SmsMessageData aMessageData);
+
+    NotifySentMessage(SmsMessageData aMessageData);
+
+    NotifyDeliveredMessage(SmsMessageData aMessageData);
+
+    NotifyRequestSmsSent(SmsMessageData aMessageData, PRInt32 aRequestId,
+                         PRUint64 aProcessId);
+
+    NotifyRequestSmsSendFailed(PRInt32 aError, PRInt32 aRequestId,
+                               PRUint64 aProcessId);
+
+    NotifyRequestGotSms(SmsMessageData aMessageData, PRInt32 aRequestId,
+                        PRUint64 aProcessId);
+
+    NotifyRequestGetSmsFailed(PRInt32 aError, PRInt32 aRequestId,
+                              PRUint64 aProcessId);
+
+    NotifyRequestSmsDeleted(bool aDeleted, PRInt32 aRequestId,
+                            PRUint64 aProcessId);
+
+    NotifyRequestSmsDeleteFailed(PRInt32 aError, PRInt32 aRequestId,
+                                 PRUint64 aProcessId);
+
+    NotifyRequestNoMessageInList(PRInt32 aRequestId, PRUint64 aProcessId);
+
+    NotifyRequestCreateMessageList(PRInt32 aListId, SmsMessageData aMessageData, PRInt32 aRequestId, PRUint64 aProcessId);
+
+    NotifyRequestGotNextMessage(SmsMessageData aMessageData, PRInt32 aRequestId, PRUint64 aProcessId);
+
+    NotifyRequestReadListFailed(PRInt32 aError, PRInt32 aRequestId,
+                                PRUint64 aProcessId);
+    NotifyRequestMarkedMessageRead(bool aRead, PRInt32 aRequestId,
+                                   PRUint64 aProcessId);
+    NotifyRequestMarkMessageReadFailed(PRInt32 aError, PRInt32 aRequestId,
+                                       PRUint64 aProcessId);
+
+parent:
+    sync HasSupport()
+        returns (bool aHasSupport);
+
+    sync GetNumberOfMessagesForText(nsString aText)
+        returns (PRUint16 aNumber);
+
+    SendMessage(nsString aNumber, nsString aMessage, PRInt32 aRequestId,
+                PRUint64 aProcessId);
+
+    sync SaveReceivedMessage(nsString aSender, nsString aBody, PRUint64 aDate)
+        returns (PRInt32 aId);
+
+    sync SaveSentMessage(nsString aReceiver, nsString aBody, PRUint64 aDate)
+        returns (PRInt32 aId);
+
+    GetMessage(PRInt32 aMessageId, PRInt32 aRequestId, PRUint64 aProcessId);
+
+    DeleteMessage(PRInt32 aMessageId, PRInt32 aRequestId, PRUint64 aProcessId);
+
+    CreateMessageList(SmsFilterData aFilter, bool aReverse, PRInt32 aRequestId, PRUint64 aProcessId);
+
+    GetNextMessageInList(PRInt32 aListId, PRInt32 aRequestId, PRUint64 aProcessId);
+
+    ClearMessageList(PRInt32 aListId);
+
+    MarkMessageRead(PRInt32 aMessageId, bool aValue, PRInt32 aRequestId, PRUint64 aProcessId);
+
+    __delete__();
+};
+
+} // namespace sms
+} // namespace dom
+} // namespace mozilla

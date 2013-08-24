@@ -1,0 +1,3 @@
+Adding client.mk options from /Users/User/Icefox/mozilla-project/Icefox/mozilla-central/.mozconfig:
+    MOZ_OBJDIR=$(TOPSRCDIR)/../iphone-device-debug-ios5.1
+    MOZ_MAKE_FLAGS=-j6

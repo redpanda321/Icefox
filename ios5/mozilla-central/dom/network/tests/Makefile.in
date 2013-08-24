@@ -1,0 +1,21 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+DEPTH            = ../../..
+topsrcdir        = @top_srcdir@
+srcdir           = @srcdir@
+VPATH            = @srcdir@
+
+relativesrcdir   = dom/network/tests
+
+include $(DEPTH)/config/autoconf.mk
+
+DIRS = \
+  $(NULL)
+
+MOCHITEST_FILES = \
+  test_network_basics.html \
+  $(NULL)
+
+include $(topsrcdir)/config/rules.mk

@@ -1,0 +1,39 @@
+/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*-
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "nsISupports.idl"
+
+%{C++
+#ifdef XP_OS2 // OS2 has UNKNOWN problems :)
+#undef UNKNOWN
+#endif
+%}
+
+/**
+ * Enumeration of Programming Languages
+ */
+
+[scriptable, uuid(ea604e90-40ba-11d5-90bb-0010a4e73d9a)]
+interface nsIProgrammingLanguage : nsISupports
+{
+    /**
+     * Identifiers for programming languages.
+     */
+    const PRUint32 UNKNOWN     = 0;
+    const PRUint32 CPLUSPLUS   = 1;
+    const PRUint32 JAVASCRIPT  = 2;
+    const PRUint32 PYTHON      = 3;
+    const PRUint32 PERL        = 4;
+    const PRUint32 JAVA        = 5;
+    const PRUint32 ZX81_BASIC  = 6;  // it could happen :)
+    const PRUint32 JAVASCRIPT2 = 7;
+    const PRUint32 RUBY =        8;
+    const PRUint32 PHP =         9;
+    const PRUint32 TCL =         10;
+    // This list can grow indefinitely. Just don't ever change an existing item.
+    const PRUint32 MAX         = 10; // keep this as the largest index.
+    
+};

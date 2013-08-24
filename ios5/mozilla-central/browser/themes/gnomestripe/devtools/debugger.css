@@ -1,0 +1,295 @@
+/* -*- Mode: javascript; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+/* vim: set ft=javascript ts=2 et sw=2 tw=80: */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#body {
+  background: -moz-dialog;
+}
+
+/**
+ * Debugger content
+ */
+
+#dbg-content {
+  padding: 0;
+}
+
+#scripts {
+  max-width: 350px;
+}
+
+/**
+ * Lists and headers
+ */
+
+.list-item {
+  padding: 2px;
+}
+
+.list-item.selected {
+  background: Highlight;
+  color: HighlightText;
+}
+
+.list-item.empty {
+  color: GrayText;
+}
+
+/**
+ * Stack frames
+ */
+
+#stackframes {
+  background-color: white;
+}
+
+.dbg-stackframe {
+  -moz-padding-start: 4px;
+  -moz-padding-end: 4px;
+}
+
+.dbg-stackframe-name {
+  -moz-padding-end: 4px;
+  font-weight: 600;
+}
+
+/**
+ * Properties view
+ */
+
+#variables {
+  background-color: white;
+}
+
+/**
+ * Property element details container
+ */
+
+.details {
+  -moz-margin-start: 10px;
+}
+
+/**
+ * Scope element
+ */
+
+.scope > .title {
+  text-shadow: 0 1px #222;
+  color: #fff;
+}
+
+.scope > .title > .arrow {
+  margin-top: -2px;
+}
+
+.scope > .title > .name {
+  padding-top: 2px;
+}
+
+.scope > .details {
+  -moz-margin-start: 2px;
+  -moz-margin-end: 2px;
+}
+
+/**
+ * Variable element
+ */
+
+.variable {
+  -moz-margin-start: 1px;
+  -moz-margin-end: 1px;
+  margin-top: 2px;
+  border-bottom: 1px dotted #ddd;
+  border-radius: 8px;
+  transition: background 1s ease-in-out;
+  background: #fff;
+}
+
+.variable[changed] {
+  transition-duration: 0.4s;
+  background: rgba(255, 255, 0, 0.65);
+}
+
+.variable[added] {
+  transition-duration: 0.4s;
+  background: rgba(0, 255, 0, 0.15);
+}
+
+.variable > .title > .arrow {
+  margin-top: -2px;
+}
+
+.variable > .title > .name {
+  color: #048;
+  font-weight: 600;
+}
+
+/**
+ * Property element
+ */
+
+.property > .title > .arrow {
+  margin-top: -2px;
+}
+
+.property > .title > .key {
+  color: #881090;
+}
+
+/**
+ * Non enumerable, configurable and writable variables and properties.
+ */
+
+.property[proto] > .title > .key,
+.variable[non-enumerable] > .title > .name,
+.property[non-enumerable] > .title > .key {
+  opacity: 0.5;
+}
+
+.variable[non-configurable] > .title > .name,
+.property[non-configurable] > .title > .key {
+  border-bottom: 1px dashed #99f;
+}
+
+.variable[non-writable] > .title > .name,
+.property[non-writable] > .title > .key {
+  border-bottom: 1px dashed #f99;
+}
+
+.variable[non-writable] > .title:after,
+.property[non-writable] > .title:after {
+  content: " ";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background: url("chrome://browser/skin/identity-icons-https.png") no-repeat;
+  opacity: 0.5;
+}
+
+#element-tooltip > label {
+  margin: 0 2px 0 2px;
+}
+
+#element-tooltip > label[non-enumerable],
+#element-tooltip > label[non-configurable],
+#element-tooltip > label[non-writable]{
+  text-decoration: line-through;
+}
+
+/**
+ * Property values colors
+ */
+
+.token-undefined {
+  -moz-padding-start: 6px;
+  color: #bbb;
+}
+
+.token-null {
+  -moz-padding-start: 6px;
+  color: #999;
+}
+
+.token-boolean {
+  -moz-padding-start: 6px;
+  color: #777;
+}
+
+.token-number {
+  -moz-padding-start: 6px;
+  color: #c40a16;
+}
+
+.token-string {
+  -moz-padding-start: 6px;
+  color: #1c00cf;
+}
+
+.token-other {
+  -moz-padding-start: 6px;
+  color: #333;
+}
+
+/**
+ * Expand/collapse arrow
+ */
+
+.arrow {
+  -moz-appearance: treetwisty;
+  -moz-margin-start: 10px;
+  -moz-margin-end: 5px;
+}
+
+.arrow[open] {
+  -moz-appearance: treetwistyopen;
+}
+
+/**
+ * Animations
+ */
+
+.details[open][animated] {
+  -moz-animation-duration: 0.25s;
+  -moz-animation-name: showblock;
+}
+
+@-moz-keyframes showblock {
+  from {
+    opacity: 0;
+    -moz-transform-origin: top;
+    -moz-transform: scaleY(0);
+  }
+
+  to {
+    opacity: 1;
+    -moz-transform-origin: top;
+    -moz-transform: scaleY(1);
+  }
+}
+
+/**
+ * Toolbar Controls
+ */
+
+#resume {
+  list-style-image: url("chrome://browser/skin/devtools/debugger-play.png");
+  -moz-image-region: rect(0px, 16px, 16px, 0px);
+}
+
+#resume[checked=true] {
+  -moz-image-region: rect(0px, 32px, 16px, 16px);
+}
+
+#step-over {
+  list-style-image: url("chrome://browser/skin/devtools/debugger-step-over.png");
+}
+
+#step-in {
+  list-style-image: url("chrome://browser/skin/devtools/debugger-step-in.png");
+}
+
+#step-out {
+  list-style-image: url("chrome://browser/skin/devtools/debugger-step-out.png");
+}
+
+#debugger-controls > toolbarbutton {
+  border-width: 0;
+  -moz-border-end-width: 1px;
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+  outline-offset: -3px;
+}
+
+#debugger-controls > toolbarbutton:last-of-type {
+  -moz-border-end-width: 0;
+}
+
+#debugger-controls {
+  border: 1px solid hsla(210,8%,5%,.45);
+  border-radius: 3px;
+  box-shadow: 0 1px 0 hsla(210,16%,76%,.15) inset, 0 0 0 1px hsla(210,16%,76%,.15) inset, 0 1px 0 hsla(210,16%,76%,.15);
+  margin: 0 3px;
+}

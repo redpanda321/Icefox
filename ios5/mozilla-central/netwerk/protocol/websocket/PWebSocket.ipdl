@@ -1,0 +1,47 @@
+/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+/* vim: set sw=2 ts=8 et tw=80 ft=cpp : */
+
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+include protocol PNecko;
+include protocol PBrowser;
+
+include "mozilla/net/NeckoMessageUtils.h";
+
+using IPC::URI;
+using IPC::InputStream;
+
+namespace mozilla {
+namespace net {
+
+async protocol PWebSocket
+{
+  manager PNecko;
+
+parent:
+  // Forwarded methods corresponding to methods on nsIWebSocketChannel
+  AsyncOpen(URI aURI, nsCString aOrigin, nsCString aProtocol, bool aSecure);
+  Close(PRUint16 code, nsCString reason);
+  SendMsg(nsCString aMsg);
+  SendBinaryMsg(nsCString aMsg);
+  SendBinaryStream(InputStream aStream, PRUint32 aLength);
+
+  DeleteSelf();
+
+child:
+  // Forwarded notifications corresponding to the nsIWebSocketListener interface
+  OnStart(nsCString aProtocol, nsCString aExtensions);
+  OnStop(nsresult aStatusCode);
+  OnMessageAvailable(nsCString aMsg);
+  OnBinaryMessageAvailable(nsCString aMsg);
+  OnAcknowledge(PRUint32 aSize);
+  OnServerClose(PRUint16 code, nsCString aReason);
+
+  __delete__();
+
+};
+
+} //namespace net
+} //namespace mozilla
