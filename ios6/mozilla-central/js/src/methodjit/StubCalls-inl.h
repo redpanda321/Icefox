@@ -1,0 +1,36 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
+ * vim: set ts=4 sw=4 et tw=99:
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#if !defined jslogic_h_inl__ && defined JS_METHODJIT
+#define jslogic_h_inl__
+
+namespace js {
+namespace mjit {
+
+static inline void
+ThrowException(VMFrame &f)
+{
+    void *ptr = JS_FUNC_TO_DATA_PTR(void *, JaegerThrowpoline);
+    *f.returnAddressLocation() = ptr;
+}
+
+#define THROW()   do { mjit::ThrowException(f); return; } while (0)
+#define THROWV(v) do { mjit::ThrowException(f); return v; } while (0)
+
+static inline void
+ReportAtomNotDefined(JSContext *cx, JSAtom *atom)
+{
+    JSAutoByteString printable;
+    if (js_AtomToPrintableString(cx, atom, &printable))
+        js_ReportIsNotDefined(cx, printable.ptr());
+}
+
+} /* namespace mjit */
+} /* namespace js */
+
+#endif /* jslogic_h__ */
+

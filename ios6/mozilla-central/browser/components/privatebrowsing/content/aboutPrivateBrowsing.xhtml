@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+-->
+<!DOCTYPE html [
+  <!ENTITY % htmlDTD PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "DTD/xhtml1-strict.dtd">
+  %htmlDTD;
+  <!ENTITY % netErrorDTD SYSTEM "chrome://global/locale/netError.dtd">
+  %netErrorDTD;
+  <!ENTITY % globalDTD SYSTEM "chrome://global/locale/global.dtd">
+  %globalDTD;
+  <!ENTITY % browserDTD SYSTEM "chrome://browser/locale/browser.dtd">
+  %browserDTD;
+#ifdef MOZ_PER_WINDOW_PRIVATE_BROWSING
+#ifdef XP_MACOSX
+  <!ENTITY basePBMenu.label   "&fileMenu.label;">
+#else
+  <!ENTITY basePBMenu.label   "<span class='appMenuButton'>&brandShortName;</span><span class='fileMenu'>&fileMenu.label;</span>">
+#endif
+#else
+#ifdef XP_MACOSX
+  <!ENTITY basePBMenu.label   "&toolsMenu.label;">
+#else
+  <!ENTITY basePBMenu.label   "<span class='appMenuButton'>&brandShortName;</span><span class='toolsMenu'>&toolsMenu.label;</span>">
+#endif
+#endif
+  <!ENTITY % privatebrowsingpageDTD SYSTEM "chrome://browser/locale/aboutPrivateBrowsing.dtd">
+  %privatebrowsingpageDTD;
+]>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <link rel="stylesheet" href="chrome://global/skin/netError.css" type="text/css" media="all"/>
+    <link rel="stylesheet" href="chrome://browser/skin/aboutPrivateBrowsing.css" type="text/css" media="all"/>
+    <style type="text/css"><![CDATA[
+      body.normal .showPrivate,
+      body.private .showNormal {
+        display: none;
+      }
+#ifdef MOZ_PER_WINDOW_PRIVATE_BROWSING
+      body.appMenuButtonVisible .fileMenu {
+        display: none;
+      }
+#else
+      body.appMenuButtonVisible .toolsMenu {
+        display: none;
+      }
+#endif
+      body.appMenuButtonInvisible .appMenuButton {
+        display: none;
+      }
+    ]]></style>
+    <script type="application/javascript;version=1.7"><![CDATA[
+      const Cc = Components.classes;
+      const Ci = Components.interfaces;
+
+      Components.utils.import("resource://gre/modules/PrivateBrowsingUtils.jsm");
+
+      if (!PrivateBrowsingUtils.isWindowPrivate(window)) {
+        document.title = "]]>&privatebrowsingpage.title.normal;<![CDATA[";
+        setFavIcon("chrome://global/skin/icons/question-16.png");
+      } else {
+#ifndef XP_MACOSX
+        document.title = "]]>&privatebrowsingpage.title;<![CDATA[";
+#endif
+        setFavIcon("chrome://browser/skin/Privacy-16.png");
+      }
+
+      var mainWindow = window.QueryInterface(Ci.nsIInterfaceRequestor)
+                             .getInterface(Ci.nsIWebNavigation)
+                             .QueryInterface(Ci.nsIDocShellTreeItem)
+                             .rootTreeItem
+                             .QueryInterface(Ci.nsIInterfaceRequestor)
+                             .getInterface(Ci.nsIDOMWindow);
+
+      // Focus the location bar
+      mainWindow.focusAndSelectUrlBar();
+
+      function setFavIcon(url) {
+        var icon = document.createElement("link");
+        icon.setAttribute("rel", "icon");
+        icon.setAttribute("type", "image/png");
+        icon.setAttribute("href", url);
+        var head = document.getElementsByTagName("head")[0];
+        head.insertBefore(icon, head.firstChild);
+      }
+
+      document.addEventListener("DOMContentLoaded", function () {
+        if (!PrivateBrowsingUtils.isWindowPrivate(window)) {
+          document.body.setAttribute("class", "normal");
+        }
+
+        // Set up the help link
+        let moreInfoURL = Cc["@mozilla.org/toolkit/URLFormatterService;1"].
+                          getService(Ci.nsIURLFormatter).
+                          formatURLPref("app.support.baseURL");
+        let moreInfoLink = document.getElementById("moreInfoLink");
+        if (moreInfoLink)
+          moreInfoLink.setAttribute("href", moreInfoURL + "private-browsing");
+
+        // Show the correct menu structure based on whether the App Menu button is
+        // shown or not.
+        var menuBar = mainWindow.document.getElementById("toolbar-menubar");
+        var appMenuButtonIsVisible = menuBar.getAttribute("autohide") == "true";
+        document.body.classList.add(appMenuButtonIsVisible ? "appMenuButtonVisible" :
+                                                             "appMenuButtonInvisible");
+      }, false);
+
+#ifdef MOZ_PER_WINDOW_PRIVATE_BROWSING
+      function openPrivateWindow() {
+        mainWindow.OpenBrowserWindow({private: true});
+      }
+#else
+      function togglePrivateBrowsing() {
+        mainWindow.gPrivateBrowsingUI.toggleMode();
+      }
+#endif
+    ]]></script>
+  </head>
+
+  <body dir="&locale.dir;"
+        class="private">
+
+    <!-- PAGE CONTAINER (for styling purposes only) -->
+    <div id="errorPageContainer">
+
+      <!-- Error Title -->
+      <div id="errorTitle">
+        <h1 id="errorTitleText" class="showPrivate">&privatebrowsingpage.title;</h1>
+        <h1 id="errorTitleTextNormal" class="showNormal">&privatebrowsingpage.title.normal;</h1>
+      </div>
+
+      <!-- LONG CONTENT (the section most likely to require scrolling) -->
+      <div id="errorLongContent">
+
+        <!-- Short Description -->
+        <div id="errorShortDesc">
+#ifdef MOZ_PER_WINDOW_PRIVATE_BROWSING
+          <p id="errorShortDescText" class="showPrivate">&privatebrowsingpage.perwindow.issueDesc;</p>
+          <p id="errorShortDescTextNormal" class="showNormal">&privatebrowsingpage.perwindow.issueDesc.normal;</p>
+#else
+          <p id="errorShortDescText" class="showPrivate">&privatebrowsingpage.issueDesc;</p>
+          <p id="errorShortDescTextNormal" class="showNormal">&privatebrowsingpage.issueDesc.normal;</p>
+#endif
+        </div>
+
+        <!-- Long Description -->
+        <div id="errorLongDesc">
+#ifdef MOZ_PER_WINDOW_PRIVATE_BROWSING
+          <p id="errorLongDescText">&privatebrowsingpage.perwindow.description;</p>
+#else
+          <p id="errorLongDescText">&privatebrowsingpage.description;</p>
+#endif
+        </div>
+
+        <!-- Start Private Browsing -->
+        <div id="startPrivateBrowsingDesc" class="showNormal">
+#ifdef MOZ_PER_WINDOW_PRIVATE_BROWSING
+          <button xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+                  id="startPrivateBrowsing" label="&privatebrowsingpage.openPrivateWindow.label;"
+                  accesskey="&privatebrowsingpage.openPrivateWindow.accesskey;"
+                  oncommand="openPrivateWindow();"/>
+#else
+          <button xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+                  id="startPrivateBrowsing" label="&privatebrowsingpage.startPrivateBrowsing.label;"
+                  accesskey="&privatebrowsingpage.startPrivateBrowsing.accesskey;"
+                  oncommand="togglePrivateBrowsing();"/>
+#endif
+        </div>
+
+        <!-- Footer -->
+        <div id="footerDesc">
+#ifdef MOZ_PER_WINDOW_PRIVATE_BROWSING
+          <p id="footerText" class="showPrivate">&privatebrowsingpage.howToStop3;</p>
+          <p id="footerTextNormal" class="showNormal">&privatebrowsingpage.howToStart3;</p>
+#else
+          <p id="footerText" class="showPrivate">&privatebrowsingpage.howToStop2;</p>
+          <p id="footerTextNormal" class="showNormal">&privatebrowsingpage.howToStart2;</p>
+#endif
+        </div>
+
+        <!-- More Info -->
+        <div id="moreInfo" class="showPrivate">
+          <p id="moreInfoText">
+            &privatebrowsingpage.moreInfo;
+          </p>
+          <p id="moreInfoLinkContainer">
+            <a id="moreInfoLink" target="_blank">&privatebrowsingpage.learnMore;</a>
+          </p>
+        </div>
+      </div>
+    </div>
+
+  </body>
+</html>

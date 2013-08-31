@@ -1,0 +1,30 @@
+# If ccache was installed via Homebrew:
+export PATH="`brew --prefix ccache`/libexec:$PATH"
+
+# Import the stock config for building the browser (Firefox)
+. $topsrcdir/browser/config/mozconfig
+
+. $topsrcdir/build/macosx/mozconfig.common
+
+# Define where build files should go. This places them in the directory
+# "obj-ff-dbg" under the current source directory
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-ff-dbg
+
+# -s makes builds quieter by default
+# -j4 allows 4 tasks to run in parallel. Set the number to be the amount of
+# cores in your machine. 4 is a good number.
+mk_add_options MOZ_MAKE_FLAGS="-s -j4"
+
+# Enable debug builds
+ac_add_options --enable-debug
+
+# Turn off compiler optimization. This will make applications run slower,
+# will allow you to debug the applications under a debugger, like GDB.
+ac_add_options --disable-optimize
+
+
+ac_add_options --with-macos-sdk=/Developer/SDKs/MacOSX10.5.sdk
+CC=clang-mp-3.1
+CXX=clang++-mp-3.1
+
+mk_add_options AUTOCONF=/usr/local/Cellar/autoconf213/2.13/bin/autoconf213

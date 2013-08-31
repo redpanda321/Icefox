@@ -1,0 +1,598 @@
+# -*- Mode: Python -*-
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+name = 'DOM'
+
+# A quick warning:
+#
+# Attributes or methods that call GetCurrentNativeCallContext must not be
+# quick-stubbed, because quick stubs don't generate a native call context.
+# qsgen.py has no way of knowing which attributes and methods do this, as it
+# looks at interfaces, not implementations.  The symptoms, if you quick-stub
+# one of those, can be really weird, because GetCurrentNativeCallContext
+# doesn't crash--it may in fact return a plausible wrong answer.
+
+members = [ 
+    # dom/interfaces/base
+    #
+    # Note that many implementations of interfaces in this directory
+    # use GetCurrentNativeCallContext, notably:
+    #   - nsIDOMCrypto.{generateCRMFRequest,signText}
+    #   - nsIDOMLocation.reload
+    #   - nsIDOMNSHistory.go
+    #   - nsIDOMJSPluginArray.refresh
+    #   - nsIDOMWindow.postMessage
+    #   - nsIDOMJSWindow.{prompt,setTimeout,setInterval,open,openDialog}
+    #
+    # (And nsIDOMModalContentWindow.returnValue is an attribute of type
+    # nsIVariant, which qsgen.py can't handle.)
+    #
+    'nsIDOMWindow.name',
+    'nsIDOMWindow.parent',
+    'nsIDOMWindow.top',
+    'nsIDOMWindow.self',
+    # Several window properties are magically resolved, including
+    # location, _content, navigator, document, and window itself.
+    # These do not need quick stubs.
+    #'nsIDOMWindow.document',
+    'nsIDOMWindow.getSelection',
+    'nsIDOMWindow.scrollByLines',
+    'nsIDOMWindow.getComputedStyle',
+    'nsIDOMWindow.sessionStorage',
+    'nsIDOMWindow.localStorage',
+    'nsIDOMWindow.onmouseenter',
+    'nsIDOMWindow.onmouseleave',
+    'nsIDOMJSWindow.dump',
+    'nsIDOMScreen.top',
+    'nsIDOMScreen.height',
+    'nsIDOMScreen.width',
+    'nsIDOMScreen.left',
+    'nsIDOMClientRect.*',
+    'nsIDOMPaintRequest.*',
+    # nsLocationSH has ~ALLOW_PROP_MODS_TO_PROTOTYPE, so don't try.
+    #'nsIDOMLocation.hostname',
+    #'nsIDOMLocation.href',
+
+    # dom/interfaces/canvas
+    #
+    # canvas friends
+    'nsIDOMTextMetrics.*',
+    'nsIDOMCanvasGradient.*',
+    'nsIDOMCanvasPattern.*',
+
+    # dom/interfaces/core
+    'nsIDOMCharacterData.data',
+    'nsIDOMCharacterData.length',
+    'nsIDOMDocument.documentElement',
+    'nsIDOMDocument.implementation',
+    'nsIDOMDocument.getElementsByTagName',
+    'nsIDOMDocument.doctype',
+    'nsIDOMDocument.getElementsByTagNameNS',
+    'nsIDOMDocument.getElementById',
+    'nsIDOMDocument.createDocumentFragment',
+    'nsIDOMDocument.createElement',
+    'nsIDOMDocument.createElementNS',
+    'nsIDOMDocument.importNode',
+    'nsIDOMDocument.createTextNode',
+    'nsIDOMDocument.documentURI',
+    'nsIDOMDocument.adoptNode',
+    'nsIDOMDocument.defaultView',
+    'nsIDOMDocument.createNodeIterator',
+    'nsIDOMDocument.createEvent',
+    'nsIDOMDocument.getElementsByClassName',
+    'nsIDOMDocument.title',
+    'nsIDOMDocument.referrer',
+    'nsIDOMDocument.hasFocus',
+    # This property is treated specially in nsDOMClassInfo in a way that
+    # would shadow any quick stub.  Also, document.location is a special
+    # case for security.
+    #'nsIDOMDocument.location',
+    'nsIDOMDocument.elementFromPoint',
+    'nsIDOMDocument.activeElement',
+    'nsIDOMDocument.onreadystatechange',
+    'nsIDOMDocument.onmouseenter',
+    'nsIDOMDocument.onmouseleave',
+    'nsIDOMDocument.URL',
+    'nsIDOMNamedNodeMap.item',
+    'nsIDOMNamedNodeMap.length',
+    'nsIDOMNodeSelector.querySelector',
+    'nsIDOMNodeSelector.querySelectorAll',
+    'nsIDOMText.splitText',
+    'nsIDOMDOMStringList.*',
+    'nsIDOMXULDocument.getBoxObjectFor',
+
+    # dom/interfaces/css
+    'nsIDOMElementCSSInlineStyle.*',
+    'nsIDOMRect.*',
+
+    # dom/interfaces/events
+    'nsIDOMEventTarget.addEventListener',
+    'nsIDOMEventTarget.removeEventListener',
+    'nsIDOMEventTarget.dispatchEvent',
+
+    'nsIDOMEvent.type',
+    'nsIDOMEvent.target',
+    'nsIDOMEvent.currentTarget',
+    'nsIDOMEvent.eventPhase',
+    'nsIDOMEvent.bubbles',
+    'nsIDOMEvent.cancelable',
+    'nsIDOMEvent.timeStamp',
+    'nsIDOMEvent.stopPropagation',
+    'nsIDOMEvent.preventDefault',
+    'nsIDOMEvent.initEvent',
+    'nsIDOMEvent.defaultPrevented',
+    'nsIDOMEvent.stopImmediatePropagation',
+    'nsIDOMMouseEvent.*',
+    'nsIDOMKeyEvent.*',
+    'nsIDOMMutationEvent.*',
+    'nsIDOMDragEvent.*',
+    'nsIDOMScrollAreaEvent.*',
+    'nsIDOMNotifyPaintEvent.*',
+    'nsIDOMMessageEvent.*',
+    'nsIDOMMouseScrollEvent.*',
+    'nsIDOMProgressEvent.lengthComputable',
+    'nsIDOMProgressEvent.loaded',
+    'nsIDOMProgressEvent.total',
+    #XXX Can't quickstub initProgressEvent because it has long long parameters.
+    'nsIDOMUIEvent.which',
+    'nsIDOMUIEvent.rangeParent',
+    'nsIDOMUIEvent.rangeOffset',
+    'nsIDOMUIEvent.pageX',
+    'nsIDOMUIEvent.pageY',
+    'nsIDOMUIEvent.isChar',
+
+    'nsIDOMTouch.*',
+    'nsIDOMTouchList.*',
+    'nsIDOMTouchEvent.*',
+
+    # dom/interfaces/geolocation - None.
+
+    # dom/interfaces/html
+    'nsIDOMHTMLAnchorElement.href',
+    'nsIDOMHTMLAnchorElement.rel',
+    'nsIDOMHTMLAnchorElement.target',
+    'nsIDOMHTMLAnchorElement.name',
+    'nsIDOMHTMLAnchorElement.text',
+    'nsIDOMHTMLAnchorElement.search',
+    'nsIDOMHTMLAnchorElement.hash',
+    'nsIDOMHTMLBaseElement.href',
+    'nsIDOMHTMLBaseElement.target',
+    'nsIDOMHTMLButtonElement.name',
+    'nsIDOMHTMLButtonElement.form',
+    'nsIDOMHTMLButtonElement.value',
+    'nsIDOMHTMLButtonElement.disabled',
+    'nsIDOMHTMLCommandElement.*',
+    'nsIDOMHTMLDocument.body',
+    'nsIDOMHTMLDocument.getElementsByName',
+    'nsIDOMHTMLDocument.anchors',
+    'nsIDOMHTMLDocument.links',
+    'nsIDOMHTMLDocument.forms',
+    'nsIDOMHTMLDocument.cookie',
+    'nsIDOMHTMLDocument.images',
+    'nsIDOMHTMLDocument.write',
+    'nsIDOMHTMLDocument.writeln',
+    'nsIDOMHTMLDocument.domain',
+    'nsIDOMHTMLDocument.getSelection',
+    'nsIDOMHTMLDocument.designMode',
+    'nsIDOMHTMLDocument.head',
+    'nsIDOMHTMLFormElement.elements',
+    'nsIDOMHTMLFormElement.name',
+    'nsIDOMHTMLFormElement.submit',
+    'nsIDOMHTMLFormElement.length',
+    'nsIDOMHTMLFormElement.target',
+    'nsIDOMHTMLFormElement.action',
+    'nsIDOMHTMLFrameElement.src',
+    'nsIDOMHTMLFrameElement.contentDocument',
+    'nsIDOMHTMLFrameElement.contentWindow',
+    'nsIDOMHTMLFrameElement.name',
+    'nsIDOMHTMLFrameSetElement.rows',
+    'nsIDOMHTMLFrameSetElement.cols',
+    'nsIDOMHTMLIFrameElement.src',
+    'nsIDOMHTMLIFrameElement.contentDocument',
+    'nsIDOMHTMLIFrameElement.contentWindow',
+    'nsIDOMHTMLImageElement.src',
+    'nsIDOMHTMLImageElement.name',
+    'nsIDOMHTMLImageElement.height',
+    'nsIDOMHTMLImageElement.width',
+    'nsIDOMHTMLImageElement.complete',
+    'nsIDOMHTMLInputElement.defaultChecked',
+    'nsIDOMHTMLInputElement.disabled',
+    'nsIDOMHTMLInputElement.select',
+    'nsIDOMHTMLInputElement.checked',
+    'nsIDOMHTMLInputElement.type',
+    'nsIDOMHTMLInputElement.form',
+    'nsIDOMHTMLInputElement.src',
+    'nsIDOMHTMLInputElement.name',
+    'nsIDOMHTMLInputElement.value',
+    'nsIDOMHTMLInputElement.files',
+    'nsIDOMHTMLInputElement.textLength',
+    'nsIDOMHTMLInputElement.selectionStart',
+    'nsIDOMHTMLInputElement.selectionEnd',
+    'nsIDOMHTMLInputElement.selectionDirection',
+    'nsIDOMHTMLInputElement.setSelectionRange',
+    'nsIDOMHTMLLinkElement.disabled',
+    'nsIDOMHTMLMeterElement.*',
+    'nsIDOMHTMLMenuElement.*',
+    'nsIDOMHTMLMenuItemElement.*',
+    'nsIDOMHTMLOptionElement.index',
+    'nsIDOMHTMLOptionElement.selected',
+    'nsIDOMHTMLOptionElement.form',
+    'nsIDOMHTMLOptionElement.text',
+    'nsIDOMHTMLOptionElement.defaultSelected',
+    'nsIDOMHTMLOptionElement.value',
+    'nsIDOMHTMLOptionElement.label',
+    'nsIDOMHTMLOptionElement.disabled',
+    'nsIDOMHTMLProgressElement.*',
+    'nsIDOMHTMLSelectElement.name',
+    'nsIDOMHTMLSelectElement.form',
+    'nsIDOMHTMLSelectElement.add',
+    'nsIDOMHTMLSelectElement.value',
+    'nsIDOMHTMLSelectElement.disabled',
+    'nsIDOMHTMLSelectElement.length',
+    'nsIDOMHTMLSelectElement.remove',
+    'nsIDOMHTMLSelectElement.selectedIndex',
+    'nsIDOMHTMLSelectElement.item',
+    'nsIDOMHTMLSelectElement.type',
+    'nsIDOMHTMLSelectElement.options',
+    'nsIDOMHTMLSelectElement.size',
+    'nsIDOMHTMLStyleElement.disabled',
+    'nsIDOMHTMLTableCellElement.colSpan',
+    'nsIDOMHTMLTableCellElement.headers',
+    'nsIDOMHTMLTableCellElement.cellIndex',
+    'nsIDOMHTMLTableCellElement.rowSpan',
+    'nsIDOMHTMLTableCellElement.abbr',
+    'nsIDOMHTMLTableCellElement.scope',
+    'nsIDOMHTMLTableCellElement.noWrap',
+    'nsIDOMHTMLTableCellElement.width',
+    'nsIDOMHTMLTableColElement.span',
+    'nsIDOMHTMLTableColElement.width',
+    'nsIDOMHTMLTableElement.rows',
+    'nsIDOMHTMLTableElement.deleteRow',
+    'nsIDOMHTMLTableElement.summary',
+    'nsIDOMHTMLTableElement.insertRow',
+    'nsIDOMHTMLTableRowElement.sectionRowIndex',
+    'nsIDOMHTMLTableRowElement.rowIndex',
+    'nsIDOMHTMLTableRowElement.cells',
+    'nsIDOMHTMLTableRowElement.deleteCell',
+    'nsIDOMHTMLTableRowElement.insertCell',
+    'nsIDOMHTMLTableSectionElement.rows',
+    'nsIDOMHTMLTableSectionElement.insertRow',
+    'nsIDOMHTMLTableSectionElement.deleteRow',
+    'nsIDOMHTMLTextAreaElement.rows',
+    'nsIDOMHTMLTextAreaElement.name',
+    'nsIDOMHTMLTextAreaElement.form',
+    'nsIDOMHTMLTextAreaElement.defaultValue',
+    'nsIDOMHTMLTextAreaElement.cols',
+    'nsIDOMHTMLTextAreaElement.value',
+    'nsIDOMHTMLTextAreaElement.type',
+    'nsIDOMHTMLTextAreaElement.select',
+    'nsIDOMHTMLTextAreaElement.setSelectionRange',
+    'nsIDOMHTMLTextAreaElement.selectionStart',
+    'nsIDOMHTMLTextAreaElement.selectionEnd',
+    'nsIDOMHTMLTextAreaElement.selectionDirection',
+    'nsIDOMHTMLTextAreaElement.textLength',
+    'nsIDOMHTMLTextAreaElement.wrap',
+    'nsIDOMHTMLTitleElement.text',
+    'nsIDOMHTMLCanvasElement.width',
+    'nsIDOMHTMLCanvasElement.height',
+    'nsIDOMHTMLCanvasElement.getContext',
+    'nsIDOMHTMLCanvasElement.toDataURL',
+
+    # dom/interfaces/json - None.
+    # All methods of nsIJSON call GetCurrentNativeCallContext.
+
+    # dom/interfaces/load-save - None.
+
+    # dom/interfaces/offline - None.
+
+    # dom/interfaces/range
+    'nsIDOMRange.*',
+
+    # dom/interfaces/sidebar - None.
+
+    # dom/interfaces/smil - None.
+
+    # dom/interfaces/storage
+    'nsIDOMToString.toString',
+    'nsIDOMStorage.setItem',
+    'nsIDOMStorage.length',
+    'nsIDOMStorage.getItem',
+    'nsIDOMStorage.key',
+    'nsIDOMStorage.removeItem',
+    'nsIDOMStorage.clear',
+    'nsIDOMStorageItem.value',
+
+    # dom/interfaces/stylesheets - None.
+
+    # dom/interfaces/svg - None.
+    'nsIDOMSVGStylable.*',
+
+    # dom/interfaces/traversal
+    'nsIDOMNodeIterator.nextNode',
+
+    # dom/interfaces/xbl - None.
+
+    # dom/interfaces/xpath
+    'nsIDOMXPathEvaluator.evaluate',
+    'nsIDOMXPathEvaluator.createExpression',
+    'nsIDOMXPathEvaluator.createNSResolver',
+    'nsIDOMXPathExpression.evaluate',
+    'nsIDOMXPathNSResolver.lookupNamespaceURI',
+    'nsIDOMXPathResult.snapshotItem',
+    'nsIDOMXPathResult.iterateNext',
+    'nsIDOMXPathResult.snapshotLength',
+    'nsIDOMXPathResult.resultType',
+    'nsIDOMXPathResult.numberValue',
+    'nsIDOMXPathResult.stringValue',
+    'nsIDOMXPathResult.booleanValue',
+    'nsIDOMXPathResult.singleNodeValue',
+    'nsIDOMNSXPathExpression.evaluateWithContext',
+
+    # dom/interfaces/xul
+    'nsIDOMXULElement.*',
+
+    # layout/xul/base/public
+    'nsIBoxObject.x',
+    'nsIBoxObject.y',
+    'nsIBoxObject.screenX',
+    'nsIBoxObject.screenY',
+    'nsIBoxObject.width',
+    'nsIBoxObject.height',
+
+    # FileReader
+    'nsIDOMFileReader.*',
+    
+    # Audio
+    'nsIDOMNotifyAudioAvailableEvent.frameBuffer',
+    'nsIDOMNotifyAudioAvailableEvent.time',
+    'nsIDOMHTMLAudioElement.mozWriteAudio',
+
+    # dom/indexedDB
+    'nsIIDBCursor.*',
+    'nsIIDBCursorWithValue.*',
+    'nsIIDBDatabase.*',
+    'nsIIDBFactory.*',
+    'nsIIDBFileHandle.*',
+    'nsIIDBIndex.*',
+    'nsIIDBKeyRange.*',
+    'nsIIDBObjectStore.*',
+    'nsIIDBRequest.*',
+    'nsIIDBTransaction.*',
+    'nsIIDBOpenDBRequest.*',
+    'nsIIDBVersionChangeEvent.*',
+    'nsIIndexedDatabaseUsageCallback.*',
+    'nsIIndexedDatabaseManager.*',
+
+    'nsIDOMDOMError.*',
+
+    # dom/file
+    'nsIDOMFileHandle.*',
+    '-nsIDOMFileHandle.getFileId',
+    '-nsIDOMFileHandle.getFileInfo',
+    'nsIDOMFileRequest.*',
+    'nsIDOMLockedFile.*',
+    ]
+
+# Most interfaces can be found by searching the includePath; to find
+# nsIDOMEvent, for example, just look for nsIDOMEvent.idl.  But IDL filenames
+# for very long interface names are slightly abbreviated, and many interfaces
+# don't have their own files, just for extra wackiness.  So qsgen.py needs
+# a little help.
+#
+irregularFilenames = {
+    # abbreviations
+    'nsIDOMHTMLTableSectionElement': 'nsIDOMHTMLTableSectionElem',
+
+    # stowaways
+    'nsIDOMTextMetrics': 'nsIDOMCanvasRenderingContext2D',
+    'nsIDOMCanvasGradient': 'nsIDOMCanvasRenderingContext2D',
+    'nsIDOMCanvasPattern': 'nsIDOMCanvasRenderingContext2D',
+
+    'nsIDOMBlob': 'nsIDOMFile',
+
+    'nsIIndexedDatabaseUsageCallback': 'nsIIndexedDatabaseManager',
+
+    'nsIDOMTouch': 'nsIDOMTouchEvent',
+    'nsIDOMTouchList': 'nsIDOMTouchEvent',
+
+    'nsITelephoneCallback': 'nsITelephone',
+    }
+
+customIncludes = [
+    'nsINode.h',
+    'nsIContent.h',
+    'nsIDocument.h',
+    'nsCSSPropertiesQS.h',
+    'nsDocument.h',
+    'nsDOMTokenList.h',
+    'nsGenericDOMDataNode.h',
+    'mozilla/dom/Element.h',
+    'nsGenericHTMLElement.h',
+    'nsSVGStylableElement.h',
+    'nsHTMLDocument.h',
+    'nsDOMQS.h',
+    'nsDOMStringMap.h',
+    'HTMLPropertiesCollection.h',
+    'nsHTMLMenuElement.h',
+    'nsICSSDeclaration.h',
+    'mozilla/dom/NodeBinding.h',
+    'mozilla/dom/ElementBinding.h',
+    'mozilla/dom/HTMLElementBinding.h'
+    ]
+
+customReturnInterfaces = [
+    'nsIDOMCanvasPattern',
+    'nsIDOMCanvasGradient',
+    ]
+
+nsIDOMHTMLDocument_Write_customMethodCallCode = """
+    nsAString &str = arg0;
+    for (unsigned i = 1; i < argc; ++i) {
+      xpc_qsDOMString next_arg(cx, argv[i], &argv[i],
+                               xpc_qsDOMString::eStringify,
+                               xpc_qsDOMString::eStringify);
+      if (!next_arg.IsValid())
+        return JS_FALSE;
+
+      str.Append(next_arg);
+    }
+
+    rv = self->%s(arg0, cx);
+"""
+
+nsIDOMStorage_Clear_customMethodCallCode = """
+    rv = self->Clear();
+    if (NS_SUCCEEDED(rv))
+        JS_ClearNonGlobalObject(cx, obj);
+"""
+
+customMethodCalls = {
+    'nsIDOMHTMLDocument_': {
+        'thisType': 'nsHTMLDocument'
+        },
+    'nsIDOMHTMLDocument_Write': {
+        'thisType': 'nsHTMLDocument',
+        'code': nsIDOMHTMLDocument_Write_customMethodCallCode % 'Write'
+        },
+    'nsIDOMHTMLDocument_Writeln': {
+        'thisType': 'nsHTMLDocument',
+        'code': nsIDOMHTMLDocument_Write_customMethodCallCode % 'Writeln'
+        },
+    'nsIDOMHTMLDocument_GetBody': {
+        'thisType': 'nsHTMLDocument',
+        'code': '    nsIContent *result = self->GetBody();',
+        'canFail': False
+        },
+    'nsIDOMHTMLDocument_GetHead': {
+        'thisType': 'nsHTMLDocument',
+        'code': '    nsIContent *result = self->GetHead();',
+        'canFail': False
+        },
+    'nsIDOMHTMLDocument_GetElementsByName': {
+        'thisType': 'nsHTMLDocument',
+        'code': '    nsRefPtr<nsContentList> result = '
+                'self->GetElementsByName(arg0);',
+        'canFail': False
+        },
+    'nsIDOMStorage_Clear': {
+        'code': nsIDOMStorage_Clear_customMethodCallCode
+        },
+    'nsIDOMNodeSelector_QuerySelector': {
+        'thisType': 'nsINode',
+        'code': '    mozilla::ErrorResult error;\n'
+                '    nsIContent* result = '
+                'self->QuerySelector(arg0, error);\n'
+                '    rv = error.ErrorCode();'
+        },
+    'nsIDOMNodeSelector_QuerySelectorAll': {
+        'thisType': 'nsINode',
+        'code': '    mozilla::ErrorResult error;\n'
+                '    nsCOMPtr<nsINodeList> result = self->QuerySelectorAll(arg0, error);\n'
+                '    rv = error.ErrorCode();'
+        },
+    'nsIDOMElementCSSInlineStyle_GetStyle': {
+        'thisType': 'nsStyledElement',
+        'code': '    /* XXXbz MathML elements inherit from nsStyledElement but\n'
+                '       don\'t actually implement GetStyle. */\n'
+                '    if (self->GetNameSpaceID() == kNameSpaceID_MathML)\n'
+                '      return xpc_qsThrow(cx, NS_ERROR_XPC_BAD_CONVERT_JS);\n'
+                '    nsIDOMCSSStyleDeclaration* result = '
+                'self->GetStyle(&rv);'
+        },
+    'nsIDOMSVGStylable_GetStyle': {
+        'thisType': 'nsSVGStylableElement',
+        'code': '    nsICSSDeclaration* result = '
+                'self->GetStyle(&rv);'
+        },
+    'nsIDOMDocument_': {
+        'thisType': 'nsDocument'
+        },
+    'nsIDOMDocument_GetElementById': {
+        'thisType': 'nsDocument',
+        'code': '    mozilla::dom::Element *result = self->GetElementById(arg0);',
+        'canFail': False
+        },
+    'nsIDOMDocument_GetElementsByTagName': {
+        'thisType': 'nsDocument',
+        'code': '    nsRefPtr<nsContentList> result ='
+                'self->GetElementsByTagName(arg0);',
+        'canFail': False
+        },
+    'nsIDOMDocument_GetElementsByTagNameNS': {
+        'thisType': 'nsDocument',
+        'code': '    nsRefPtr<nsContentList> result ='
+                'self->nsIDocument::GetElementsByTagNameNS(arg0, arg1);',
+        'canFail': False
+        },
+    'nsIDOMDocument_CreateElement': {
+        'thisType': 'nsDocument',
+        'code': '    mozilla::ErrorResult error;\n'
+                '    nsCOMPtr<mozilla::dom::Element> result = self->nsIDocument::CreateElement(arg0, error);\n'
+                '    rv = error.ErrorCode();'
+    },
+    'nsIDOMDocument_CreateElementNS': {
+        'thisType': 'nsDocument',
+        'code': '    mozilla::ErrorResult error;\n'
+                '    nsCOMPtr<mozilla::dom::Element> result = self->nsIDocument::CreateElementNS(arg0, arg1, error);\n'
+                '    rv = error.ErrorCode();'
+    },
+    'nsIDOMDocument_CreateTextNode': {
+        'thisType': 'nsDocument',
+        'code': '    nsCOMPtr<nsIContent> result;\n'
+                '    rv = self->CreateTextNode(arg0, getter_AddRefs(result));'
+    },
+    'nsIDOMDocument_GetOnreadystatechange' : {
+        'thisType' : 'nsDocument',
+        'unwrapThisFailureFatal' : False
+        },
+    'nsIDOMDocument_SetOnreadystatechange' : {
+        'thisType' : 'nsDocument',
+        'unwrapThisFailureFatal' : False
+        },
+    'nsIDOMDocument_GetOnmouseenter' : {
+        'thisType' : 'nsDocument',
+        'unwrapThisFailureFatal' : False
+        },
+    'nsIDOMDocument_SetOnmouseenter' : {
+        'thisType' : 'nsDocument',
+        'unwrapThisFailureFatal' : False
+        },
+    'nsIDOMDocument_GetOnmouseleave' : {
+        'thisType' : 'nsDocument',
+        'unwrapThisFailureFatal' : False
+        },
+    'nsIDOMDocument_SetOnmouseleave' : {
+        'thisType' : 'nsDocument',
+        'unwrapThisFailureFatal' : False
+        },
+    'nsIDOMDocument_GetTitle' : {
+        'thisType' : 'nsDocument',
+        'code': '    nsString result;\n'
+                '    self->GetTitle(result);',
+        'canFail': False
+        },
+    'nsIDOMWindow_GetOnmouseenter' : {
+        'thisType' : 'nsIDOMWindow',
+        'unwrapThisFailureFatal' : False
+        },
+    'nsIDOMWindow_SetOnmouseenter' : {
+        'thisType' : 'nsIDOMWindow',
+        'unwrapThisFailureFatal' : False
+        },
+    'nsIDOMWindow_GetOnmouseleave' : {
+        'thisType' : 'nsIDOMWindow',
+        'unwrapThisFailureFatal' : False
+        },
+    'nsIDOMWindow_SetOnmouseleave' : {
+        'thisType' : 'nsIDOMWindow',
+        'unwrapThisFailureFatal' : False
+        }
+    }
+
+newBindingProperties = {
+    'nsIDOMNode': 'mozilla::dom::NodeBinding::sNativePropertyHooks.mNativeProperties.regular',
+    'nsIDOMElement': 'mozilla::dom::ElementBinding::sNativePropertyHooks.mNativeProperties.regular',
+    'nsIDOMHTMLElement': 'mozilla::dom::HTMLElementBinding::sNativePropertyHooks.mNativeProperties.regular'
+    }

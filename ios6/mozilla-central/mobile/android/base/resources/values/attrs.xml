@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
+<resources>
+
+    <declare-styleable name="AboutHomeSection">
+        <attr name="title" format="string"/>
+        <attr name="subtitle" format="string"/>
+        <attr name="more_text" format="string"/>
+    </declare-styleable>
+
+    <declare-styleable name="MenuItem">
+        <attr name="android:id"/>
+        <attr name="android:orderInCategory"/>
+        <attr name="android:title"/>
+        <attr name="android:icon"/>
+        <attr name="android:checkable"/>
+        <attr name="android:checked"/>
+        <attr name="android:visible"/>
+        <attr name="android:enabled"/>
+        <attr name="android:showAsAction"/>
+    </declare-styleable>
+
+    <declare-styleable name="FlowLayout">
+        <attr name="spacing" format="dimension"/>
+    </declare-styleable>
+
+    <declare-styleable name="MultiChoicePreference">
+        <attr name="entries" format="string"/>
+        <attr name="entryKeys" format="string"/>
+        <attr name="initialValues" format="string"/>
+    </declare-styleable>
+
+    <declare-styleable name="BrowserToolbarCurve">
+        <attr name="curveTowards">
+            <flag name="none" value="0x00" />
+            <flag name="left" value="0x01" />
+            <flag name="right" value ="0x02" />
+        </attr>
+    </declare-styleable>
+
+    <declare-styleable name="TabsButton">
+        <attr name="cropped" format="boolean"/>
+    </declare-styleable>
+
+    <declare-styleable name="TabsPanel">
+        <attr name="sidebar" format="boolean"/>
+    </declare-styleable>
+
+    <declare-styleable name="TabsTray">
+        <attr name="tabs">
+            <flag name="tabs_normal" value="0x00" />
+            <flag name="tabs_private" value ="0x01" />
+        </attr>
+    </declare-styleable>
+
+    <declare-styleable name="TextSelectionHandle">
+        <attr name="handleType">
+            <flag name="start" value="0x01" />
+            <flag name="middle" value="0x02" />
+            <flag name="end" value="0x03" />
+        </attr>
+    </declare-styleable>
+
+    <declare-styleable name="PrivateBrowsing">
+        <attr name="state_private" format="boolean"/>
+    </declare-styleable>
+
+    <declare-styleable name="LightweightTheme">
+        <attr name="state_light" format="boolean"/>
+        <attr name="state_dark" format="boolean"/>
+    </declare-styleable>
+
+</resources>
+

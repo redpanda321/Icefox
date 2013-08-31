@@ -1,0 +1,80 @@
+/* -*- Mode: javascript; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+/* vim: set ft=javascript ts=2 et sw=2 tw=80: */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/**
+ * Sources searching
+ */
+
+#globalsearch {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.dbg-results-container:not([open]) {
+  display: none;
+}
+
+/**
+ * Stack frames
+ */
+
+#stackframes {
+  overflow: auto;
+}
+
+/**
+ * Breakpoints view
+ */
+
+#breakpoints {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.dbg-breakpoint > .state,
+.dbg-breakpoint > .content {
+  overflow: hidden;
+}
+
+/**
+ * Variables view
+ */
+
+#variables {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/**
+ * Scope, variable and property elements
+ */
+
+#variables .details:not([open]) {
+  display: none;
+}
+
+.scope[non-header] > .title,
+.variable[non-header] > .title,
+.property[non-header] > .title {
+  display: none;
+}
+
+/**
+ * Variables and properties searching
+ */
+
+.variable[non-match] > .title,
+.property[non-match] > .title {
+  display: none;
+}
+
+/**
+ * Toolbar
+ */
+
+.devtools-toolbarbutton:not([label]) > .toolbarbutton-text {
+  display: none;
+}

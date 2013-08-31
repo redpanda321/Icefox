@@ -1,0 +1,119 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+DEPTH     = @DEPTH@
+topsrcdir = @top_srcdir@
+srcdir    = @srcdir@
+VPATH     = @srcdir@
+FAIL_ON_WARNINGS := 1
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE = content
+LIBRARY_NAME = gkconmedia_s
+LIBXUL_LIBRARY = 1
+
+EXPORTS = \
+  AbstractMediaDecoder.h \
+  AudioSampleFormat.h \
+  AudioSegment.h \
+  BufferMediaResource.h \
+  DecoderTraits.h \
+  FileBlockCache.h \
+  MediaDecoderOwner.h \
+  MediaResource.h \
+  MediaSegment.h \
+  MediaStreamGraph.h \
+  AudioAvailableEventManager.h \
+  MediaDecoder.h \
+  MediaDecoderStateMachine.h \
+  MediaDecoderReader.h \
+  nsDOMMediaStream.h \
+  MediaCache.h \
+  SharedBuffer.h \
+  StreamBuffer.h \
+  TimeVarying.h \
+  VideoFrameContainer.h \
+  VideoUtils.h \
+  VideoSegment.h \
+  VorbisUtils.h \
+  MediaMetadataManager.h \
+  $(NULL)
+
+CPPSRCS = \
+  AudioSegment.cpp \
+  DecoderTraits.cpp \
+  FileBlockCache.cpp \
+  MediaResource.cpp \
+  MediaStreamGraph.cpp \
+  AudioAvailableEventManager.cpp \
+  MediaDecoder.cpp \
+  MediaDecoderStateMachine.cpp \
+  MediaDecoderReader.cpp \
+  nsDOMMediaStream.cpp \
+  MediaCache.cpp \
+  StreamBuffer.cpp \
+  VideoFrameContainer.cpp \
+  VideoSegment.cpp \
+  VideoUtils.cpp \
+  $(NULL)
+
+ifdef MOZ_SYDNEYAUDIO
+EXPORTS += \
+  AudioStream.h \
+  $(NULL)
+CPPSRCS += \
+  AudioStream.cpp \
+  $(NULL)
+endif
+
+PARALLEL_DIRS += webaudio
+
+ifdef MOZ_RAW
+PARALLEL_DIRS += raw
+endif
+
+ifdef MOZ_OGG
+PARALLEL_DIRS += ogg
+endif
+
+ifdef MOZ_WAVE
+PARALLEL_DIRS += wave
+endif
+
+ifdef MOZ_WEBM
+PARALLEL_DIRS += webm
+endif
+
+ifdef MOZ_GSTREAMER
+PARALLEL_DIRS += gstreamer
+endif
+
+ifdef MOZ_DASH
+PARALLEL_DIRS += dash
+endif
+
+ifdef MOZ_MEDIA_PLUGINS
+PARALLEL_DIRS += plugins
+endif
+
+ifdef MOZ_WMF
+PARALLEL_DIRS += wmf
+endif
+
+PARALLEL_DIRS += webrtc
+
+ifeq (gonk,$(MOZ_WIDGET_TOOLKIT))
+PARALLEL_DIRS += omx
+endif
+
+TEST_DIRS += test
+
+FORCE_STATIC_LIB = 1
+
+include $(topsrcdir)/config/config.mk
+include $(topsrcdir)/ipc/chromium/chromium-config.mk
+include $(topsrcdir)/config/rules.mk
+
+DEFINES += -D_IMPL_NS_LAYOUT
