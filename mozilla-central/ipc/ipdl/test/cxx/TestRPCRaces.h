@@ -23,42 +23,37 @@ public:
     { }
     virtual ~TestRPCRacesParent() { }
 
+    static bool RunTestInProcesses() { return true; }
+    static bool RunTestInThreads() { return true; }
+
     void Main();
 
 protected:
-    NS_OVERRIDE
     virtual bool
-    RecvStartRace();
+    RecvStartRace() MOZ_OVERRIDE;
 
-    NS_OVERRIDE
     virtual bool
-    AnswerRace(bool* hasRace);
+    AnswerRace(bool* hasRace) MOZ_OVERRIDE;
 
-    NS_OVERRIDE
     virtual bool
-    AnswerStackFrame();
+    AnswerStackFrame() MOZ_OVERRIDE;
 
-    NS_OVERRIDE
     virtual bool
-    AnswerStackFrame3();
+    AnswerStackFrame3() MOZ_OVERRIDE;
 
-    NS_OVERRIDE
     virtual bool
-    AnswerParent();
+    AnswerParent() MOZ_OVERRIDE;
 
-    NS_OVERRIDE
     virtual bool
-    RecvGetAnsweredParent(bool* answeredParent);
+    RecvGetAnsweredParent(bool* answeredParent) MOZ_OVERRIDE;
 
-    NS_OVERRIDE
     virtual mozilla::ipc::RPCChannel::RacyRPCPolicy
-    MediateRPCRace(const Message& parent, const Message& child)
+    MediateRPCRace(const Message& parent, const Message& child) MOZ_OVERRIDE
     {
         return MediateRace(parent, child);
     }
 
-    NS_OVERRIDE
-    virtual void ActorDestroy(ActorDestroyReason why)
+    virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE
     {
         if (NormalShutdown != why)
             fail("unexpected destruction!");
@@ -88,43 +83,34 @@ public:
     virtual ~TestRPCRacesChild() { }
 
 protected:
-    NS_OVERRIDE
     virtual bool
-    RecvStart();
+    RecvStart() MOZ_OVERRIDE;
 
-    NS_OVERRIDE
     virtual bool
-    AnswerRace(bool* hasRace);
+    AnswerRace(bool* hasRace) MOZ_OVERRIDE;
 
-    NS_OVERRIDE
     virtual bool
-    AnswerStackFrame();
+    AnswerStackFrame() MOZ_OVERRIDE;
 
-    NS_OVERRIDE
     virtual bool
-    AnswerStackFrame3();
+    AnswerStackFrame3() MOZ_OVERRIDE;
 
-    NS_OVERRIDE
     virtual bool
-    RecvWakeup();
+    RecvWakeup() MOZ_OVERRIDE;
 
-    NS_OVERRIDE
     virtual bool
-    RecvWakeup3();
+    RecvWakeup3() MOZ_OVERRIDE;
 
-    NS_OVERRIDE
     virtual bool
-    AnswerChild();
+    AnswerChild() MOZ_OVERRIDE;
 
-    NS_OVERRIDE
     virtual mozilla::ipc::RPCChannel::RacyRPCPolicy
-    MediateRPCRace(const Message& parent, const Message& child)
+    MediateRPCRace(const Message& parent, const Message& child) MOZ_OVERRIDE
     {
         return MediateRace(parent, child);
     }
 
-    NS_OVERRIDE
-    virtual void ActorDestroy(ActorDestroyReason why)
+    virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE
     {
         if (NormalShutdown != why)
             fail("unexpected destruction!");

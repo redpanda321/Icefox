@@ -1,8 +1,3 @@
-//
-// Copyright (c) 2002-2010 The ANGLE Project Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-//
 /****************************************************************************\
 Copyright (c) 2002, NVIDIA Corporation.
 
@@ -55,7 +50,8 @@ NVIDIA HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 #include <string.h>
 
-#include "compiler/debug.h"
+#include "common/angleutils.h"
+#include "compiler/compilerdebug.h"
 #include "compiler/preprocessor/slglobals.h"
 
 #undef malloc
@@ -187,12 +183,13 @@ static int AddString(StringTable *stable, const char *s)
     char *str;
 
     len = (int) strlen(s);
-    if (stable->nextFree + len + 1 >= stable->size) {
+    while (stable->nextFree + len + 1 >= stable->size) {
         assert(stable->size < 1000000);
         str = (char *) malloc(stable->size*2);
         memcpy(str, stable->strings, stable->size);
         free(stable->strings);
         stable->strings = str;
+        stable->size = stable->size*2;
     }
     loc = stable->nextFree;
     strcpy(&stable->strings[loc], s);
@@ -311,7 +308,7 @@ struct AtomTable_Rec {
     int size;
 };
 
-static AtomTable latable = { { 0 } };
+static AtomTable latable = { { NULL, 0, 0 }, { NULL, 0, 0, {0} }, NULL, NULL, 0, 0 };
 AtomTable *atable = &latable;
 
 static int AddAtomFixed(AtomTable *atable, const char *s, int atom);
@@ -335,12 +332,7 @@ static int GrowAtomTable(AtomTable *atable, int size)
             atable->size = 0;
         }
         if (!newmap || !newrev) {
-            /* failed to grow -- error */
-            if (newmap)
-                atable->amap = newmap;
-            if (newrev)
-                atable->amap = newrev;
-            return -1;
+            abort();
         }
         memset(&newmap[atable->size], 0, (size - atable->size) * sizeof(int));
         memset(&newrev[atable->size], 0, (size - atable->size) * sizeof(int));
@@ -438,14 +430,14 @@ static int FindHashLoc(AtomTable *atable, const char *s)
             if (cpp->options.DumpAtomTable) {
                 int ii;
                 char str[200];
-                sprintf(str, "*** Hash failed with more than %d collisions. Must increase hash table size. ***",
+                snprintf(str, sizeof(str), "*** Hash failed with more than %d collisions. Must increase hash table size. ***",
                        HASH_TABLE_MAX_COLLISIONS);
                 CPPShInfoLogMsg(str);
 
-                sprintf(str, "*** New string \"%s\", hash=%04x, delta=%04x", s, collision[0], hashdelta);
+                snprintf(str, sizeof(str), "*** New string \"%s\", hash=%04x, delta=%04x", s, collision[0], hashdelta);
                 CPPShInfoLogMsg(str);
                 for (ii = 0; ii <= HASH_TABLE_MAX_COLLISIONS; ii++) {
-                    sprintf(str, "*** Collides on try %d at hash entry %04x with \"%s\"",
+                    snprintf(str, sizeof(str), "*** Collides on try %d at hash entry %04x with \"%s\"",
                            ii + 1, collision[ii], GetAtomString(atable, atable->htable.entry[collision[ii]].value));
                     CPPShInfoLogMsg(str);
                 }
@@ -624,7 +616,7 @@ static int AddAtomFixed(AtomTable *atable, const char *s, int atom)
 
 int InitAtomTable(AtomTable *atable, int htsize)
 {
-    int ii;
+    unsigned int ii;
 
     htsize = htsize <= 0 ? INIT_HASH_TABLE_SIZE : htsize;
     if (!InitStringTable(&atable->stable))
@@ -689,14 +681,14 @@ void PrintAtomTable(AtomTable *atable)
     char str[200];
 
     for (ii = 0; ii < atable->nextFree; ii++) {
-        sprintf(str, "%d: \"%s\"", ii, &atable->stable.strings[atable->amap[ii]]);
+        snprintf(str, sizeof(str), "%d: \"%s\"", ii, &atable->stable.strings[atable->amap[ii]]);
         CPPDebugLogMsg(str);
     }
-    sprintf(str, "Hash table: size=%d, entries=%d, collisions=",
+    snprintf(str, sizeof(str), "Hash table: size=%d, entries=%d, collisions=",
            atable->htable.size, atable->htable.entries);
     CPPDebugLogMsg(str);
     for (ii = 0; ii < HASH_TABLE_MAX_COLLISIONS; ii++) {
-        sprintf(str, " %d", atable->htable.counts[ii]);
+        snprintf(str, sizeof(str), " %d", atable->htable.counts[ii]);
         CPPDebugLogMsg(str);
     }
 

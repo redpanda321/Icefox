@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 #ifndef mozilla_XPCOM_h
 #define mozilla_XPCOM_h
 
@@ -25,7 +29,6 @@
 #include "nsISupports.h"
 
 #include "nsTArray.h"
-#include "nsTPtrArray.h"
 #include "nsTWeakRef.h"
 
 #include "nsCOMPtr.h"
@@ -74,8 +77,6 @@
 #include "nsIException.h"
 #include "nsIExceptionService.h"
 #include "nsIFactory.h"
-#include "nsIFastLoadFileControl.h"
-#include "nsIFastLoadService.h"
 #include "nsIFile.h"
 #include "nsIHashable.h"
 #include "nsIINIParser.h"
@@ -92,7 +93,6 @@
 #include "nsIProgrammingLanguage.h"
 #include "nsIProperties.h"
 #include "nsIPropertyBag2.h"
-#include "nsIRecyclingAllocator.h"
 #include "nsIRunnable.h"
 #include "nsISeekableStream.h"
 #include "nsISerializable.h"
@@ -108,7 +108,6 @@
 #include "nsISupportsPrimitives.h"
 #include "nsISupportsPriority.h"
 #include "nsIThreadManager.h"
-#include "nsITimelineService.h"
 #include "nsITimer.h"
 #include "nsITraceRefcnt.h"
 #include "nsIUUIDGenerator.h"
@@ -117,7 +116,6 @@
 #include "nsIUnicharLineInputStream.h"
 #include "nsIVariant.h"
 #include "nsIVersionComparator.h"
-#include "nsIWeakReference.h"
 #include "nsIWritablePropertyBag2.h"
 
 // interfaces that include something above
@@ -130,7 +128,6 @@
 #include "nsIConverterOutputStream.h"
 #include "nsIDebug2.h"
 #include "nsIInputStreamTee.h"
-#include "nsILocalFile.h"
 #include "nsIMultiplexInputStream.h"
 #include "nsIMutableArray.h"
 #include "nsIPersistentProperties2.h"
@@ -164,7 +161,6 @@
 
 #include "nsArrayEnumerator.h"
 #include "nsArrayUtils.h"
-#include "nsAutoLock.h"
 #include "nsCRTGlue.h"
 #include "nsCycleCollectionParticipant.h"
 #include "nsDeque.h"

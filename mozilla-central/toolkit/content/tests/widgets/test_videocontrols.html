@@ -2,7 +2,6 @@
 <html>
 <head>
   <title>Video controls test</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>  
   <script type="text/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
@@ -11,7 +10,7 @@
 <p id="display"></p>
 
 <div id="content">
-  <video width="320" height="240" id="video" src="video.ogg" controls mozNoDynamicControls preload="auto"></video>
+  <video width="320" height="240" id="video" src="seek_with_sound.ogg" controls mozNoDynamicControls preload="auto"></video>
 </div>
 
 <pre id="test">
@@ -31,14 +30,15 @@ const playButtonHeight = 28;
 const muteButtonWidth = 33;
 const muteButtonHeight = 28;
 const durationWidth = 34;
-const scrubberWidth = videoWidth - playButtonWidth - muteButtonWidth - durationWidth;
+const fullscreenButtonWidth = document.mozFullScreenEnabled ? 28 : 0;
+const scrubberWidth = videoWidth - playButtonWidth - muteButtonWidth - durationWidth - fullscreenButtonWidth;
 const scrubberHeight = 28;
 
 // Play button is on the bottom-left
 const playButtonCenterX = 0 + Math.round(playButtonWidth / 2);
 const playButtonCenterY = videoHeight - Math.round(playButtonHeight / 2);
-// Mute button is on the bottom-right
-const muteButtonCenterX = videoWidth - Math.round(muteButtonWidth / 2);
+// Mute button is on the bottom-right before the full screen button
+const muteButtonCenterX = videoWidth - Math.round(muteButtonWidth / 2) - fullscreenButtonWidth;
 const muteButtonCenterY = videoHeight - Math.round(muteButtonHeight / 2);
 // Scrubber bar is between the play and mute buttons. We don't need it's
 // X center, just the offset of its box.
@@ -57,8 +57,6 @@ function runTest(event) {
       is(event.type, "canplaythrough", "checking event type");
       is(video.paused, true, "checking video play state");
       is(video.muted, false, "checking video mute state");
-      // Don't respond to any more canplaythroughs
-      event.target.removeEventListener("canplaythrough", runTest, false);
 
       // Click the play button
       synthesizeMouse(video, playButtonCenterX, playButtonCenterY, { });
@@ -213,11 +211,36 @@ function runTest(event) {
   testnum++;
 }
 
+var canplaythroughsavedevent = null;
+var gotcanplaythroughevent = false;
+var gotloadevent = false;
+
+function canplaythroughevent(event) {
+  canplaythroughsavedevent = event;
+  gotcanplaythroughevent = true;
+  video.removeEventListener("canplaythrough",  canplaythroughevent, false);
+  maybeStartTest();
+}
+
+function loadevent(event) {
+  gotloadevent = true;
+  maybeStartTest();
+}
+
+// setTimeout so that test starts after paint suppression ends
+function maybeStartTest() {
+  if (!gotcanplaythroughevent || !gotloadevent)
+    return;
+
+  setTimeout("runTest(canplaythroughsavedevent);", 0);
+}
+
 var testnum = 1;
 var video = document.getElementById("video");
 
 // Kick off test once video has loaded.
-video.addEventListener("canplaythrough",  runTest, false);
+video.addEventListener("canplaythrough",  canplaythroughevent, false);
+window.addEventListener("load",  loadevent, false);
 
 // Other events expected by the test.
 video.addEventListener("play",  runTest, false);

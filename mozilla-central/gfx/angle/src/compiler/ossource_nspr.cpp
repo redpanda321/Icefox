@@ -5,7 +5,7 @@
 //
 
 //
-// This file contains the posix specific functions
+// This file contains the nspr specific functions
 //
 #include "compiler/osinclude.h"
 
@@ -14,7 +14,7 @@
 //
 OS_TLSIndex OS_AllocTLSIndex()
 {
-    PRUintn index;
+    unsigned index;
     PRStatus status = PR_NewThreadPrivateIndex(&index, NULL);
 
     if (status) {
@@ -24,7 +24,6 @@ OS_TLSIndex OS_AllocTLSIndex()
 
     return index;
 }
-
 
 bool OS_SetTLSValue(OS_TLSIndex nIndex, void *lpvValue)
 {
@@ -36,9 +35,9 @@ bool OS_SetTLSValue(OS_TLSIndex nIndex, void *lpvValue)
     return PR_SetThreadPrivate(nIndex, lpvValue) == 0;
 }
 
-
 bool OS_FreeTLSIndex(OS_TLSIndex nIndex)
 {
     // Can't delete TLS keys with nspr
     return true;
 }
+

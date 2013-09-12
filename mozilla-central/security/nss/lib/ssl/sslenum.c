@@ -2,44 +2,10 @@
  * Table enumerating all implemented cipher suites
  * Part of public API.
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Stephen Henson <stephen.henson@gemplus.com>
- *   Dr Vipul Gupta <vipul.gupta@sun.com>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-/* $Id: sslenum.c,v 1.17 2010/02/10 18:07:21 wtc%google.com Exp $ */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+/* $Id: sslenum.c,v 1.19 2012/04/25 14:50:12 gerv%gerv.net Exp $ */
 
 #include "ssl.h"
 #include "sslproto.h"
@@ -54,6 +20,9 @@
  * such as AES and RC4 to allow servers that prefer Camellia to negotiate
  * Camellia without having to disable AES and RC4, which are needed for
  * interoperability with clients that don't yet implement Camellia.
+ *
+ * The ordering of cipher suites in this table must match the ordering in
+ * the cipherSuites table in ssl3con.c.
  *
  * If new ECC cipher suites are added, also update the ssl3CipherSuite arrays
  * in ssl3ecc.c.
@@ -95,8 +64,8 @@ const PRUint16 SSL_ImplementedCiphers[] = {
 #endif /* NSS_ENABLE_ECC */
     TLS_RSA_WITH_SEED_CBC_SHA,
     TLS_RSA_WITH_CAMELLIA_128_CBC_SHA,
-    SSL_RSA_WITH_RC4_128_MD5,
     SSL_RSA_WITH_RC4_128_SHA,
+    SSL_RSA_WITH_RC4_128_MD5,
     TLS_RSA_WITH_AES_128_CBC_SHA,
 
     /* 112-bit 3DES */

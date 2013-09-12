@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 /* header created automatically with -DGEN_TREES_H */
 
 local const ct_data static_ltree[L_CODES+2] = {
@@ -70,7 +74,7 @@ local const ct_data static_dtree[D_CODES] = {
 {{19},{ 5}}, {{11},{ 5}}, {{27},{ 5}}, {{ 7},{ 5}}, {{23},{ 5}}
 };
 
-const uch _dist_code[DIST_CODE_LEN] = {
+const uch ZLIB_INTERNAL _dist_code[DIST_CODE_LEN] = {
  0,  1,  2,  3,  4,  4,  5,  5,  6,  6,  6,  6,  7,  7,  7,  7,  8,  8,  8,  8,
  8,  8,  8,  8,  9,  9,  9,  9,  9,  9,  9,  9, 10, 10, 10, 10, 10, 10, 10, 10,
 10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11,
@@ -99,7 +103,7 @@ const uch _dist_code[DIST_CODE_LEN] = {
 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29
 };
 
-const uch _length_code[MAX_MATCH-MIN_MATCH+1]= {
+const uch ZLIB_INTERNAL _length_code[MAX_MATCH-MIN_MATCH+1]= {
  0,  1,  2,  3,  4,  5,  6,  7,  8,  8,  9,  9, 10, 10, 11, 11, 12, 12, 12, 12,
 13, 13, 13, 13, 14, 14, 14, 14, 15, 15, 15, 15, 16, 16, 16, 16, 16, 16, 16, 16,
 17, 17, 17, 17, 17, 17, 17, 17, 18, 18, 18, 18, 18, 18, 18, 18, 19, 19, 19, 19,

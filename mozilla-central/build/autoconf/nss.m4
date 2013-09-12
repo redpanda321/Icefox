@@ -5,7 +5,7 @@
 
 dnl AM_PATH_NSS([MINIMUM-VERSION, [ACTION-IF-FOUND [, ACTION-IF-NOT-FOUND]]])
 dnl Test for NSS, and define NSS_CFLAGS and NSS_LIBS
-AC_DEFUN(AM_PATH_NSS,
+AC_DEFUN([AM_PATH_NSS],
 [dnl
 
 AC_ARG_WITH(nss-prefix,
@@ -73,6 +73,7 @@ AC_ARG_WITH(nss-exec-prefix,
 		ifelse([$2], , :, [$2])     
 	else
 		AC_MSG_RESULT(no)
+		ifelse([$3], , :, [$3])
 	fi
 
 

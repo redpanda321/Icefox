@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Benjamin Smedberg <benjamin@smedbergs.us>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsXPCOM_h__
 #define nsXPCOM_h__
@@ -63,8 +30,6 @@
 # define NS_LogDtor                  NS_LogDtor_P
 # define NS_LogCOMPtrAddRef          NS_LogCOMPtrAddRef_P
 # define NS_LogCOMPtrRelease         NS_LogCOMPtrRelease_P
-# define NS_CycleCollectorSuspect    NS_CycleCollectorSuspect_P
-# define NS_CycleCollectorForget     NS_CycleCollectorForget_P
 # define NS_CycleCollectorSuspect2   NS_CycleCollectorSuspect2_P
 # define NS_CycleCollectorForget2    NS_CycleCollectorForget2_P
 #endif
@@ -116,16 +81,16 @@ struct Module;
  *
  * @param binDirectory     The directory containing the component
  *                         registry and runtime libraries;
- *                         or use <CODE>nsnull</CODE> to use the working
+ *                         or use <CODE>nullptr</CODE> to use the working
  *                         directory.
  *
  * @param appFileLocationProvider The object to be used by Gecko that specifies
  *                         to Gecko where to find profiles, the component
  *                         registry preferences and so on; or use
- *                         <CODE>nsnull</CODE> for the default behaviour.
+ *                         <CODE>nullptr</CODE> for the default behaviour.
  *
  * @see NS_NewLocalFile
- * @see nsILocalFile
+ * @see nsIFile
  * @see nsIDirectoryServiceProvider
  *
  * @return NS_OK for success;
@@ -204,7 +169,7 @@ XPCOM_API(nsresult)
 NS_GetMemoryManager(nsIMemory* *result);
 
 /**
- * Public Method to create an instance of a nsILocalFile.  This function
+ * Public Method to create an instance of a nsIFile.  This function
  * may be called prior to NS_InitXPCOM.
  * 
  *   @param path       
@@ -218,7 +183,7 @@ NS_GetMemoryManager(nsIMemory* *result);
  *       resolve symbolic links.  By default, this value will be false
  *       on all non unix systems.  On unix, this attribute is effectively
  *       a noop.  
- * @param result Interface pointer to a new instance of an nsILocalFile 
+ * @param result Interface pointer to a new instance of an nsIFile 
  *
  * @return NS_OK for success;
  *         other error codes indicate a failure.
@@ -228,26 +193,26 @@ NS_GetMemoryManager(nsIMemory* *result);
 
 XPCOM_API(nsresult)
 NS_NewLocalFile(const nsAString &path, 
-                PRBool followLinks, 
-                nsILocalFile* *result);
+                bool followLinks, 
+                nsIFile* *result);
 
 XPCOM_API(nsresult)
 NS_NewNativeLocalFile(const nsACString &path, 
-                      PRBool followLinks, 
-                      nsILocalFile* *result);
+                      bool followLinks, 
+                      nsIFile* *result);
 
 #endif
 
 /**
  * Allocates a block of memory of a particular size. If the memory cannot
- * be allocated (because of an out-of-memory condition), null is returned.
+ * be allocated (because of an out-of-memory condition), the process aborts.
  *
  * @param size   The size of the block to allocate
  * @result       The block of memory
  * @note         This function is thread-safe.
  */
 XPCOM_API(void*)
-NS_Alloc(PRSize size);
+NS_Alloc(size_t size);
 
 /**
  * Reallocates a block of memory to a new size.
@@ -262,11 +227,10 @@ NS_Alloc(PRSize size);
  * If s is the size of the block to which ptr points, the first min(s, size)
  * bytes of ptr's block are copied to the new block. If the allocation
  * succeeds, ptr is freed and a pointer to the new block is returned. If the
- * allocation fails, ptr is not freed and null is returned. The returned
- * value may be the same as ptr.
+ * allocation fails, the process aborts.
  */
 XPCOM_API(void*)
-NS_Realloc(void* ptr, PRSize size);
+NS_Realloc(void* ptr, size_t size);
 
 /**
  * Frees a block of memory. Null is a permissible value, in which case no
@@ -306,9 +270,9 @@ enum {
  * @param aLine  The source file line number (-1 indicates no line number)
  */
 XPCOM_API(void)
-NS_DebugBreak(PRUint32 aSeverity,
+NS_DebugBreak(uint32_t aSeverity,
               const char *aStr, const char *aExpr,
-              const char *aFile, PRInt32 aLine);
+              const char *aFile, int32_t aLine);
 
 /**
  * Perform a stack-walk to a debugging log under various
@@ -343,10 +307,10 @@ NS_LogTerm();
  */
 
 XPCOM_API(void)
-NS_LogCtor(void *aPtr, const char *aTypeName, PRUint32 aInstanceSize);
+NS_LogCtor(void *aPtr, const char *aTypeName, uint32_t aInstanceSize);
 
 XPCOM_API(void)
-NS_LogDtor(void *aPtr, const char *aTypeName, PRUint32 aInstanceSize);
+NS_LogDtor(void *aPtr, const char *aTypeName, uint32_t aInstanceSize);
 
 /**
  * Log a stacktrace when an XPCOM object's refcount is incremented or
@@ -360,7 +324,7 @@ NS_LogDtor(void *aPtr, const char *aTypeName, PRUint32 aInstanceSize);
  */
 XPCOM_API(void)
 NS_LogAddRef(void *aPtr, nsrefcnt aNewRefCnt,
-             const char *aTypeName, PRUint32 aInstanceSize);
+             const char *aTypeName, uint32_t aInstanceSize);
 
 XPCOM_API(void)
 NS_LogRelease(void *aPtr, nsrefcnt aNewRefCnt, const char *aTypeName);
@@ -389,17 +353,18 @@ NS_LogCOMPtrRelease(void *aCOMPtr, nsISupports *aObject);
  * The first two functions below exist only to support binary components
  * that were compiled for older XPCOM versions.
  */
-XPCOM_API(PRBool)
-NS_CycleCollectorSuspect(nsISupports *n);
 
-XPCOM_API(PRBool)
-NS_CycleCollectorForget(nsISupports *n);
+#ifdef __cplusplus
+
+class nsCycleCollectionParticipant;
 
 XPCOM_API(nsPurpleBufferEntry*)
-NS_CycleCollectorSuspect2(nsISupports *n);
+NS_CycleCollectorSuspect2(void *n, nsCycleCollectionParticipant *p);
 
-XPCOM_API(PRBool)
+XPCOM_API(bool)
 NS_CycleCollectorForget2(nsPurpleBufferEntry *e);
+
+#endif
 
 /**
  * Categories (in the category manager service) used by XPCOM:

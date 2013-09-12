@@ -1,47 +1,13 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  * vim: sw=2 ts=2 et lcs=trail\:.,tab\:>~ :
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Vladimir Vukicevic <vladimir.vukicevic@oracle.com>
- *   Shawn Wilsher <me@shawnwilsher.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "sqlite3.h"
 
 #include "jsapi.h"
-#include "jsdate.h"
+#include "jsfriendapi.h"
 
 #include "nsPrintfCString.h"
 #include "nsString.h"
@@ -49,12 +15,18 @@
 #include "mozilla/Mutex.h"
 #include "mozilla/CondVar.h"
 #include "nsThreadUtils.h"
+#include "nsJSUtils.h"
 
 #include "Variant.h"
 #include "mozStoragePrivateHelpers.h"
 #include "mozIStorageStatement.h"
 #include "mozIStorageCompletionCallback.h"
 #include "mozIStorageBindingParams.h"
+
+#include "prlog.h"
+#ifdef PR_LOGGING
+extern PRLogModuleInfo* gStorageLog;
+#endif
 
 namespace mozilla {
 namespace storage {
@@ -100,7 +72,7 @@ convertResultCode(int aSQLiteResultCode)
 
   // generic error
 #ifdef DEBUG
-  nsCAutoString message;
+  nsAutoCString message;
   message.AppendLiteral("SQLite returned error code ");
   message.AppendInt(rc);
   message.AppendLiteral(" , Storage will convert it to NS_ERROR_FAILURE");
@@ -124,7 +96,7 @@ checkAndLogStatementPerformance(sqlite3_stmt *aStatement)
   if (::strstr(sql, "/* do not warn (bug "))
     return;
 
-  nsCAutoString message;
+  nsAutoCString message;
   message.AppendInt(count);
   if (count == 1)
     message.Append(" sort operation has ");
@@ -141,46 +113,42 @@ checkAndLogStatementPerformance(sqlite3_stmt *aStatement)
 nsIVariant *
 convertJSValToVariant(
   JSContext *aCtx,
-  jsval aValue)
+  JS::Value aValue)
 {
-  if (JSVAL_IS_INT(aValue))
-    return new IntegerVariant(JSVAL_TO_INT(aValue));
+  if (aValue.isInt32())
+    return new IntegerVariant(aValue.toInt32());
 
-  if (JSVAL_IS_DOUBLE(aValue))
-    return new FloatVariant(JSVAL_TO_DOUBLE(aValue));
+  if (aValue.isDouble())
+    return new FloatVariant(aValue.toDouble());
 
-  if (JSVAL_IS_STRING(aValue)) {
-    JSString *str = JSVAL_TO_STRING(aValue);
-    nsDependentString value(
-      reinterpret_cast<PRUnichar *>(::JS_GetStringChars(str)),
-      ::JS_GetStringLength(str)
-    );
+  if (aValue.isString()) {
+    nsDependentJSString value;
+    if (!value.init(aCtx, aValue))
+        return nullptr;
     return new TextVariant(value);
   }
 
-  if (JSVAL_IS_BOOLEAN(aValue))
-    return new IntegerVariant((aValue == JSVAL_TRUE) ? 1 : 0);
+  if (aValue.isBoolean())
+    return new IntegerVariant(aValue.isTrue() ? 1 : 0);
 
-  if (JSVAL_IS_NULL(aValue))
+  if (aValue.isNull())
     return new NullVariant();
 
-  if (JSVAL_IS_OBJECT(aValue)) {
-    JSObject *obj = JSVAL_TO_OBJECT(aValue);
+  if (aValue.isObject()) {
+    JSObject* obj = &aValue.toObject();
     // We only support Date instances, all others fail.
-    if (!::js_DateIsValid(aCtx, obj))
-      return nsnull;
+    if (!::js_DateIsValid(obj))
+      return nullptr;
 
-    double msecd = ::js_DateGetMsecSinceEpoch(aCtx, obj);
+    double msecd = ::js_DateGetMsecSinceEpoch(obj);
     msecd *= 1000.0;
-    PRInt64 msec;
-    LL_D2L(msec, msecd);
+    int64_t msec = msecd;
 
     return new IntegerVariant(msec);
   }
 
-  return nsnull;
+  return nullptr;
 }
-
 
 namespace {
 class CallbackEvent : public nsRunnable
@@ -208,128 +176,7 @@ newCompletionEvent(mozIStorageCompletionCallback *aCallback)
   return event.forget();
 }
 
-/**
- * This code is heavily based on the sample at:
- *   http://www.sqlite.org/unlock_notify.html
- */
-namespace {
 
-class UnlockNotification
-{
-public:
-  UnlockNotification()
-  : mMutex("UnlockNotification mMutex")
-  , mCondVar(mMutex, "UnlockNotification condVar")
-  , mSignaled(false)
-  {
-  }
-
-  void Wait()
-  {
-    mozilla::MutexAutoLock lock(mMutex);
-    while (!mSignaled) {
-      (void)mCondVar.Wait();
-    }
-  }
-
-  void Signal()
-  {
-    mozilla::MutexAutoLock lock(mMutex);
-    mSignaled = true;
-    (void)mCondVar.Notify();
-  }
-
-private:
-  mozilla::Mutex mMutex;
-  mozilla::CondVar mCondVar;
-  bool mSignaled;
-};
-
-void
-UnlockNotifyCallback(void **aArgs,
-                     int aArgsSize)
-{
-  for (int i = 0; i < aArgsSize; i++) {
-    UnlockNotification *notification =
-      static_cast<UnlockNotification *>(aArgs[i]);
-    notification->Signal();
-  }
-}
-
-int
-WaitForUnlockNotify(sqlite3* aDatabase)
-{
-  UnlockNotification notification;
-  int srv = ::sqlite3_unlock_notify(aDatabase, UnlockNotifyCallback,
-                                    &notification);
-  NS_ASSERTION(srv == SQLITE_LOCKED || srv == SQLITE_OK, "Bad result!");
-  if (srv == SQLITE_OK)
-    notification.Wait();
-
-  return srv;
-}
-
-} // anonymous namespace
-
-int
-stepStmt(sqlite3_stmt* aStatement)
-{
-  bool checkedMainThread = false;
-
-  sqlite3* db = ::sqlite3_db_handle(aStatement);
-  (void)::sqlite3_extended_result_codes(db, 1);
-
-  int srv;
-  while ((srv = ::sqlite3_step(aStatement)) == SQLITE_LOCKED_SHAREDCACHE) {
-    if (!checkedMainThread) {
-      checkedMainThread = true;
-      if (NS_IsMainThread()) {
-        NS_WARNING("We won't allow blocking on the main thread!");
-        break;
-      }
-    }
-
-    srv = WaitForUnlockNotify(sqlite3_db_handle(aStatement));
-    if (srv != SQLITE_OK)
-      break;
-
-    ::sqlite3_reset(aStatement);
-  }
-
-  (void)::sqlite3_extended_result_codes(db, 0);
-  // Drop off the extended result bits of the result code.
-  return srv & 0xFF;
-}
-
-int
-prepareStmt(sqlite3* aDatabase,
-            const nsCString &aSQL,
-            sqlite3_stmt **_stmt)
-{
-  bool checkedMainThread = false;
-
-  (void)::sqlite3_extended_result_codes(aDatabase, 1);
-
-  int srv;
-  while((srv = ::sqlite3_prepare_v2(aDatabase, aSQL.get(), -1, _stmt, NULL)) ==
-        SQLITE_LOCKED_SHAREDCACHE) {
-    if (!checkedMainThread) {
-      checkedMainThread = true;
-      if (NS_IsMainThread()) {
-        NS_WARNING("We won't allow blocking on the main thread!");
-        break;
-      }
-    }
-
-    srv = WaitForUnlockNotify(aDatabase);
-    if (srv != SQLITE_OK)
-      break;
-  }
-
-  (void)::sqlite3_extended_result_codes(aDatabase, 0);
-  // Drop off the extended result bits of the result code.
-  return srv & 0xFF;
-}
 
 } // namespace storage
 } // namespace mozilla

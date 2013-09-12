@@ -1,10 +1,10 @@
 /**  
  * Import common SimpleTest methods so that they're usable in this window.
  */
-var imports = [ "SimpleTest", "is", "isnot", "ok", "onerror", "todo", 
+var imports = [ "SimpleTest", "is", "isnot", "ise", "ok", "onerror", "todo",
   "todo_is", "todo_isnot" ];
-for each (var import in imports) {
-  window[import] = window.opener.wrappedJSObject[import];
+for each (var name in imports) {
+  window[name] = window.opener.wrappedJSObject[name];
 }
 
 /**
@@ -18,6 +18,8 @@ const NAV_RELOAD = 4;
 
 var gExpectedEvents;          // an array of events which are expected to
                               // be triggered by this navigation
+var gUnexpectedEvents;        // an array of event names which are NOT expected
+                              // to be triggered by this navigation
 var gFinalEvent;              // true if the last expected event has fired
 var gUrisNotInBFCache = [];   // an array of uri's which shouldn't be stored
                               // in the bfcache
@@ -25,6 +27,8 @@ var gNavType = NAV_NONE;      // defines the most recent navigation type
                               // executed by doPageNavigation
 var gOrigMaxTotalViewers =    // original value of max_total_viewers,
   undefined;                  // to be restored at end of test
+
+var gExtractedPath = null;    //used to cache file path for extracting files from a .jar file
 
 /**
  * The doPageNavigation() function performs page navigations asynchronously, 
@@ -38,6 +42,8 @@ var gOrigMaxTotalViewers =    // original value of max_total_viewers,
  *               back: if true, the browser will execute goBack()
  *
  *            forward: if true, the browser will execute goForward()
+ *
+ *             reload: if true, the browser will execute reload()
  *
  *  eventsToListenFor: an array containing one or more of the following event  
  *                     types to listen for:  "pageshow", "pagehide", "onload",
@@ -91,6 +97,8 @@ function doPageNavigation(params) {
     params.eventsToListenFor : ["pageshow"];
   gExpectedEvents = typeof(params.eventsToListenFor) == "undefined" || 
     eventsToListenFor.length == 0 ? undefined : params.expectedEvents; 
+  gUnexpectedEvents = typeof(params.eventsToListenFor) == "undefined" || 
+    eventsToListenFor.length == 0 ? undefined : params.unexpectedEvents; 
   let preventBFCache = (typeof[params.preventBFCache] == "undefined") ? 
     false : params.preventBFCache;
   let waitOnly = (typeof(params.waitForEventsOnly) == "boolean" 
@@ -123,6 +131,10 @@ function doPageNavigation(params) {
       eventFound = true;
     for each (let anExpectedEvent in gExpectedEvents) {
       if (anExpectedEvent.type == anEventType)
+        eventFound = true;
+    }
+    for each (let anExpectedEventType in gUnexpectedEvents) {
+      if (anExpectedEventType == anEventType)
         eventFound = true;
     }
     if (!eventFound)
@@ -256,7 +268,12 @@ function pageEventListener(event) {
        "though it was loaded with .preventBFCache previously\n");
     }
   }
-  
+
+  if (typeof(gUnexpectedEvents) != "undefined") {
+    is(gUnexpectedEvents.indexOf(event.type), -1,
+       "Should not get unexpected event " + event.type);
+  }  
+
   // If no expected events were specified, mark the final event as having been 
   // triggered when a pageshow event is fired; this will allow 
   // doPageNavigation() to return.
@@ -297,6 +314,18 @@ function pageEventListener(event) {
       event.originalTarget.location + " had an unexpected value"); 
   }
 
+  if ("visibilityState" in expected) {
+    is(event.originalTarget.visibilityState, expected.visibilityState,
+       "The visibilityState property of the document on page " +
+       event.originalTarget.location + " had an unexpected value");
+  }
+
+  if ("hidden" in expected) {
+    is(event.originalTarget.hidden, expected.hidden,
+       "The hidden property of the document on page " +
+       event.originalTarget.location + " had an unexpected value");
+  }
+
   // If we're out of expected events, let doPageNavigation() return.
   if (gExpectedEvents.length == 0)
     setTimeout(function() { gFinalEvent = true; }, 0);
@@ -313,7 +342,6 @@ function finish() {
   // If the test changed the value of max_total_viewers via a call to
   // enableBFCache(), then restore it now.
   if (typeof(gOrigMaxTotalViewers) != "undefined") {
-    netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
     var prefs = Components.classes["@mozilla.org/preferences-service;1"]
                 .getService(Components.interfaces.nsIPrefBranch);
     prefs.setIntPref("browser.sessionhistory.max_total_viewers",
@@ -321,8 +349,22 @@ function finish() {
   }
 
   // Close the test window and signal the framework that the test is done.
+  let opener = window.opener;
+  let SimpleTest = opener.wrappedJSObject.SimpleTest;
+
+  // Wait for the window to be closed before finishing the test
+  let ww = Components.classes["@mozilla.org/embedcomp/window-watcher;1"]
+	             .getService(Components.interfaces.nsIWindowWatcher);
+  ww.registerNotification(function(subject, topic, data) {
+    if (topic == "domwindowclosed") {
+      ww.unregisterNotification(arguments.callee);
+      SimpleTest.waitForFocus(function() {
+        SimpleTest.finish();
+      }, opener);
+    }
+  });
+
   window.close();
-  window.opener.wrappedJSObject.SimpleTest.finish();
 }
 
 /**
@@ -382,7 +424,6 @@ function waitForTrue(fn, onWaitComplete, timeout) {
  *           to 0 (disabled), if a number, set it to that specific number
  */
 function enableBFCache(enable) {
-  netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
   var prefs = Components.classes["@mozilla.org/preferences-service;1"]
               .getService(Components.interfaces.nsIPrefBranch);
   
@@ -405,12 +446,36 @@ function enableBFCache(enable) {
   }
 }
 
+/*
+ * get http root for local tests.  Use a single extractJarToTmp instead of 
+ * extracting for each test.  
+ * Returns a file://path if we have a .jar file
+ */
+function getHttpRoot() {
+  var location = window.location.href;
+  location = getRootDirectory(location);
+  var jar = getJar(location);
+  if (jar != null) {
+    if (gExtractedPath == null) {
+      var resolved = extractJarToTmp(jar);
+      gExtractedPath = resolved.path;
+    }
+  } else {
+    return null;
+  }
+  return "file://" + gExtractedPath + '/';
+}
+
 /**
  * Returns the full HTTP url for a file in the mochitest docshell test 
  * directory.
  */
 function getHttpUrl(filename) {
-  return "http://mochi.test:8888/chrome/docshell/test/chrome/" + filename;
+  var root = getHttpRoot();
+  if (root == null) {
+    root = "http://mochi.test:8888/chrome/docshell/test/chrome/";
+  }
+  return root + filename;
 }
 
 /**

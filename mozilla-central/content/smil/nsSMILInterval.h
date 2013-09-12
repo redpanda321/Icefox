@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SMIL module.
- *
- * The Initial Developer of the Original Code is Brian Birtles.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Brian Birtles <birtles@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef NS_SMILINTERVAL_H_
 #define NS_SMILINTERVAL_H_
@@ -56,8 +24,7 @@ public:
   nsSMILInterval();
   nsSMILInterval(const nsSMILInterval& aOther);
   ~nsSMILInterval();
-  void NotifyChanged(const nsSMILTimeContainer* aContainer);
-  void Unlink(PRBool aFiltered = PR_FALSE);
+  void Unlink(bool aFiltered = false);
 
   const nsSMILInstanceTime* Begin() const
   {
@@ -86,17 +53,18 @@ public:
   void FixBegin();
   void FixEnd();
 
+  typedef nsTArray<nsRefPtr<nsSMILInstanceTime> > InstanceTimeList;
+
   void AddDependentTime(nsSMILInstanceTime& aTime);
   void RemoveDependentTime(const nsSMILInstanceTime& aTime);
+  void GetDependentTimes(InstanceTimeList& aTimes);
 
   // Cue for assessing if this interval can be filtered
-  PRBool IsDependencyChainLink() const;
+  bool IsDependencyChainLink() const;
 
 private:
   nsRefPtr<nsSMILInstanceTime> mBegin;
   nsRefPtr<nsSMILInstanceTime> mEnd;
-
-  typedef nsTArray<nsRefPtr<nsSMILInstanceTime> > InstanceTimeList;
 
   // nsSMILInstanceTimes to notify when this interval is changed or deleted.
   InstanceTimeList mDependentTimes;
@@ -104,29 +72,14 @@ private:
   // Indicates if the end points of the interval are fixed or not.
   //
   // Note that this is not the same as having an end point whose TIME is fixed
-  // (i.e. nsSMILInstanceTime::IsFixed() returns PR_TRUE). This is because it is
+  // (i.e. nsSMILInstanceTime::IsFixed() returns true). This is because it is
   // possible to have an end point with a fixed TIME and yet still update the
   // end point to refer to a different nsSMILInstanceTime object.
   //
-  // However, if mBegin/EndFixed is PR_TRUE, then BOTH the nsSMILInstanceTime
+  // However, if mBegin/EndFixed is true, then BOTH the nsSMILInstanceTime
   // OBJECT returned for that end point and its TIME value will not change.
-  PRPackedBool mBeginFixed;
-  PRPackedBool mEndFixed;
-
-  // When change notifications are passed around the timing model we try to
-  // filter out all changes where there is no observable difference to an
-  // instance time. Changes that may produce an observable difference are:
-  //
-  // * Changes to the time of an interval endpoint
-  // * Changes in the relative times of different time containers
-  // * Changes to the dependency chain (which may affect the animation sandwich)
-  //
-  // The nsSMILTimeValueSpec can detect the first two changes by recalculating
-  // the time but in order to help detect the third change we simply set a flag
-  // whenever the mBegin or mEnd pointers are changed. These flags are reset
-  // when the next change notification is sent.
-  PRPackedBool mBeginObjectChanged;
-  PRPackedBool mEndObjectChanged;
+  bool mBeginFixed;
+  bool mEndFixed;
 };
 
 #endif // NS_SMILINTERVAL_H_

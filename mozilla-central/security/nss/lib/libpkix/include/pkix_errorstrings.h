@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the PKIX-C library.
- *
- * The Initial Developer of the Original Code is
- * Sun Microsystems, Inc.
- * Portions created by the Initial Developer are
- * Copyright 2004-2007 Sun Microsystems, Inc.  All Rights Reserved.
- *
- * Contributor(s):
- *   Sun Microsystems, Inc.
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * This file is intended to be included after different definitions of
@@ -272,6 +239,7 @@ PKIX_ERRORENTRY(CERTVERIFYCERTTYPEFAILED,PKIX_PL_Cert_VerifyCertAndKeyType faile
 PKIX_ERRORENTRY(CERTVERIFYKEYUSAGEFAILED,PKIX_PL_Cert_VerifyKeyUsage failed,0),
 PKIX_ERRORENTRY(CERTVERIFYSIGNATUREFAILED,PKIX_PL_Cert_VerifySignature failed,0),
 PKIX_ERRORENTRY(CHAINREJECTEDBYREVOCATIONCHECKER,Chain rejected by Revocation Checker,0),
+PKIX_ERRORENTRY(CHAINVERIFYCALLBACKFAILED,Chain rejected by Application Callback,SEC_ERROR_APPLICATION_CALLBACK_ERROR),
 PKIX_ERRORENTRY(CHECKCERTAGAINSTANCHORFAILED,pkix_CheckCertAgainstAnchor failed,0),
 PKIX_ERRORENTRY(CHECKCERTFAILED,pkix_CheckCert failed,0),
 PKIX_ERRORENTRY(CHECKCHAINFAILED,pkix_CheckChain failed,0),
@@ -610,8 +578,8 @@ PKIX_ERRORENTRY(INFOACCESSCREATELISTFAILED,pkix_pl_InfoAccess_CreateList failed,
 PKIX_ERRORENTRY(INFOACCESSGETLOCATIONFAILED,PKIX_PL_InfoAccess_GetLocation failed,0),
 PKIX_ERRORENTRY(INFOACCESSGETLOCATIONTYPEFAILED,PKIX_PL_InfoAccess_GetLocationType failed,0),
 PKIX_ERRORENTRY(INFOACCESSGETMETHODFAILED,PKIX_PL_InfoAccess_GetMethod failed,0),
-PKIX_ERRORENTRY(INFOACCESSPARSELOCATIONFAILED,pkix_pl_InfoAccess_ParseLocation failed,0),
-PKIX_ERRORENTRY(INFOACCESSPARSETOKENSFAILED,pkix_pl_InfoAccess_ParseTokens failed,0),
+PKIX_ERRORENTRY(INFOACCESSPARSELOCATIONFAILED,pkix_pl_InfoAccess_ParseLocation failed,SEC_ERROR_BAD_INFO_ACCESS_LOCATION),
+PKIX_ERRORENTRY(INFOACCESSPARSETOKENSFAILED,pkix_pl_InfoAccess_ParseTokens failed,SEC_ERROR_BAD_INFO_ACCESS_LOCATION),
 PKIX_ERRORENTRY(INITIALIZECHECKERSFAILED,pkix_InitializeCheckers failed,0),
 PKIX_ERRORENTRY(INITIALIZEFAILED,PKIX_PL_Initialize failed,0),
 PKIX_ERRORENTRY(INPUTLISTMUSTBEHEADER,Input List must be header,SEC_ERROR_INVALID_ARGS),
@@ -732,7 +700,7 @@ PKIX_ERRORENTRY(NORESPONSEDATAINHTTPRESPONSE,No responseData in Http Response,SE
 PKIX_ERRORENTRY(NOTARGETCERTSUPPLIED,No target cert supplied,SEC_ERROR_INVALID_ARGS),
 PKIX_ERRORENTRY(NOTCONFORMINGCRLDP,Cert CRL DP does not conform to the rfc, 0),
 PKIX_ERRORENTRY(NOTDERPACKAGE,Not a DER package,0),
-PKIX_ERRORENTRY(NOTENOUGHNAMECOMPONENTSINGENERALNAME,Not enough name components in GeneralName,0),
+PKIX_ERRORENTRY(NOTENOUGHNAMECOMPONENTSINGENERALNAME,Not enough name components in GeneralName,SEC_ERROR_BAD_INFO_ACCESS_LOCATION),
 PKIX_ERRORENTRY(NSSCERTIFICATEUSAGETOPKIXKUANDEKUFAILED,Failed to convert nss certificate usage to pkix ku and eku data structures,0),
 PKIX_ERRORENTRY(NSSCONTEXTCREATEFAILED,PKIX_PL_NssContext_Create failed,0),
 PKIX_ERRORENTRY(NSSCONTEXTDESTROYFAILED,PKIX_PL_NssContext_Destroy failed,0),
@@ -997,7 +965,7 @@ PKIX_ERRORENTRY(SETPOLICIESFAILED,Fail to set cert validation policies,0),
 PKIX_ERRORENTRY(SHUTDOWNFAILED,PKIX_PL_Shutdown failed,0),
 PKIX_ERRORENTRY(SIGNATURECHECKERINITIALIZEFAILED,pkix_SignatureChecker_Initialize failed,0),
 PKIX_ERRORENTRY(SIGNATURECHECKERSTATECREATEFAILED,pkix_SignatureCheckerState_Create failed,0),
-PKIX_ERRORENTRY(SIGNATUREDIDNOTVERIFYWITHTHEPUBLICKEY,Signature did not verify with the public key,SEC_ERROR_BAD_SIGNATURE),
+PKIX_ERRORENTRY(SIGNATUREDIDNOTVERIFYWITHTHEPUBLICKEY,Signature did not verify with the public key,0),
 PKIX_ERRORENTRY(SINGLEPOLICYNODEEQUALSFAILED,PKIX_PL_SinglePolicyNode_Equals failed,0),
 PKIX_ERRORENTRY(SINGLEPOLICYNODEHASHCODEFAILED,pkix_SinglePolicyNode_Hashcode failed,0),
 PKIX_ERRORENTRY(SINGLEPOLICYNODETOSTRINGFAILED,pkix_SinglePolicyNode_ToString failed,0),
@@ -1071,7 +1039,6 @@ PKIX_ERRORENTRY(UNDEFINEDEQUALSCALLBACK,Undefined equals callback,0),
 PKIX_ERRORENTRY(UNEXPECTEDERRORINESTABLISHINGCONNECTION,Unexpected error in establishing connection,0),
 PKIX_ERRORENTRY(UNEXPECTEDRESULTCODEINRESPONSE,Unexpected result code in Response,SEC_ERROR_BAD_LDAP_RESPONSE),
 PKIX_ERRORENTRY(UNKNOWNFORMAT,Unknown format,SEC_ERROR_INVALID_ARGS),
-PKIX_ERRORENTRY(UNKNOWNINFOACCESSTYPE,Unknown InfoAccess type,SEC_ERROR_UNKNOWN_AIA_LOCATION_TYPE),
 PKIX_ERRORENTRY(UNKNOWNINFOACCESSMETHOD,Unknown InfoAccess method,SEC_ERROR_BAD_INFO_ACCESS_METHOD),
 PKIX_ERRORENTRY(UNKNOWNOBJECTOID,Unknown object OID,0),
 PKIX_ERRORENTRY(UNKNOWNOBJECTTYPE,Unknown object type,0),
@@ -1101,7 +1068,7 @@ PKIX_ERRORENTRY(VALIDATEPARAMSGETPROCESSINGPARAMSFAILED,PKIX_ValidateParams_GetP
 PKIX_ERRORENTRY(VALIDATERESULTCREATEFAILED,pkix_ValidateResult_Create failed,0),
 PKIX_ERRORENTRY(VALIDATERESULTGETPOLICYTREEFAILED,PKIX_ValidateResult_GetPolicyTree failed,0),
 PKIX_ERRORENTRY(VALIDATERESULTGETTRUSTANCHORFAILED,PKIX_ValidateResult_GetTrustAnchor failed,0),
-PKIX_ERRORENTRY(VALIDATIONFAILEDCERTSIGNATURECHECKING,Validation failed: Cert Signature checking,SEC_ERROR_BAD_SIGNATURE),
+PKIX_ERRORENTRY(VALIDATIONFAILEDCERTSIGNATURECHECKING,Validation failed: Cert Signature checking,0),
 PKIX_ERRORENTRY(VALIDATIONFAILEDNULLCERTPOINTER,Validation failed: NULL Cert pointer,0),
 PKIX_ERRORENTRY(VALIDATIONFAILEDPATHTONAMECHECKFAILED,Validation failed: PathToName check failed,SEC_ERROR_CERT_NOT_IN_NAME_SPACE),
 PKIX_ERRORENTRY(VALUEINESCAPEDASCII,value in EscapedASCII,0),

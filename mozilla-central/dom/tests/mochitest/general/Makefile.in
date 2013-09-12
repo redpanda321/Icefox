@@ -1,67 +1,61 @@
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# The Initial Developer of the Original Code is
-# Mozilla Foundation.
-# Portions created by the Initial Developer are Copyright (C) 2007
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either of the GNU General Public License Version 2 or later (the "GPL"),
-# or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH		= ../../../..
+DEPTH		= @DEPTH@
 topsrcdir	= @top_srcdir@
 srcdir		= @srcdir@
 VPATH		= @srcdir@
-relativesrcdir  = dom/tests/mochitest/general
+relativesrcdir  = @relativesrcdir@
 
 include $(DEPTH)/config/autoconf.mk
-include $(topsrcdir)/config/rules.mk
 
-_TEST_FILES = \
+MOCHITEST_FILES = \
+		file_MozEnteredDomFullscreen.html \
+		test_outerHTML.html \
+		test_outerHTML.xhtml \
 		497633.html \
-		489127.html \
+		historyframes.html \
 		test_497898.html \
 		test_bug504220.html \
+		test_bug628069_1.html \
+		test_bug628069_2.html \
+		file_bug628069.html \
+		test_bug631440.html \
+		test_bug653364.html \
+		test_bug629535.html \
+		test_clientRects.html \
+		test_consoleAPI.html \
 		test_domWindowUtils.html \
 		test_domWindowUtils_scrollXY.html \
-		test_innerScreen.xul \
 		test_offsets.html \
 		test_offsets.js \
-		test_offsets.xul \
 		test_windowProperties.html \
 		test_clipboard_events.html \
-		test_focusrings.xul \
-		test_nodesFromRect.html \
 		test_frameElementWrapping.html \
 		file_frameElementWrapping.html \
+		test_framedhistoryframes.html \
+		test_windowedhistoryframes.html \
+		test_focusrings.xul \
+		file_moving_xhr.html \
+		test_vibrator.html \
+		test_for_of.html \
+		test_focus_legend_noparent.html \
+		file_clonewrapper.html \
+		file_moving_nodeList.html \
+		test_performance_now.html \
+		test_interfaces.html \
+		test_idleapi_permissions.html \
 		$(NULL)
 
-libs:: $(_TEST_FILES)
-	$(INSTALL) $^ $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
+# Disable this test until bug 795711 is fixed.
+#		test_network_events.html \
+
+MOCHITEST_CHROME_FILES = \
+		test_innerScreen.xul \
+		test_offsets.xul \
+		test_offsets.js \
+		$(NULL)
+
+include $(topsrcdir)/config/rules.mk

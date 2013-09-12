@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corp..
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s): Kai Engert <kaie@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsCertPicker.h"
 #include "nsMemory.h"
@@ -43,15 +11,14 @@
 #include "nsNSSComponent.h"
 #include "nsNSSCertificate.h"
 #include "nsReadableUtils.h"
-#include "nsNSSCleaner.h"
 #include "nsICertPickDialogs.h"
 #include "nsNSSShutDown.h"
 #include "nsNSSCertHelper.h"
-
-NSSCleanupAutoPtrClass(CERTCertNicknames, CERT_FreeNicknames)
-NSSCleanupAutoPtrClass(CERTCertList, CERT_DestroyCertList)
+#include "ScopedNSSTypes.h"
 
 #include "cert.h"
+
+using namespace mozilla;
 
 NS_IMPL_ISUPPORTS1(nsCertPicker, nsIUserCertPicker)
 
@@ -65,47 +32,40 @@ nsCertPicker::~nsCertPicker()
 
 NS_IMETHODIMP nsCertPicker::PickByUsage(nsIInterfaceRequestor *ctx, 
                                         const PRUnichar *selectedNickname, 
-                                        PRInt32 certUsage, 
-                                        PRBool allowInvalid, 
-                                        PRBool allowDuplicateNicknames, 
-                                        PRBool *canceled, 
+                                        int32_t certUsage, 
+                                        bool allowInvalid, 
+                                        bool allowDuplicateNicknames, 
+                                        bool *canceled, 
                                         nsIX509Cert **_retval)
 {
   nsNSSShutDownPreventionLock locker;
-  PRInt32 selectedIndex = -1;
-  PRBool selectionFound = PR_FALSE;
-  PRUnichar **certNicknameList = nsnull;
-  PRUnichar **certDetailsList = nsnull;
-  CERTCertListNode* node = nsnull;
+  int32_t selectedIndex = -1;
+  bool selectionFound = false;
+  PRUnichar **certNicknameList = nullptr;
+  PRUnichar **certDetailsList = nullptr;
+  CERTCertListNode* node = nullptr;
   nsresult rv = NS_OK;
 
   {
     // Iterate over all certs. This assures that user is logged in to all hardware tokens.
-    CERTCertList *allcerts = nsnull;
     nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext();
-    allcerts = PK11_ListCerts(PK11CertListUnique, ctx);
-    CERT_DestroyCertList(allcerts);
+    ScopedCERTCertList allcerts(PK11_ListCerts(PK11CertListUnique, ctx));
   }
 
   /* find all user certs that are valid and for SSL */
   /* note that we are allowing expired certs in this list */
 
-  CERTCertList *certList = 
+  ScopedCERTCertList certList( 
     CERT_FindUserCertsByUsage(CERT_GetDefaultCertDB(), 
                               (SECCertUsage)certUsage,
                               !allowDuplicateNicknames,
                               !allowInvalid,
-                              ctx);
-  CERTCertListCleaner clc(certList);
-
+                              ctx));
   if (!certList) {
     return NS_ERROR_NOT_AVAILABLE;
   }
 
-  CERTCertNicknames *nicknames = getNSSCertNicknamesFromCertList(certList);
-
-  CERTCertNicknamesCleaner cnc(nicknames);
-
+  ScopedCERTCertNicknames nicknames(getNSSCertNicknamesFromCertList(certList));
   if (!nicknames) {
     return NS_ERROR_NOT_AVAILABLE;
   }
@@ -119,14 +79,14 @@ NS_IMETHODIMP nsCertPicker::PickByUsage(nsIInterfaceRequestor *ctx,
     return NS_ERROR_OUT_OF_MEMORY;
   }
 
-  PRInt32 CertsToUse;
+  int32_t CertsToUse;
 
   for (CertsToUse = 0, node = CERT_LIST_HEAD(certList);
        !CERT_LIST_END(node, certList) && CertsToUse < nicknames->numnicknames;
        node = CERT_LIST_NEXT(node)
       )
   {
-    nsNSSCertificate *tempCert = new nsNSSCertificate(node->cert);
+    nsNSSCertificate *tempCert = nsNSSCertificate::Create(node->cert);
 
     if (tempCert) {
 
@@ -142,7 +102,7 @@ NS_IMETHODIMP nsCertPicker::PickByUsage(nsIInterfaceRequestor *ctx,
       if (!selectionFound) {
         if (i_nickname == nsDependentString(selectedNickname)) {
           selectedIndex = CertsToUse;
-          selectionFound = PR_TRUE;
+          selectionFound = true;
         }
       }
 
@@ -151,8 +111,8 @@ NS_IMETHODIMP nsCertPicker::PickByUsage(nsIInterfaceRequestor *ctx,
         certDetailsList[CertsToUse] = ToNewUnicode(details);
       }
       else {
-        certNicknameList[CertsToUse] = nsnull;
-        certDetailsList[CertsToUse] = nsnull;
+        certNicknameList[CertsToUse] = nullptr;
+        certDetailsList[CertsToUse] = nullptr;
       }
 
       NS_RELEASE(tempCert);
@@ -162,7 +122,7 @@ NS_IMETHODIMP nsCertPicker::PickByUsage(nsIInterfaceRequestor *ctx,
   }
 
   if (CertsToUse) {
-    nsICertPickDialogs *dialogs = nsnull;
+    nsICertPickDialogs *dialogs = nullptr;
     rv = getNSSDialogs((void**)&dialogs, 
       NS_GET_IID(nsICertPickDialogs), 
       NS_CERTPICKDIALOGS_CONTRACTID);
@@ -183,7 +143,7 @@ NS_IMETHODIMP nsCertPicker::PickByUsage(nsIInterfaceRequestor *ctx,
     }
   }
 
-  PRInt32 i;
+  int32_t i;
   for (i = 0; i < CertsToUse; ++i) {
     nsMemory::Free(certNicknameList[i]);
     nsMemory::Free(certDetailsList[i]);
@@ -201,7 +161,7 @@ NS_IMETHODIMP nsCertPicker::PickByUsage(nsIInterfaceRequestor *ctx,
          ++i, node = CERT_LIST_NEXT(node)) {
 
       if (i == selectedIndex) {
-        nsNSSCertificate *cert = new nsNSSCertificate(node->cert);
+        nsNSSCertificate *cert = nsNSSCertificate::Create(node->cert);
         if (!cert) {
           rv = NS_ERROR_OUT_OF_MEMORY;
           break;

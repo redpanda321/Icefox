@@ -1,42 +1,11 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsTXTToHTMLConv.h"
 #include "nsNetUtil.h"
+#include "nsEscape.h"
 #include "nsStringStream.h"
 #include "nsAutoPtr.h"
 
@@ -148,7 +117,7 @@ nsTXTToHTMLConv::SetTitle(const PRUnichar *aTitle)
 }
 
 NS_IMETHODIMP
-nsTXTToHTMLConv::PreFormatHTML(PRBool value)
+nsTXTToHTMLConv::PreFormatHTML(bool value)
 {
     mPreFormatHTML = value;
     return NS_OK;
@@ -158,16 +127,16 @@ nsTXTToHTMLConv::PreFormatHTML(PRBool value)
 NS_IMETHODIMP
 nsTXTToHTMLConv::OnDataAvailable(nsIRequest* request, nsISupports *aContext,
                                  nsIInputStream *aInStream,
-                                 PRUint32 aOffset, PRUint32 aCount)
+                                 uint64_t aOffset, uint32_t aCount)
 {
     nsresult rv = NS_OK;
     nsString pushBuffer;
-    PRUint32 amtRead = 0;
+    uint32_t amtRead = 0;
     nsAutoArrayPtr<char> buffer(new char[aCount+1]);
     if (!buffer) return NS_ERROR_OUT_OF_MEMORY;
 
     do {
-        PRUint32 read = 0;
+        uint32_t read = 0;
         // XXX readSegments, to avoid the first copy?
         rv = aInStream->Read(buffer, aCount-amtRead, &read);
         if (NS_FAILED(rv)) return rv;
@@ -177,7 +146,7 @@ nsTXTToHTMLConv::OnDataAvailable(nsIRequest* request, nsISupports *aContext,
         AppendASCIItoUTF16(buffer, mBuffer);
         amtRead += read;
 
-        PRInt32 front = -1, back = -1, tokenLoc = -1, cursor = 0;
+        int32_t front = -1, back = -1, tokenLoc = -1, cursor = 0;
 
         while ( (tokenLoc = FindToken(cursor, &mToken)) > -1) {
             if (mToken->prepend) {
@@ -198,9 +167,9 @@ nsTXTToHTMLConv::OnDataAvailable(nsIRequest* request, nsISupports *aContext,
             cursor = CatHTML(front, back);
         }
 
-        PRInt32 end = mBuffer.RFind(TOKEN_DELIMITERS, mBuffer.Length());
-        mBuffer.Left(pushBuffer, PR_MAX(cursor, end));
-        mBuffer.Cut(0, PR_MAX(cursor, end));
+        int32_t end = mBuffer.RFind(TOKEN_DELIMITERS, mBuffer.Length());
+        mBuffer.Left(pushBuffer, NS_MAX(cursor, end));
+        mBuffer.Cut(0, NS_MAX(cursor, end));
         cursor = 0;
 
         if (!pushBuffer.IsEmpty()) {
@@ -223,8 +192,8 @@ nsTXTToHTMLConv::OnDataAvailable(nsIRequest* request, nsISupports *aContext,
 // nsTXTToHTMLConv methods
 nsTXTToHTMLConv::nsTXTToHTMLConv()
 {
-    mToken = nsnull;
-    mPreFormatHTML = PR_FALSE;
+    mToken = nullptr;
+    mPreFormatHTML = false;
 }
 
 nsTXTToHTMLConv::~nsTXTToHTMLConv()
@@ -240,34 +209,34 @@ nsTXTToHTMLConv::Init()
     // build up the list of tokens to handle
     convToken *token = new convToken;
     if (!token) return NS_ERROR_OUT_OF_MEMORY;
-    token->prepend = PR_FALSE;
+    token->prepend = false;
     token->token.Assign(PRUnichar('<'));
     token->modText.AssignLiteral("&lt;");
     mTokens.AppendElement(token);
 
     token = new convToken;
     if (!token) return NS_ERROR_OUT_OF_MEMORY;
-    token->prepend = PR_FALSE;
+    token->prepend = false;
     token->token.Assign(PRUnichar('>'));
     token->modText.AssignLiteral("&gt;");
     mTokens.AppendElement(token);
 
     token = new convToken;
     if (!token) return NS_ERROR_OUT_OF_MEMORY;
-    token->prepend = PR_FALSE;
+    token->prepend = false;
     token->token.Assign(PRUnichar('&'));
     token->modText.AssignLiteral("&amp;");
     mTokens.AppendElement(token);
 
     token = new convToken;
     if (!token) return NS_ERROR_OUT_OF_MEMORY;
-    token->prepend = PR_TRUE;
+    token->prepend = true;
     token->token.AssignLiteral("http://"); // XXX need to iterate through all protos
     mTokens.AppendElement(token);
 
     token = new convToken;
     if (!token) return NS_ERROR_OUT_OF_MEMORY;
-    token->prepend = PR_TRUE;
+    token->prepend = true;
     token->token.Assign(PRUnichar('@'));
     token->modText.AssignLiteral("mailto:");
     mTokens.AppendElement(token);
@@ -275,12 +244,12 @@ nsTXTToHTMLConv::Init()
     return rv;
 }
 
-PRInt32
-nsTXTToHTMLConv::FindToken(PRInt32 cursor, convToken* *_retval)
+int32_t
+nsTXTToHTMLConv::FindToken(int32_t cursor, convToken* *_retval)
 {
-    PRInt32 loc = -1, firstToken = mBuffer.Length();
-    PRInt8 token = -1;
-    for (PRUint8 i=0; i < mTokens.Length(); i++) {
+    int32_t loc = -1, firstToken = mBuffer.Length();
+    int8_t token = -1;
+    for (uint8_t i=0; i < mTokens.Length(); i++) {
         loc = mBuffer.Find(mTokens[i]->token, cursor);
         if (loc != -1)
             if (loc < firstToken) {
@@ -295,11 +264,11 @@ nsTXTToHTMLConv::FindToken(PRInt32 cursor, convToken* *_retval)
     return firstToken;
 }
 
-PRInt32
-nsTXTToHTMLConv::CatHTML(PRInt32 front, PRInt32 back)
+int32_t
+nsTXTToHTMLConv::CatHTML(int32_t front, int32_t back)
 {
-    PRInt32 cursor = 0;
-    PRInt32 modLen = mToken->modText.Length();
+    int32_t cursor = 0;
+    int32_t modLen = mToken->modText.Length();
     if (!mToken->prepend) {
         // replace the entire token (from delimiter to delimiter)
         mBuffer.Cut(front, back - front);
@@ -309,11 +278,24 @@ nsTXTToHTMLConv::CatHTML(PRInt32 front, PRInt32 back)
         nsString linkText;
         // href is implied
         mBuffer.Mid(linkText, front, back-front);
+
         mBuffer.Insert(NS_LITERAL_STRING("<a href=\""), front);
         cursor += front+9;
-        if (modLen)
+        if (modLen) {
             mBuffer.Insert(mToken->modText, cursor);
-        cursor += modLen-front+back;
+            cursor += modLen;
+        }
+
+        NS_ConvertUTF16toUTF8 linkTextUTF8(linkText);
+        nsCString escaped;
+        if (NS_EscapeURL(linkTextUTF8.Data(), linkTextUTF8.Length(), esc_Minimal, escaped)) {
+            mBuffer.Cut(cursor, back - front);
+            CopyUTF8toUTF16(escaped, linkText);
+            mBuffer.Insert(linkText, cursor);
+            back = front + linkText.Length();
+        }
+
+        cursor += back-front;
         mBuffer.Insert(NS_LITERAL_STRING("\">"), cursor);
         cursor += 2;
         mBuffer.Insert(linkText, cursor);
@@ -321,6 +303,6 @@ nsTXTToHTMLConv::CatHTML(PRInt32 front, PRInt32 back)
         mBuffer.Insert(NS_LITERAL_STRING("</a>"), cursor);
         cursor += 4;
     }
-    mToken = nsnull; // indicates completeness
+    mToken = nullptr; // indicates completeness
     return cursor;
 }

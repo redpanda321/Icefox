@@ -1,41 +1,7 @@
 /* vim:set ts=4 sw=4 sts=4 et ci: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2003
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@meer.net>
- *   Jim Mathies <jmathies@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include <stdlib.h>
 #include "nsHttp.h"
@@ -44,6 +10,7 @@
 #include "nsIAuthModule.h"
 #include "nsCOMPtr.h"
 #include "plbase64.h"
+#include "prnetdb.h"
 
 //-----------------------------------------------------------------------------
 
@@ -52,8 +19,13 @@
 #include "nsIServiceManager.h"
 #include "nsIHttpAuthenticableChannel.h"
 #include "nsIURI.h"
+#include "nsIX509Cert.h"
+#include "nsISSLStatus.h"
+#include "nsISSLStatusProvider.h"
+#include "mozilla/Attributes.h"
 
 static const char kAllowProxies[] = "network.automatic-ntlm-auth.allow-proxies";
+static const char kAllowNonFqdn[] = "network.automatic-ntlm-auth.allow-non-fqdn";
 static const char kTrustedURIs[]  = "network.automatic-ntlm-auth.trusted-uris";
 static const char kForceGeneric[] = "network.auth.force-generic-ntlm";
 
@@ -61,10 +33,10 @@ static const char kForceGeneric[] = "network.auth.force-generic-ntlm";
 // but since that file lives in a separate library we cannot directly share it.
 // bug 236865 addresses this problem.
 
-static PRBool
+static bool
 MatchesBaseURI(const nsCSubstring &matchScheme,
                const nsCSubstring &matchHost,
-               PRInt32             matchPort,
+               int32_t             matchPort,
                const char         *baseStart,
                const char         *baseEnd)
 {
@@ -75,7 +47,7 @@ MatchesBaseURI(const nsCSubstring &matchScheme,
     if (schemeEnd) {
         // the given scheme must match the parsed scheme exactly
         if (!matchScheme.Equals(Substring(baseStart, schemeEnd)))
-            return PR_FALSE;
+            return false;
         hostStart = schemeEnd + 3;
     }
     else
@@ -86,8 +58,8 @@ MatchesBaseURI(const nsCSubstring &matchScheme,
     if (hostEnd && hostEnd < baseEnd) {
         // the given port must match the parsed port exactly
         int port = atoi(hostEnd + 1);
-        if (matchPort != (PRInt32) port)
-            return PR_FALSE;
+        if (matchPort != (int32_t) port)
+            return false;
     }
     else
         hostEnd = baseEnd;
@@ -95,13 +67,13 @@ MatchesBaseURI(const nsCSubstring &matchScheme,
 
     // if we didn't parse out a host, then assume we got a match.
     if (hostStart == hostEnd)
-        return PR_TRUE;
+        return true;
 
-    PRUint32 hostLen = hostEnd - hostStart;
+    uint32_t hostLen = hostEnd - hostStart;
 
     // matchHost must either equal host or be a subdomain of host
     if (matchHost.Length() < hostLen)
-        return PR_FALSE;
+        return false;
 
     const char *end = matchHost.EndReading();
     if (PL_strncasecmp(end - hostLen, hostStart, hostLen) == 0) {
@@ -111,32 +83,46 @@ MatchesBaseURI(const nsCSubstring &matchScheme,
         if (matchHost.Length() == hostLen ||
             *(end - hostLen) == '.' ||
             *(end - hostLen - 1) == '.')
-            return PR_TRUE;
+            return true;
     }
 
-    return PR_FALSE;
+    return false;
 }
 
-static PRBool
+static bool
+IsNonFqdn(nsIURI *uri)
+{
+    nsAutoCString host;
+    PRNetAddr addr;
+
+    if (NS_FAILED(uri->GetAsciiHost(host)))
+        return false;
+
+    // return true if host does not contain a dot and is not an ip address
+    return !host.IsEmpty() && host.FindChar('.') == kNotFound &&
+           PR_StringToNetAddr(host.BeginReading(), &addr) != PR_SUCCESS;
+}
+
+static bool
 TestPref(nsIURI *uri, const char *pref)
 {
     nsCOMPtr<nsIPrefBranch> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
     if (!prefs)
-        return PR_FALSE;
+        return false;
 
-    nsCAutoString scheme, host;
-    PRInt32 port;
+    nsAutoCString scheme, host;
+    int32_t port;
 
     if (NS_FAILED(uri->GetScheme(scheme)))
-        return PR_FALSE;
+        return false;
     if (NS_FAILED(uri->GetAsciiHost(host)))
-        return PR_FALSE;
+        return false;
     if (NS_FAILED(uri->GetPort(&port)))
-        return PR_FALSE;
+        return false;
 
     char *hostList;
     if (NS_FAILED(prefs->GetCharPref(pref, &hostList)) || !hostList)
-        return PR_FALSE;
+        return false;
 
     // pseudo-BNF
     // ----------
@@ -161,59 +147,68 @@ TestPref(nsIURI *uri, const char *pref)
         if (start == end)
             break;
         if (MatchesBaseURI(scheme, host, port, start, end))
-            return PR_TRUE;
+            return true;
         if (*end == '\0')
             break;
         start = end + 1;
     }
     
     nsMemory::Free(hostList);
-    return PR_FALSE;
+    return false;
 }
 
 // Check to see if we should use our generic (internal) NTLM auth module.
-static PRBool
+static bool
 ForceGenericNTLM()
 {
     nsCOMPtr<nsIPrefBranch> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
     if (!prefs)
-        return PR_FALSE;
-    PRBool flag = PR_FALSE;
+        return false;
+    bool flag = false;
 
     if (NS_FAILED(prefs->GetBoolPref(kForceGeneric, &flag)))
-        flag = PR_FALSE;
+        flag = false;
 
     LOG(("Force use of generic ntlm auth module: %d\n", flag));
     return flag;
 }
 
 // Check to see if we should use default credentials for this host or proxy.
-static PRBool
+static bool
 CanUseDefaultCredentials(nsIHttpAuthenticableChannel *channel,
-                         PRBool isProxyAuth)
+                         bool isProxyAuth)
 {
     nsCOMPtr<nsIPrefBranch> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
     if (!prefs)
-        return PR_FALSE;
+        return false;
 
     if (isProxyAuth) {
-        PRBool val;
+        bool val;
         if (NS_FAILED(prefs->GetBoolPref(kAllowProxies, &val)))
-            val = PR_FALSE;
+            val = false;
         LOG(("Default credentials allowed for proxy: %d\n", val));
         return val;
     }
 
     nsCOMPtr<nsIURI> uri;
     channel->GetURI(getter_AddRefs(uri));
-    PRBool isTrustedHost = (uri && TestPref(uri, kTrustedURIs));
+
+    bool allowNonFqdn;
+    if (NS_FAILED(prefs->GetBoolPref(kAllowNonFqdn, &allowNonFqdn)))
+        allowNonFqdn = false;
+    if (allowNonFqdn && uri && IsNonFqdn(uri)) {
+        LOG(("Host is non-fqdn, default credentials are allowed\n"));
+        return true;
+    }
+
+    bool isTrustedHost = (uri && TestPref(uri, kTrustedURIs));
     LOG(("Default credentials allowed for host: %d\n", isTrustedHost));
     return isTrustedHost;
 }
 
 // Dummy class for session state object.  This class doesn't hold any data.
 // Instead we use its existence as a flag.  See ChallengeReceived.
-class nsNTLMSessionState : public nsISupports
+class nsNTLMSessionState MOZ_FINAL : public nsISupports
 {
 public:
     NS_DECL_ISUPPORTS
@@ -227,17 +222,20 @@ NS_IMPL_ISUPPORTS1(nsHttpNTLMAuth, nsIHttpAuthenticator)
 NS_IMETHODIMP
 nsHttpNTLMAuth::ChallengeReceived(nsIHttpAuthenticableChannel *channel,
                                   const char     *challenge,
-                                  PRBool          isProxyAuth,
+                                  bool            isProxyAuth,
                                   nsISupports   **sessionState,
                                   nsISupports   **continuationState,
-                                  PRBool         *identityInvalid)
+                                  bool           *identityInvalid)
 {
     LOG(("nsHttpNTLMAuth::ChallengeReceived [ss=%p cs=%p]\n",
          *sessionState, *continuationState));
 
+    // Use the native NTLM if available
+    mUseNative = true;
+
     // NOTE: we don't define any session state, but we do use the pointer.
 
-    *identityInvalid = PR_FALSE;
+    *identityInvalid = false;
 
     // Start a new auth sequence if the challenge is exactly "NTLM".
     // If native NTLM auth apis are available and enabled through prefs,
@@ -249,7 +247,7 @@ nsHttpNTLMAuth::ChallengeReceived(nsIHttpAuthenticableChannel *channel,
         // through UseGenericNTLM. (We use native auth by default if the
         // system provides it.) If *sessionState is non-null, we failed to
         // instantiate a native NTLM module the last time, so skip trying again.
-        PRBool forceGeneric = ForceGenericNTLM();
+        bool forceGeneric = ForceGenericNTLM();
         if (!forceGeneric && !*sessionState) {
             // Check for approved default credentials hosts and proxies. If 
             // *continuationState is non-null, the last authentication attempt
@@ -268,7 +266,7 @@ nsHttpNTLMAuth::ChallengeReceived(nsIHttpAuthenticableChannel *channel,
                 // will be sent. We rely on windows internal apis to decide whether
                 // we should support this older, less secure version of the protocol.
                 module = do_CreateInstance(NS_AUTH_MODULE_CONTRACTID_PREFIX "sys-ntlm");
-                *identityInvalid = PR_TRUE;
+                *identityInvalid = true;
             }
 #endif // XP_WIN
 #ifdef PR_LOGGING
@@ -298,9 +296,11 @@ nsHttpNTLMAuth::ChallengeReceived(nsIHttpAuthenticableChannel *channel,
             // see bug 520607 for details.
             LOG(("Trying to fall back on internal ntlm auth.\n"));
             module = do_CreateInstance(NS_AUTH_MODULE_CONTRACTID_PREFIX "ntlm");
+	    
+            mUseNative = false;
 
             // Prompt user for domain, username, and password.
-            *identityInvalid = PR_TRUE;
+            *identityInvalid = true;
         }
 
         // If this fails, then it means that we cannot do NTLM auth.
@@ -319,23 +319,23 @@ nsHttpNTLMAuth::ChallengeReceived(nsIHttpAuthenticableChannel *channel,
 NS_IMETHODIMP
 nsHttpNTLMAuth::GenerateCredentials(nsIHttpAuthenticableChannel *authChannel,
                                     const char      *challenge,
-                                    PRBool           isProxyAuth,
+                                    bool             isProxyAuth,
                                     const PRUnichar *domain,
                                     const PRUnichar *user,
                                     const PRUnichar *pass,
                                     nsISupports    **sessionState,
                                     nsISupports    **continuationState,
-                                    PRUint32       *aFlags,
+                                    uint32_t       *aFlags,
                                     char           **creds)
 
 {
     LOG(("nsHttpNTLMAuth::GenerateCredentials\n"));
 
-    *creds = nsnull;
+    *creds = nullptr;
     *aFlags = 0;
 
     // if user or password is empty, ChallengeReceived returned
-    // identityInvalid = PR_FALSE, that means we are using default user
+    // identityInvalid = false, that means we are using default user
     // credentials; see  nsAuthSSPI::Init method for explanation of this 
     // condition
     if (!user || !pass)
@@ -346,17 +346,13 @@ nsHttpNTLMAuth::GenerateCredentials(nsIHttpAuthenticableChannel *authChannel,
     NS_ENSURE_SUCCESS(rv, rv);
 
     void *inBuf, *outBuf;
-    PRUint32 inBufLen, outBufLen;
+    uint32_t inBufLen, outBufLen;
 
     // initial challenge
     if (PL_strcasecmp(challenge, "NTLM") == 0) {
         // NTLM service name format is 'HTTP@host' for both http and https
-        nsCOMPtr<nsIURI> uri;
-        rv = authChannel->GetURI(getter_AddRefs(uri));
-        if (NS_FAILED(rv))
-            return rv;
-        nsCAutoString serviceName, host;
-        rv = uri->GetAsciiHost(host);
+        nsAutoCString serviceName, host;
+        rv = authChannel->GetAsciiHostForAuth(host);
         if (NS_FAILED(rv))
             return rv;
         serviceName.AppendLiteral("HTTP@");
@@ -366,8 +362,61 @@ nsHttpNTLMAuth::GenerateCredentials(nsIHttpAuthenticableChannel *authChannel,
         if (NS_FAILED(rv))
             return rv;
 
+// This update enables updated Windows machines (Win7 or patched previous
+// versions) and Linux machines running Samba (updated for Channel 
+// Binding), to perform Channel Binding when authenticating using NTLMv2 
+// and an outer secure channel.
+// 
+// Currently only implemented for Windows, linux support will be landing in 
+// a separate patch, update this #ifdef accordingly then.
+#if defined (XP_WIN) /* || defined (LINUX) */
+        // We should retrieve the server certificate and compute the CBT, 
+        // but only when we are using the native NTLM implementation and 
+        // not the internal one.
+        // It is a valid case not having the security info object.  This
+        // occures when we connect an https site through an ntlm proxy.
+        // After the ssl tunnel has been created, we get here the second
+        // time and now generate the CBT from now valid security info.
+        nsCOMPtr<nsIChannel> channel = do_QueryInterface(authChannel, &rv);
+        if (NS_FAILED(rv))
+            return rv;
+
+        nsCOMPtr<nsISupports> security;
+        rv = channel->GetSecurityInfo(getter_AddRefs(security));
+        if (NS_FAILED(rv))
+            return rv;
+
+        nsCOMPtr<nsISSLStatusProvider> statusProvider =
+            do_QueryInterface(security);
+
+        if (mUseNative && statusProvider) {
+            nsCOMPtr<nsISSLStatus> status;
+            rv = statusProvider->GetSSLStatus(getter_AddRefs(status));
+            if (NS_FAILED(rv))
+                return rv;
+
+            nsCOMPtr<nsIX509Cert> cert;
+            rv = status->GetServerCert(getter_AddRefs(cert));
+            if (NS_FAILED(rv))
+                return rv;
+
+            uint32_t length;
+            uint8_t* certArray;
+            cert->GetRawDER(&length, &certArray);						  
+			
+            // If there is a server certificate, we pass it along the
+            // first time we call GetNextToken().
+            inBufLen = length;
+            inBuf = certArray;
+        } else { 
+            // If there is no server certificate, we don't pass anything.
+            inBufLen = 0;
+            inBuf = nullptr;
+        }
+#else // Extended protection update is just for Linux and Windows machines.
         inBufLen = 0;
-        inBuf = nsnull;
+        inBuf = nullptr;
+#endif
     }
     else {
         // decode challenge; skip past "NTLM " to the start of the base64
@@ -388,7 +437,7 @@ nsHttpNTLMAuth::GenerateCredentials(nsIHttpAuthenticableChannel *authChannel,
         if (!inBuf)
             return NS_ERROR_OUT_OF_MEMORY;
 
-        if (PL_Base64Decode(challenge, len, (char *) inBuf) == nsnull) {
+        if (PL_Base64Decode(challenge, len, (char *) inBuf) == nullptr) {
             nsMemory::Free(inBuf);
             return NS_ERROR_UNEXPECTED; // improper base64 encoding
         }
@@ -417,7 +466,7 @@ nsHttpNTLMAuth::GenerateCredentials(nsIHttpAuthenticableChannel *authChannel,
 }
 
 NS_IMETHODIMP
-nsHttpNTLMAuth::GetAuthFlags(PRUint32 *flags)
+nsHttpNTLMAuth::GetAuthFlags(uint32_t *flags)
 {
     *flags = CONNECTION_BASED | IDENTITY_INCLUDES_DOMAIN | IDENTITY_ENCRYPTED;
     return NS_OK;

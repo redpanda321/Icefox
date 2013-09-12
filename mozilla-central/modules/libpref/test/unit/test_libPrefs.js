@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is libpref
- *
- * The Initial Developer of the Original Code is Collabora ltd.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Frederic Plourde <frederic.plourde@collabora.co.uk>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 const PREF_INVALID = 0;
 const PREF_BOOL    = 128;
@@ -55,17 +23,52 @@ function run_test() {
             getService(Ci.nsIPrefService);
 
   var pb2= Cc["@mozilla.org/preferences-service;1"].
-            getService(Ci.nsIPrefBranch2);
+            getService(Ci.nsIPrefBranch);
 
   var pb = Cc["@mozilla.org/preferences-service;1"].
             getService(Ci.nsIPrefBranch);
 
   //**************************************************************************//
+  // Nullsafety
+
+  do_check_throws(function() {
+    pb.getPrefType(null); },  Cr.NS_ERROR_INVALID_ARG);
+  do_check_throws(function() {
+    pb.getBoolPref(null); },  Cr.NS_ERROR_INVALID_ARG);
+  do_check_throws(function() {
+    pb.setBoolPref(null, false); },  Cr.NS_ERROR_INVALID_ARG);
+  do_check_throws(function() {
+    pb.getIntPref(null); },  Cr.NS_ERROR_INVALID_ARG);
+  do_check_throws(function() {
+    pb.setIntPref(null, 0); },  Cr.NS_ERROR_INVALID_ARG);
+  do_check_throws(function() {
+    pb.getCharPref(null); },  Cr.NS_ERROR_INVALID_ARG);
+  do_check_throws(function() {
+    pb.setCharPref(null, null); },  Cr.NS_ERROR_INVALID_ARG);
+  do_check_throws(function() {
+    pb.getComplexValue(null, Components.interfaces.nsISupportsString); },  Cr.NS_ERROR_INVALID_ARG);
+  do_check_throws(function() {
+    pb.setComplexValue(null, Components.interfaces.nsISupportsString, pb); },  Cr.NS_ERROR_INVALID_ARG);
+  do_check_throws(function() {
+    pb.clearUserPref(null); },  Cr.NS_ERROR_INVALID_ARG);
+  do_check_throws(function() {
+    pb.prefHasUserValue(null); },  Cr.NS_ERROR_INVALID_ARG);
+  do_check_throws(function() {
+    pb.lockPref(null); },  Cr.NS_ERROR_INVALID_ARG);
+  do_check_throws(function() {
+    pb.prefIsLocked(null); },  Cr.NS_ERROR_INVALID_ARG);
+  do_check_throws(function() {
+    pb.unlockPref(null); },  Cr.NS_ERROR_INVALID_ARG);
+  do_check_throws(function() {
+    pb.deleteBranch(null); },  Cr.NS_ERROR_INVALID_ARG);
+  do_check_throws(function() {
+    pb.getChildList(null); },  Cr.NS_ERROR_INVALID_ARG);
+
+  //**************************************************************************//
   // Nonexisting user preferences
 
   do_check_eq(pb.prefHasUserValue("UserPref.nonexistent.hasUserValue"), false);
-  do_check_throws(function() {
-    pb.clearUserPref("UserPref.nonexistent.clearUserPref");},  Cr.NS_ERROR_UNEXPECTED);
+  pb.clearUserPref("UserPref.nonexistent.clearUserPref"); // shouldn't throw
   do_check_eq(pb.getPrefType("UserPref.nonexistent.getPrefType"), PREF_INVALID);
   do_check_eq(pb.root, "");
 
@@ -104,8 +107,8 @@ function run_test() {
   do_check_eq(pb.getBoolPref("UserPref.existing.bool"), false);
   pb.setIntPref("UserPref.existing.int", 24);
   do_check_eq(pb.getIntPref("UserPref.existing.int"), 24);
-  pb.setCharPref("UserPref.existing.char", "hej då!");
-  do_check_eq(pb.getCharPref("UserPref.existing.char"), "hej då!");
+  pb.setCharPref("UserPref.existing.char", "hej dÃ¥!");
+  do_check_eq(pb.getCharPref("UserPref.existing.char"), "hej dÃ¥!");
 
   // prefHasUserValue should return true now
   do_check_true(pb.prefHasUserValue("UserPref.existing.bool"));
@@ -320,10 +323,12 @@ function run_test() {
   do_check_eq(pb.getIntPref("int1"), 23);
   do_check_eq(pb.getIntPref("int2"), -1236);
   do_check_eq(pb.getCharPref("char1"), "_testPref");
-  do_check_eq(pb.getCharPref("char2"), "älskar");
+  do_check_eq(pb.getCharPref("char2"), "Ã¤lskar");
 
   // loading our former savePrefFile should allow us to read former prefs
   ps.readUserPrefs(savePrefFile);
+  // cleanup the file now we don't need it
+  savePrefFile.remove(false);
   do_check_eq(ps.getBoolPref("ReadPref.bool"), true);
   do_check_eq(ps.getIntPref("ReadPref.int"), 230);
   do_check_eq(ps.getCharPref("ReadPref.char"), "hello");

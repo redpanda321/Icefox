@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  * vim: sw=2 ts=2 et lcs=trail\:.,tab\:>~ :
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Shawn Wilsher <me@shawnwilsher.com> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsString.h"
 
@@ -54,15 +21,15 @@ nsresult
 Row::initialize(sqlite3_stmt *aStatement)
 {
   // Initialize the hash table
-  NS_ENSURE_TRUE(mNameHashtable.Init(), NS_ERROR_OUT_OF_MEMORY);
+  mNameHashtable.Init();
 
   // Get the number of results
   mNumCols = ::sqlite3_column_count(aStatement);
 
   // Start copying over values
-  for (PRUint32 i = 0; i < mNumCols; i++) {
+  for (uint32_t i = 0; i < mNumCols; i++) {
     // Store the value
-    nsIVariant *variant = nsnull;
+    nsIVariant *variant = nullptr;
     int type = ::sqlite3_column_type(aStatement, i);
     switch (type) {
       case SQLITE_INTEGER:
@@ -100,7 +67,7 @@ Row::initialize(sqlite3_stmt *aStatement)
     // Associate the name (if any) with the index
     const char *name = ::sqlite3_column_name(aStatement, i);
     if (!name) break;
-    nsCAutoString colName(name);
+    nsAutoCString colName(name);
     mNameHashtable.Put(colName, i);
   }
 
@@ -121,7 +88,7 @@ NS_IMPL_THREADSAFE_ISUPPORTS2(
 //// mozIStorageRow
 
 NS_IMETHODIMP
-Row::GetResultByIndex(PRUint32 aIndex,
+Row::GetResultByIndex(uint32_t aIndex,
                       nsIVariant **_result)
 {
   ENSURE_INDEX_VALUE(aIndex, mNumCols);
@@ -133,7 +100,7 @@ NS_IMETHODIMP
 Row::GetResultByName(const nsACString &aName,
                      nsIVariant **_result)
 {
-  PRUint32 index;
+  uint32_t index;
   NS_ENSURE_TRUE(mNameHashtable.Get(aName, &index), NS_ERROR_NOT_AVAILABLE);
   return GetResultByIndex(index, _result);
 }
@@ -142,19 +109,19 @@ Row::GetResultByName(const nsACString &aName,
 //// mozIStorageValueArray
 
 NS_IMETHODIMP
-Row::GetNumEntries(PRUint32 *_entries)
+Row::GetNumEntries(uint32_t *_entries)
 {
   *_entries = mNumCols;
   return NS_OK;
 }
 
 NS_IMETHODIMP
-Row::GetTypeOfIndex(PRUint32 aIndex,
-                    PRInt32 *_type)
+Row::GetTypeOfIndex(uint32_t aIndex,
+                    int32_t *_type)
 {
   ENSURE_INDEX_VALUE(aIndex, mNumCols);
 
-  PRUint16 type;
+  uint16_t type;
   (void)mData.ObjectAt(aIndex)->GetDataType(&type);
   switch (type) {
     case nsIDataType::VTYPE_INT32:
@@ -178,23 +145,23 @@ Row::GetTypeOfIndex(PRUint32 aIndex,
 }
 
 NS_IMETHODIMP
-Row::GetInt32(PRUint32 aIndex,
-              PRInt32 *_value)
+Row::GetInt32(uint32_t aIndex,
+              int32_t *_value)
 {
   ENSURE_INDEX_VALUE(aIndex, mNumCols);
   return mData.ObjectAt(aIndex)->GetAsInt32(_value);
 }
 
 NS_IMETHODIMP
-Row::GetInt64(PRUint32 aIndex,
-              PRInt64 *_value)
+Row::GetInt64(uint32_t aIndex,
+              int64_t *_value)
 {
   ENSURE_INDEX_VALUE(aIndex, mNumCols);
   return mData.ObjectAt(aIndex)->GetAsInt64(_value);
 }
 
 NS_IMETHODIMP
-Row::GetDouble(PRUint32 aIndex,
+Row::GetDouble(uint32_t aIndex,
                double *_value)
 {
   ENSURE_INDEX_VALUE(aIndex, mNumCols);
@@ -202,7 +169,7 @@ Row::GetDouble(PRUint32 aIndex,
 }
 
 NS_IMETHODIMP
-Row::GetUTF8String(PRUint32 aIndex,
+Row::GetUTF8String(uint32_t aIndex,
                    nsACString &_value)
 {
   ENSURE_INDEX_VALUE(aIndex, mNumCols);
@@ -210,7 +177,7 @@ Row::GetUTF8String(PRUint32 aIndex,
 }
 
 NS_IMETHODIMP
-Row::GetString(PRUint32 aIndex,
+Row::GetString(uint32_t aIndex,
                nsAString &_value)
 {
   ENSURE_INDEX_VALUE(aIndex, mNumCols);
@@ -218,51 +185,51 @@ Row::GetString(PRUint32 aIndex,
 }
 
 NS_IMETHODIMP
-Row::GetBlob(PRUint32 aIndex,
-             PRUint32 *_size,
-             PRUint8 **_blob)
+Row::GetBlob(uint32_t aIndex,
+             uint32_t *_size,
+             uint8_t **_blob)
 {
   ENSURE_INDEX_VALUE(aIndex, mNumCols);
 
-  PRUint16 type;
+  uint16_t type;
   nsIID interfaceIID;
   return mData.ObjectAt(aIndex)->GetAsArray(&type, &interfaceIID, _size,
                                             reinterpret_cast<void **>(_blob));
 }
 
 NS_IMETHODIMP
-Row::GetIsNull(PRUint32 aIndex,
-               PRBool *_isNull)
+Row::GetIsNull(uint32_t aIndex,
+               bool *_isNull)
 {
   ENSURE_INDEX_VALUE(aIndex, mNumCols);
   NS_ENSURE_ARG_POINTER(_isNull);
 
-  PRUint16 type;
+  uint16_t type;
   (void)mData.ObjectAt(aIndex)->GetDataType(&type);
   *_isNull = type == nsIDataType::VTYPE_EMPTY;
   return NS_OK;
 }
 
 NS_IMETHODIMP
-Row::GetSharedUTF8String(PRUint32,
-                         PRUint32 *,
+Row::GetSharedUTF8String(uint32_t,
+                         uint32_t *,
                          char const **)
 {
   return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 NS_IMETHODIMP
-Row::GetSharedString(PRUint32,
-                     PRUint32 *,
+Row::GetSharedString(uint32_t,
+                     uint32_t *,
                      const PRUnichar **)
 {
   return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 NS_IMETHODIMP
-Row::GetSharedBlob(PRUint32,
-                   PRUint32 *,
-                   const PRUint8 **)
+Row::GetSharedBlob(uint32_t,
+                   uint32_t *,
+                   const uint8_t **)
 {
   return NS_ERROR_NOT_IMPLEMENTED;
 }

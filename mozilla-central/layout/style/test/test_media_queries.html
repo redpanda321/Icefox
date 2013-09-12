@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=156716
 -->
 <head>
   <title>Test for Bug 156716</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -25,6 +24,10 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=156716
 SimpleTest.waitForExplicitFinish();
 
 var iframe;
+
+function getScreenPixelsPerCSSPixel() {
+  return SpecialPowers.DOMWindowUtils.screenPixelsPerCSSPixel;
+}
 
 function run() {
   iframe = document.getElementById("subdoc");
@@ -76,7 +79,7 @@ function run() {
     var sheet = parse_test_style_element.sheet; // XXX yikes, not live!
     if (sheet.cssRules.length == 1 &&
         sheet.cssRules[0].type == CSSRule.MEDIA_RULE)
-      return sheet.cssRules[0].media.mediaText != "screen";
+      return sheet.cssRules[0].media.mediaText != "screen, not all";
     ok(false, "unexpected result testing whether query " + q +
               " is parseable");
     return true; // doesn't matter, we already failed
@@ -161,6 +164,13 @@ function run() {
   query_should_be_parseable("not all and (orientation)");
   query_should_be_parseable("only all and (orientation)");
 
+  query_should_be_parseable("(-moz-device-orientation)");
+  query_should_not_be_parseable("not (-moz-device-orientation)");
+  query_should_not_be_parseable("only (-moz-device-orientation)");
+  query_should_be_parseable("all and (-moz-device-orientation)");
+  query_should_be_parseable("not all and (-moz-device-orientation)");
+  query_should_be_parseable("only all and (-moz-device-orientation)");
+
   var features = [ "width", "height", "device-width", "device-height" ];
   var feature;
   var i;
@@ -187,7 +197,7 @@ function run() {
   }
 
   var content_div = document.getElementById("content");
-  content_div.style.font = "-moz-initial";
+  content_div.style.font = "initial";
   var em_size =
     getComputedStyle(content_div, "").fontSize.match(/^(\d+)px$/)[1];
 
@@ -275,6 +285,24 @@ function run() {
   should_apply("not all and (orientation: landscape)");
   should_apply("(orientation: portrait)");
 
+  expression_should_be_parseable("-moz-device-orientation");
+  expression_should_be_parseable("-moz-device-orientation: portrait");
+  expression_should_be_parseable("-moz-device-orientation: landscape");
+  expression_should_not_be_parseable("min--moz-device-orientation");
+  expression_should_not_be_parseable("min--moz-device-orientation: portrait");
+  expression_should_not_be_parseable("min--moz-device-orientation: landscape");
+  expression_should_not_be_parseable("max--moz-device-orientation");
+  expression_should_not_be_parseable("max--moz-device-orientation: portrait");
+  expression_should_not_be_parseable("max--moz-device-orientation: landscape");
+
+  // determine the actual configuration of the screen and test against it
+  var device_orientation = (device_width > device_height) ? "landscape" : "portrait";
+  var not_device_orientation = (device_orientation == "landscape") ? "portrait" : "landscape";
+  should_apply("(-moz-device-orientation)");
+  should_apply("(-moz-device-orientation: " + device_orientation + ")");
+  should_not_apply("(-moz-device-orientation: " + not_device_orientation + ")");
+  should_apply("not all and (-moz-device-orientation: " + not_device_orientation + ")");
+
   should_apply("(aspect-ratio: 59/80)");
   should_not_apply("(aspect-ratio: 58/80)");
   should_not_apply("(aspect-ratio: 59/81)");
@@ -328,6 +356,26 @@ function run() {
   should_not_apply("all and (max-device-aspect-ratio: " + low_dar_1 + ")");
   should_apply("not all and (max-device-aspect-ratio: " + low_dar_2 + ")");
   expression_should_not_be_parseable("max-device-aspect-ratio");
+
+  var real_dpr = 1.0 * getScreenPixelsPerCSSPixel();
+  var high_dpr = 1.1 * getScreenPixelsPerCSSPixel();
+  var low_dpr = 0.9 * getScreenPixelsPerCSSPixel();
+  should_apply("all and (max--moz-device-pixel-ratio: " + real_dpr + ")");
+  should_apply("all and (min--moz-device-pixel-ratio: " + real_dpr + ")");
+  should_not_apply("not all and (max--moz-device-pixel-ratio: " + real_dpr + ")");
+  should_not_apply("not all and (min--moz-device-pixel-ratio: " + real_dpr + ")");
+  should_apply("all and (min--moz-device-pixel-ratio: " + low_dpr + ")");
+  should_apply("all and (max--moz-device-pixel-ratio: " + high_dpr + ")");
+  should_not_apply("all and (max--moz-device-pixel-ratio: " + low_dpr + ")");
+  should_not_apply("all and (min--moz-device-pixel-ratio: " + high_dpr + ")");
+  should_apply("not all and (max--moz-device-pixel-ratio: " + low_dpr + ")");
+  should_apply("not all and (min--moz-device-pixel-ratio: " + high_dpr + ")");
+  should_apply("(-moz-device-pixel-ratio: " + real_dpr + ")");
+  should_not_apply("(-moz-device-pixel-ratio: " + high_dpr + ")");
+  should_not_apply("(-moz-device-pixel-ratio: " + low_dpr + ")");
+  should_apply("(-moz-device-pixel-ratio)");
+  expression_should_not_be_parseable("min--moz-device-pixel-ratio");
+  expression_should_not_be_parseable("max--moz-device-pixel-ratio");
 
   features = [ "max-aspect-ratio", "device-aspect-ratio" ];
   for (i in features) {
@@ -413,11 +461,15 @@ function run() {
     feature = features[i];
     expression_should_be_parseable(feature + ": 3dpi");
     expression_should_be_parseable(feature + ":3dpi");
-    expression_should_not_be_parseable(feature + ": 3.0dpi");
-    expression_should_not_be_parseable(feature + ": 3.4dpi");
+    expression_should_be_parseable(feature + ": 3.0dpi");
+    expression_should_be_parseable(feature + ": 3.4dpi");
     expression_should_be_parseable(feature + "\t: 120dpcm");
+    expression_should_be_parseable(feature + ": 1dppx");
+    expression_should_be_parseable(feature + ": 1.5dppx");
+    expression_should_be_parseable(feature + ": 2.0dppx");
     expression_should_not_be_parseable(feature + ": 0dpi");
     expression_should_not_be_parseable(feature + ": -3dpi");
+    expression_should_not_be_parseable(feature + ": 0dppx");
   }
 
   // Find the resolution using max-resolution
@@ -436,6 +488,7 @@ function run() {
   if (query_applies("(min-resolution: " + resolution + "dpi)")) {
     // It's exact!
     should_apply("(resolution: " + resolution + "dpi)");
+    should_apply("(resolution: " + Math.floor(resolution/96) + "dppx)");
     should_not_apply("(resolution: " + (resolution + 1) + "dpi)");
     should_not_apply("(resolution: " + (resolution - 1) + "dpi)");
     dpi_high = resolution + 1;
@@ -502,6 +555,7 @@ function run() {
   expression_should_be_parseable("-moz-images-in-buttons");
   expression_should_be_parseable("-moz-windows-default-theme");
   expression_should_be_parseable("-moz-mac-graphite-theme");
+  expression_should_be_parseable("-moz-mac-lion-theme");
   expression_should_be_parseable("-moz-windows-compositor");
   expression_should_be_parseable("-moz-windows-classic");
   expression_should_be_parseable("-moz-touch-enabled");
@@ -516,6 +570,7 @@ function run() {
   expression_should_be_parseable("-moz-images-in-buttons: 0");
   expression_should_be_parseable("-moz-windows-default-theme: 0");
   expression_should_be_parseable("-moz-mac-graphite-theme: 0");
+  expression_should_be_parseable("-moz-mac-lion-theme: 0");
   expression_should_be_parseable("-moz-windows-compositor: 0");
   expression_should_be_parseable("-moz-windows-classic: 0");
   expression_should_be_parseable("-moz-touch-enabled: 0");
@@ -530,6 +585,7 @@ function run() {
   expression_should_be_parseable("-moz-images-in-buttons: 1");
   expression_should_be_parseable("-moz-windows-default-theme: 1");
   expression_should_be_parseable("-moz-mac-graphite-theme: 1");
+  expression_should_be_parseable("-moz-mac-lion-theme: 1");
   expression_should_be_parseable("-moz-windows-compositor: 1");
   expression_should_be_parseable("-moz-windows-classic: 1");
   expression_should_be_parseable("-moz-touch-enabled: 1");
@@ -544,6 +600,7 @@ function run() {
   expression_should_not_be_parseable("-moz-images-in-buttons: -1");
   expression_should_not_be_parseable("-moz-windows-default-theme: -1");
   expression_should_not_be_parseable("-moz-mac-graphite-theme: -1");
+  expression_should_not_be_parseable("-moz-mac-lion-theme: -1");
   expression_should_not_be_parseable("-moz-windows-compositor: -1");
   expression_should_not_be_parseable("-moz-windows-classic: -1");
   expression_should_not_be_parseable("-moz-touch-enabled: -1");
@@ -558,10 +615,59 @@ function run() {
   expression_should_not_be_parseable("-moz-images-in-buttons: true");
   expression_should_not_be_parseable("-moz-windows-default-theme: true");
   expression_should_not_be_parseable("-moz-mac-graphite-theme: true");
+  expression_should_not_be_parseable("-moz-mac-lion-theme: true");
   expression_should_not_be_parseable("-moz-windows-compositor: true");
   expression_should_not_be_parseable("-moz-windows-classic: true");
   expression_should_not_be_parseable("-moz-touch-enabled: true");
   expression_should_not_be_parseable("-moz-maemo-classic: true");
+
+  // windows theme media queries
+  expression_should_be_parseable("-moz-windows-theme: aero");
+  expression_should_be_parseable("-moz-windows-theme: luna-blue");
+  expression_should_be_parseable("-moz-windows-theme: luna-olive");
+  expression_should_be_parseable("-moz-windows-theme: luna-silver");
+  expression_should_be_parseable("-moz-windows-theme: royale");
+  expression_should_be_parseable("-moz-windows-theme: generic");
+  expression_should_be_parseable("-moz-windows-theme: zune");
+  expression_should_be_parseable("-moz-windows-theme: garbage");
+  expression_should_not_be_parseable("-moz-windows-theme: ''");
+  expression_should_not_be_parseable("-moz-windows-theme: ");
+
+  // OpenType SVG media features
+  query_should_be_parseable("(-moz-is-glyph)");
+  query_should_not_be_parseable("not (-moz-is-glyph)");
+  query_should_not_be_parseable("only (-moz-is-glyph)");
+  query_should_be_parseable("all and (-moz-is-glyph)");
+  query_should_be_parseable("not all and (-moz-is-glyph)");
+  query_should_be_parseable("only all and (-moz-is-glyph)");
+
+  query_should_be_parseable("(-moz-is-glyph:0)");
+  query_should_not_be_parseable("not (-moz-is-glyph:0)");
+  query_should_not_be_parseable("only (-moz-is-glyph:0)");
+  query_should_be_parseable("all and (-moz-is-glyph:0)");
+  query_should_be_parseable("not all and (-moz-is-glyph:0)");
+  query_should_be_parseable("only all and (-moz-is-glyph:0)");
+
+  query_should_be_parseable("(-moz-is-glyph:1)");
+  query_should_not_be_parseable("not (-moz-is-glyph:1)");
+  query_should_not_be_parseable("only (-moz-is-glyph:1)");
+  query_should_be_parseable("all and (-moz-is-glyph:1)");
+  query_should_be_parseable("not all and (-moz-is-glyph:1)");
+  query_should_be_parseable("only all and (-moz-is-glyph:1)");
+
+  query_should_not_be_parseable("(min--moz-is-glyph:0)");
+  query_should_not_be_parseable("(max--moz-is-glyph:0)");
+  query_should_not_be_parseable("(min--moz-is-glyph:1)");
+  query_should_not_be_parseable("(max--moz-is-glyph:1)");
+
+  should_apply("not all and (-moz-is-glyph)");
+  should_apply("(-moz-is-glyph:0)");
+  should_apply("not all and (-moz-is-glyph:1)");
+  should_apply("only all and (-moz-is-glyph:0)");
+  should_not_apply("(-moz-is-glyph)");
+  should_not_apply("(-moz-is-glyph:1)");
+  should_not_apply("not all and (-moz-is-glyph:0)");
+  should_not_apply("only all and (-moz-is-glyph:1)");
 
   // Parsing tests
   // bug 454227

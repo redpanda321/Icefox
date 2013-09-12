@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license 
+ *  Use of this source code is governed by a BSD-style license
  *  that can be found in the LICENSE file in the root of the source
  *  tree. An additional intellectual property rights grant can be found
- *  in the file PATENTS.  All contributing project authors may 
+ *  in the file PATENTS.  All contributing project authors may
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
@@ -24,20 +24,12 @@ static const unsigned int bmode_cts[VP8_BINTRAMODES] =
     43891, 17694, 10036, 3920, 3363, 2546, 5119, 3221, 2471, 1723
 };
 
-typedef enum
-{
-    SUBMVREF_NORMAL,
-    SUBMVREF_LEFT_ZED,
-    SUBMVREF_ABOVE_ZED,
-    SUBMVREF_LEFT_ABOVE_SAME,
-    SUBMVREF_LEFT_ABOVE_ZED
-} sumvfref_t;
 
-int vp8_mv_cont(const MV *l, const MV *a)
+int vp8_mv_cont(const int_mv *l, const int_mv *a)
 {
-    int lez = (l->row == 0 && l->col == 0);
-    int aez = (a->row == 0 && a->col == 0);
-    int lea = (l->row == a->row && l->col == a->col);
+    int lez = (l->as_int == 0);
+    int aez = (a->as_int == 0);
+    int lea = (l->as_int == a->as_int);
 
     if (lea && lez)
         return SUBMVREF_LEFT_ABOVE_ZED;
@@ -264,8 +256,10 @@ void vp8_entropy_mode_init()
     vp8_tokens_from_tree(vp8_uv_mode_encodings,  vp8_uv_mode_tree);
     vp8_tokens_from_tree(vp8_mbsplit_encodings, vp8_mbsplit_tree);
 
-    vp8_tokens_from_tree(VP8_MVREFENCODINGS,   vp8_mv_ref_tree);
-    vp8_tokens_from_tree(VP8_SUBMVREFENCODINGS, vp8_sub_mv_ref_tree);
+    vp8_tokens_from_tree_offset(vp8_mv_ref_encoding_array,
+                                vp8_mv_ref_tree, NEARESTMV);
+    vp8_tokens_from_tree_offset(vp8_sub_mv_ref_encoding_array,
+                                vp8_sub_mv_ref_tree, LEFT4X4);
 
     vp8_tokens_from_tree(vp8_small_mvencodings, vp8_small_mvtree);
 }

@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsBrowserStatusFilter_h__
 #define nsBrowserStatusFilter_h__
@@ -71,7 +38,7 @@ private:
     void MaybeSendProgress();
     void MaybeSendStatus();
     void ResetMembers();
-    PRBool DelayInEffect() { return mDelayedStatus || mDelayedProgress; }
+    bool DelayInEffect() { return mDelayedStatus || mDelayedProgress; }
 
     static void TimeoutHandler(nsITimer *aTimer, void *aClosure);
 
@@ -81,21 +48,21 @@ private:
 
     // delayed values
     nsString                         mStatusMsg;
-    PRInt64                          mCurProgress;
-    PRInt64                          mMaxProgress;
+    int64_t                          mCurProgress;
+    int64_t                          mMaxProgress;
 
     nsString                         mCurrentStatusMsg;
-    PRBool                           mStatusIsDirty;
-    PRInt32                          mCurrentPercentage;
+    bool                             mStatusIsDirty;
+    int32_t                          mCurrentPercentage;
 
     // used to convert OnStart/OnStop notifications into progress notifications
-    PRInt32                          mTotalRequests;
-    PRInt32                          mFinishedRequests;
-    PRPackedBool                     mUseRealProgressFlag;
+    int32_t                          mTotalRequests;
+    int32_t                          mFinishedRequests;
+    bool                             mUseRealProgressFlag;
 
     // indicates whether a timeout is pending
-    PRPackedBool                     mDelayedStatus;
-    PRPackedBool                     mDelayedProgress;
+    bool                             mDelayedStatus;
+    bool                             mDelayedProgress;
 };
 
 #define NS_BROWSERSTATUSFILTER_CLASSNAME \

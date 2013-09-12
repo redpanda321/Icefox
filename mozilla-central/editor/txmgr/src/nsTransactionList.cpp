@@ -1,44 +1,19 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include "mozilla/mozalloc.h"
+#include "nsCOMPtr.h"
+#include "nsDebug.h"
+#include "nsError.h"
+#include "nsID.h"
+#include "nsISupportsUtils.h"
 #include "nsITransactionManager.h"
 #include "nsTransactionItem.h"
 #include "nsTransactionList.h"
 #include "nsTransactionStack.h"
+#include "nscore.h"
 
 NS_IMPL_ISUPPORTS1(nsTransactionList, nsITransactionList)
 
@@ -65,7 +40,7 @@ nsTransactionList::~nsTransactionList()
 }
 
 /* readonly attribute long numItems; */
-NS_IMETHODIMP nsTransactionList::GetNumItems(PRInt32 *aNumItems)
+NS_IMETHODIMP nsTransactionList::GetNumItems(int32_t *aNumItems)
 {
   NS_ENSURE_TRUE(aNumItems, NS_ERROR_NULL_POINTER);
 
@@ -75,10 +50,10 @@ NS_IMETHODIMP nsTransactionList::GetNumItems(PRInt32 *aNumItems)
 
   NS_ENSURE_TRUE(txMgr, NS_ERROR_FAILURE);
 
-  nsresult result = NS_ERROR_FAILURE;
+  nsresult result = NS_OK;
 
   if (mTxnStack)
-    result = mTxnStack->GetSize(aNumItems);
+    *aNumItems = mTxnStack->GetSize();
   else if (mTxnItem)
     result = mTxnItem->GetNumberOfChildren(aNumItems);
 
@@ -86,11 +61,11 @@ NS_IMETHODIMP nsTransactionList::GetNumItems(PRInt32 *aNumItems)
 }
 
 /* boolean itemIsBatch (in long aIndex); */
-NS_IMETHODIMP nsTransactionList::ItemIsBatch(PRInt32 aIndex, PRBool *aIsBatch)
+NS_IMETHODIMP nsTransactionList::ItemIsBatch(int32_t aIndex, bool *aIsBatch)
 {
   NS_ENSURE_TRUE(aIsBatch, NS_ERROR_NULL_POINTER);
 
-  *aIsBatch = PR_FALSE;
+  *aIsBatch = false;
 
   nsCOMPtr<nsITransactionManager> txMgr = do_QueryReferent(mTxnMgr);
 
@@ -98,10 +73,10 @@ NS_IMETHODIMP nsTransactionList::ItemIsBatch(PRInt32 aIndex, PRBool *aIsBatch)
 
   nsRefPtr<nsTransactionItem> item;
 
-  nsresult result = NS_ERROR_FAILURE;
+  nsresult result = NS_OK;
 
   if (mTxnStack)
-    result = mTxnStack->GetItem(aIndex, getter_AddRefs(item));
+    item = mTxnStack->GetItem(aIndex);
   else if (mTxnItem)
     result = mTxnItem->GetChild(aIndex, getter_AddRefs(item));
 
@@ -113,7 +88,7 @@ NS_IMETHODIMP nsTransactionList::ItemIsBatch(PRInt32 aIndex, PRBool *aIsBatch)
 }
 
 /* nsITransaction getItem (in long aIndex); */
-NS_IMETHODIMP nsTransactionList::GetItem(PRInt32 aIndex, nsITransaction **aItem)
+NS_IMETHODIMP nsTransactionList::GetItem(int32_t aIndex, nsITransaction **aItem)
 {
   NS_ENSURE_TRUE(aItem, NS_ERROR_NULL_POINTER);
 
@@ -125,10 +100,10 @@ NS_IMETHODIMP nsTransactionList::GetItem(PRInt32 aIndex, nsITransaction **aItem)
 
   nsRefPtr<nsTransactionItem> item;
 
-  nsresult result = NS_ERROR_FAILURE;
+  nsresult result = NS_OK;
 
   if (mTxnStack)
-    result = mTxnStack->GetItem(aIndex, getter_AddRefs(item));
+    item = mTxnStack->GetItem(aIndex);
   else if (mTxnItem)
     result = mTxnItem->GetChild(aIndex, getter_AddRefs(item));
 
@@ -136,11 +111,13 @@ NS_IMETHODIMP nsTransactionList::GetItem(PRInt32 aIndex, nsITransaction **aItem)
 
   NS_ENSURE_TRUE(item, NS_ERROR_FAILURE);
 
-  return item->GetTransaction(aItem);
+  *aItem = item->GetTransaction().get();
+
+  return NS_OK;
 }
 
 /* long getNumChildrenForItem (in long aIndex); */
-NS_IMETHODIMP nsTransactionList::GetNumChildrenForItem(PRInt32 aIndex, PRInt32 *aNumChildren)
+NS_IMETHODIMP nsTransactionList::GetNumChildrenForItem(int32_t aIndex, int32_t *aNumChildren)
 {
   NS_ENSURE_TRUE(aNumChildren, NS_ERROR_NULL_POINTER);
 
@@ -152,10 +129,10 @@ NS_IMETHODIMP nsTransactionList::GetNumChildrenForItem(PRInt32 aIndex, PRInt32 *
 
   nsRefPtr<nsTransactionItem> item;
 
-  nsresult result = NS_ERROR_FAILURE;
+  nsresult result = NS_OK;
 
   if (mTxnStack)
-    result = mTxnStack->GetItem(aIndex, getter_AddRefs(item));
+    item = mTxnStack->GetItem(aIndex);
   else if (mTxnItem)
     result = mTxnItem->GetChild(aIndex, getter_AddRefs(item));
 
@@ -167,7 +144,7 @@ NS_IMETHODIMP nsTransactionList::GetNumChildrenForItem(PRInt32 aIndex, PRInt32 *
 }
 
 /* nsITransactionList getChildListForItem (in long aIndex); */
-NS_IMETHODIMP nsTransactionList::GetChildListForItem(PRInt32 aIndex, nsITransactionList **aTxnList)
+NS_IMETHODIMP nsTransactionList::GetChildListForItem(int32_t aIndex, nsITransactionList **aTxnList)
 {
   NS_ENSURE_TRUE(aTxnList, NS_ERROR_NULL_POINTER);
 
@@ -179,10 +156,10 @@ NS_IMETHODIMP nsTransactionList::GetChildListForItem(PRInt32 aIndex, nsITransact
 
   nsRefPtr<nsTransactionItem> item;
 
-  nsresult result = NS_ERROR_FAILURE;
+  nsresult result = NS_OK;
 
   if (mTxnStack)
-    result = mTxnStack->GetItem(aIndex, getter_AddRefs(item));
+    item = mTxnStack->GetItem(aIndex);
   else if (mTxnItem)
     result = mTxnItem->GetChild(aIndex, getter_AddRefs(item));
 

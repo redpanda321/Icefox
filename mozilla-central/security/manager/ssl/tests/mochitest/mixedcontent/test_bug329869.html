@@ -2,7 +2,6 @@
 <html>
 <head>
   <title>dymanic script load</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="text/javascript" src="mixedContentTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
@@ -17,7 +16,7 @@
       var newElement = document.createElement("script");
       newElement.src= "http://example.org/tests/security/ssl/mixedcontent/bug329869.js";
       document.body.appendChild(newElement);
-    }, 500);
+    }, 0);
   }
 
   function afterNavigationTest()

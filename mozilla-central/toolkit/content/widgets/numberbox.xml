@@ -1,4 +1,8 @@
 <?xml version="1.0"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 
 <bindings id="numberboxBindings"
    xmlns="http://www.mozilla.org/xbl"
@@ -15,8 +19,8 @@
 
     <content>
       <xul:hbox class="textbox-input-box numberbox-input-box" flex="1" xbl:inherits="context,disabled,focused">
-        <html:input class="numberbox-input textbox-input" flex="1" anonid="input"
-                    xbl:inherits="onfocus,onblur,value,type,maxlength,disabled,size,readonly,placeholder,tabindex,accesskey"/>
+        <html:input class="numberbox-input textbox-input" anonid="input"
+                    xbl:inherits="value,maxlength,disabled,size,readonly,placeholder,tabindex,accesskey"/>
       </xul:hbox>
       <xul:spinbuttons anonid="buttons" xbl:inherits="disabled,hidden=hidespinbuttons"/>
     </content>
@@ -249,7 +253,7 @@
     </implementation>
 
     <handlers>
-      <handler event="input">
+      <handler event="input" phase="capturing">
         this._valueEntered = true;
       </handler>
 

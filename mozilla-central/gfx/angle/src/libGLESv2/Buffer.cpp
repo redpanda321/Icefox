@@ -10,6 +10,10 @@
 
 #include "libGLESv2/Buffer.h"
 
+#include "libGLESv2/main.h"
+#include "libGLESv2/VertexDataManager.h"
+#include "libGLESv2/IndexDataManager.h"
+
 namespace gl
 {
 
@@ -18,11 +22,17 @@ Buffer::Buffer(GLuint id) : RefCountObject(id)
     mContents = NULL;
     mSize = 0;
     mUsage = GL_DYNAMIC_DRAW;
+
+    mStaticVertexBuffer = NULL;
+    mStaticIndexBuffer = NULL;
+    mUnmodifiedDataUse = 0;
 }
 
 Buffer::~Buffer()
 {
     delete[] mContents;
+    delete mStaticVertexBuffer;
+    delete mStaticIndexBuffer;
 }
 
 void Buffer::bufferData(const void *data, GLsizeiptr size, GLenum usage)
@@ -46,11 +56,62 @@ void Buffer::bufferData(const void *data, GLsizeiptr size, GLenum usage)
 
     mSize = size;
     mUsage = usage;
+
+    invalidateStaticData();
+
+    if (usage == GL_STATIC_DRAW)
+    {
+        mStaticVertexBuffer = new StaticVertexBuffer(getDevice());
+        mStaticIndexBuffer = new StaticIndexBuffer(getDevice());
+    }
 }
 
 void Buffer::bufferSubData(const void *data, GLsizeiptr size, GLintptr offset)
 {
     memcpy(mContents + offset, data, size);
+    
+    if ((mStaticVertexBuffer && mStaticVertexBuffer->size() != 0) || (mStaticIndexBuffer && mStaticIndexBuffer->size() != 0))
+    {
+        invalidateStaticData();
+    }
+
+    mUnmodifiedDataUse = 0;
+}
+
+StaticVertexBuffer *Buffer::getStaticVertexBuffer()
+{
+    return mStaticVertexBuffer;
+}
+
+StaticIndexBuffer *Buffer::getStaticIndexBuffer()
+{
+    return mStaticIndexBuffer;
+}
+
+void Buffer::invalidateStaticData()
+{
+    delete mStaticVertexBuffer;
+    mStaticVertexBuffer = NULL;
+
+    delete mStaticIndexBuffer;
+    mStaticIndexBuffer = NULL;
+
+    mUnmodifiedDataUse = 0;
+}
+
+// Creates static buffers if sufficient used data has been left unmodified
+void Buffer::promoteStaticUsage(int dataSize)
+{
+    if (!mStaticVertexBuffer && !mStaticIndexBuffer)
+    {
+        mUnmodifiedDataUse += dataSize;
+
+        if (mUnmodifiedDataUse > 3 * mSize)
+        {
+            mStaticVertexBuffer = new StaticVertexBuffer(getDevice());
+            mStaticIndexBuffer = new StaticIndexBuffer(getDevice());
+        }
+    }
 }
 
 }

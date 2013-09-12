@@ -1,42 +1,8 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is spacecategory.c code, released
- * Apr 12, 2002.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Suresh Duddi <dp@netscape.com>, 12-April-2002
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 ** spacecategory.c
@@ -52,9 +18,6 @@
 #include <ctype.h>
 #include <string.h>
 
-/*
-** Ugh, MSVC6's qsort is too slow...
-*/
 #include "nsQuickSort.h"
 
 #if defined(HAVE_BOUTELL_GD)
@@ -124,7 +87,7 @@ AddChild(STCategoryNode * parent, STCategoryNode * child)
 int
 Reparent(STCategoryNode * parent, STCategoryNode * child)
 {
-    PRUint32 i;
+    uint32_t i;
 
     if (child->parent == parent)
         return 0;
@@ -159,7 +122,7 @@ Reparent(STCategoryNode * parent, STCategoryNode * child)
 STCategoryNode *
 findCategoryNode(const char *catName, STGlobals * g)
 {
-    PRUint32 i;
+    uint32_t i;
 
     for (i = 0; i < g->mNCategoryMap; i++) {
         if (!strcmp(g->mCategoryMap[i]->categoryName, catName))
@@ -289,7 +252,7 @@ ProcessCategoryParentRule(STCategoryRule * parentRule, STCategoryNode * root,
 {
     STCategoryNode *node;
     STCategoryNode *child;
-    PRUint32 i;
+    uint32_t i;
 
     /* Find the parent node in the tree. If not make one and add it into the tree */
     node = findCategoryNode(parentRule->categoryName, g);
@@ -435,7 +398,7 @@ initCategories(STGlobals * g)
 int
 callsiteMatchesRule(tmcallsite * aCallsite, STCategoryRule * aRule)
 {
-    PRUint32 patnum = 0;
+    uint32_t patnum = 0;
     const char *methodName = NULL;
 
     while (patnum < aRule->npats && aCallsite && aCallsite->method) {
@@ -475,8 +438,8 @@ callsiteMatchesRule(tmcallsite * aCallsite, STCategoryRule * aRule)
 
 #ifdef DEBUG_dp
 PRIntervalTime _gMatchTime = 0;
-PRUint32 _gMatchCount = 0;
-PRUint32 _gMatchRules = 0;
+uint32_t _gMatchCount = 0;
+uint32_t _gMatchRules = 0;
 #endif
 
 /*
@@ -491,7 +454,7 @@ matchAllocation(STGlobals * g, STAllocation * aAllocation)
 #ifdef DEBUG_dp
     PRIntervalTime start = PR_IntervalNow();
 #endif
-    PRUint32 rulenum;
+    uint32_t rulenum;
     STCategoryNode *node = NULL;
     STCategoryRule *rule;
 
@@ -616,7 +579,7 @@ freeNodeRunsProcessor(STRequest * inRequest, STOptions * inOptions,
                       STCategoryNode * node)
 {
     if (node->runs) {
-        PRUint32 loop = 0;
+        uint32_t loop = 0;
 
         for (loop = 0; loop < globals.mCommandLineOptions.mContexts; loop++) {
             if (node->runs[loop]) {
@@ -673,7 +636,7 @@ compareNode(const void *aNode1, const void *aNode2, void *aContext)
 {
     int retval = 0;
     STCategoryNode *node1, *node2;
-    PRUint32 a, b;
+    uint32_t a, b;
     optcon *oc = (optcon *) aContext;
 
     if (!aNode1 || !aNode2 || !oc->mOptions || !oc->mContext)
@@ -746,7 +709,7 @@ walkTree(STCategoryNode * root, STCategoryNodeProcessor func,
          void *clientData, int maxdepth)
 {
     STCategoryNode *nodes[1024], *node;
-    PRUint32 begin, end, i;
+    uint32_t begin, end, i;
     int ret = 0;
     int curdepth = 0, ncurdepth = 0;
 
@@ -787,7 +750,7 @@ walkTree(STCategoryNode * root, STCategoryNodeProcessor func,
 int
 freeRule(STCategoryRule * rule)
 {
-    PRUint32 i;
+    uint32_t i;
     char *p = (char *) rule->categoryName;
 
     PR_FREEIF(p);
@@ -808,7 +771,7 @@ freeNodeRuns(STCategoryNode * root)
 void
 freeNodeMap(STGlobals * g)
 {
-    PRUint32 i;
+    uint32_t i;
 
     /* all nodes are in the map table. Just delete all of those. */
     for (i = 0; i < g->mNCategoryMap; i++) {
@@ -821,7 +784,7 @@ freeNodeMap(STGlobals * g)
 int
 freeCategories(STGlobals * g)
 {
-    PRUint32 i;
+    uint32_t i;
 
     /*
      ** walk the tree and free runs held in nodes
@@ -855,7 +818,7 @@ int
 categorizeRun(STOptions * inOptions, STContext * inContext,
               const STRun * aRun, STGlobals * g)
 {
-    PRUint32 i;
+    uint32_t i;
 
 #if defined(DEBUG_dp)
     PRIntervalTime start = PR_IntervalNow();
@@ -919,7 +882,7 @@ displayCategoryNodeProcessor(STRequest * inRequest, STOptions * inOptions,
                              STCategoryNode * node)
 {
     STCategoryNode *root = (STCategoryNode *) clientData;
-    PRUint32 byteSize = 0, heapCost = 0, count = 0;
+    uint32_t byteSize = 0, heapCost = 0, count = 0;
     double percent = 0;
     STOptions customOps;
 

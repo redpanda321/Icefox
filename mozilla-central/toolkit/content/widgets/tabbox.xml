@@ -1,4 +1,8 @@
 <?xml version="1.0"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 
 <bindings id="tabBindings"
           xmlns="http://www.mozilla.org/xbl"
@@ -477,16 +481,19 @@
             aNewTab.focus();
           }
           else if (this.getAttribute("setfocus") != "false") {
-            document.commandDispatcher.advanceFocusIntoSubtree(aNewTab);
-            
+            let selectedPanel = this.tabbox.selectedPanel;
+            document.commandDispatcher.advanceFocusIntoSubtree(selectedPanel);
+
             // Make sure that the focus doesn't move outside the tabbox
             if (this.tabbox) {
               try {
                 let el = document.commandDispatcher.focusedElement;
-                while (el && el != this.tabbox)
+                while (el && el != this.tabbox.tabpanels) {
+                  if (el == this.tabbox || el == selectedPanel)
+                    return;
                   el = el.parentNode;
-                if (el != this.tabbox)
-                  aNewTab.focus();
+                }
+                aNewTab.focus();
               } catch(e) {
               }
             }
@@ -570,7 +577,7 @@
       </method>
     </implementation>
 
-#ifdef MOZ_WIDGET_GTK2
+#ifdef MOZ_WIDGET_GTK
     <handlers>
       <handler event="DOMMouseScroll">
       <![CDATA[
@@ -594,7 +601,7 @@
       <property name="accessibleType" readonly="true">
         <getter>
           <![CDATA[
-            return Components.interfaces.nsIAccessibleProvider.XULTabpanels;
+            return Components.interfaces.nsIAccessibleProvider.XULDeck;
           ]]>
         </getter>
       </property>
@@ -778,7 +785,12 @@
 #else
         false
 #endif
-      </field>    
+      </field>
+      <field name="TelemetryStopwatch" readonly="true">
+        let tmp = {};
+        Cu.import("resource://gre/modules/TelemetryStopwatch.jsm", tmp);
+        tmp.TelemetryStopwatch;
+      </field>
     </implementation>
 
     <handlers>
@@ -788,13 +800,32 @@
           return;
 
         if (this != this.parentNode.selectedItem) { // Not selected yet
-          // Select new tab after short delay so that PostHandleEvent() doesn't see
-          // the tab as selected yet, otherwise it will focus the tab for us --
-          // the CSS for tab has -moz-user-focus: normal only for selected="true".
-          function setTab(tab) {
-            tab.parentNode._selectNewTab(tab);
+          let stopwatchid = this.parentNode.getAttribute("stopwatchid");
+          if (stopwatchid) {
+            this.TelemetryStopwatch.start(stopwatchid);
           }
-          setTimeout(setTab, 0, this);
+
+          // Call this before setting the 'ignorefocus' attribute because this
+          // will pass on focus if the formerly selected tab was focused as well.
+          this.parentNode._selectNewTab(this);
+
+          var isTabFocused = false;
+          try {
+            isTabFocused = (document.commandDispatcher.focusedElement == this);
+          } catch (e) {}
+
+          // Set '-moz-user-focus' to 'ignore' so that PostHandleEvent() can't
+          // focus the tab; we only want tabs to be focusable by the mouse if
+          // they are already focused. After a short timeout we'll reset
+          // '-moz-user-focus' so that tabs can be focused by keyboard again.
+          if (!isTabFocused) {
+            this.setAttribute("ignorefocus", "true");
+            setTimeout(function (tab) tab.removeAttribute("ignorefocus"), 0, this);
+          }
+
+          if (stopwatchid) {
+            this.TelemetryStopwatch.finish(stopwatchid);
+          }
         }
         // Otherwise this tab is already selected and we will fall
         // through to mousedown behavior which sets focus on the current tab,

@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape Portable Runtime (NSPR).
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* Win95 Sockets module
  *
@@ -107,6 +75,7 @@ typedef struct _WSA_COMPATIBILITY_MODE {
 static HMODULE libWinsock2 = NULL;
 static WSAIOCTLPROC wsaioctlProc = NULL;
 static PRBool socketSetCompatMode = PR_FALSE;
+static PRBool socketFixInet6RcvBuf = PR_FALSE;
 
 void _PR_MD_InitSockets(void)
 {
@@ -129,6 +98,11 @@ void _PR_MD_InitSockets(void)
                 socketSetCompatMode = PR_TRUE;
             }
         }
+    }
+    else if (osvi.dwMajorVersion == 5 && osvi.dwMinorVersion == 1)
+    {
+        /* if Windows XP (32-bit) */
+        socketFixInet6RcvBuf = PR_TRUE;
     }
 }
 
@@ -187,6 +161,27 @@ _PR_MD_SOCKET(int af, int type, int flags)
             ** If the call to WSAIoctl() fails with WSAEOPNOTSUPP,
             ** don't close the socket.
             */ 
+        }
+    }
+
+    if (af == AF_INET6 && socketFixInet6RcvBuf)
+    {
+        int bufsize;
+        int len = sizeof(bufsize);
+        int rv;
+
+        /* Windows XP 32-bit returns an error on getpeername() for AF_INET6
+         * sockets if the receive buffer size is greater than 65535 before
+         * the connection is initiated. The default receive buffer size may
+         * be 128000 so fix it here to always be <= 65535. See bug 513659
+         * and IBM DB2 support technote "Receive/Send IPv6 Socket Size
+         * Problem in Windows XP SP2 & SP3".
+         */
+        rv = getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char*)&bufsize, &len);
+        if (rv == 0 && bufsize > 65535)
+        {
+            bufsize = 65535;
+            setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char*)&bufsize, len);
         }
     }
 

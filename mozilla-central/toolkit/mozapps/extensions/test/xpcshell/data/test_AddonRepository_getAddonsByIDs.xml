@@ -21,8 +21,8 @@
     <description>Test Description 1</description>
     <eula>Test EULA 1</eula>
     <developer_comments>Test Developer Comments 1</developer_comments>
-    <icon>http://localhost:4444/icon1.png</icon>
-    <status id="4">Public</status>
+    <icon size="32">http://localhost:4444/icon1.png</icon>
+    <status id="8">Preliminarily Reviewed</status>
     <compatible_applications>
       <application>
         <appID>xpcshell@tests.mozilla.org</appID>
@@ -32,8 +32,12 @@
     </compatible_applications>
     <previews>
       <preview primary="1">
-        <full type="image/png">http://localhost:4444/full1-1.png</full>
-        <thumbnail type="image/png">http://localhost:4444/thumbnail1-1.png</thumbnail>
+        <full type="image/png" width="400" height="300">
+          http://localhost:4444/full1-1.png
+        </full>
+        <thumbnail type="image/png" width="200" height="150">
+          http://localhost:4444/thumbnail1-1.png
+        </thumbnail>
         <caption>Caption 1 - 1</caption>
       </preview>
       <preview primary="0">
@@ -57,6 +61,69 @@
     <last_updated epoch="1265033045">2010-02-01T14:04:05Z</last_updated>
     <install size="5555">http://localhost:4444/addons/test_AddonRepository_2.xpi</install>
   </addon>
+
+  <addon_compatibility hosted="true" id="123">
+    <guid>test1@tests.mozilla.org</guid>
+    <name>PASS</name>
+    <version_ranges>
+      <!-- Will be included -->
+      <version_range type="incompatible">
+        <min_version>0.1</min_version>
+        <max_version>0.2</max_version>
+        <compatible_applications>
+          <application>
+            <name>XPCShell</name>
+            <application_id>666</application_id>
+            <min_version>3.0</min_version>
+            <max_version>4.0</max_version>
+            <appID>xpcshell@tests.mozilla.org</appID>
+          </application>
+        </compatible_applications>
+      </version_range>
+      <!-- Will be included -->
+      <version_range type="incompatible">
+        <min_version>0.2</min_version>
+        <max_version>0.3</max_version>
+        <compatible_applications>
+          <application>
+            <name>XPCShell</name>
+            <application_id>666</application_id>
+            <min_version>5.0</min_version>
+            <max_version>6.0</max_version>
+            <appID>xpcshell@tests.mozilla.org</appID>
+          </application>
+        </compatible_applications>
+      </version_range>
+      <!-- Won't be included - invalid type attribute -->
+      <version_range type="unknown">
+        <min_version>9</min_version>
+        <max_version>10</max_version>
+        <compatible_applications>
+          <application>
+            <name>XPCShell</name>
+            <application_id>666</application_id>
+            <min_version>10.0</min_version>
+            <max_version>11.0</max_version>
+            <appID>xpcshell@tests.mozilla.org</appID>
+          </application>
+        </compatible_applications>
+      </version_range>
+      <!-- Won't be included - no matching appID -->
+      <version_range type="incompatible">
+        <min_version>0.2</min_version>
+        <max_version>0.3</max_version>
+        <compatible_applications>
+          <application>
+            <name>Unknown App</name>
+            <application_id>123</application_id>
+            <min_version>1.0</min_version>
+            <max_version>999.0</max_version>
+            <appID>unknown-app@tests.mozilla.org</appID>
+          </application>
+        </compatible_applications>
+      </version_range>
+    </version_ranges>
+  </addon_compatibility>
 
   <!-- Fails because guid matches previously successful result -->
   <addon>

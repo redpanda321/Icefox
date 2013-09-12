@@ -10,6 +10,7 @@
     COMPONENT(BINARYOUTPUTSTREAM, nsBinaryOutputStreamConstructor)
     COMPONENT(STORAGESTREAM, nsStorageStreamConstructor)
     COMPONENT(VERSIONCOMPARATOR, nsVersionComparatorImplConstructor)
+    COMPONENT(SCRIPTABLEBASE64ENCODER, nsScriptableBase64EncoderConstructor)
     COMPONENT(PIPE, nsPipeConstructor)
 
     COMPONENT(PROPERTIES, nsPropertiesConstructor)
@@ -17,16 +18,11 @@
     COMPONENT(PERSISTENTPROPERTIES, nsPersistentProperties::Create)
 
     COMPONENT(SUPPORTSARRAY, nsSupportsArray::Create)
-    COMPONENT(ARRAY, nsArrayConstructor)
+    COMPONENT(ARRAY, nsArray::XPCOMConstructor)
     COMPONENT(CONSOLESERVICE, nsConsoleServiceConstructor)
     COMPONENT(EXCEPTIONSERVICE, nsExceptionServiceConstructor)
     COMPONENT(ATOMSERVICE, nsAtomServiceConstructor)
-#ifdef MOZ_TIMELINE
-    COMPONENT(TIMELINESERVICE, nsTimelineServiceConstructor)
-#endif
     COMPONENT(OBSERVERSERVICE, nsObserverService::Create)
-
-    COMPONENT(XPCOMPROXY, nsProxyObjectManager::Create)
 
     COMPONENT(TIMER, nsTimerImplConstructor)
 
@@ -63,14 +59,8 @@
     COMPONENT(STRINGINPUTSTREAM, nsStringInputStreamConstructor)
     COMPONENT(MULTIPLEXINPUTSTREAM, nsMultiplexInputStreamConstructor)
 
-#ifndef MOZ_NO_FAST_LOAD
-    COMPONENT(FASTLOADSERVICE, nsFastLoadService::Create)
-#endif
-
     COMPONENT(VARIANT, nsVariantConstructor)
     COMPONENT(INTERFACEINFOMANAGER_SERVICE, nsXPTIInterfaceInfoManagerGetSingleton)
-
-    COMPONENT(RECYCLINGALLOCATOR, nsRecyclingAllocatorImplConstructor)
 
     COMPONENT(HASH_PROPERTY_BAG, nsHashPropertyBagConstructor)
 
@@ -86,4 +76,7 @@
 
     COMPONENT(SYSTEMINFO, nsSystemInfoConstructor)
     COMPONENT(MEMORY_REPORTER_MANAGER, nsMemoryReporterManagerConstructor)
+    COMPONENT(MEMORY_INFO_DUMPER, nsMemoryInfoDumperConstructor)
     COMPONENT(IOUTIL, nsIOUtilConstructor)
+    COMPONENT(CYCLE_COLLECTOR_LOGGER, nsCycleCollectorLoggerConstructor)
+    COMPONENT(MESSAGE_LOOP, nsMessageLoopConstructor)

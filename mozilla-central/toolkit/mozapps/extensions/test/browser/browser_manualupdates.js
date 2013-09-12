@@ -18,10 +18,10 @@ function test() {
     id: "addon1@tests.mozilla.org",
     name: "auto updating addon",
     version: "1.0",
-    applyBackgroundUpdates: true
+    applyBackgroundUpdates: AddonManager.AUTOUPDATE_ENABLE
   }]);
 
-  open_manager(null, function(aWindow) {
+  open_manager("addons://list/extension", function(aWindow) {
     gManagerWindow = aWindow;
     gCategoryUtilities = new CategoryUtilities(gManagerWindow);
     run_next_test();
@@ -43,38 +43,36 @@ add_test(function() {
     id: "addon2@tests.mozilla.org",
     name: "manually updating addon",
     version: "1.0",
-    applyBackgroundUpdates: false
+    isCompatible: false,
+    blocklistState: Ci.nsIBlocklistService.STATE_BLOCKED,
+    applyBackgroundUpdates: AddonManager.AUTOUPDATE_DISABLE
   }]);
   
-  is(gCategoryUtilities.isVisible(gAvailableCategory), true, "Available Updates category should now be visible");
-  
-  gAvailableCategory.addEventListener("CategoryVisible", function() {
-    gAvailableCategory.removeEventListener("CategoryVisible", arguments.callee, false);
-    is(gCategoryUtilities.isVisible(gAvailableCategory), false, "Available Updates category should not be visible");
-    gAvailableCategory.addEventListener("CategoryVisible", function() {
-      gAvailableCategory.removeEventListener("CategoryVisible", arguments.callee, false);
-      is(gCategoryUtilities.isVisible(gAvailableCategory), true, "Available Updates category should be visible");
-      run_next_test();
-    }, false);
-    gProvider.addons[1].applyBackgroundUpdates = false;
-  }, false);
-  gProvider.addons[1].applyBackgroundUpdates = true;
+  is(gCategoryUtilities.isVisible(gAvailableCategory), false, "Available Updates category should still be hidden");
+
+  run_next_test();
 });
 
 
 add_test(function() {
   gAvailableCategory.addEventListener("CategoryBadgeUpdated", function() {
     gAvailableCategory.removeEventListener("CategoryBadgeUpdated", arguments.callee, false);
+    is(gCategoryUtilities.isVisible(gAvailableCategory), true, "Available Updates category should now be visible");
     is(gAvailableCategory.badgeCount, 1, "Badge for Available Updates should now be 1");
     run_next_test();
   }, false);
-  
-  gProvider.createInstalls([{
-    name: "manually updating addon (new and improved!)",
-    existingAddon: gProvider.addons[1],
-    version: "1.1",
-    releaseNotesURI: Services.io.newURI(TESTROOT + "thereIsNoFileHere.xhtml", null, null)
-  }]);
+
+  gCategoryUtilities.openType("extension", function() {
+    gProvider.createInstalls([{
+      name: "manually updating addon (new and improved!)",
+      existingAddon: gProvider.addons[1],
+      version: "1.1",
+      releaseNotesURI: Services.io.newURI(TESTROOT + "thereIsNoFileHere.xhtml", null, null)
+    }]);
+
+    var item = get_addon_element(gManagerWindow, "addon2@tests.mozilla.org");
+    is(item._version.value, "1.0", "Should still show the old version in the normal list");
+  });
 });
 
 
@@ -84,7 +82,7 @@ add_test(function() {
     is(gManagerWindow.gViewController.currentViewId, "addons://updates/available", "Available Updates view should be the current view");
     run_next_test();
   }, true);
-  EventUtils.synthesizeMouse(gAvailableCategory, 2, 2, { }, gManagerWindow);
+  EventUtils.synthesizeMouseAtCenter(gAvailableCategory, { }, gManagerWindow);
 });
 
 
@@ -115,6 +113,8 @@ add_test(function() {
   is_element_visible(postfix, "'Update' postfix should be visible");
   is_element_visible(item._updateAvailable, "");
   is_element_visible(item._relNotesToggle, "Release notes toggle should be visible");
+  is_element_hidden(item._warning, "Incompatible warning should be hidden");
+  is_element_hidden(item._error, "Blocklist error should be hidden");
 
   info("Opening release notes");
   item.addEventListener("RelNotesToggle", function() {
@@ -143,19 +143,30 @@ add_test(function() {
         run_next_test();
 
       }, false);
-      EventUtils.synthesizeMouse(item._relNotesToggle, 2, 2, { }, gManagerWindow);
+      EventUtils.synthesizeMouseAtCenter(item._relNotesToggle, { }, gManagerWindow);
       is_element_visible(item._relNotesLoading, "Release notes loading message should be visible");
 
     }, false);
-    EventUtils.synthesizeMouse(item._relNotesToggle, 2, 2, { }, gManagerWindow);
+    EventUtils.synthesizeMouseAtCenter(item._relNotesToggle, { }, gManagerWindow);
 
   }, false);
-  EventUtils.synthesizeMouse(item._relNotesToggle, 2, 2, { }, gManagerWindow);
+  EventUtils.synthesizeMouseAtCenter(item._relNotesToggle, { }, gManagerWindow);
   is_element_visible(item._relNotesLoading, "Release notes loading message should be visible");
 });
 
 
 add_test(function() {
+  var badgeUpdated = false;
+  var installCompleted = false;
+
+  gAvailableCategory.addEventListener("CategoryBadgeUpdated", function() {
+    gAvailableCategory.removeEventListener("CategoryBadgeUpdated", arguments.callee, false);
+    if (installCompleted)
+      run_next_test();
+    else
+      badgeUpdated = true;
+  }, false);
+
   var list = gManagerWindow.document.getElementById("updates-list");
   var item = list.firstChild;
   var updateBtn = item._updateBtn;
@@ -169,11 +180,63 @@ add_test(function() {
     },
     onInstallEnded: function() {
       install.removeTestListener(this);
-      info("install ended");
+      info("Install ended");
       is_element_hidden(item._installStatus, "Install progress widget should be hidden");
-      run_next_test();
+
+      if (badgeUpdated)
+        run_next_test();
+      else
+        installCompleted = true;
     }
   };
   install.addTestListener(listener);
-  EventUtils.synthesizeMouse(updateBtn, 2, 2, { }, gManagerWindow);
+  EventUtils.synthesizeMouseAtCenter(updateBtn, { }, gManagerWindow);
+});
+
+
+add_test(function() {
+  is(gCategoryUtilities.isVisible(gAvailableCategory), true, "Available Updates category should still be visible");
+  is(gAvailableCategory.badgeCount, 0, "Badge for Available Updates should now be 0");
+
+  gCategoryUtilities.openType("extension", function() {
+    is(gCategoryUtilities.isVisible(gAvailableCategory), false, "Available Updates category should be hidden");
+
+    close_manager(gManagerWindow, function() {
+      open_manager(null, function(aWindow) {
+        gManagerWindow = aWindow;
+        gCategoryUtilities = new CategoryUtilities(gManagerWindow);
+        gAvailableCategory = gManagerWindow.gCategories.get("addons://updates/available");
+
+        is(gCategoryUtilities.isVisible(gAvailableCategory), false, "Available Updates category should be hidden");
+
+        run_next_test();
+      });
+    });
+  });
+});
+
+add_test(function() {
+  gAvailableCategory.addEventListener("CategoryBadgeUpdated", function() {
+    gAvailableCategory.removeEventListener("CategoryBadgeUpdated", arguments.callee, false);
+    is(gCategoryUtilities.isVisible(gAvailableCategory), true, "Available Updates category should now be visible");
+    is(gAvailableCategory.badgeCount, 1, "Badge for Available Updates should now be 1");
+
+    gAvailableCategory.addEventListener("CategoryBadgeUpdated", function() {
+      gAvailableCategory.removeEventListener("CategoryBadgeUpdated", arguments.callee, false);
+      is(gCategoryUtilities.isVisible(gAvailableCategory), false, "Available Updates category should now be hidden");
+
+      run_next_test();
+    }, false);
+
+    AddonManager.getAddonByID("addon2@tests.mozilla.org", function(aAddon) {
+      aAddon.applyBackgroundUpdates = AddonManager.AUTOUPDATE_ENABLE;
+    });
+  }, false);
+
+  gProvider.createInstalls([{
+    name: "manually updating addon (new and even more improved!)",
+    existingAddon: gProvider.addons[1],
+    version: "1.2",
+    releaseNotesURI: Services.io.newURI(TESTROOT + "thereIsNoFileHere.xhtml", null, null)
+  }]);
 });

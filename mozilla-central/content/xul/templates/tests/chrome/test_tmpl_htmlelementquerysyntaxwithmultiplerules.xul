@@ -10,11 +10,33 @@
         onload="test_template();"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
 
   <body xmlns="http://www.w3.org/1999/xhtml" style="height: 300px; overflow: auto;"/>
+
+  <data id="output" xmlns:html="http://www.w3.org/1999/xhtml">
+    <html:span step="-2" id="http://www.some-fictitious-zoo.com/mammals/lion">Lion</html:span>
+    <html:span id="http://www.some-fictitious-zoo.com/mammals/hippopotamus">HIPPOPOTAMUS</html:span>
+    <vbox>
+      <html:p step="2" id="http://www.some-fictitious-zoo.com/mammals/lion">
+        <html:span title="Lion"/>
+      </html:p>
+      <html:p id="http://www.some-fictitious-zoo.com/mammals/africanelephant">
+        <html:span title="African Elephant"/>
+      </html:p>
+      <html:p step="-1" id="http://www.some-fictitious-zoo.com/mammals/polarbear">
+        <html:span title="Polar Bear"/>
+      </html:p>
+      <html:p id="http://www.some-fictitious-zoo.com/mammals/gorilla">
+        <html:span title="Gorilla"/>
+      </html:p>
+    </vbox>
+    <html:span step="5" id="http://www.some-fictitious-zoo.com/mammals/chimpanzee">Chimpanzee</html:span>
+    <html:span id="http://www.some-fictitious-zoo.com/mammals/llama">LLAMA</html:span>
+    <html:span step="1" id="http://www.some-fictitious-zoo.com/mammals/polarbear">Polar Bear</html:span>
+    <html:span id="http://www.some-fictitious-zoo.com/mammals/aardvark">aardvark</html:span>
+    <html:span step="-3" id="http://www.some-fictitious-zoo.com/mammals/ninebandedarmadillo">Nine-banded Armadillo</html:span>
+  </data>
 
 <script src="templates_shared.js"/>
 
@@ -28,30 +50,7 @@ var isTreeBuilder = false;
 var needsOpen = false;
 var notWorkingYet = true;
 var notWorkingYetDynamic = true;
-var expectedOutput =
-<output xmlns:html="http://www.w3.org/1999/xhtml">
-  <html:span step="-2" id="http://www.some-fictitious-zoo.com/mammals/lion">Lion</html:span>
-  <html:span id="http://www.some-fictitious-zoo.com/mammals/hippopotamus">HIPPOPOTAMUS</html:span>
-  <vbox>
-    <html:p step="2" id="http://www.some-fictitious-zoo.com/mammals/lion">
-      <html:span title="Lion"/>
-    </html:p>
-    <html:p id="http://www.some-fictitious-zoo.com/mammals/africanelephant">
-      <html:span title="African Elephant"/>
-    </html:p>
-    <html:p step="-1" id="http://www.some-fictitious-zoo.com/mammals/polarbear">
-      <html:span title="Polar Bear"/>
-    </html:p>
-    <html:p id="http://www.some-fictitious-zoo.com/mammals/gorilla">
-      <html:span title="Gorilla"/>
-    </html:p>
-  </vbox>
-  <html:span step="5" id="http://www.some-fictitious-zoo.com/mammals/chimpanzee">Chimpanzee</html:span>
-  <html:span id="http://www.some-fictitious-zoo.com/mammals/llama">LLAMA</html:span>
-  <html:span step="1" id="http://www.some-fictitious-zoo.com/mammals/polarbear">Polar Bear</html:span>
-  <html:span id="http://www.some-fictitious-zoo.com/mammals/aardvark">aardvark</html:span>
-  <html:span step="-3" id="http://www.some-fictitious-zoo.com/mammals/ninebandedarmadillo">Nine-banded Armadillo</html:span>
-</output>;
+var expectedOutput = document.getElementById("output");
 
 var changes = [
   // step 1
@@ -99,5 +98,5 @@ var changes = [
 ]]>
 </script>
 
-<div xmlns="http://www.w3.org/1999/xhtml" id="root" datasources="animals.rdf" ref="http://www.some-fictitious-zoo.com/mammals"><template xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" id="template"><query><content uri="?uri"/><member container="?uri" child="?animal"/><triple subject="?animal" predicate="http://www.some-fictitious-zoo.com/rdf#name" object="?name"/><triple subject="?animal" predicate="http://www.some-fictitious-zoo.com/rdf#specimens" object="?specimens"/></query><rule><conditions id="conditions"><where subject="?specimens" rel="greater" value="6"/></conditions><action><vbox><p xmlns="http://www.w3.org/1999/xhtml" uri="?animal"><span title="?name"/></p></vbox></action></rule><rule><action><span xmlns="http://www.w3.org/1999/xhtml" uri="?animal"><textnode xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" value="?name"/></span></action></rule></template></div>
+<div xmlns="http://www.w3.org/1999/xhtml" id="root" datasources="rdf:null" ref="http://www.some-fictitious-zoo.com/mammals"><template xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" id="template"><query><content uri="?uri"/><member container="?uri" child="?animal"/><triple subject="?animal" predicate="http://www.some-fictitious-zoo.com/rdf#name" object="?name"/><triple subject="?animal" predicate="http://www.some-fictitious-zoo.com/rdf#specimens" object="?specimens"/></query><rule><conditions id="conditions"><where subject="?specimens" rel="greater" value="6"/></conditions><action><vbox><p xmlns="http://www.w3.org/1999/xhtml" uri="?animal"><span title="?name"/></p></vbox></action></rule><rule><action><span xmlns="http://www.w3.org/1999/xhtml" uri="?animal"><textnode xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" value="?name"/></span></action></rule></template></div>
 </window>

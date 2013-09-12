@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape Portable Runtime (NSPR).
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 ** Portable safe sprintf code.
@@ -86,6 +54,9 @@ struct NumArg {
 	double d;
 	const char *s;
 	int *ip;
+#ifdef WIN32
+	const WCHAR *ws;
+#endif
     } u;
 };
 
@@ -103,6 +74,9 @@ struct NumArg {
 #define TYPE_STRING	8
 #define TYPE_DOUBLE	9
 #define TYPE_INTSTR	10
+#ifdef WIN32
+#define TYPE_WSTRING	11
+#endif
 #define TYPE_UNKNOWN	20
 
 #define FLAG_LEFT	0x1
@@ -573,8 +547,12 @@ static struct NumArg* BuildArgArray( const char *fmt, va_list ap, int* rv, struc
 	    }
 	    break;
 
-	case 'C':
 	case 'S':
+#ifdef WIN32
+	    nas[ cn ].type = TYPE_WSTRING;
+	    break;
+#endif
+	case 'C':
 	case 'E':
 	case 'G':
 	    /* XXX not supported I suppose */
@@ -653,6 +631,12 @@ static struct NumArg* BuildArgArray( const char *fmt, va_list ap, int* rv, struc
 	    nas[cn].u.s = va_arg( ap, char* );
 	    break;
 
+#ifdef WIN32
+	case TYPE_WSTRING:
+	    nas[cn].u.ws = va_arg( ap, WCHAR* );
+	    break;
+#endif
+
 	case TYPE_INTSTR:
 	    nas[cn].u.ip = va_arg( ap, int* );
 	    break;
@@ -690,6 +674,9 @@ static int dosprintf(SprintfState *ss, const char *fmt, va_list ap)
 	double d;
 	const char *s;
 	int *ip;
+#ifdef WIN32
+	const WCHAR *ws;
+#endif
     } u;
     const char *fmt0;
     static char *hex = "0123456789abcdef";
@@ -701,7 +688,9 @@ static int dosprintf(SprintfState *ss, const char *fmt, va_list ap)
     struct NumArg  nasArray[ NAS_DEFAULT_NUM ];
     char  pattern[20];
     const char* dolPt = NULL;  /* in "%4$.2f", dolPt will point to . */
-
+#ifdef WIN32
+    char *pBuf = NULL;
+#endif
 
     /*
     ** build an argument array, IF the fmt is numbered argument
@@ -965,14 +954,43 @@ static int dosprintf(SprintfState *ss, const char *fmt, va_list ap)
 	    radix = 16;
 	    goto fetch_and_convert;
 
+#ifndef WIN32
+	  case 'S':
+	    /* XXX not supported I suppose */
+	    PR_ASSERT(0);
+	    break;
+#endif
+
 #if 0
 	  case 'C':
-	  case 'S':
 	  case 'E':
 	  case 'G':
 	    /* XXX not supported I suppose */
 	    PR_ASSERT(0);
 	    break;
+#endif
+
+#ifdef WIN32
+	  case 'S':
+	    u.ws = nas ? nap->u.ws : va_arg(ap, const WCHAR*);
+
+	    /* Get the required size in rv */
+	    rv = WideCharToMultiByte(CP_ACP, 0, u.ws, -1, NULL, 0, NULL, NULL);
+	    if (rv == 0)
+		rv = 1;
+	    pBuf = PR_MALLOC(rv);
+	    WideCharToMultiByte(CP_ACP, 0, u.ws, -1, pBuf, (int)rv, NULL, NULL);
+	    pBuf[rv-1] = '\0';
+
+	    rv = cvt_s(ss, pBuf, width, prec, flags);
+
+	    /* We don't need the allocated buffer anymore */
+	    PR_Free(pBuf);
+	    if (rv < 0) {
+		return rv;
+	    }
+	    break;
+
 #endif
 
 	  case 's':

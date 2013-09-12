@@ -10,11 +10,32 @@
         onload="test_template();"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
 
   <body xmlns="http://www.w3.org/1999/xhtml" style="height: 300px; overflow: auto;"/>
+
+  <data id="output">
+    <groupbox step="-3" id="http://www.some-fictitious-zoo.com/birds" container="true" empty="false">
+      <caption value="Birds"/>
+      <checkbox id="http://www.some-fictitious-zoo.com/birds/barnowl" label="Barn Owl"/>
+      <checkbox id="http://www.some-fictitious-zoo.com/birds/raven" label="Raven"/>
+    </groupbox>
+    <groupbox step="1" id="http://www.some-fictitious-zoo.com/insects">
+      <caption value="Insects"/>
+    </groupbox>
+    <groupbox id="http://www.some-fictitious-zoo.com/crustaceans" container="true" empty="true">
+      <caption value="Crustaceans"/>
+    </groupbox>
+    <groupbox id="http://www.some-fictitious-zoo.com/mammals" container="true" empty="false">
+      <caption value="Mammals"/>
+      <checkbox id="http://www.some-fictitious-zoo.com/mammals/africanelephant" label="African Elephant"/>
+      <checkbox step="2" id="http://www.some-fictitious-zoo.com/mammals/koala" label="Koala"/>
+      <checkbox id="http://www.some-fictitious-zoo.com/mammals/polarbear" label="Polar Bear"/>
+      <checkbox id="http://www.some-fictitious-zoo.com/mammals/aardvark" label="aardvark"/>
+      <checkbox id="http://www.some-fictitious-zoo.com/mammals/ninebandedarmadillo" label="Nine-banded Armadillo"/>
+      <checkbox id="http://www.some-fictitious-zoo.com/mammals/gorilla" label="Gorilla"/>
+    </groupbox>
+  </data>
 
 <script src="templates_shared.js"/>
 
@@ -28,29 +49,7 @@ var isTreeBuilder = false;
 var needsOpen = false;
 var notWorkingYet = false;
 var notWorkingYetDynamic = false;
-var expectedOutput =
-<output>
-  <groupbox step="-3" id="http://www.some-fictitious-zoo.com/birds" container="true" empty="false">
-    <caption value="Birds"/>
-    <checkbox id="http://www.some-fictitious-zoo.com/birds/barnowl" label="Barn Owl"/>
-    <checkbox id="http://www.some-fictitious-zoo.com/birds/raven" label="Raven"/>
-  </groupbox>
-  <groupbox step="1" id="http://www.some-fictitious-zoo.com/insects">
-    <caption value="Insects"/>
-  </groupbox>
-  <groupbox id="http://www.some-fictitious-zoo.com/crustaceans" container="true" empty="true">
-    <caption value="Crustaceans"/>
-  </groupbox>
-  <groupbox id="http://www.some-fictitious-zoo.com/mammals" container="true" empty="false">
-    <caption value="Mammals"/>
-    <checkbox id="http://www.some-fictitious-zoo.com/mammals/africanelephant" label="African Elephant"/>
-    <checkbox step="2" id="http://www.some-fictitious-zoo.com/mammals/koala" label="Koala"/>
-    <checkbox id="http://www.some-fictitious-zoo.com/mammals/polarbear" label="Polar Bear"/>
-    <checkbox id="http://www.some-fictitious-zoo.com/mammals/aardvark" label="aardvark"/>
-    <checkbox id="http://www.some-fictitious-zoo.com/mammals/ninebandedarmadillo" label="Nine-banded Armadillo"/>
-    <checkbox id="http://www.some-fictitious-zoo.com/mammals/gorilla" label="Gorilla"/>
-  </groupbox>
-</output>;
+var expectedOutput = document.getElementById("output");
 
 var changes = [
   // step 1
@@ -83,7 +82,7 @@ var changes = [
 ]]>
 </script>
 
-<vbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" id="root" datasources="animals.rdf" ref="http://www.some-fictitious-zoo.com/all-animals">
+<vbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" id="root" datasources="rdf:null" ref="http://www.some-fictitious-zoo.com/all-animals">
 <template>
 <rule>
 <conditions>

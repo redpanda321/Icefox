@@ -1,4 +1,9 @@
-do_load_httpd_js();
+const Cc = Components.classes;
+const Ci = Components.interfaces;
+const Cu = Components.utils;
+const Cr = Components.results;
+
+Cu.import("resource://testing-common/httpd.js");
 
 const BUGID = "369787";
 var server = null;
@@ -16,10 +21,23 @@ function change_content_type() {
 function TestListener() {
 }
 TestListener.prototype.onStartRequest = function(request, context) {
-  change_content_type();
+  try {
+    // request might be different from channel
+    channel = request.QueryInterface(Components.interfaces.nsIChannel);
+
+    change_content_type();
+  } catch (ex) {
+    print(ex);
+    throw ex;
+  }
 }
 TestListener.prototype.onStopRequest = function(request, context, status) {
-  change_content_type();
+  try {
+    change_content_type();
+  } catch (ex) {
+    print(ex);
+    // don't re-throw ex to avoid hanging the test
+  }
 
   do_timeout(0, after_channel_closed);
 }
@@ -34,7 +52,7 @@ function after_channel_closed() {
 
 function run_test() {
   // start server
-  server = new nsHttpServer();
+  server = new HttpServer();
 
   server.registerPathHandler("/bug" + BUGID, bug369787);
 

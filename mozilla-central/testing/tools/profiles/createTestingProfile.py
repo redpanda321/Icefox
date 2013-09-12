@@ -1,3 +1,7 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 import getopt
 import os
 import re
@@ -22,9 +26,9 @@ userPrefs = {
     'dom.disable_window_move_resize': 'false',
     'layout.fire_onload_after_image_background_loads': 'true',
     'javascript.options.showInConsole': 'true',
-    'privacy.popups.firstTime': 'false',
     'layout.debug.enable_data_xbl': 'true',
     'shell.checkDefaultClient': 'false',
+    'toolkit.startup.max_resumed_crashes': -1,
     'browser.EULA.override': 'true'
 }
 

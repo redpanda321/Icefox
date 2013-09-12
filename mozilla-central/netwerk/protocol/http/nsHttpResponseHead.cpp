@@ -1,43 +1,8 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /* vim:set ts=4 sw=4 sts=4 et cin: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@netscape.com> (original author)
- *   Andreas M. Schneider <clarence@clarence.de>
- *   Christian Biesinger <cbiesinger@web.de>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include <stdlib.h>
 #include "nsHttpResponseHead.h"
@@ -53,7 +18,7 @@
 nsresult
 nsHttpResponseHead::SetHeader(nsHttpAtom hdr,
                               const nsACString &val,
-                              PRBool merge)
+                              bool merge)
 {
     nsresult rv = mHeaders.SetHeader(hdr, val, merge);
     if (NS_FAILED(rv)) return rv;
@@ -69,17 +34,17 @@ nsHttpResponseHead::SetHeader(nsHttpAtom hdr,
 }
 
 void
-nsHttpResponseHead::SetContentLength(PRInt64 len)
+nsHttpResponseHead::SetContentLength(int64_t len)
 {
     mContentLength = len;
-    if (!LL_GE_ZERO(len)) // < 0
+    if (len < 0)
         mHeaders.ClearHeader(nsHttp::Content_Length);
     else
-        mHeaders.SetHeader(nsHttp::Content_Length, nsPrintfCString(20, "%lld", len));
+        mHeaders.SetHeader(nsHttp::Content_Length, nsPrintfCString("%lld", len));
 }
 
 void
-nsHttpResponseHead::Flatten(nsACString &buf, PRBool pruneTransients)
+nsHttpResponseHead::Flatten(nsACString &buf, bool pruneTransients)
 {
     if (mVersion == NS_HTTP_VERSION_0_9)
         return;
@@ -90,19 +55,19 @@ nsHttpResponseHead::Flatten(nsACString &buf, PRBool pruneTransients)
     else
         buf.AppendLiteral("1.0 ");
 
-    buf.Append(nsPrintfCString("%u", PRUintn(mStatus)) +
+    buf.Append(nsPrintfCString("%u", unsigned(mStatus)) +
                NS_LITERAL_CSTRING(" ") +
                mStatusText +
                NS_LITERAL_CSTRING("\r\n"));
 
     if (!pruneTransients) {
-        mHeaders.Flatten(buf, PR_FALSE);
+        mHeaders.Flatten(buf, false);
         return;
     }
 
     // otherwise, we need to iterate over the headers and only flatten
     // those that are appropriate.
-    PRUint32 i, count = mHeaders.Count();
+    uint32_t i, count = mHeaders.Count();
     for (i=0; i<count; ++i) {
         nsHttpAtom header;
         const char *value = mHeaders.PeekHeaderAt(i, header);
@@ -178,7 +143,7 @@ nsHttpResponseHead::ParseStatusLine(const char *line)
     }
     else {
         // Status-Code
-        mStatus = (PRUint16) atoi(++line);
+        mStatus = (uint16_t) atoi(++line);
         if (mStatus == 0) {
             LOG(("mal-formed response status; assuming status = 200\n"));
             mStatus = 200;
@@ -190,34 +155,42 @@ nsHttpResponseHead::ParseStatusLine(const char *line)
             mStatusText.AssignLiteral("OK");
         }
         else
-            mStatusText = ++line;
+            mStatusText = nsDependentCString(++line);
     }
 
     LOG(("Have status line [version=%u status=%u statusText=%s]\n",
-        PRUintn(mVersion), PRUintn(mStatus), mStatusText.get()));
+        unsigned(mVersion), unsigned(mStatus), mStatusText.get()));
 }
 
-void
+nsresult
 nsHttpResponseHead::ParseHeaderLine(const char *line)
 {
     nsHttpAtom hdr = {0};
     char *val;
-
-    mHeaders.ParseHeaderLine(line, &hdr, &val);
+    nsresult rv;
+    
+    rv = mHeaders.ParseHeaderLine(line, &hdr, &val);
+    if (NS_FAILED(rv))
+        return rv;
+    
     // leading and trailing LWS has been removed from |val|
 
     // handle some special case headers...
     if (hdr == nsHttp::Content_Length) {
-        PRInt64 len;
+        int64_t len;
+        const char *ignored;
         // permit only a single value here.
-        if (nsHttp::ParseInt64(val, &len))
+        if (nsHttp::ParseInt64(val, &ignored, &len)) {
             mContentLength = len;
-        else
-            LOG(("invalid content-length!\n"));
+        }
+        else {
+            // If this is a negative content length then just ignore it 
+            LOG(("invalid content-length! %s\n", val));
+        }
     }
     else if (hdr == nsHttp::Content_Type) {
         LOG(("ParseContentType [type=%s]\n", val));
-        PRBool dummy;
+        bool dummy;
         net_ParseContentType(nsDependentCString(val),
                              mContentType, mContentCharset, &dummy);
     }
@@ -225,6 +198,7 @@ nsHttpResponseHead::ParseHeaderLine(const char *line)
         ParseCacheControl(val);
     else if (hdr == nsHttp::Pragma)
         ParsePragma(val);
+    return NS_OK;
 }
 
 // From section 13.2.3 of RFC2616, we compute the current age of a cached
@@ -238,12 +212,12 @@ nsHttpResponseHead::ParseHeaderLine(const char *line)
 // This is typically a very small number.
 //
 nsresult
-nsHttpResponseHead::ComputeCurrentAge(PRUint32 now,
-                                      PRUint32 requestTime,
-                                      PRUint32 *result)
+nsHttpResponseHead::ComputeCurrentAge(uint32_t now,
+                                      uint32_t requestTime,
+                                      uint32_t *result) const
 {
-    PRUint32 dateValue;
-    PRUint32 ageValue;
+    uint32_t dateValue;
+    uint32_t ageValue;
 
     *result = 0;
 
@@ -261,7 +235,7 @@ nsHttpResponseHead::ComputeCurrentAge(PRUint32 now,
 
     // Compute corrected received age
     if (NS_SUCCEEDED(GetAgeValue(&ageValue)))
-        *result = PR_MAX(*result, ageValue);
+        *result = NS_MAX(*result, ageValue);
 
     NS_ASSERTION(now >= requestTime, "bogus request time");
 
@@ -282,7 +256,7 @@ nsHttpResponseHead::ComputeCurrentAge(PRUint32 now,
 //     freshnessLifetime = 0
 //
 nsresult
-nsHttpResponseHead::ComputeFreshnessLifetime(PRUint32 *result)
+nsHttpResponseHead::ComputeFreshnessLifetime(uint32_t *result) const
 {
     *result = 0;
 
@@ -292,7 +266,7 @@ nsHttpResponseHead::ComputeFreshnessLifetime(PRUint32 *result)
 
     *result = 0;
 
-    PRUint32 date = 0, date2 = 0;
+    uint32_t date = 0, date2 = 0;
     if (NS_FAILED(GetDateValue(&date)))
         date = NowInSeconds(); // synthesize a date header if none exists
 
@@ -316,8 +290,8 @@ nsHttpResponseHead::ComputeFreshnessLifetime(PRUint32 *result)
     }
 
     // These responses can be cached indefinitely.
-    if ((mStatus == 300) || (mStatus == 301)) {
-        *result = PRUint32(-1);
+    if ((mStatus == 300) || nsHttp::IsPermanentRedirect(mStatus)) {
+        *result = uint32_t(-1);
         return NS_OK;
     }
 
@@ -328,8 +302,8 @@ nsHttpResponseHead::ComputeFreshnessLifetime(PRUint32 *result)
     return NS_OK;
 }
 
-PRBool
-nsHttpResponseHead::MustValidate()
+bool
+nsHttpResponseHead::MustValidate() const
 {
     LOG(("nsHttpResponseHead::MustValidate ??\n"));
 
@@ -346,6 +320,7 @@ nsHttpResponseHead::MustValidate()
     case 302:
     case 304:
     case 307:
+    case 308:
         break;
         // Uncacheable redirects
     case 303:
@@ -357,14 +332,14 @@ nsHttpResponseHead::MustValidate()
     case 416:
     default:  // revalidate unknown error pages
         LOG(("Must validate since response is an uncacheable error page\n"));
-        return PR_TRUE;
+        return true;
     }
     
     // The no-cache response header indicates that we must validate this
     // cached response before reusing.
     if (NoCache()) {
         LOG(("Must validate since response contains 'no-cache' header\n"));
-        return PR_TRUE;
+        return true;
     }
 
     // Likewise, if the response is no-store, then we must validate this
@@ -373,7 +348,7 @@ nsHttpResponseHead::MustValidate()
     // to support File->SaveAs, View->PageSource, and other browser features.
     if (NoStore()) {
         LOG(("Must validate since response contains 'no-store' header\n"));
-        return PR_TRUE;
+        return true;
     }
 
     // Compare the Expires header to the Date header.  If the server sent an
@@ -381,15 +356,15 @@ nsHttpResponseHead::MustValidate()
     // cached response before reusing.
     if (ExpiresInPast()) {
         LOG(("Must validate since Expires < Date\n"));
-        return PR_TRUE;
+        return true;
     }
 
     LOG(("no mandatory validation requirement\n"));
-    return PR_FALSE;
+    return false;
 }
 
-PRBool
-nsHttpResponseHead::MustValidateIfExpired()
+bool
+nsHttpResponseHead::MustValidateIfExpired() const
 {
     // according to RFC2616, section 14.9.4:
     //
@@ -400,25 +375,29 @@ nsHttpResponseHead::MustValidateIfExpired()
     return HasHeaderValue(nsHttp::Cache_Control, "must-revalidate");
 }
 
-PRBool
-nsHttpResponseHead::IsResumable()
+bool
+nsHttpResponseHead::IsResumable() const
 {
     // even though some HTTP/1.0 servers may support byte range requests, we're not
     // going to bother with them, since those servers wouldn't understand If-Range.
-    return mVersion >= NS_HTTP_VERSION_1_1 &&
+    // Also, while in theory it may be possible to resume when the status code
+    // is not 200, it is unlikely to be worth the trouble, especially for
+    // non-2xx responses.
+    return mStatus == 200 &&
+           mVersion >= NS_HTTP_VERSION_1_1 &&
            PeekHeader(nsHttp::Content_Length) && 
           (PeekHeader(nsHttp::ETag) || PeekHeader(nsHttp::Last_Modified)) &&
            HasHeaderValue(nsHttp::Accept_Ranges, "bytes");
 }
 
-PRBool
-nsHttpResponseHead::ExpiresInPast()
+bool
+nsHttpResponseHead::ExpiresInPast() const
 {
-    PRUint32 maxAgeVal, expiresVal, dateVal;
+    uint32_t maxAgeVal, expiresVal, dateVal;
     
     // Bug #203271. Ensure max-age directive takes precedence over Expires
     if (NS_SUCCEEDED(GetMaxAgeValue(&maxAgeVal))) {
-        return PR_FALSE;
+        return false;
     }
     
     return NS_SUCCEEDED(GetExpiresValue(&expiresVal)) &&
@@ -427,17 +406,16 @@ nsHttpResponseHead::ExpiresInPast()
 }
 
 nsresult
-nsHttpResponseHead::UpdateHeaders(nsHttpHeaderArray &headers)
+nsHttpResponseHead::UpdateHeaders(const nsHttpHeaderArray &headers)
 {
     LOG(("nsHttpResponseHead::UpdateHeaders [this=%x]\n", this));
 
-    PRUint32 i, count = headers.Count();
+    uint32_t i, count = headers.Count();
     for (i=0; i<count; ++i) {
         nsHttpAtom header;
         const char *val = headers.PeekHeaderAt(i, header);
 
         if (!val) {
-            NS_NOTREACHED("null header value");
             continue;
         }
 
@@ -485,24 +463,24 @@ nsHttpResponseHead::Reset()
 
     mVersion = NS_HTTP_VERSION_1_1;
     mStatus = 200;
-    mContentLength = LL_MAXUINT;
-    mCacheControlNoStore = PR_FALSE;
-    mCacheControlNoCache = PR_FALSE;
-    mPragmaNoCache = PR_FALSE;
+    mContentLength = UINT64_MAX;
+    mCacheControlNoStore = false;
+    mCacheControlNoCache = false;
+    mPragmaNoCache = false;
     mStatusText.Truncate();
     mContentType.Truncate();
     mContentCharset.Truncate();
 }
 
 nsresult
-nsHttpResponseHead::ParseDateHeader(nsHttpAtom header, PRUint32 *result)
+nsHttpResponseHead::ParseDateHeader(nsHttpAtom header, uint32_t *result) const
 {
     const char *val = PeekHeader(header);
     if (!val)
         return NS_ERROR_NOT_AVAILABLE;
 
     PRTime time;
-    PRStatus st = PR_ParseTimeString(val, PR_TRUE, &time);
+    PRStatus st = PR_ParseTimeString(val, true, &time);
     if (st != PR_SUCCESS)
         return NS_ERROR_NOT_AVAILABLE;
 
@@ -511,20 +489,20 @@ nsHttpResponseHead::ParseDateHeader(nsHttpAtom header, PRUint32 *result)
 }
 
 nsresult
-nsHttpResponseHead::GetAgeValue(PRUint32 *result)
+nsHttpResponseHead::GetAgeValue(uint32_t *result) const
 {
     const char *val = PeekHeader(nsHttp::Age);
     if (!val)
         return NS_ERROR_NOT_AVAILABLE;
 
-    *result = (PRUint32) atoi(val);
+    *result = (uint32_t) atoi(val);
     return NS_OK;
 }
 
 // Return the value of the (HTTP 1.1) max-age directive, which itself is a
 // component of the Cache-Control response header
 nsresult
-nsHttpResponseHead::GetMaxAgeValue(PRUint32 *result)
+nsHttpResponseHead::GetMaxAgeValue(uint32_t *result) const
 {
     const char *val = PeekHeader(nsHttp::Cache_Control);
     if (!val)
@@ -537,19 +515,19 @@ nsHttpResponseHead::GetMaxAgeValue(PRUint32 *result)
     int maxAgeValue = atoi(p + 8);
     if (maxAgeValue < 0)
         maxAgeValue = 0;
-    *result = PRUint32(maxAgeValue);
+    *result = uint32_t(maxAgeValue);
     return NS_OK;
 }
 
 nsresult
-nsHttpResponseHead::GetExpiresValue(PRUint32 *result)
+nsHttpResponseHead::GetExpiresValue(uint32_t *result) const
 {
     const char *val = PeekHeader(nsHttp::Expires);
     if (!val)
         return NS_ERROR_NOT_AVAILABLE;
 
     PRTime time;
-    PRStatus st = PR_ParseTimeString(val, PR_TRUE, &time);
+    PRStatus st = PR_ParseTimeString(val, true, &time);
     if (st != PR_SUCCESS) {
         // parsing failed... RFC 2616 section 14.21 says we should treat this
         // as an expiration time in the past.
@@ -557,15 +535,15 @@ nsHttpResponseHead::GetExpiresValue(PRUint32 *result)
         return NS_OK;
     }
 
-    if (LL_CMP(time, <, LL_Zero()))
+    if (time < 0)
         *result = 0;
     else
         *result = PRTimeToSeconds(time); 
     return NS_OK;
 }
 
-PRInt64
-nsHttpResponseHead::TotalEntitySize()
+int64_t
+nsHttpResponseHead::TotalEntitySize() const
 {
     const char* contentRange = PeekHeader(nsHttp::Content_Range);
     if (!contentRange)
@@ -580,9 +558,9 @@ nsHttpResponseHead::TotalEntitySize()
     if (*slash == '*') // Server doesn't know the length
         return -1;
 
-    PRInt64 size;
+    int64_t size;
     if (!nsHttp::ParseInt64(slash, &size))
-        size = LL_MAXUINT;
+        size = UINT64_MAX;
     return size;
 }
 
@@ -614,7 +592,7 @@ nsHttpResponseHead::ParseVersion(const char *str)
     }
 
     char *p = PL_strchr(str, '.');
-    if (p == nsnull) {
+    if (p == nullptr) {
         LOG(("mal-formed server version; assuming HTTP/1.0\n"));
         mVersion = NS_HTTP_VERSION_1_0;
         return;
@@ -638,19 +616,19 @@ nsHttpResponseHead::ParseCacheControl(const char *val)
 {
     if (!(val && *val)) {
         // clear flags
-        mCacheControlNoCache = PR_FALSE;
-        mCacheControlNoStore = PR_FALSE;
+        mCacheControlNoCache = false;
+        mCacheControlNoStore = false;
         return;
     }
 
     // search header value for occurrence(s) of "no-cache" but ignore
     // occurrence(s) of "no-cache=blah"
     if (nsHttp::FindToken(val, "no-cache", HTTP_HEADER_VALUE_SEPS))
-        mCacheControlNoCache = PR_TRUE;
+        mCacheControlNoCache = true;
 
     // search header value for occurrence of "no-store" 
     if (nsHttp::FindToken(val, "no-store", HTTP_HEADER_VALUE_SEPS))
-        mCacheControlNoStore = PR_TRUE;
+        mCacheControlNoStore = true;
 }
 
 void
@@ -660,7 +638,7 @@ nsHttpResponseHead::ParsePragma(const char *val)
 
     if (!(val && *val)) {
         // clear no-cache flag
-        mPragmaNoCache = PR_FALSE;
+        mPragmaNoCache = false;
         return;
     }
 
@@ -668,5 +646,5 @@ nsHttpResponseHead::ParsePragma(const char *val)
     // a request header), caching is inhibited when this header is present so
     // as to match existing Navigator behavior.
     if (nsHttp::FindToken(val, "no-cache", HTTP_HEADER_VALUE_SEPS))
-        mPragmaNoCache = PR_TRUE;
+        mPragmaNoCache = true;
 }

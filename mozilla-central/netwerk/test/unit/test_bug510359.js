@@ -1,16 +1,16 @@
-do_load_httpd_js();
+const Cc = Components.classes;
+const Ci = Components.interfaces;
+const Cu = Components.utils;
+const Cr = Components.results;
 
-var httpserver = new nsHttpServer();
+Cu.import("resource://testing-common/httpd.js");
+
+var httpserver = new HttpServer();
 var index = 0;
 var tests = [
     { url : "/bug510359", server : "0", expected : "0"},
     { url : "/bug510359", server : "1", expected : "1"},
 ];
-
-function getCacheService() {
-    return Components.classes["@mozilla.org/network/cache-service;1"]
-            .getService(Components.interfaces.nsICacheService);
-}
 
 function setupChannel(suffix, value) {
     var ios = Components.classes["@mozilla.org/network/io-service;1"]
@@ -19,6 +19,7 @@ function setupChannel(suffix, value) {
     var httpChan = chan.QueryInterface(Components.interfaces.nsIHttpChannel);
     httpChan.requestMethod = "GET";
     httpChan.setRequestHeader("x-request", value, false);
+    httpChan.setRequestHeader("Cookie", "c="+value, false);
     return httpChan;
 }
 
@@ -43,8 +44,8 @@ function run_test() {
     httpserver.start(4444);
 
     // clear cache
-    getCacheService().evictEntries(
-            Components.interfaces.nsICache.STORE_ANYWHERE);
+    evict_cache_entries();
+
     triggerNextTest();
 
     do_test_pending();

@@ -17,10 +17,10 @@ extern "C" {
 
     @section intro Introduction
 
-    This is the documentation fot the <tt>libnestegg</tt> C API.
+    This is the documentation for the <tt>libnestegg</tt> C API.
     <tt>libnestegg</tt> is a demultiplexing library for <a
-    href="http://www.matroska.org/">Matroska</a> and <a
-    href="http://www.webmproject.org/">WebMedia</a> media files.
+    href="http://www.webmproject.org/code/specs/container/">WebM</a>
+    media files.
 
     @section example Example code
 
@@ -68,6 +68,12 @@ extern "C" {
 #define NESTEGG_CODEC_VP8    0 /**< Track uses Google On2 VP8 codec. */
 #define NESTEGG_CODEC_VORBIS 1 /**< Track uses Xiph Vorbis codec. */
 
+#define NESTEGG_VIDEO_MONO              0 /**< Track is mono video. */
+#define NESTEGG_VIDEO_STEREO_LEFT_RIGHT 1 /**< Track is side-by-side stereo video.  Left first. */
+#define NESTEGG_VIDEO_STEREO_BOTTOM_TOP 2 /**< Track is top-bottom stereo video.  Right first. */
+#define NESTEGG_VIDEO_STEREO_TOP_BOTTOM 3 /**< Track is top-bottom stereo video.  Left first. */
+#define NESTEGG_VIDEO_STEREO_RIGHT_LEFT 11 /**< Track is side-by-side stereo video.  Right first. */
+
 #define NESTEGG_SEEK_SET 0 /**< Seek offset relative to beginning of stream. */
 #define NESTEGG_SEEK_CUR 1 /**< Seek offset relative to current position in stream. */
 #define NESTEGG_SEEK_END 2 /**< Seek offset relative to end of stream. */
@@ -113,6 +119,10 @@ typedef struct {
 
 /** Parameters specific to a video track. */
 typedef struct {
+  unsigned int stereo_mode;    /**< Video mode.  One of #NESTEGG_VIDEO_MONO,
+                                    #NESTEGG_VIDEO_STEREO_LEFT_RIGHT,
+                                    #NESTEGG_VIDEO_STEREO_BOTTOM_TOP, or
+                                    #NESTEGG_VIDEO_STEREO_TOP_BOTTOM. */
   unsigned int width;          /**< Width of the video frame in pixels. */
   unsigned int height;         /**< Height of the video frame in pixels. */
   unsigned int display_width;  /**< Display width of the video frame in pixels. */
@@ -139,9 +149,10 @@ typedef void (* nestegg_log)(nestegg * context, unsigned int severity, char cons
     @param context  Storage for the new nestegg context.  @see nestegg_destroy
     @param io       User supplied IO context.
     @param callback Optional logging callback function pointer.  May be NULL.
+    @param max_offset Optional maximum offset to be read. Set -1 to ignore.
     @retval  0 Success.
     @retval -1 Error. */
-int nestegg_init(nestegg ** context, nestegg_io io, nestegg_log callback);
+int nestegg_init(nestegg ** context, nestegg_io io, nestegg_log callback, int64_t max_offset);
 
 /** Destroy a nestegg context and free associated memory.
     @param context #nestegg context to be freed.  @see nestegg_init */
@@ -154,12 +165,44 @@ void nestegg_destroy(nestegg * context);
     @retval -1 Error. */
 int nestegg_duration(nestegg * context, uint64_t * duration);
 
+/** Query the tstamp scale of the media stream in nanoseconds.
+    Timecodes presented by nestegg have been scaled by this value
+    before presentation to the caller.
+    @param context Stream context initialized by #nestegg_init.
+    @param scale   Storage for the queried scale factor.
+    @retval  0 Success.
+    @retval -1 Error. */
+int nestegg_tstamp_scale(nestegg * context, uint64_t * scale);
+
 /** Query the number of tracks in the media stream.
     @param context Stream context initialized by #nestegg_init.
     @param tracks  Storage for the queried track count.
     @retval  0 Success.
     @retval -1 Error. */
 int nestegg_track_count(nestegg * context, unsigned int * tracks);
+
+/** Query the start and end offset for a particular cluster.
+    @param context     Stream context initialized by #nestegg_init.
+    @param cluster_num Zero-based cluster number; order they appear in cues.
+    @param max_offset  Optional maximum offset to be read. Set -1 to ignore.
+    @param start_pos   Starting offset of the cluster. -1 means non-existant.
+    @param end_pos     Starting offset of the cluster. -1 means non-existant or
+                       final cluster.
+    @param tstamp      Starting timestamp of the cluster.
+    @retval  0 Success.
+    @retval -1 Error. */
+int nestegg_get_cue_point(nestegg * context, unsigned int cluster_num,
+                          int64_t max_offset, int64_t * start_pos,
+                          int64_t * end_pos, uint64_t * tstamp);
+
+/** Seek to @a offset.  Stream will seek directly to offset.
+    Should be used to seek to the start of a resync point, i.e. cluster; the
+    parser will not be able to understand other offsets.
+    @param context Stream context initialized by #nestegg_init.
+    @param offset  Absolute offset in bytes.
+    @retval  0 Success.
+    @retval -1 Error. */
+int nestegg_offset_seek(nestegg * context, uint64_t offset);
 
 /** Seek @a track to @a tstamp.  Stream seek will terminate at the earliest
     key point in the stream at or before @a tstamp.  Other tracks in the

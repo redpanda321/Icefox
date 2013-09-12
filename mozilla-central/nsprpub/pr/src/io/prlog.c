@@ -1,46 +1,16 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape Portable Runtime (NSPR).
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   IBM Corporation
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "primpl.h"
 #include "prenv.h"
 #include "prprf.h"
 #include <string.h>
+#ifdef ANDROID
+#include <android/log.h>
+#endif
 
 /*
  * Lock used to lock the log.
@@ -126,6 +96,18 @@ static void OutputDebugStringA(const char* msg) {
     PR_END_MACRO
 #elif defined(_PR_USE_STDIO_FOR_LOGGING)
 #define _PUT_LOG(fd, buf, nb) {fwrite(buf, 1, nb, fd); fflush(fd);}
+#elif defined(ANDROID)
+#define _PUT_LOG(fd, buf, nb)                                \
+    PR_BEGIN_MACRO                                           \
+    if (fd == _pr_stderr) {                                  \
+        char savebyte = buf[nb];                             \
+        buf[nb] = '\0';                                      \
+        __android_log_write(ANDROID_LOG_INFO, "PRLog", buf); \
+        buf[nb] = savebyte;                                  \
+    } else {                                                 \
+        PR_Write(fd, buf, nb);                               \
+    }                                                        \
+    PR_END_MACRO
 #elif defined(_PR_PTHREADS)
 #define _PUT_LOG(fd, buf, nb) PR_Write(fd, buf, nb)
 #else
@@ -145,6 +127,7 @@ static FILE *logFile = NULL;
 static PRFileDesc *logFile = 0;
 #endif
 static PRBool outputTimeStamp = PR_FALSE;
+static PRBool appendToLog = PR_FALSE;
 
 #define LINE_BUF_SIZE           512
 #define DEFAULT_BUF_SIZE        16384
@@ -232,6 +215,8 @@ void _PR_InitLog(void)
                 }
             } else if (strcasecmp(module, "timestamp") == 0) {
                 outputTimeStamp = PR_TRUE;
+            } else if (strcasecmp(module, "append") == 0) {
+                appendToLog = PR_TRUE;
             } else {
                 PRLogModuleInfo *lm = logModules;
                 PRBool skip_modcheck =
@@ -390,7 +375,8 @@ PR_IMPLEMENT(PRBool) PR_SetLogFile(const char *file)
     else
 #endif
     {
-        newLogFile = fopen(file, "w");
+        const char *mode = appendToLog ? "a" : "w";
+        newLogFile = fopen(file, mode);
         if (!newLogFile)
             return PR_FALSE;
 
@@ -412,8 +398,14 @@ PR_IMPLEMENT(PRBool) PR_SetLogFile(const char *file)
     return PR_TRUE;
 #else
     PRFileDesc *newLogFile;
+    PRIntn flags = PR_WRONLY|PR_CREATE_FILE;
+    if (appendToLog) {
+        flags |= PR_APPEND;
+    } else {
+        flags |= PR_TRUNCATE;
+    }
 
-    newLogFile = PR_Open(file, PR_WRONLY|PR_CREATE_FILE|PR_TRUNCATE, 0666);
+    newLogFile = PR_Open(file, flags, 0666);
     if (newLogFile) {
         if (logFile && logFile != _pr_stdout && logFile != _pr_stderr) {
             PR_Close(logFile);
@@ -551,9 +543,8 @@ PR_IMPLEMENT(void) PR_Abort(void)
 PR_IMPLEMENT(void) PR_Assert(const char *s, const char *file, PRIntn ln)
 {
     PR_LogPrint("Assertion failure: %s, at %s:%d\n", s, file, ln);
-#if defined(XP_UNIX) || defined(XP_OS2) || defined(XP_BEOS)
     fprintf(stderr, "Assertion failure: %s, at %s:%d\n", s, file, ln);
-#endif
+    fflush(stderr);
 #ifdef WIN32
     DebugBreak();
 #endif

@@ -1,72 +1,55 @@
-/* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 4 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Foundation code.
- *
- * The Initial Developer of the Original Code is Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Vladimir Vukicevic <vladimir@pobox.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 2 -*-
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#ifdef MOZ_LOGGING
+#define FORCE_PR_LOG /* Allow logging in the release build */
+#endif
+
+#include "mozilla/layers/CompositorChild.h"
+#include "mozilla/layers/CompositorParent.h"
+#include "mozilla/layers/ImageBridgeChild.h"
+
+#include "prlog.h"
+#include "prenv.h"
 
 #include "gfxPlatform.h"
 
+#include "nsXULAppAPI.h"
+
 #if defined(XP_WIN)
 #include "gfxWindowsPlatform.h"
-#elif defined(XP_MACOSX)
+#include "gfxD2DSurface.h"
+#elif defined(XP_MACOSX) || defined(XP_IOS)
 #include "gfxPlatformMac.h"
-#elif defined(MOZ_WIDGET_GTK2)
+#elif defined(MOZ_WIDGET_GTK)
 #include "gfxPlatformGtk.h"
 #elif defined(MOZ_WIDGET_QT)
 #include "gfxQtPlatform.h"
-#elif defined(XP_BEOS)
-#include "gfxBeOSPlatform.h"
 #elif defined(XP_OS2)
 #include "gfxOS2Platform.h"
 #elif defined(ANDROID)
 #include "gfxAndroidPlatform.h"
 #endif
 
-#include "gfxAtoms.h"
+#include "nsGkAtoms.h"
 #include "gfxPlatformFontList.h"
 #include "gfxContext.h"
 #include "gfxImageSurface.h"
-#include "gfxTextRunCache.h"
-#include "gfxTextRunWordCache.h"
 #include "gfxUserFontSet.h"
+#include "nsUnicodeProperties.h"
+#include "harfbuzz/hb.h"
+#ifdef MOZ_GRAPHITE
+#include "gfxGraphiteShaper.h"
+#endif
 
 #include "nsUnicodeRange.h"
 #include "nsServiceManagerUtils.h"
 #include "nsTArray.h"
-#include "nsIUGenCategory.h"
 #include "nsUnicharUtilCIID.h"
 #include "nsILocaleService.h"
+#include "nsReadableUtils.h"
 
 #include "nsWeakReference.h"
 
@@ -74,45 +57,57 @@
 #include "qcms.h"
 
 #include "plstr.h"
-#include "nsIPrefService.h"
-#include "nsIPrefBranch.h"
-#include "nsIPrefBranch2.h"
-#include "nsIPrefLocalizedString.h"
 #include "nsCRT.h"
 #include "GLContext.h"
 #include "GLContextProvider.h"
 
-#include "mozilla/FunctionTimer.h"
+#ifdef MOZ_WIDGET_ANDROID
+#include "TexturePoolOGL.h"
+#endif
+
+#include "mozilla/Preferences.h"
+#include "mozilla/Assertions.h"
+#include "mozilla/Attributes.h"
 
 #include "nsIGfxInfo.h"
 
-gfxPlatform *gPlatform = nsnull;
+using namespace mozilla;
+using namespace mozilla::layers;
+
+gfxPlatform *gPlatform = nullptr;
+static bool gEverInitialized = false;
 
 // These two may point to the same profile
-static qcms_profile *gCMSOutputProfile = nsnull;
-static qcms_profile *gCMSsRGBProfile = nsnull;
+static qcms_profile *gCMSOutputProfile = nullptr;
+static qcms_profile *gCMSsRGBProfile = nullptr;
 
-static qcms_transform *gCMSRGBTransform = nsnull;
-static qcms_transform *gCMSInverseRGBTransform = nsnull;
-static qcms_transform *gCMSRGBATransform = nsnull;
+static qcms_transform *gCMSRGBTransform = nullptr;
+static qcms_transform *gCMSInverseRGBTransform = nullptr;
+static qcms_transform *gCMSRGBATransform = nullptr;
 
-static PRBool gCMSInitialized = PR_FALSE;
+static bool gCMSInitialized = false;
 static eCMSMode gCMSMode = eCMSMode_Off;
 static int gCMSIntent = -2;
-
-static const char *CMPrefName = "gfx.color_management.mode";
-static const char *CMPrefNameOld = "gfx.color_management.enabled";
-static const char *CMIntentPrefName = "gfx.color_management.rendering_intent";
-static const char *CMProfilePrefName = "gfx.color_management.display_profile";
-static const char *CMForceSRGBPrefName = "gfx.color_management.force_srgb";
 
 static void ShutdownCMS();
 static void MigratePrefs();
 
+#include "mozilla/gfx/2D.h"
+using namespace mozilla::gfx;
+
+// logs shared across gfx
+#ifdef PR_LOGGING
+static PRLogModuleInfo *sFontlistLog = nullptr;
+static PRLogModuleInfo *sFontInitLog = nullptr;
+static PRLogModuleInfo *sTextrunLog = nullptr;
+static PRLogModuleInfo *sTextrunuiLog = nullptr;
+static PRLogModuleInfo *sCmapDataLog = nullptr;
+#endif
+
 /* Class to listen for pref changes so that chrome code can dynamically
    force sRGB as an output profile. See Bug #452125. */
-class SRGBOverrideObserver : public nsIObserver,
-                             public nsSupportsWeakReference
+class SRGBOverrideObserver MOZ_FINAL : public nsIObserver,
+                                       public nsSupportsWeakReference
 {
 public:
     NS_DECL_ISUPPORTS
@@ -134,11 +129,28 @@ SRGBOverrideObserver::Observe(nsISupports *aSubject,
 }
 
 #define GFX_DOWNLOADABLE_FONTS_ENABLED "gfx.downloadable_fonts.enabled"
+#define GFX_DOWNLOADABLE_FONTS_SANITIZE "gfx.downloadable_fonts.sanitize"
 
-#define GFX_PREF_HARFBUZZ_LEVEL "gfx.font_rendering.harfbuzz.level"
-#define HARFBUZZ_LEVEL_DEFAULT  0
+#define GFX_PREF_HARFBUZZ_SCRIPTS "gfx.font_rendering.harfbuzz.scripts"
+#define HARFBUZZ_SCRIPTS_DEFAULT  mozilla::unicode::SHAPING_DEFAULT
+#define GFX_PREF_FALLBACK_USE_CMAPS  "gfx.font_rendering.fallback.always_use_cmaps"
 
-class FontPrefsObserver : public nsIObserver
+#define GFX_PREF_OPENTYPE_SVG "gfx.font_rendering.opentype_svg.enabled"
+
+#ifdef MOZ_GRAPHITE
+#define GFX_PREF_GRAPHITE_SHAPING "gfx.font_rendering.graphite.enabled"
+#endif
+
+#define BIDI_NUMERAL_PREF "bidi.numeral"
+
+static const char* kObservedPrefs[] = {
+    "gfx.downloadable_fonts.",
+    "gfx.font_rendering.",
+    "bidi.numeral",
+    nullptr
+};
+
+class FontPrefsObserver MOZ_FINAL : public nsIObserver
 {
 public:
     NS_DECL_ISUPPORTS
@@ -152,19 +164,39 @@ FontPrefsObserver::Observe(nsISupports *aSubject,
                            const char *aTopic,
                            const PRUnichar *someData)
 {
-    nsCOMPtr<nsIPrefBranch> branch = do_QueryInterface(aSubject);
-    if (!branch || someData == nsnull) {
+    if (!someData) {
         NS_ERROR("font pref observer code broken");
         return NS_ERROR_UNEXPECTED;
     }
-    
-    gfxPlatform::GetPlatform()->FontsPrefsChanged(branch, 
-        NS_ConvertUTF16toUTF8(someData).get());
+    NS_ASSERTION(gfxPlatform::GetPlatform(), "the singleton instance has gone");
+    gfxPlatform::GetPlatform()->FontsPrefsChanged(NS_ConvertUTF16toUTF8(someData).get());
 
     return NS_OK;
 }
 
+class OrientationSyncPrefsObserver : public nsIObserver
+{
+public:
+    NS_DECL_ISUPPORTS
+    NS_DECL_NSIOBSERVER
+};
 
+NS_IMPL_ISUPPORTS1(OrientationSyncPrefsObserver, nsIObserver)
+
+NS_IMETHODIMP
+OrientationSyncPrefsObserver::Observe(nsISupports *aSubject,
+                                      const char *aTopic,
+                                      const PRUnichar *someData)
+{
+    if (!someData) {
+        NS_ERROR("orientation sync pref observer broken");
+        return NS_ERROR_UNEXPECTED;
+    }
+    NS_ASSERTION(gfxPlatform::GetPlatform(), "the singleton instance has gone");
+    gfxPlatform::GetPlatform()->OrientationSyncPrefsObserverChanged();
+
+    return NS_OK;
+}
 
 // this needs to match the list of pref font.default.xx entries listed in all.js!
 // the order *must* match the order in eFontPrefLang
@@ -204,23 +236,67 @@ static const char *gPrefLangNames[] = {
 };
 
 gfxPlatform::gfxPlatform()
+  : mAzureCanvasBackendCollector(this, &gfxPlatform::GetAzureBackendInfo)
 {
-    mUseHarfBuzzLevel = UNINITIALIZED_VALUE;
+    mUseHarfBuzzScripts = UNINITIALIZED_VALUE;
     mAllowDownloadableFonts = UNINITIALIZED_VALUE;
+    mDownloadableFontsSanitize = UNINITIALIZED_VALUE;
+    mFallbackUsesCmaps = UNINITIALIZED_VALUE;
+
+#ifdef MOZ_GRAPHITE
+    mGraphiteShapingEnabled = UNINITIALIZED_VALUE;
+#endif
+    mBidiNumeralOption = UNINITIALIZED_VALUE;
+
+    uint32_t canvasMask = (1 << BACKEND_CAIRO) | (1 << BACKEND_SKIA);
+    uint32_t contentMask = 0;
+    InitBackendPrefs(canvasMask, contentMask);
 }
 
 gfxPlatform*
 gfxPlatform::GetPlatform()
 {
+    if (!gPlatform) {
+        Init();
+    }
     return gPlatform;
 }
 
-nsresult
+void
 gfxPlatform::Init()
 {
-    NS_ASSERTION(!gPlatform, "Already started???");
+    if (gEverInitialized) {
+        NS_RUNTIMEABORT("Already started???");
+    }
+    gEverInitialized = true;
 
-    gfxAtoms::RegisterAtoms();
+#ifdef PR_LOGGING
+    sFontlistLog = PR_NewLogModule("fontlist");;
+    sFontInitLog = PR_NewLogModule("fontinit");;
+    sTextrunLog = PR_NewLogModule("textrun");;
+    sTextrunuiLog = PR_NewLogModule("textrunui");;
+    sCmapDataLog = PR_NewLogModule("cmapdata");;
+#endif
+
+    bool useOffMainThreadCompositing = false;
+#ifdef MOZ_X11
+    // On X11 platforms only use OMTC if firefox was initalized with thread-safe
+    // X11 (else it would crash).
+    useOffMainThreadCompositing = (PR_GetEnv("MOZ_USE_OMTC") != NULL);
+#else
+    useOffMainThreadCompositing = Preferences::GetBool(
+          "layers.offmainthreadcomposition.enabled",
+          false);
+#endif
+
+    if (useOffMainThreadCompositing && (XRE_GetProcessType() ==
+                                        GeckoProcessType_Default)) {
+        CompositorParent::StartUp();
+        if (Preferences::GetBool("layers.async-video.enabled",false)) {
+            ImageBridgeChild::StartUp();
+        }
+
+    }
 
     /* Initialize the GfxInfo service.
      * Note: we can't call functions on GfxInfo that depend
@@ -235,78 +311,81 @@ gfxPlatform::Init()
 
 #if defined(XP_WIN)
     gPlatform = new gfxWindowsPlatform;
-#elif defined(XP_MACOSX)
+#elif defined(XP_MACOSX) || defined(XP_IOS)
     gPlatform = new gfxPlatformMac;
-#elif defined(MOZ_WIDGET_GTK2)
+#elif defined(MOZ_WIDGET_GTK)
     gPlatform = new gfxPlatformGtk;
 #elif defined(MOZ_WIDGET_QT)
     gPlatform = new gfxQtPlatform;
-#elif defined(XP_BEOS)
-    gPlatform = new gfxBeOSPlatform;
 #elif defined(XP_OS2)
     gPlatform = new gfxOS2Platform;
 #elif defined(ANDROID)
     gPlatform = new gfxAndroidPlatform;
+#else
+    #error "No gfxPlatform implementation available"
 #endif
-    if (!gPlatform)
-        return NS_ERROR_OUT_OF_MEMORY;
 
-    gPlatform->mScreenReferenceSurface =
-      gPlatform->CreateOffscreenSurface(gfxIntSize(1,1),
-                                        gfxASurface::ImageFormatARGB32);
-    if (!gPlatform->mScreenReferenceSurface) {
-      NS_ERROR("Could not initialize mScreenReferenceSurface");
-      Shutdown();
-      return NS_ERROR_OUT_OF_MEMORY;
-    }
+#ifdef DEBUG
+    mozilla::gl::GLContext::StaticInit();
+#endif
 
     nsresult rv;
 
-#if defined(XP_MACOSX) || defined(XP_WIN) || defined(ANDROID) // temporary, until this is implemented on others
+#if defined(XP_MACOSX) || defined(XP_IOS) || defined(XP_WIN) || defined(ANDROID) // temporary, until this is implemented on others
     rv = gfxPlatformFontList::Init();
     if (NS_FAILED(rv)) {
-        NS_ERROR("Could not initialize gfxPlatformFontList");
-        Shutdown();
-        return rv;
+        NS_RUNTIMEABORT("Could not initialize gfxPlatformFontList");
     }
 #endif
 
+    gPlatform->mScreenReferenceSurface =
+        gPlatform->CreateOffscreenSurface(gfxIntSize(1,1),
+                                          gfxASurface::CONTENT_COLOR_ALPHA);
+    if (!gPlatform->mScreenReferenceSurface) {
+        NS_RUNTIMEABORT("Could not initialize mScreenReferenceSurface");
+    }
+
     rv = gfxFontCache::Init();
     if (NS_FAILED(rv)) {
-        NS_ERROR("Could not initialize gfxFontCache");
-        Shutdown();
-        return rv;
-    }
-
-    rv = gfxTextRunWordCache::Init();
-    if (NS_FAILED(rv)) {
-        NS_ERROR("Could not initialize gfxTextRunWordCache");
-        Shutdown();
-        return rv;
-    }
-
-    rv = gfxTextRunCache::Init();
-    if (NS_FAILED(rv)) {
-        NS_ERROR("Could not initialize gfxTextRunCache");
-        Shutdown();
-        return rv;
+        NS_RUNTIMEABORT("Could not initialize gfxFontCache");
     }
 
     /* Pref migration hook. */
     MigratePrefs();
 
     /* Create and register our CMS Override observer. */
-    gPlatform->overrideObserver = new SRGBOverrideObserver();
-    FontPrefsObserver *fontPrefObserver = new FontPrefsObserver();
+    gPlatform->mSRGBOverrideObserver = new SRGBOverrideObserver();
+    Preferences::AddWeakObserver(gPlatform->mSRGBOverrideObserver, "gfx.color_management.force_srgb");
 
-    nsCOMPtr<nsIPrefBranch2> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
-    if (prefs) {
-        prefs->AddObserver(CMForceSRGBPrefName, gPlatform->overrideObserver, PR_TRUE);
-        prefs->AddObserver(GFX_DOWNLOADABLE_FONTS_ENABLED, fontPrefObserver, PR_FALSE);
-        prefs->AddObserver("gfx.font_rendering.", fontPrefObserver, PR_FALSE);
+    gPlatform->mFontPrefsObserver = new FontPrefsObserver();
+    Preferences::AddStrongObservers(gPlatform->mFontPrefsObserver, kObservedPrefs);
+
+    gPlatform->mOrientationSyncPrefsObserver = new OrientationSyncPrefsObserver();
+    Preferences::AddStrongObserver(gPlatform->mOrientationSyncPrefsObserver, "layers.orientation.sync.timeout");
+
+    gPlatform->mWorkAroundDriverBugs = Preferences::GetBool("gfx.work-around-driver-bugs", true);
+
+    mozilla::Preferences::AddBoolVarCache(&gPlatform->mWidgetUpdateFlashing,
+                                          "nglayout.debug.widget_update_flashing");
+
+    mozilla::gl::GLContext::PlatformStartup();
+
+#ifdef MOZ_WIDGET_ANDROID
+    // Texture pool init
+    mozilla::gl::TexturePoolOGL::Init();
+#endif
+
+    // Force registration of the gfx component, thus arranging for
+    // ::Shutdown to be called.
+    nsCOMPtr<nsISupports> forceReg
+        = do_CreateInstance("@mozilla.org/gfx/init;1");
+
+    if (Preferences::GetBool("gfx.2d.recording", false)) {
+      gPlatform->mRecorder = Factory::CreateEventRecorderForFile("browserrecording.aer");
+      Factory::SetGlobalEventRecorder(gPlatform->mRecorder);
     }
 
-    return NS_OK;
+    gPlatform->mOrientationSyncMillis = Preferences::GetUint("layers.orientation.sync.timeout", (uint32_t)0);
 }
 
 void
@@ -314,30 +393,63 @@ gfxPlatform::Shutdown()
 {
     // These may be called before the corresponding subsystems have actually
     // started up. That's OK, they can handle it.
-    gfxTextRunCache::Shutdown();
-    gfxTextRunWordCache::Shutdown();
     gfxFontCache::Shutdown();
     gfxFontGroup::Shutdown();
-#if defined(XP_MACOSX) || defined(XP_WIN) // temporary, until this is implemented on others
+#ifdef MOZ_GRAPHITE
+    gfxGraphiteShaper::Shutdown();
+#endif
+#if defined(XP_MACOSX) || defined(XP_IOS) || defined(XP_WIN) // temporary, until this is implemented on others
     gfxPlatformFontList::Shutdown();
 #endif
 
     // Free the various non-null transforms and loaded profiles
     ShutdownCMS();
 
-    /* Unregister our CMS Override callback. */
-    nsCOMPtr<nsIPrefBranch2> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
-    if (prefs)
-        prefs->RemoveObserver(CMForceSRGBPrefName, gPlatform->overrideObserver);
+    // In some cases, gPlatform may not be created but Shutdown() called,
+    // e.g., during xpcshell tests.
+    if (gPlatform) {
+        /* Unregister our CMS Override callback. */
+        NS_ASSERTION(gPlatform->mSRGBOverrideObserver, "mSRGBOverrideObserver has alreay gone");
+        Preferences::RemoveObserver(gPlatform->mSRGBOverrideObserver, "gfx.color_management.force_srgb");
+        gPlatform->mSRGBOverrideObserver = nullptr;
 
+        NS_ASSERTION(gPlatform->mFontPrefsObserver, "mFontPrefsObserver has alreay gone");
+        Preferences::RemoveObservers(gPlatform->mFontPrefsObserver, kObservedPrefs);
+        gPlatform->mFontPrefsObserver = nullptr;
+    }
+
+#ifdef MOZ_WIDGET_ANDROID
+    // Shut down the texture pool
+    mozilla::gl::TexturePoolOGL::Shutdown();
+#endif
+
+    // Shut down the default GL context provider.
     mozilla::gl::GLContextProvider::Shutdown();
 
+#if defined(XP_WIN)
+    // The above shutdown calls operate on the available context providers on
+    // most platforms.  Windows is a "special snowflake", though, and has three
+    // context providers available, so we have to shut all of them down.
+    // We should only support the default GL provider on Windows; then, this
+    // could go away. Unfortunately, we currently support WGL (the default) for
+    // WebGL on Optimus.
+    mozilla::gl::GLContextProviderEGL::Shutdown();
+#endif
+
+    // This will block this thread untill the ImageBridge protocol is completely
+    // deleted.
+    ImageBridgeChild::ShutDown();
+
+    CompositorParent::ShutDown();
+
     delete gPlatform;
-    gPlatform = nsnull;
+    gPlatform = nullptr;
 }
 
 gfxPlatform::~gfxPlatform()
 {
+    mScreenReferenceSurface = nullptr;
+
     // The cairo folks think we should only clean up in debug builds,
     // but we're generally in the habit of trying to shut down as
     // cleanly as possible even in production code, so call this
@@ -358,20 +470,30 @@ gfxPlatform::~gfxPlatform()
 }
 
 already_AddRefed<gfxASurface>
+gfxPlatform::CreateOffscreenImageSurface(const gfxIntSize& aSize,
+                                         gfxASurface::gfxContentType aContentType)
+{
+  nsRefPtr<gfxASurface> newSurface;
+  newSurface = new gfxImageSurface(aSize, OptimalFormatForContent(aContentType));
+
+  return newSurface.forget();
+}
+
+already_AddRefed<gfxASurface>
 gfxPlatform::OptimizeImage(gfxImageSurface *aSurface,
                            gfxASurface::gfxImageFormat format)
 {
     const gfxIntSize& surfaceSize = aSurface->GetSize();
 
 #ifdef XP_WIN
-    if (gfxWindowsPlatform::GetPlatform()->GetRenderMode() == 
+    if (gfxWindowsPlatform::GetPlatform()->GetRenderMode() ==
         gfxWindowsPlatform::RENDER_DIRECT2D) {
-        return nsnull;
+        return nullptr;
     }
 #endif
-    nsRefPtr<gfxASurface> optSurface = CreateOffscreenSurface(surfaceSize, format);
+    nsRefPtr<gfxASurface> optSurface = CreateOffscreenSurface(surfaceSize, gfxASurface::ContentFromFormat(format));
     if (!optSurface || optSurface->CairoStatus() != 0)
-        return nsnull;
+        return nullptr;
 
     gfxContext tmpCtx(optSurface);
     tmpCtx.SetOperator(gfxContext::OPERATOR_SOURCE);
@@ -381,6 +503,295 @@ gfxPlatform::OptimizeImage(gfxImageSurface *aSurface,
     gfxASurface *ret = optSurface;
     NS_ADDREF(ret);
     return ret;
+}
+
+cairo_user_data_key_t kDrawTarget;
+
+RefPtr<DrawTarget>
+gfxPlatform::CreateDrawTargetForSurface(gfxASurface *aSurface, const IntSize& aSize)
+{
+  RefPtr<DrawTarget> drawTarget = Factory::CreateDrawTargetForCairoSurface(aSurface->CairoSurface(), aSize);
+  aSurface->SetData(&kDrawTarget, drawTarget, NULL);
+  return drawTarget;
+}
+
+cairo_user_data_key_t kSourceSurface;
+
+/**
+ * Record the backend that was used to construct the SourceSurface.
+ * When getting the cached SourceSurface for a gfxASurface/DrawTarget pair,
+ * we check to make sure the DrawTarget's backend matches the backend
+ * for the cached SourceSurface, and only use it if they match. This
+ * can avoid expensive and unnecessary readbacks.
+ */
+struct SourceSurfaceUserData
+{
+  RefPtr<SourceSurface> mSrcSurface;
+  BackendType mBackendType;
+};
+
+void SourceBufferDestroy(void *srcSurfUD)
+{
+  delete static_cast<SourceSurfaceUserData*>(srcSurfUD);
+}
+
+void SourceSnapshotDetached(cairo_surface_t *nullSurf)
+{
+  gfxImageSurface* origSurf =
+    static_cast<gfxImageSurface*>(cairo_surface_get_user_data(nullSurf, &kSourceSurface));
+
+  origSurf->SetData(&kSourceSurface, NULL, NULL);
+}
+
+RefPtr<SourceSurface>
+gfxPlatform::GetSourceSurfaceForSurface(DrawTarget *aTarget, gfxASurface *aSurface)
+{
+  void *userData = aSurface->GetData(&kSourceSurface);
+
+  if (userData) {
+    SourceSurfaceUserData *surf = static_cast<SourceSurfaceUserData*>(userData);
+
+    if (surf->mSrcSurface->IsValid() && surf->mBackendType == aTarget->GetType()) {
+      return surf->mSrcSurface;
+    }
+    // We can just continue here as when setting new user data the destroy
+    // function will be called for the old user data.
+  }
+
+  SurfaceFormat format;
+  if (aSurface->GetContentType() == gfxASurface::CONTENT_ALPHA) {
+    format = FORMAT_A8;
+  } else if (aSurface->GetContentType() == gfxASurface::CONTENT_COLOR) {
+    format = FORMAT_B8G8R8X8;
+  } else {
+    format = FORMAT_B8G8R8A8;
+  }
+
+  RefPtr<SourceSurface> srcBuffer;
+
+#ifdef XP_WIN
+  if (aSurface->GetType() == gfxASurface::SurfaceTypeD2D) {
+    NativeSurface surf;
+    surf.mFormat = format;
+    surf.mType = NATIVE_SURFACE_D3D10_TEXTURE;
+    surf.mSurface = static_cast<gfxD2DSurface*>(aSurface)->GetTexture();
+    mozilla::gfx::DrawTarget *dt = static_cast<mozilla::gfx::DrawTarget*>(aSurface->GetData(&kDrawTarget));
+    if (dt) {
+      dt->Flush();
+    }
+    srcBuffer = aTarget->CreateSourceSurfaceFromNativeSurface(surf);
+  } else
+#endif
+  if (aSurface->CairoSurface() && aTarget->GetType() == BACKEND_CAIRO) {
+    // If this is an xlib cairo surface we don't want to fetch it into memory
+    // because this is a major slow down.
+    NativeSurface surf;
+    surf.mFormat = format;
+    surf.mType = NATIVE_SURFACE_CAIRO_SURFACE;
+    surf.mSurface = aSurface->CairoSurface();
+    srcBuffer = aTarget->CreateSourceSurfaceFromNativeSurface(surf);
+
+    if (srcBuffer) {
+      // It's cheap enough to make a new one so we won't keep it around and
+      // keeping it creates a cycle.
+      return srcBuffer;
+    }
+  }
+
+  if (!srcBuffer) {
+    nsRefPtr<gfxImageSurface> imgSurface = aSurface->GetAsImageSurface();
+
+    bool isWin32ImageSurf = imgSurface &&
+                            aSurface->GetType() == gfxASurface::SurfaceTypeWin32;
+
+    if (!imgSurface) {
+      imgSurface = new gfxImageSurface(aSurface->GetSize(), OptimalFormatForContent(aSurface->GetContentType()));
+      nsRefPtr<gfxContext> ctx = new gfxContext(imgSurface);
+      ctx->SetSource(aSurface);
+      ctx->SetOperator(gfxContext::OPERATOR_SOURCE);
+      ctx->Paint();
+    }
+
+    gfxImageFormat cairoFormat = imgSurface->Format();
+    switch(cairoFormat) {
+      case gfxASurface::ImageFormatARGB32:
+        format = FORMAT_B8G8R8A8;
+        break;
+      case gfxASurface::ImageFormatRGB24:
+        format = FORMAT_B8G8R8X8;
+        break;
+      case gfxASurface::ImageFormatA8:
+        format = FORMAT_A8;
+        break;
+      case gfxASurface::ImageFormatRGB16_565:
+        format = FORMAT_R5G6B5;
+        break;
+      default:
+        NS_RUNTIMEABORT("Invalid surface format!");
+    }
+
+    IntSize size = IntSize(imgSurface->GetSize().width, imgSurface->GetSize().height);
+    srcBuffer = aTarget->CreateSourceSurfaceFromData(imgSurface->Data(),
+                                                     size,
+                                                     imgSurface->Stride(),
+                                                     format);
+
+    if (!srcBuffer) {
+      // We need to check if our gfxASurface will keep the underlying data
+      // alive. This is true if gfxASurface actually -is- an ImageSurface or
+      // if it is a gfxWindowsSurface which supports GetAsImageSurface.
+      if (imgSurface != aSurface && !isWin32ImageSurf) {
+        // This shouldn't happen for now, it can be easily supported by making
+        // a copy. For now let's just abort.
+        NS_RUNTIMEABORT("Attempt to create unsupported SourceSurface from"
+            "non-image surface.");
+        return nullptr;
+      }
+
+      srcBuffer = Factory::CreateWrappingDataSourceSurface(imgSurface->Data(),
+                                                           imgSurface->Stride(),
+                                                           size, format);
+
+    }
+
+    cairo_surface_t *nullSurf =
+	cairo_null_surface_create(CAIRO_CONTENT_COLOR_ALPHA);
+    cairo_surface_set_user_data(nullSurf,
+                                &kSourceSurface,
+                                imgSurface,
+                                NULL);
+    cairo_surface_attach_snapshot(imgSurface->CairoSurface(), nullSurf, SourceSnapshotDetached);
+    cairo_surface_destroy(nullSurf);
+  }
+
+  SourceSurfaceUserData *srcSurfUD = new SourceSurfaceUserData;
+  srcSurfUD->mBackendType = aTarget->GetType();
+  srcSurfUD->mSrcSurface = srcBuffer;
+  aSurface->SetData(&kSourceSurface, srcSurfUD, SourceBufferDestroy);
+
+  return srcBuffer;
+}
+
+TemporaryRef<ScaledFont>
+gfxPlatform::GetScaledFontForFont(DrawTarget* aTarget, gfxFont *aFont)
+{
+  NativeFont nativeFont;
+  nativeFont.mType = NATIVE_FONT_CAIRO_FONT_FACE;
+  nativeFont.mFont = aFont->GetCairoScaledFont();
+  RefPtr<ScaledFont> scaledFont =
+    Factory::CreateScaledFontForNativeFont(nativeFont,
+                                           aFont->GetAdjustedSize());
+  return scaledFont;
+}
+
+cairo_user_data_key_t kDrawSourceSurface;
+static void
+DataSourceSurfaceDestroy(void *dataSourceSurface)
+{
+  static_cast<DataSourceSurface*>(dataSourceSurface)->Release();
+}
+
+cairo_user_data_key_t kDrawTargetForSurface;
+static void
+DataDrawTargetDestroy(void *aTarget)
+{
+  static_cast<DrawTarget*>(aTarget)->Release();
+}
+
+already_AddRefed<gfxASurface>
+gfxPlatform::GetThebesSurfaceForDrawTarget(DrawTarget *aTarget)
+{
+  if (aTarget->GetType() == BACKEND_CAIRO) {
+    cairo_surface_t* csurf =
+      static_cast<cairo_surface_t*>(aTarget->GetNativeSurface(NATIVE_SURFACE_CAIRO_SURFACE));
+    return gfxASurface::Wrap(csurf);
+  }
+
+  // The semantics of this part of the function are sort of weird. If we
+  // don't have direct support for the backend, we snapshot the first time
+  // and then return the snapshotted surface for the lifetime of the draw
+  // target. Sometimes it seems like this works out, but it seems like it
+  // might result in no updates ever.
+  RefPtr<SourceSurface> source = aTarget->Snapshot();
+  RefPtr<DataSourceSurface> data = source->GetDataSurface();
+
+  if (!data) {
+    return NULL;
+  }
+
+  IntSize size = data->GetSize();
+  gfxASurface::gfxImageFormat format = OptimalFormatForContent(ContentForFormat(data->GetFormat()));
+
+
+  nsRefPtr<gfxASurface> surf =
+    new gfxImageSurface(data->GetData(), gfxIntSize(size.width, size.height),
+                        data->Stride(), format);
+
+  surf->SetData(&kDrawSourceSurface, data.forget().drop(), DataSourceSurfaceDestroy);
+  // keep the draw target alive as long as we need its data
+  aTarget->AddRef();
+  surf->SetData(&kDrawTargetForSurface, aTarget, DataDrawTargetDestroy);
+
+  return surf.forget();
+}
+
+RefPtr<DrawTarget>
+gfxPlatform::CreateDrawTargetForBackend(BackendType aBackend, const IntSize& aSize, SurfaceFormat aFormat)
+{
+  // There is a bunch of knowledge in the gfxPlatform heirarchy about how to
+  // create the best offscreen surface for the current system and situation. We
+  // can easily take advantage of this for the Cairo backend, so that's what we
+  // do.
+  // mozilla::gfx::Factory can get away without having all this knowledge for
+  // now, but this might need to change in the future (using
+  // CreateOffscreenSurface() and CreateDrawTargetForSurface() for all
+  // backends).
+  if (aBackend == BACKEND_CAIRO) {
+    nsRefPtr<gfxASurface> surf = CreateOffscreenSurface(ThebesIntSize(aSize),
+                                                        ContentForFormat(aFormat));
+    if (!surf || surf->CairoStatus()) {
+      return NULL;
+    }
+
+    return CreateDrawTargetForSurface(surf, aSize);
+  } else {
+    return Factory::CreateDrawTarget(aBackend, aSize, aFormat);
+  }
+}
+
+RefPtr<DrawTarget>
+gfxPlatform::CreateOffscreenDrawTarget(const IntSize& aSize, SurfaceFormat aFormat)
+{
+  NS_ASSERTION(mPreferredCanvasBackend, "No backend.");
+  RefPtr<DrawTarget> target = CreateDrawTargetForBackend(mPreferredCanvasBackend, aSize, aFormat);
+  if (target ||
+      mFallbackCanvasBackend == BACKEND_NONE) {
+    return target;
+  }
+
+  return CreateDrawTargetForBackend(mFallbackCanvasBackend, aSize, aFormat);
+}
+
+
+RefPtr<DrawTarget>
+gfxPlatform::CreateDrawTargetForData(unsigned char* aData, const IntSize& aSize, int32_t aStride, SurfaceFormat aFormat)
+{
+  NS_ASSERTION(mPreferredCanvasBackend, "No backend.");
+  return Factory::CreateDrawTargetForData(mPreferredCanvasBackend, aData, aSize, aStride, aFormat);
+}
+
+/* static */ BackendType
+gfxPlatform::BackendTypeForName(const nsCString& aName)
+{
+  if (aName.EqualsLiteral("cairo"))
+    return BACKEND_CAIRO;
+  if (aName.EqualsLiteral("skia"))
+    return BACKEND_SKIA;
+  if (aName.EqualsLiteral("direct2d"))
+    return BACKEND_DIRECT2D;
+  if (aName.EqualsLiteral("cg"))
+    return BACKEND_COREGRAPHICS;
+  return BACKEND_NONE;
 }
 
 nsresult
@@ -397,52 +808,68 @@ gfxPlatform::UpdateFontList()
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
-PRBool 
-gfxPlatform::GetBoolPref(const char *aPref, PRBool aDefault)
-{
-    nsCOMPtr<nsIPrefBranch> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
-    if (prefs) {
-        PRBool allow;
-        nsresult rv = prefs->GetBoolPref(aPref, &allow);
-        if (NS_SUCCEEDED(rv))
-            return allow;
-    }
-
-    return aDefault;
-}
-
-PRBool
+bool
 gfxPlatform::DownloadableFontsEnabled()
 {
     if (mAllowDownloadableFonts == UNINITIALIZED_VALUE) {
-        mAllowDownloadableFonts = GetBoolPref(GFX_DOWNLOADABLE_FONTS_ENABLED, PR_FALSE);
+        mAllowDownloadableFonts =
+            Preferences::GetBool(GFX_DOWNLOADABLE_FONTS_ENABLED, false);
     }
 
     return mAllowDownloadableFonts;
 }
 
-PRInt8
-gfxPlatform::UseHarfBuzzLevel()
+bool
+gfxPlatform::SanitizeDownloadedFonts()
 {
-    if (mUseHarfBuzzLevel == UNINITIALIZED_VALUE) {
-        mUseHarfBuzzLevel = HARFBUZZ_LEVEL_DEFAULT;
-        nsCOMPtr<nsIPrefBranch2> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
-        if (prefs) {
-            PRInt32 level;
-            nsresult rv = prefs->GetIntPref(GFX_PREF_HARFBUZZ_LEVEL, &level);
-            if (NS_SUCCEEDED(rv)) {
-                mUseHarfBuzzLevel = level;
-            }
-        }
+    if (mDownloadableFontsSanitize == UNINITIALIZED_VALUE) {
+        mDownloadableFontsSanitize =
+            Preferences::GetBool(GFX_DOWNLOADABLE_FONTS_SANITIZE, true);
     }
 
-    return mUseHarfBuzzLevel;
+    return mDownloadableFontsSanitize;
+}
+
+bool
+gfxPlatform::UseCmapsDuringSystemFallback()
+{
+    if (mFallbackUsesCmaps == UNINITIALIZED_VALUE) {
+        mFallbackUsesCmaps =
+            Preferences::GetBool(GFX_PREF_FALLBACK_USE_CMAPS, false);
+    }
+
+    return mFallbackUsesCmaps;
+}
+
+#ifdef MOZ_GRAPHITE
+bool
+gfxPlatform::UseGraphiteShaping()
+{
+    if (mGraphiteShapingEnabled == UNINITIALIZED_VALUE) {
+        mGraphiteShapingEnabled =
+            Preferences::GetBool(GFX_PREF_GRAPHITE_SHAPING, false);
+    }
+
+    return mGraphiteShapingEnabled;
+}
+#endif
+
+bool
+gfxPlatform::UseHarfBuzzForScript(int32_t aScriptCode)
+{
+    if (mUseHarfBuzzScripts == UNINITIALIZED_VALUE) {
+        mUseHarfBuzzScripts = Preferences::GetInt(GFX_PREF_HARFBUZZ_SCRIPTS, HARFBUZZ_SCRIPTS_DEFAULT);
+    }
+
+    int32_t shapingType = mozilla::unicode::ScriptShapingType(aScriptCode);
+
+    return (mUseHarfBuzzScripts & shapingType) != 0;
 }
 
 gfxFontEntry*
 gfxPlatform::MakePlatformFont(const gfxProxyFontEntry *aProxyEntry,
-                              const PRUint8 *aFontData,
-                              PRUint32 aLength)
+                              const uint8_t *aFontData,
+                              uint32_t aLength)
 {
     // Default implementation does not handle activating downloaded fonts;
     // just free the data and return.
@@ -452,109 +879,97 @@ gfxPlatform::MakePlatformFont(const gfxProxyFontEntry *aProxyEntry,
     if (aFontData) {
         NS_Free((void*)aFontData);
     }
-    return nsnull;
+    return nullptr;
 }
 
 static void
 AppendGenericFontFromPref(nsString& aFonts, nsIAtom *aLangGroup, const char *aGenericName)
 {
-    nsresult rv;
+    NS_ENSURE_TRUE_VOID(Preferences::GetRootBranch());
 
-    nsCOMPtr<nsIPrefBranch> prefs(do_GetService(NS_PREFSERVICE_CONTRACTID));
-    if (!prefs)
-        return;
-
-    nsCAutoString prefName, langGroupString;
-    nsXPIDLCString nameValue, nameListValue;
+    nsAutoCString prefName, langGroupString;
 
     aLangGroup->ToUTF8String(langGroupString);
 
-    nsCAutoString genericDotLang;
+    nsAutoCString genericDotLang;
     if (aGenericName) {
         genericDotLang.Assign(aGenericName);
     } else {
         prefName.AssignLiteral("font.default.");
         prefName.Append(langGroupString);
-        prefs->GetCharPref(prefName.get(), getter_Copies(genericDotLang));
+        genericDotLang = Preferences::GetCString(prefName.get());
     }
 
     genericDotLang.AppendLiteral(".");
     genericDotLang.Append(langGroupString);
 
-    // fetch font.name.xxx value                   
+    // fetch font.name.xxx value
     prefName.AssignLiteral("font.name.");
     prefName.Append(genericDotLang);
-    rv = prefs->GetCharPref(prefName.get(), getter_Copies(nameValue));
-    if (NS_SUCCEEDED(rv)) {
+    nsAdoptingString nameValue = Preferences::GetString(prefName.get());
+    if (nameValue) {
         if (!aFonts.IsEmpty())
             aFonts.AppendLiteral(", ");
-        aFonts.Append(NS_ConvertUTF8toUTF16(nameValue));
+        aFonts += nameValue;
     }
 
-    // fetch font.name-list.xxx value                   
+    // fetch font.name-list.xxx value
     prefName.AssignLiteral("font.name-list.");
     prefName.Append(genericDotLang);
-    rv = prefs->GetCharPref(prefName.get(), getter_Copies(nameListValue));
-    if (NS_SUCCEEDED(rv) && !nameListValue.Equals(nameValue)) {
+    nsAdoptingString nameListValue = Preferences::GetString(prefName.get());
+    if (nameListValue && !nameListValue.Equals(nameValue)) {
         if (!aFonts.IsEmpty())
             aFonts.AppendLiteral(", ");
-        aFonts.Append(NS_ConvertUTF8toUTF16(nameListValue));
+        aFonts += nameListValue;
     }
 }
 
 void
-gfxPlatform::GetPrefFonts(nsIAtom *aLanguage, nsString& aFonts, PRBool aAppendUnicode)
+gfxPlatform::GetPrefFonts(nsIAtom *aLanguage, nsString& aFonts, bool aAppendUnicode)
 {
     aFonts.Truncate();
 
-    AppendGenericFontFromPref(aFonts, aLanguage, nsnull);
+    AppendGenericFontFromPref(aFonts, aLanguage, nullptr);
     if (aAppendUnicode)
-        AppendGenericFontFromPref(aFonts, gfxAtoms::x_unicode, nsnull);
+        AppendGenericFontFromPref(aFonts, nsGkAtoms::Unicode, nullptr);
 }
 
-PRBool gfxPlatform::ForEachPrefFont(eFontPrefLang aLangArray[], PRUint32 aLangArrayLen, PrefFontCallback aCallback,
+bool gfxPlatform::ForEachPrefFont(eFontPrefLang aLangArray[], uint32_t aLangArrayLen, PrefFontCallback aCallback,
                                     void *aClosure)
 {
-    nsresult rv;
+    NS_ENSURE_TRUE(Preferences::GetRootBranch(), false);
 
-    nsCOMPtr<nsIPrefBranch> prefs(do_GetService(NS_PREFSERVICE_CONTRACTID));
-    if (!prefs)
-        return PR_FALSE;
-
-    PRUint32    i;
-    
+    uint32_t    i;
     for (i = 0; i < aLangArrayLen; i++) {
         eFontPrefLang prefLang = aLangArray[i];
         const char *langGroup = GetPrefLangName(prefLang);
-        
-        nsCAutoString prefName;
-        nsXPIDLCString nameValue, nameListValue;
-    
-        nsCAutoString genericDotLang;
+
+        nsAutoCString prefName;
+
         prefName.AssignLiteral("font.default.");
         prefName.Append(langGroup);
-        prefs->GetCharPref(prefName.get(), getter_Copies(genericDotLang));
-    
+        nsAdoptingCString genericDotLang = Preferences::GetCString(prefName.get());
+
         genericDotLang.AppendLiteral(".");
         genericDotLang.Append(langGroup);
-    
-        // fetch font.name.xxx value                   
+
+        // fetch font.name.xxx value
         prefName.AssignLiteral("font.name.");
         prefName.Append(genericDotLang);
-        rv = prefs->GetCharPref(prefName.get(), getter_Copies(nameValue));
-        if (NS_SUCCEEDED(rv)) {
+        nsAdoptingCString nameValue = Preferences::GetCString(prefName.get());
+        if (nameValue) {
             if (!aCallback(prefLang, NS_ConvertUTF8toUTF16(nameValue), aClosure))
-                return PR_FALSE;
+                return false;
         }
-    
-        // fetch font.name-list.xxx value                   
+
+        // fetch font.name-list.xxx value
         prefName.AssignLiteral("font.name-list.");
         prefName.Append(genericDotLang);
-        rv = prefs->GetCharPref(prefName.get(), getter_Copies(nameListValue));
-        if (NS_SUCCEEDED(rv) && !nameListValue.Equals(nameValue)) {
+        nsAdoptingCString nameListValue = Preferences::GetCString(prefName.get());
+        if (nameListValue && !nameListValue.Equals(nameValue)) {
             const char kComma = ',';
             const char *p, *p_end;
-            nsCAutoString list(nameListValue);
+            nsAutoCString list(nameListValue);
             list.BeginReading(p);
             list.EndReading(p_end);
             while (p < p_end) {
@@ -567,16 +982,16 @@ PRBool gfxPlatform::ForEachPrefFont(eFontPrefLang aLangArray[], PRUint32 aLangAr
                 const char *start = p;
                 while (++p != p_end && *p != kComma)
                     /* nothing */ ;
-                nsCAutoString fontName(Substring(start, p));
-                fontName.CompressWhitespace(PR_FALSE, PR_TRUE);
+                nsAutoCString fontName(Substring(start, p));
+                fontName.CompressWhitespace(false, true);
                 if (!aCallback(prefLang, NS_ConvertUTF8toUTF16(fontName), aClosure))
-                    return PR_FALSE;
+                    return false;
                 p++;
             }
         }
     }
 
-    return PR_TRUE;
+    return true;
 }
 
 eFontPrefLang
@@ -584,7 +999,7 @@ gfxPlatform::GetFontPrefLangFor(const char* aLang)
 {
     if (!aLang || !aLang[0])
         return eFontPrefLang_Others;
-    for (PRUint32 i = 0; i < PRUint32(eFontPrefLang_LangCount); ++i) {
+    for (uint32_t i = 0; i < uint32_t(eFontPrefLang_LangCount); ++i) {
         if (!PL_strcasecmp(gPrefLangNames[i], aLang))
             return eFontPrefLang(i);
     }
@@ -596,7 +1011,7 @@ gfxPlatform::GetFontPrefLangFor(nsIAtom *aLang)
 {
     if (!aLang)
         return eFontPrefLang_Others;
-    nsCAutoString lang;
+    nsAutoCString lang;
     aLang->ToUTF8String(lang);
     return GetFontPrefLangFor(lang.get());
 }
@@ -604,13 +1019,13 @@ gfxPlatform::GetFontPrefLangFor(nsIAtom *aLang)
 const char*
 gfxPlatform::GetPrefLangName(eFontPrefLang aLang)
 {
-    if (PRUint32(aLang) < PRUint32(eFontPrefLang_AllCount))
-        return gPrefLangNames[PRUint32(aLang)];
-    return nsnull;
+    if (uint32_t(aLang) < uint32_t(eFontPrefLang_AllCount))
+        return gPrefLangNames[uint32_t(aLang)];
+    return nullptr;
 }
 
 eFontPrefLang
-gfxPlatform::GetFontPrefLangFor(PRUint8 aUnicodeRange)
+gfxPlatform::GetFontPrefLangFor(uint8_t aUnicodeRange)
 {
     switch (aUnicodeRange) {
         case kRangeSetLatin:   return eFontPrefLang_Western;
@@ -636,12 +1051,17 @@ gfxPlatform::GetFontPrefLangFor(PRUint8 aUnicodeRange)
         case kRangeGurmukhi:   return eFontPrefLang_Gurmukhi;
         case kRangeKhmer:      return eFontPrefLang_Khmer;
         case kRangeMalayalam:  return eFontPrefLang_Malayalam;
+        case kRangeOriya:      return eFontPrefLang_Oriya;
+        case kRangeTelugu:     return eFontPrefLang_Telugu;
+        case kRangeKannada:    return eFontPrefLang_Kannada;
+        case kRangeSinhala:    return eFontPrefLang_Sinhala;
+        case kRangeTibetan:    return eFontPrefLang_Tibetan;
         case kRangeSetCJK:     return eFontPrefLang_CJKSet;
         default:               return eFontPrefLang_Others;
     }
 }
 
-PRBool 
+bool
 gfxPlatform::IsLangCJK(eFontPrefLang aLang)
 {
     switch (aLang) {
@@ -651,14 +1071,14 @@ gfxPlatform::IsLangCJK(eFontPrefLang aLang)
         case eFontPrefLang_ChineseHK:
         case eFontPrefLang_Korean:
         case eFontPrefLang_CJKSet:
-            return PR_TRUE;
+            return true;
         default:
-            return PR_FALSE;
+            return false;
     }
 }
 
-void 
-gfxPlatform::GetLangPrefs(eFontPrefLang aPrefLangs[], PRUint32 &aLen, eFontPrefLang aCharLang, eFontPrefLang aPageLang)
+void
+gfxPlatform::GetLangPrefs(eFontPrefLang aPrefLangs[], uint32_t &aLen, eFontPrefLang aCharLang, eFontPrefLang aPageLang)
 {
     if (IsLangCJK(aCharLang)) {
         AppendCJKPrefLangs(aPrefLangs, aLen, aCharLang, aPageLang);
@@ -670,37 +1090,22 @@ gfxPlatform::GetLangPrefs(eFontPrefLang aPrefLangs[], PRUint32 &aLen, eFontPrefL
 }
 
 void
-gfxPlatform::AppendCJKPrefLangs(eFontPrefLang aPrefLangs[], PRUint32 &aLen, eFontPrefLang aCharLang, eFontPrefLang aPageLang)
+gfxPlatform::AppendCJKPrefLangs(eFontPrefLang aPrefLangs[], uint32_t &aLen, eFontPrefLang aCharLang, eFontPrefLang aPageLang)
 {
-    nsCOMPtr<nsIPrefBranch> prefs(do_GetService(NS_PREFSERVICE_CONTRACTID));
-
     // prefer the lang specified by the page *if* CJK
     if (IsLangCJK(aPageLang)) {
         AppendPrefLang(aPrefLangs, aLen, aPageLang);
     }
-    
+
     // if not set up, set up the default CJK order, based on accept lang settings and locale
     if (mCJKPrefLangs.Length() == 0) {
-    
+
         // temp array
         eFontPrefLang tempPrefLangs[kMaxLenPrefLangList];
-        PRUint32 tempLen = 0;
-        
+        uint32_t tempLen = 0;
+
         // Add the CJK pref fonts from accept languages, the order should be same order
-        nsCAutoString list;
-        if (prefs) {
-            nsCOMPtr<nsIPrefLocalizedString> prefString;
-            nsresult rv =
-                prefs->GetComplexValue("intl.accept_languages",
-                                       NS_GET_IID(nsIPrefLocalizedString),
-                                       getter_AddRefs(prefString));
-            if (NS_SUCCEEDED(rv) && prefString) {
-                nsAutoString temp;
-                prefString->ToString(getter_Copies(temp));
-                LossyCopyUTF16toASCII(temp, list);
-            }
-        }
-        
+        nsAdoptingCString list = Preferences::GetLocalizedCString("intl.accept_languages");
         if (!list.IsEmpty()) {
             const char kComma = ',';
             const char *p, *p_end;
@@ -716,8 +1121,8 @@ gfxPlatform::AppendCJKPrefLangs(eFontPrefLang aPrefLangs[], PRUint32 &aLen, eFon
                 const char *start = p;
                 while (++p != p_end && *p != kComma)
                     /* nothing */ ;
-                nsCAutoString lang(Substring(start, p));
-                lang.CompressWhitespace(PR_FALSE, PR_TRUE);
+                nsAutoCString lang(Substring(start, p));
+                lang.CompressWhitespace(false, true);
                 eFontPrefLang fpl = gfxPlatform::GetFontPrefLangFor(lang.get());
                 switch (fpl) {
                     case eFontPrefLang_Japanese:
@@ -775,53 +1180,177 @@ gfxPlatform::AppendCJKPrefLangs(eFontPrefLang aPrefLangs[], PRUint32 &aLen, eFon
         AppendPrefLang(tempPrefLangs, tempLen, eFontPrefLang_ChineseCN);
         AppendPrefLang(tempPrefLangs, tempLen, eFontPrefLang_ChineseHK);
         AppendPrefLang(tempPrefLangs, tempLen, eFontPrefLang_ChineseTW);
-        
+
         // copy into the cached array
-        PRUint32 j;
+        uint32_t j;
         for (j = 0; j < tempLen; j++) {
             mCJKPrefLangs.AppendElement(tempPrefLangs[j]);
         }
     }
-    
+
     // append in cached CJK langs
-    PRUint32  i, numCJKlangs = mCJKPrefLangs.Length();
-    
+    uint32_t  i, numCJKlangs = mCJKPrefLangs.Length();
+
     for (i = 0; i < numCJKlangs; i++) {
         AppendPrefLang(aPrefLangs, aLen, (eFontPrefLang) (mCJKPrefLangs[i]));
     }
-        
+
 }
 
-void 
-gfxPlatform::AppendPrefLang(eFontPrefLang aPrefLangs[], PRUint32& aLen, eFontPrefLang aAddLang)
+void
+gfxPlatform::AppendPrefLang(eFontPrefLang aPrefLangs[], uint32_t& aLen, eFontPrefLang aAddLang)
 {
     if (aLen >= kMaxLenPrefLangList) return;
-    
+
     // make sure
-    PRUint32  i = 0;
+    uint32_t  i = 0;
     while (i < aLen && aPrefLangs[i] != aAddLang) {
         i++;
     }
-    
+
     if (i == aLen) {
         aPrefLangs[aLen] = aAddLang;
         aLen++;
     }
 }
 
+void
+gfxPlatform::InitBackendPrefs(uint32_t aCanvasBitmask, uint32_t aContentBitmask)
+{
+    mPreferredCanvasBackend = GetCanvasBackendPref(aCanvasBitmask);
+    if (!mPreferredCanvasBackend) {
+      mPreferredCanvasBackend = BACKEND_CAIRO;
+    }
+    mFallbackCanvasBackend = GetCanvasBackendPref(aCanvasBitmask & ~(1 << mPreferredCanvasBackend));
+    mContentBackend = GetContentBackendPref(aContentBitmask);
+}
+
+/* static */ BackendType
+gfxPlatform::GetCanvasBackendPref(uint32_t aBackendBitmask)
+{
+    return GetBackendPref(nullptr, "gfx.canvas.azure.backends", aBackendBitmask);
+}
+
+/* static */ BackendType
+gfxPlatform::GetContentBackendPref(uint32_t aBackendBitmask)
+{
+    return GetBackendPref("gfx.content.azure.enabled", "gfx.content.azure.backends", aBackendBitmask);
+}
+
+/* static */ BackendType
+gfxPlatform::GetBackendPref(const char* aEnabledPrefName, const char* aBackendPrefName, uint32_t aBackendBitmask)
+{
+    if (aEnabledPrefName &&
+        !Preferences::GetBool(aEnabledPrefName, false)) {
+        return BACKEND_NONE;
+    }
+
+    nsTArray<nsCString> backendList;
+    nsCString prefString;
+    if (NS_SUCCEEDED(Preferences::GetCString(aBackendPrefName, &prefString))) {
+        ParseString(prefString, ',', backendList);
+    }
+
+    for (uint32_t i = 0; i < backendList.Length(); ++i) {
+        BackendType result = BackendTypeForName(backendList[i]);
+        if ((1 << result) & aBackendBitmask) {
+            return result;
+        }
+    }
+    return BACKEND_NONE;
+}
+
+bool
+gfxPlatform::UseProgressiveTilePainting()
+{
+    static bool sUseProgressiveTilePainting;
+    static bool sUseProgressiveTilePaintingPrefCached = false;
+
+    if (!sUseProgressiveTilePaintingPrefCached) {
+        sUseProgressiveTilePaintingPrefCached = true;
+        mozilla::Preferences::AddBoolVarCache(&sUseProgressiveTilePainting,
+                                              "layers.progressive-paint",
+                                              false);
+    }
+
+    return sUseProgressiveTilePainting;
+}
+
+bool
+gfxPlatform::UseLowPrecisionBuffer()
+{
+    static bool sUseLowPrecisionBuffer;
+    static bool sUseLowPrecisionBufferPrefCached = false;
+
+    if (!sUseLowPrecisionBufferPrefCached) {
+        sUseLowPrecisionBufferPrefCached = true;
+        mozilla::Preferences::AddBoolVarCache(&sUseLowPrecisionBuffer,
+                                              "layers.low-precision-buffer",
+                                              false);
+    }
+
+    return sUseLowPrecisionBuffer;
+}
+
+float
+gfxPlatform::GetLowPrecisionResolution()
+{
+    static float sLowPrecisionResolution;
+    static bool sLowPrecisionResolutionPrefCached = false;
+
+    if (!sLowPrecisionResolutionPrefCached) {
+        int32_t lowPrecisionResolution = 250;
+        sLowPrecisionResolutionPrefCached = true;
+        mozilla::Preferences::AddIntVarCache(&lowPrecisionResolution,
+                                             "layers.low-precision-resolution",
+                                             250);
+        sLowPrecisionResolution = lowPrecisionResolution / 1000.f;
+    }
+
+    return sLowPrecisionResolution;
+}
+
+bool
+gfxPlatform::UseReusableTileStore()
+{
+    static bool sUseReusableTileStore;
+    static bool sUseReusableTileStorePrefCached = false;
+
+    if (!sUseReusableTileStorePrefCached) {
+        sUseReusableTileStorePrefCached = true;
+        mozilla::Preferences::AddBoolVarCache(&sUseReusableTileStore,
+                                              "layers.reuse-invalid-tiles",
+                                              false);
+    }
+
+    return sUseReusableTileStore;
+}
+
+bool
+gfxPlatform::OffMainThreadCompositingEnabled()
+{
+  return XRE_GetProcessType() == GeckoProcessType_Default ?
+    CompositorParent::CompositorLoop() != nullptr :
+    CompositorChild::ChildProcessHasCompositor();
+}
+
 eCMSMode
 gfxPlatform::GetCMSMode()
 {
-    if (gCMSInitialized == PR_FALSE) {
-        gCMSInitialized = PR_TRUE;
-        nsCOMPtr<nsIPrefBranch> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
-        if (prefs) {
-            PRInt32 mode;
-            nsresult rv =
-                prefs->GetIntPref(CMPrefName, &mode);
-            if (NS_SUCCEEDED(rv) && (mode >= 0) && (mode < eCMSMode_AllCount)) {
-                gCMSMode = static_cast<eCMSMode>(mode);
-            }
+    if (gCMSInitialized == false) {
+        gCMSInitialized = true;
+        nsresult rv;
+
+        int32_t mode;
+        rv = Preferences::GetInt("gfx.color_management.mode", &mode);
+        if (NS_SUCCEEDED(rv) && (mode >= 0) && (mode < eCMSMode_AllCount)) {
+            gCMSMode = static_cast<eCMSMode>(mode);
+        }
+
+        bool enableV4;
+        rv = Preferences::GetBool("gfx.color_management.enablev4", &enableV4);
+        if (NS_SUCCEEDED(rv) && enableV4) {
+            qcms_enable_iccv4();
         }
     }
     return gCMSMode;
@@ -834,36 +1363,32 @@ unacceptable performance overhead, so we go with perceptual. */
 #define INTENT_MIN 0
 #define INTENT_MAX 3
 
-PRBool
+int
 gfxPlatform::GetRenderingIntent()
 {
     if (gCMSIntent == -2) {
 
         /* Try to query the pref system for a rendering intent. */
-        nsCOMPtr<nsIPrefBranch> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
-        if (prefs) {
-            PRInt32 pIntent;
-            nsresult rv = prefs->GetIntPref(CMIntentPrefName, &pIntent);
-            if (NS_SUCCEEDED(rv)) {
-              
-                /* If the pref is within range, use it as an override. */
-                if ((pIntent >= INTENT_MIN) && (pIntent <= INTENT_MAX))
-                    gCMSIntent = pIntent;
-
-                /* If the pref is out of range, use embedded profile. */
-                else
-                    gCMSIntent = -1;
+        int32_t pIntent;
+        if (NS_SUCCEEDED(Preferences::GetInt("gfx.color_management.rendering_intent", &pIntent))) {
+            /* If the pref is within range, use it as an override. */
+            if ((pIntent >= INTENT_MIN) && (pIntent <= INTENT_MAX)) {
+                gCMSIntent = pIntent;
+            }
+            /* If the pref is out of range, use embedded profile. */
+            else {
+                gCMSIntent = -1;
             }
         }
-
         /* If we didn't get a valid intent from prefs, use the default. */
-        if (gCMSIntent == -2) 
+        else {
             gCMSIntent = INTENT_DEFAULT;
+        }
     }
     return gCMSIntent;
 }
 
-void 
+void
 gfxPlatform::TransformPixel(const gfxRGBA& in, gfxRGBA& out, qcms_transform *transform)
 {
 
@@ -871,18 +1396,18 @@ gfxPlatform::TransformPixel(const gfxRGBA& in, gfxRGBA& out, qcms_transform *tra
         /* we want the bytes in RGB order */
 #ifdef IS_LITTLE_ENDIAN
         /* ABGR puts the bytes in |RGBA| order on little endian */
-        PRUint32 packed = in.Packed(gfxRGBA::PACKED_ABGR);
+        uint32_t packed = in.Packed(gfxRGBA::PACKED_ABGR);
         qcms_transform_data(transform,
-                       (PRUint8 *)&packed, (PRUint8 *)&packed,
+                       (uint8_t *)&packed, (uint8_t *)&packed,
                        1);
         out.~gfxRGBA();
         new (&out) gfxRGBA(packed, gfxRGBA::PACKED_ABGR);
 #else
         /* ARGB puts the bytes in |ARGB| order on big endian */
-        PRUint32 packed = in.Packed(gfxRGBA::PACKED_ARGB);
+        uint32_t packed = in.Packed(gfxRGBA::PACKED_ARGB);
         /* add one to move past the alpha byte */
         qcms_transform_data(transform,
-                       (PRUint8 *)&packed + 1, (PRUint8 *)&packed + 1,
+                       (uint8_t *)&packed + 1, (uint8_t *)&packed + 1,
                        1);
         out.~gfxRGBA();
         new (&out) gfxRGBA(packed, gfxRGBA::PACKED_ARGB);
@@ -896,38 +1421,28 @@ gfxPlatform::TransformPixel(const gfxRGBA& in, gfxRGBA& out, qcms_transform *tra
 qcms_profile *
 gfxPlatform::GetPlatformCMSOutputProfile()
 {
-    return nsnull;
+    return nullptr;
 }
 
 qcms_profile *
 gfxPlatform::GetCMSOutputProfile()
 {
     if (!gCMSOutputProfile) {
-        NS_TIME_FUNCTION;
+        /* Determine if we're using the internal override to force sRGB as
+           an output profile for reftests. See Bug 452125.
 
-        nsCOMPtr<nsIPrefBranch> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
-        if (prefs) {
+           Note that we don't normally (outside of tests) set a
+           default value of this preference, which means nsIPrefBranch::GetBoolPref
+           will typically throw (and leave its out-param untouched).
+         */
+        if (Preferences::GetBool("gfx.color_management.force_srgb", false)) {
+            gCMSOutputProfile = GetCMSsRGBProfile();
+        }
 
-            nsresult rv;
-
-            /* Determine if we're using the internal override to force sRGB as
-               an output profile for reftests. See Bug 452125. */
-            PRBool hasSRGBOverride, doSRGBOverride;
-            rv = prefs->PrefHasUserValue(CMForceSRGBPrefName, &hasSRGBOverride);
-            if (NS_SUCCEEDED(rv) && hasSRGBOverride) {
-                rv = prefs->GetBoolPref(CMForceSRGBPrefName, &doSRGBOverride);
-                if (NS_SUCCEEDED(rv) && doSRGBOverride)
-                    gCMSOutputProfile = GetCMSsRGBProfile();
-            }
-
-            if (!gCMSOutputProfile) {
-
-                nsXPIDLCString fname;
-                rv = prefs->GetCharPref(CMProfilePrefName,
-                                        getter_Copies(fname));
-                if (NS_SUCCEEDED(rv) && !fname.IsEmpty()) {
-                    gCMSOutputProfile = qcms_profile_from_path(fname);
-                }
+        if (!gCMSOutputProfile) {
+            nsAdoptingCString fname = Preferences::GetCString("gfx.color_management.display_profile");
+            if (!fname.IsEmpty()) {
+                gCMSOutputProfile = qcms_profile_from_path(fname);
             }
         }
 
@@ -942,13 +1457,13 @@ gfxPlatform::GetCMSOutputProfile()
             NS_ASSERTION(gCMSOutputProfile != GetCMSsRGBProfile(),
                          "Builtin sRGB profile tagged as bogus!!!");
             qcms_profile_release(gCMSOutputProfile);
-            gCMSOutputProfile = nsnull;
+            gCMSOutputProfile = nullptr;
         }
 
         if (!gCMSOutputProfile) {
             gCMSOutputProfile = GetCMSsRGBProfile();
         }
-        /* Precache the LUT16 Interpolations for the output profile. See 
+        /* Precache the LUT16 Interpolations for the output profile. See
            bug 444661 for details. */
         qcms_profile_precache_output_transform(gCMSOutputProfile);
     }
@@ -976,7 +1491,7 @@ gfxPlatform::GetCMSRGBTransform()
         inProfile = GetCMSsRGBProfile();
 
         if (!inProfile || !outProfile)
-            return nsnull;
+            return nullptr;
 
         gCMSRGBTransform = qcms_transform_create(inProfile, QCMS_DATA_RGB_8,
                                               outProfile, QCMS_DATA_RGB_8,
@@ -995,7 +1510,7 @@ gfxPlatform::GetCMSInverseRGBTransform()
         outProfile = GetCMSsRGBProfile();
 
         if (!inProfile || !outProfile)
-            return nsnull;
+            return nullptr;
 
         gCMSInverseRGBTransform = qcms_transform_create(inProfile, QCMS_DATA_RGB_8,
                                                      outProfile, QCMS_DATA_RGB_8,
@@ -1014,7 +1529,7 @@ gfxPlatform::GetCMSRGBATransform()
         inProfile = GetCMSsRGBProfile();
 
         if (!inProfile || !outProfile)
-            return nsnull;
+            return nullptr;
 
         gCMSRGBATransform = qcms_transform_create(inProfile, QCMS_DATA_RGBA_8,
                                                outProfile, QCMS_DATA_RGBA_8,
@@ -1030,76 +1545,49 @@ static void ShutdownCMS()
 
     if (gCMSRGBTransform) {
         qcms_transform_release(gCMSRGBTransform);
-        gCMSRGBTransform = nsnull;
+        gCMSRGBTransform = nullptr;
     }
     if (gCMSInverseRGBTransform) {
         qcms_transform_release(gCMSInverseRGBTransform);
-        gCMSInverseRGBTransform = nsnull;
+        gCMSInverseRGBTransform = nullptr;
     }
     if (gCMSRGBATransform) {
         qcms_transform_release(gCMSRGBATransform);
-        gCMSRGBATransform = nsnull;
+        gCMSRGBATransform = nullptr;
     }
     if (gCMSOutputProfile) {
         qcms_profile_release(gCMSOutputProfile);
 
         // handle the aliased case
         if (gCMSsRGBProfile == gCMSOutputProfile)
-            gCMSsRGBProfile = nsnull;
-        gCMSOutputProfile = nsnull;
+            gCMSsRGBProfile = nullptr;
+        gCMSOutputProfile = nullptr;
     }
     if (gCMSsRGBProfile) {
         qcms_profile_release(gCMSsRGBProfile);
-        gCMSsRGBProfile = nsnull;
+        gCMSsRGBProfile = nullptr;
     }
 
     // Reset the state variables
     gCMSIntent = -2;
     gCMSMode = eCMSMode_Off;
-    gCMSInitialized = PR_FALSE;
+    gCMSInitialized = false;
 }
 
 static void MigratePrefs()
 {
-
-    /* Load the pref service. If we don't get it die quietly since this isn't
-       critical code. */
-    nsCOMPtr<nsIPrefBranch> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
-    if (!prefs)
-        return;
-
     /* Migrate from the boolean color_management.enabled pref - we now use
        color_management.mode. */
-    PRBool hasOldCMPref;
-    nsresult rv =
-        prefs->PrefHasUserValue(CMPrefNameOld, &hasOldCMPref);
-    if (NS_SUCCEEDED(rv) && (hasOldCMPref == PR_TRUE)) {
-        PRBool CMWasEnabled;
-        rv = prefs->GetBoolPref(CMPrefNameOld, &CMWasEnabled);
-        if (NS_SUCCEEDED(rv) && (CMWasEnabled == PR_TRUE))
-            prefs->SetIntPref(CMPrefName, eCMSMode_All);
-        prefs->ClearUserPref(CMPrefNameOld);
+    if (Preferences::HasUserValue("gfx.color_management.enabled")) {
+        if (Preferences::GetBool("gfx.color_management.enabled", false)) {
+            Preferences::SetInt("gfx.color_management.mode", static_cast<int32_t>(eCMSMode_All));
+        }
+        Preferences::ClearUser("gfx.color_management.enabled");
     }
-
 }
 
 // default SetupClusterBoundaries, based on Unicode properties;
 // platform subclasses may override if they wish
-static nsIUGenCategory* gGenCategory = nsnull;
-
-static nsIUGenCategory*
-GetGenCategory()
-{
-    if (!gGenCategory) {
-        nsresult rv = CallGetService(NS_UNICHARCATEGORY_CONTRACTID, &gGenCategory);
-        if (NS_FAILED(rv)) {
-            NS_ERROR("Failed to get the Unicode character category service!");
-            gGenCategory = nsnull;
-        }
-    }
-    return gGenCategory;
-}
-
 void
 gfxPlatform::SetupClusterBoundaries(gfxTextRun *aTextRun, const PRUnichar *aString)
 {
@@ -1108,45 +1596,145 @@ gfxPlatform::SetupClusterBoundaries(gfxTextRun *aTextRun, const PRUnichar *aStri
         // XXX is this true in all languages???
         // behdad: don't think so.  Czech for example IIRC has a
         // 'ch' grapheme.
+        // jfkthame: but that's not expected to behave as a grapheme cluster
+        // for selection/editing/etc.
         return;
     }
 
-    nsIUGenCategory* gc = GetGenCategory();
-    if (!gc) {
-        NS_WARNING("No Unicode category service: cannot determine clusters");
-        return;
-    }
+    gfxShapedWord::SetupClusterBoundaries(aTextRun->GetCharacterGlyphs(),
+                                          aString, aTextRun->GetLength());
+}
 
-    PRUint32 i, length = aTextRun->GetLength();
-    for (i = 0; i < length; ++i) {
-        PRBool surrogatePair = PR_FALSE;
-        PRUint32 ch = aString[i];
-        if (NS_IS_HIGH_SURROGATE(ch) &&
-            i < length - 1 && NS_IS_LOW_SURROGATE(aString[i+1])) {
-            ch = SURROGATE_TO_UCS4(ch, aString[i+1]);
-            surrogatePair = PR_TRUE;
-        }
-        if (i > 0 && gc->Get(ch) == nsIUGenCategory::kMark) {
-            gfxTextRun::CompressedGlyph g;
-            aTextRun->SetGlyphs(i, g.SetComplex(PR_FALSE, PR_TRUE, 0), nsnull);
-        }
-        if (surrogatePair) {
-            ++i;
-            gfxTextRun::CompressedGlyph g;
-            aTextRun->SetGlyphs(i, g.SetComplex(PR_FALSE, PR_TRUE, 0), nsnull);
-        }
+int32_t
+gfxPlatform::GetBidiNumeralOption()
+{
+    if (mBidiNumeralOption == UNINITIALIZED_VALUE) {
+        mBidiNumeralOption = Preferences::GetInt(BIDI_NUMERAL_PREF, 0);
     }
+    return mBidiNumeralOption;
 }
 
 void
-gfxPlatform::FontsPrefsChanged(nsIPrefBranch *aPrefBranch, const char *aPref)
+gfxPlatform::FontsPrefsChanged(const char *aPref)
 {
-    NS_ASSERTION(aPref != nsnull, "null preference");
+    NS_ASSERTION(aPref != nullptr, "null preference");
     if (!strcmp(GFX_DOWNLOADABLE_FONTS_ENABLED, aPref)) {
         mAllowDownloadableFonts = UNINITIALIZED_VALUE;
-    } else if (!strcmp(GFX_PREF_HARFBUZZ_LEVEL, aPref)) {
-        mUseHarfBuzzLevel = UNINITIALIZED_VALUE;
-        gfxTextRunWordCache::Flush();
+    } else if (!strcmp(GFX_DOWNLOADABLE_FONTS_SANITIZE, aPref)) {
+        mDownloadableFontsSanitize = UNINITIALIZED_VALUE;
+    } else if (!strcmp(GFX_PREF_FALLBACK_USE_CMAPS, aPref)) {
+        mFallbackUsesCmaps = UNINITIALIZED_VALUE;
+#ifdef MOZ_GRAPHITE
+    } else if (!strcmp(GFX_PREF_GRAPHITE_SHAPING, aPref)) {
+        mGraphiteShapingEnabled = UNINITIALIZED_VALUE;
+        gfxFontCache *fontCache = gfxFontCache::GetCache();
+        if (fontCache) {
+            fontCache->AgeAllGenerations();
+            fontCache->FlushShapedWordCaches();
+        }
+#endif
+    } else if (!strcmp(GFX_PREF_HARFBUZZ_SCRIPTS, aPref)) {
+        mUseHarfBuzzScripts = UNINITIALIZED_VALUE;
+        gfxFontCache *fontCache = gfxFontCache::GetCache();
+        if (fontCache) {
+            fontCache->AgeAllGenerations();
+            fontCache->FlushShapedWordCaches();
+        }
+    } else if (!strcmp(BIDI_NUMERAL_PREF, aPref)) {
+        mBidiNumeralOption = UNINITIALIZED_VALUE;
+    } else if (!strcmp(GFX_PREF_OPENTYPE_SVG, aPref)) {
         gfxFontCache::GetCache()->AgeAllGenerations();
     }
+}
+
+
+PRLogModuleInfo*
+gfxPlatform::GetLog(eGfxLog aWhichLog)
+{
+#ifdef PR_LOGGING
+    switch (aWhichLog) {
+    case eGfxLog_fontlist:
+        return sFontlistLog;
+        break;
+    case eGfxLog_fontinit:
+        return sFontInitLog;
+        break;
+    case eGfxLog_textrun:
+        return sTextrunLog;
+        break;
+    case eGfxLog_textrunui:
+        return sTextrunuiLog;
+        break;
+    case eGfxLog_cmapdata:
+        return sCmapDataLog;
+        break;
+    default:
+        break;
+    }
+
+    return nullptr;
+#else
+    return nullptr;
+#endif
+}
+
+int
+gfxPlatform::GetScreenDepth() const
+{
+    NS_WARNING("GetScreenDepth not implemented on this platform -- returning 0!");
+    return 0;
+}
+
+mozilla::gfx::SurfaceFormat
+gfxPlatform::Optimal2DFormatForContent(gfxASurface::gfxContentType aContent)
+{
+  switch (aContent) {
+  case gfxASurface::CONTENT_COLOR:
+    switch (GetOffscreenFormat()) {
+    case gfxASurface::ImageFormatARGB32:
+      return mozilla::gfx::FORMAT_B8G8R8A8;
+    case gfxASurface::ImageFormatRGB24:
+      return mozilla::gfx::FORMAT_B8G8R8X8;
+    case gfxASurface::ImageFormatRGB16_565:
+      return mozilla::gfx::FORMAT_R5G6B5;
+    default:
+      NS_NOTREACHED("unknown gfxImageFormat for CONTENT_COLOR");
+      return mozilla::gfx::FORMAT_B8G8R8A8;
+    }
+  case gfxASurface::CONTENT_ALPHA:
+    return mozilla::gfx::FORMAT_A8;
+  case gfxASurface::CONTENT_COLOR_ALPHA:
+    return mozilla::gfx::FORMAT_B8G8R8A8;
+  default:
+    NS_NOTREACHED("unknown gfxContentType");
+    return mozilla::gfx::FORMAT_B8G8R8A8;
+  }
+}
+
+gfxImageFormat
+gfxPlatform::OptimalFormatForContent(gfxASurface::gfxContentType aContent)
+{
+  switch (aContent) {
+  case gfxASurface::CONTENT_COLOR:
+    return GetOffscreenFormat();
+  case gfxASurface::CONTENT_ALPHA:
+    return gfxASurface::ImageFormatA8;
+  case gfxASurface::CONTENT_COLOR_ALPHA:
+    return gfxASurface::ImageFormatARGB32;
+  default:
+    NS_NOTREACHED("unknown gfxContentType");
+    return gfxASurface::ImageFormatARGB32;
+  }
+}
+
+void
+gfxPlatform::OrientationSyncPrefsObserverChanged()
+{
+  mOrientationSyncMillis = Preferences::GetUint("layers.orientation.sync.timeout", (uint32_t)0);
+}
+
+uint32_t
+gfxPlatform::GetOrientationSyncMillis() const
+{
+  return mOrientationSyncMillis;
 }

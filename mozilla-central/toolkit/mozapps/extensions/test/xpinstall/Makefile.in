@@ -1,51 +1,21 @@
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# The Initial Developer of the Original Code is
-# the Mozilla Foundation.
-# Portions created by the Initial Developer are Copyright (C) 2008
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either of the GNU General Public License Version 2 or later (the "GPL"),
-# or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH		= ../../../../..
+DEPTH		= @DEPTH@
 topsrcdir	= @top_srcdir@
 srcdir		= @srcdir@
 VPATH		= @srcdir@
-relativesrcdir  = toolkit/mozapps/extensions/test/xpinstall
+relativesrcdir  = @relativesrcdir@
 
 include $(DEPTH)/config/autoconf.mk
-include $(topsrcdir)/config/rules.mk
 
-_BROWSER_FILES = head.js \
+# browser_bug672485.js is disabled due to a leak. See bug 682410.
+
+MOCHITEST_BROWSER_FILES = head.js \
                  browser_unsigned_url.js \
                  browser_unsigned_trigger.js \
+                 browser_unsigned_trigger_iframe.js \
                  browser_whitelist.js \
                  browser_whitelist2.js \
                  browser_whitelist3.js \
@@ -77,6 +47,7 @@ _BROWSER_FILES = head.js \
                  browser_auth.js \
                  browser_auth2.js \
                  browser_auth3.js \
+                 browser_auth4.js \
                  browser_offline.js \
                  browser_navigateaway.js \
                  browser_navigateaway2.js \
@@ -85,6 +56,17 @@ _BROWSER_FILES = head.js \
                  browser_cancel.js \
                  browser_multipackage.js \
                  browser_trigger_redirect.js \
+                 browser_httphash.js \
+                 browser_httphash2.js \
+                 browser_httphash3.js \
+                 browser_httphash4.js \
+                 browser_httphash5.js \
+                 browser_httphash6.js \
+                 browser_badargs.js \
+                 browser_badargs2.js \
+                 browser_bug611242.js \
+                 browser_bug638292.js \
+                 browser_bug645699.js \
                  unsigned.xpi \
                  signed.xpi \
                  signed2.xpi \
@@ -100,13 +82,17 @@ _BROWSER_FILES = head.js \
                  multipackage.xpi \
                  enabled.html \
                  installtrigger.html \
+                 installtrigger_frame.html \
                  startsoftwareupdate.html \
                  installchrome.html \
                  triggerredirect.html \
                  authRedirect.sjs \
                  cookieRedirect.sjs \
+                 hashRedirect.sjs \
                  bug540558.html \
+                 bug638292.html \
+                 bug645699.html \
+                 redirect.sjs \
                  $(NULL)
 
-libs::	$(_BROWSER_FILES)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/browser/$(relativesrcdir)
+include $(topsrcdir)/config/rules.mk

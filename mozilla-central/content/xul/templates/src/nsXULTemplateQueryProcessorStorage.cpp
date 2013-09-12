@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is Neil Deakin
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Laurent Jouanneau <laurent.jouanneau@disruptive-innovations.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "prprf.h"
 
@@ -69,14 +37,14 @@ NS_IMPL_ISUPPORTS1(nsXULTemplateResultSetStorage, nsISimpleEnumerator)
 nsXULTemplateResultSetStorage::nsXULTemplateResultSetStorage(mozIStorageStatement* aStatement)
         : mStatement(aStatement)
 {
-    PRUint32 count;
+    uint32_t count;
     nsresult rv = aStatement->GetColumnCount(&count);
     if (NS_FAILED(rv)) {
-        mStatement = nsnull;
+        mStatement = nullptr;
         return;
     }
-    for (PRUint32 c = 0; c < count; c++) {
-        nsCAutoString name;
+    for (uint32_t c = 0; c < count; c++) {
+        nsAutoCString name;
         rv = aStatement->GetColumnName(c, name);
         if (NS_SUCCEEDED(rv)) {
             nsCOMPtr<nsIAtom> columnName = do_GetAtom(NS_LITERAL_CSTRING("?") + name);
@@ -86,10 +54,10 @@ nsXULTemplateResultSetStorage::nsXULTemplateResultSetStorage(mozIStorageStatemen
 }
 
 NS_IMETHODIMP
-nsXULTemplateResultSetStorage::HasMoreElements(PRBool *aResult)
+nsXULTemplateResultSetStorage::HasMoreElements(bool *aResult)
 {
     if (!mStatement) {
-        *aResult = PR_FALSE;
+        *aResult = false;
         return NS_OK;
     }
 
@@ -99,7 +67,7 @@ nsXULTemplateResultSetStorage::HasMoreElements(PRBool *aResult)
     // it could live longer than it needed to get results.
     // So we destroy the statement to free resources when all results are fetched
     if (!*aResult) {
-        mStatement = nsnull;
+        mStatement = nullptr;
     }
     return NS_OK;
 }
@@ -119,11 +87,11 @@ nsXULTemplateResultSetStorage::GetNext(nsISupports **aResult)
 }
 
 
-PRInt32
+int32_t
 nsXULTemplateResultSetStorage::GetColumnIndex(nsIAtom* aColumnName)
 {
-    PRInt32 count = mColumnNames.Count();
-    for (PRInt32 c = 0; c < count; c++) {
+    int32_t count = mColumnNames.Count();
+    for (int32_t c = 0; c < count; c++) {
         if (mColumnNames[c] == aColumnName)
             return c;
     }
@@ -137,16 +105,16 @@ nsXULTemplateResultSetStorage::FillColumnValues(nsCOMArray<nsIVariant>& aArray)
     if (!mStatement)
         return;
 
-    PRInt32 count = mColumnNames.Count();
+    int32_t count = mColumnNames.Count();
 
-    for (PRInt32 c = 0; c < count; c++) {
+    for (int32_t c = 0; c < count; c++) {
         nsCOMPtr<nsIWritableVariant> value = do_CreateInstance("@mozilla.org/variant;1");
 
-        PRInt32 type;
+        int32_t type;
         mStatement->GetTypeOfIndex(c, &type);
 
         if (type == mStatement->VALUE_TYPE_INTEGER) {
-            PRInt64 val = mStatement->AsInt64(c);
+            int64_t val = mStatement->AsInt64(c);
             value->SetAsInt64(val);
         }
         else if (type == mStatement->VALUE_TYPE_FLOAT) {
@@ -177,26 +145,26 @@ NS_IMPL_ISUPPORTS1(nsXULTemplateQueryProcessorStorage,
 
 
 nsXULTemplateQueryProcessorStorage::nsXULTemplateQueryProcessorStorage() 
-    : mGenerationStarted(PR_FALSE)
+    : mGenerationStarted(false)
 {
 }
 
 NS_IMETHODIMP
 nsXULTemplateQueryProcessorStorage::GetDatasource(nsIArray* aDataSources,
                                                   nsIDOMNode* aRootNode,
-                                                  PRBool aIsTrusted,
+                                                  bool aIsTrusted,
                                                   nsIXULTemplateBuilder* aBuilder,
-                                                  PRBool* aShouldDelayBuilding,
+                                                  bool* aShouldDelayBuilding,
                                                   nsISupports** aReturn)
 {
-    *aReturn = nsnull;
-    *aShouldDelayBuilding = PR_FALSE;
+    *aReturn = nullptr;
+    *aShouldDelayBuilding = false;
 
     if (!aIsTrusted) {
         return NS_OK;
     }
 
-    PRUint32 length;
+    uint32_t length;
     nsresult rv = aDataSources->GetLength(&length);
     NS_ENSURE_SUCCESS(rv, rv);
 
@@ -219,13 +187,13 @@ nsXULTemplateQueryProcessorStorage::GetDatasource(nsIArray* aDataSources,
     NS_ENSURE_SUCCESS(rv, rv);
 
     nsCOMPtr<nsIFile> databaseFile;
-    nsCAutoString scheme;
+    nsAutoCString scheme;
     rv = uri->GetScheme(scheme);
     NS_ENSURE_SUCCESS(rv, rv);
 
     if (scheme.EqualsLiteral("profile")) {
 
-        nsCAutoString path;
+        nsAutoCString path;
         rv = uri->GetPath(path);
         NS_ENSURE_SUCCESS(rv, rv);
 
@@ -285,7 +253,7 @@ nsXULTemplateQueryProcessorStorage::InitializeForBuilding(nsISupports* aDatasour
     if (!mStorageConnection)
         return NS_ERROR_INVALID_ARG;
 
-    PRBool ready;
+    bool ready;
     mStorageConnection->GetConnectionReady(&ready);
     if (!ready)
       return NS_ERROR_UNEXPECTED;
@@ -296,7 +264,7 @@ nsXULTemplateQueryProcessorStorage::InitializeForBuilding(nsISupports* aDatasour
 NS_IMETHODIMP
 nsXULTemplateQueryProcessorStorage::Done()
 {
-    mGenerationStarted = PR_FALSE;
+    mGenerationStarted = false;
     return NS_OK;
 }
 
@@ -310,7 +278,7 @@ nsXULTemplateQueryProcessorStorage::CompileQuery(nsIXULTemplateBuilder* aBuilder
     nsCOMPtr<nsIDOMNodeList> childNodes;
     aQueryNode->GetChildNodes(getter_AddRefs(childNodes));
 
-    PRUint32 length;
+    uint32_t length;
     childNodes->GetLength(&length);
 
     nsCOMPtr<mozIStorageStatement> statement;
@@ -318,7 +286,7 @@ nsXULTemplateQueryProcessorStorage::CompileQuery(nsIXULTemplateBuilder* aBuilder
     nsAutoString sqlQuery;
 
     // Let's get all text nodes (which should be the query) 
-    nsContentUtils::GetNodeTextContent(queryContent, PR_FALSE, sqlQuery);
+    nsContentUtils::GetNodeTextContent(queryContent, false, sqlQuery);
 
     nsresult rv = mStorageConnection->CreateStatement(NS_ConvertUTF16toUTF8(sqlQuery),
                                                               getter_AddRefs(statement));
@@ -327,17 +295,16 @@ nsXULTemplateQueryProcessorStorage::CompileQuery(nsIXULTemplateBuilder* aBuilder
         return rv;
     }
 
-    PRUint32 parameterCount = 0;
-    PRUint32 count = queryContent->GetChildCount();
-
-    for (PRUint32 i = 0; i < count; ++i) {
-        nsIContent *child = queryContent->GetChildAt(i);
+    uint32_t parameterCount = 0;
+    for (nsIContent* child = queryContent->GetFirstChild();
+         child;
+         child = child->GetNextSibling()) {
 
         if (child->NodeInfo()->Equals(nsGkAtoms::param, kNameSpaceID_XUL)) {
             nsAutoString value;
-            nsContentUtils::GetNodeTextContent(child, PR_FALSE, value);
+            nsContentUtils::GetNodeTextContent(child, false, value);
 
-            PRUint32 index = parameterCount;
+            uint32_t index = parameterCount;
             nsAutoString name, indexValue;
 
             if (child->GetAttr(kNameSpaceID_None, nsGkAtoms::name, name)) {
@@ -360,39 +327,39 @@ nsXULTemplateQueryProcessorStorage::CompileQuery(nsIXULTemplateBuilder* aBuilder
 
             static nsIContent::AttrValuesArray sTypeValues[] =
                 { &nsGkAtoms::int32, &nsGkAtoms::integer, &nsGkAtoms::int64,
-                  &nsGkAtoms::null, &nsGkAtoms::double_, &nsGkAtoms::string, nsnull };
+                  &nsGkAtoms::null, &nsGkAtoms::double_, &nsGkAtoms::string, nullptr };
 
-            PRInt32 typeError = 1;
-            PRInt32 typeValue = child->FindAttrValueIn(kNameSpaceID_None, nsGkAtoms::type,
+            int32_t typeError = 1;
+            int32_t typeValue = child->FindAttrValueIn(kNameSpaceID_None, nsGkAtoms::type,
                                                        sTypeValues, eCaseMatters);
             rv = NS_ERROR_ILLEGAL_VALUE;
-            PRInt32 valInt32 = 0;
-            PRInt64 valInt64 = 0;
-            PRFloat64 valFloat = 0;
+            int32_t valInt32 = 0;
+            int64_t valInt64 = 0;
+            double valFloat = 0;
 
             switch (typeValue) {
               case 0:
               case 1:
                 typeError = PR_sscanf(NS_ConvertUTF16toUTF8(value).get(),"%d",&valInt32);
                 if (typeError > 0)
-                    rv = statement->BindInt32Parameter(index, valInt32);
+                    rv = statement->BindInt32ByIndex(index, valInt32);
                 break;
               case 2:
                 typeError = PR_sscanf(NS_ConvertUTF16toUTF8(value).get(),"%lld",&valInt64);
                 if (typeError > 0)
-                    rv = statement->BindInt64Parameter(index, valInt64);
+                    rv = statement->BindInt64ByIndex(index, valInt64);
                 break;
               case 3:
-                rv = statement->BindNullParameter(index);
+                rv = statement->BindNullByIndex(index);
                 break;
               case 4:
                 typeError = PR_sscanf(NS_ConvertUTF16toUTF8(value).get(),"%lf",&valFloat);
                 if (typeError > 0)
-                    rv = statement->BindDoubleParameter(index, valFloat);
+                    rv = statement->BindDoubleByIndex(index, valFloat);
                 break;
               case 5:
               case nsIContent::ATTR_MISSING:
-                rv = statement->BindStringParameter(index, value);
+                rv = statement->BindStringByIndex(index, value);
                 break;
               default:
                 typeError = 0;
@@ -422,7 +389,7 @@ nsXULTemplateQueryProcessorStorage::GenerateResults(nsISupports* aDatasource,
                                                     nsISupports* aQuery,
                                                     nsISimpleEnumerator** aResults)
 {
-    mGenerationStarted = PR_TRUE;
+    mGenerationStarted = true;
 
     nsCOMPtr<mozIStorageStatement> statement = do_QueryInterface(aQuery);
     if (!statement)
@@ -455,7 +422,7 @@ nsXULTemplateQueryProcessorStorage::TranslateRef(nsISupports* aDatasource,
                                                  nsIXULTemplateResult** aRef)
 {
     nsXULTemplateResultStorage* result =
-        new nsXULTemplateResultStorage(nsnull);
+        new nsXULTemplateResultStorage(nullptr);
     if (!result)
         return NS_ERROR_OUT_OF_MEMORY;
 
@@ -469,8 +436,8 @@ NS_IMETHODIMP
 nsXULTemplateQueryProcessorStorage::CompareResults(nsIXULTemplateResult* aLeft,
                                                    nsIXULTemplateResult* aRight,
                                                    nsIAtom* aVar,
-                                                   PRUint32 aSortHints,
-                                                   PRInt32* aResult)
+                                                   uint32_t aSortHints,
+                                                   int32_t* aResult)
 {
     *aResult = 0;
     if (!aVar)
@@ -490,13 +457,13 @@ nsXULTemplateQueryProcessorStorage::CompareResults(nsIXULTemplateResult* aLeft,
 
         if (vLeftValue && vRightValue) {
             nsresult rv1, rv2;
-            PRUint16 vtypeL, vtypeR;
+            uint16_t vtypeL, vtypeR;
             vLeftValue->GetDataType(&vtypeL);
             vRightValue->GetDataType(&vtypeR);
 
             if (vtypeL == vtypeR) {
                 if (vtypeL == nsIDataType::VTYPE_INT64) {
-                    PRInt64 leftValue, rightValue;
+                    int64_t leftValue, rightValue;
                     rv1 = vLeftValue->GetAsInt64(&leftValue);
                     rv2 = vRightValue->GetAsInt64(&rightValue);
                     if (NS_SUCCEEDED(rv1) && NS_SUCCEEDED(rv2)) {

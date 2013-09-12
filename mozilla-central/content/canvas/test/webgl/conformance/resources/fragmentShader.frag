@@ -10,7 +10,7 @@ are met:
    notice, this list of conditions and the following disclaimer in the
    documentation and/or other materials provided with the distribution.
 
-THIS SOFTWARE IS PROVIDED BY APPLE COMPUTER, INC. ``AS IS'' AND ANY
+THIS SOFTWARE IS PROVIDED BY APPLE COMPUTER, INC. AS IS AND ANY
 EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
 PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL APPLE COMPUTER, INC. OR
@@ -24,11 +24,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 // Workaround for non-compliant WebGL implementations (FIXME)
-#if defined(GL_ES)
 varying mediump vec3 v_normal;
-#else
-varying vec3 v_normal;
-#endif
 
 void main()
 {

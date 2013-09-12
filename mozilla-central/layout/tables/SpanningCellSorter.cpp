@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 // vim:cindent:ts=4:et:sw=4:
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla's table layout code.
- *
- * The Initial Developer of the Original Code is the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   L. David Baron <dbaron@dbaron.org> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Code to sort cells by their colspan, used by BasicTableLayoutStrategy.
@@ -46,14 +14,12 @@
 
 //#define DEBUG_SPANNING_CELL_SORTER
 
-SpanningCellSorter::SpanningCellSorter(nsIPresShell *aPresShell)
-  : mPresShell(aPresShell)
-  , mState(ADDING)
-  , mSortedHashTable(nsnull)
+SpanningCellSorter::SpanningCellSorter()
+  : mState(ADDING)
+  , mSortedHashTable(nullptr)
 {
     memset(mArray, 0, sizeof(mArray));
     mHashTable.entryCount = 0;
-    mPresShell->PushStackMemory();
 }
 
 SpanningCellSorter::~SpanningCellSorter()
@@ -63,7 +29,6 @@ SpanningCellSorter::~SpanningCellSorter()
         mHashTable.entryCount = 0;
     }
     delete [] mSortedHashTable;
-    mPresShell->PopStackMemory();
 }
 
 /* static */ PLDHashTableOps
@@ -75,7 +40,7 @@ SpanningCellSorter::HashTableOps = {
     PL_DHashMoveEntryStub,
     PL_DHashClearEntryStub,
     PL_DHashFinalizeStub,
-    nsnull
+    nullptr
 };
 
 /* static */ PLDHashNumber
@@ -84,7 +49,7 @@ SpanningCellSorter::HashTableHashKey(PLDHashTable *table, const void *key)
     return NS_PTR_TO_INT32(key);
 }
 
-/* static */ PRBool
+/* static */ bool
 SpanningCellSorter::HashTableMatchEntry(PLDHashTable *table,
                                         const PLDHashEntryHdr *hdr,
                                         const void *key)
@@ -93,38 +58,38 @@ SpanningCellSorter::HashTableMatchEntry(PLDHashTable *table,
     return NS_PTR_TO_INT32(key) == entry->mColSpan;
 }
 
-PRBool
-SpanningCellSorter::AddCell(PRInt32 aColSpan, PRInt32 aRow, PRInt32 aCol)
+bool
+SpanningCellSorter::AddCell(int32_t aColSpan, int32_t aRow, int32_t aCol)
 {
     NS_ASSERTION(mState == ADDING, "cannot call AddCell after GetNext");
     NS_ASSERTION(aColSpan >= ARRAY_BASE, "cannot add cells with colspan<2");
 
-    Item *i = (Item*) mPresShell->AllocateStackMemory(sizeof(Item));
-    NS_ENSURE_TRUE(i != nsnull, PR_FALSE);
+    Item *i = (Item*) mozilla::AutoStackArena::Allocate(sizeof(Item));
+    NS_ENSURE_TRUE(i != nullptr, false);
 
     i->row = aRow;
     i->col = aCol;
 
     if (UseArrayForSpan(aColSpan)) {
-        PRInt32 index = SpanToIndex(aColSpan);
+        int32_t index = SpanToIndex(aColSpan);
         i->next = mArray[index];
         mArray[index] = i;
     } else {
         if (!mHashTable.entryCount &&
-            !PL_DHashTableInit(&mHashTable, &HashTableOps, nsnull,
+            !PL_DHashTableInit(&mHashTable, &HashTableOps, nullptr,
                                sizeof(HashTableEntry), PL_DHASH_MIN_SIZE)) {
             NS_NOTREACHED("table init failed");
             mHashTable.entryCount = 0;
-            return PR_FALSE;
+            return false;
         }
         HashTableEntry *entry = static_cast<HashTableEntry*>
                                            (PL_DHashTableOperate(&mHashTable, NS_INT32_TO_PTR(aColSpan),
                                  PL_DHASH_ADD));
-        NS_ENSURE_TRUE(entry, PR_FALSE);
+        NS_ENSURE_TRUE(entry, false);
 
         NS_ASSERTION(entry->mColSpan == 0 || entry->mColSpan == aColSpan,
                      "wrong entry");
-        NS_ASSERTION((entry->mColSpan == 0) == (entry->mItems == nsnull),
+        NS_ASSERTION((entry->mColSpan == 0) == (entry->mItems == nullptr),
                      "entry should be either new or properly initialized");
         entry->mColSpan = aColSpan;
 
@@ -132,12 +97,12 @@ SpanningCellSorter::AddCell(PRInt32 aColSpan, PRInt32 aRow, PRInt32 aCol)
         entry->mItems = i;
     }
 
-    return PR_TRUE;
+    return true;
 }
 
 /* static */ PLDHashOperator
 SpanningCellSorter::FillSortedArray(PLDHashTable *table, PLDHashEntryHdr *hdr,
-                                    PRUint32 number, void *arg)
+                                    uint32_t number, void *arg)
 {
     HashTableEntry *entry = static_cast<HashTableEntry*>(hdr);
     HashTableEntry **sh = static_cast<HashTableEntry**>(arg);
@@ -150,8 +115,8 @@ SpanningCellSorter::FillSortedArray(PLDHashTable *table, PLDHashEntryHdr *hdr,
 /* static */ int
 SpanningCellSorter::SortArray(const void *a, const void *b, void *closure)
 {
-    PRInt32 spanA = (*static_cast<HashTableEntry*const*>(a))->mColSpan;
-    PRInt32 spanB = (*static_cast<HashTableEntry*const*>(b))->mColSpan;
+    int32_t spanA = (*static_cast<HashTableEntry*const*>(a))->mColSpan;
+    int32_t spanB = (*static_cast<HashTableEntry*const*>(b))->mColSpan;
 
     if (spanA < spanB)
         return -1;
@@ -161,7 +126,7 @@ SpanningCellSorter::SortArray(const void *a, const void *b, void *closure)
 }
 
 SpanningCellSorter::Item*
-SpanningCellSorter::GetNext(PRInt32 *aColSpan)
+SpanningCellSorter::GetNext(int32_t *aColSpan)
 {
     NS_ASSERTION(mState != DONE, "done enumerating, stop calling");
 
@@ -195,11 +160,11 @@ SpanningCellSorter::GetNext(PRInt32 *aColSpan)
                 if (!sh) {
                     // give up
                     mState = DONE;
-                    return nsnull;
+                    return nullptr;
                 }
                 PL_DHashTableEnumerate(&mHashTable, FillSortedArray, sh);
                 NS_QuickSort(sh, mHashTable.entryCount, sizeof(sh[0]),
-                             SortArray, nsnull);
+                             SortArray, nullptr);
                 mSortedHashTable = sh;
             }
             /* fall through */
@@ -221,5 +186,5 @@ SpanningCellSorter::GetNext(PRInt32 *aColSpan)
         case DONE:
             ;
     }
-    return nsnull;
+    return nullptr;
 }

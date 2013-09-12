@@ -1,42 +1,8 @@
 #! gmake
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is the Netscape security libraries.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1994-2000
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Stephen Fung <fungstep@hotmail.com> and
-#   Douglas Stebila <douglas@stebila.ca>, Sun Microsystems Laboratories
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #######################################################################
 # (1) Include initial platform-independent assignments (MANDATORY).   #
@@ -76,11 +42,58 @@ endif
 
 ifeq ($(FREEBL_NO_DEPEND),1)
 	DEFINES += -DFREEBL_NO_DEPEND
+	STUBS_SRCS = stubs.c
+endif
+
+ifeq ($(FREEBL_LOWHASH),1)
+	LOWHASH_SRCS = nsslowhash.c
+	LOWHASH_EXPORTS = nsslowhash.h
+	MAPFILE_SOURCE = freebl_hash.def
+else
+	MAPFILE_SOURCE = freebl.def
+endif
+
+# FREEBL_USE_PRELINK
+#
+# Most modern version of Linux support a speed optimization scheme where an
+# application called prelink modifies programs and shared libraries to quickly
+# load if they fit into an already designed address space. In short, prelink
+# scans the list of programs and libraries on your system, assigns them a
+# predefined space in the the address space, then provides the fixups to the
+# library.
+#
+# The modification of the shared library is correctly detected by the freebl
+# FIPS checksum scheme where we check a signed hash of the library against the
+# library itself.
+#
+# The prelink command itself can reverse the process of modification and output
+# the prestine shared library as it was before prelink made it's changes.
+# This option tells Freebl could use prelink to output the original copy of
+# the shared library before prelink modified it.
+#
+# FREEBL_PRELINK_COMMAND
+#
+# This is an optional environment variable which can override the default
+# prelink command. It could be used on systems that did something similiar to 
+# prelink but used a different command and syntax. The only requirement is the 
+# program must take the library as the last argument, the program must output 
+# the original library to standard out, and the program does not need to take 
+# any quoted or imbedded spaces in its arguments (except the path to the 
+# library itself, which can have imbedded spaces or special characters).
+#
+ifdef FREEBL_USE_PRELINK
+	DEFINES += -DFREEBL_USE_PRELINK
+ifdef LINUX
+	DEFINES += -D__GNU_SOURCE=1
+endif
+endif
+ifdef FREEBL_PRELINK_COMMAND
+	DEFINES +=-DFREEBL_PRELINK_COMMAND=\"$(FREEBL_PRELINK_COMMAND)\"
 endif
 # NSS_X86 means the target is a 32-bits x86 CPU architecture
 # NSS_X64 means the target is a 64-bits x64 CPU architecture
 # NSS_X86_OR_X64 means the target is either x86 or x64
-ifeq (,$(filter-out x386 x86 x86_64,$(CPU_ARCH)))
+ifeq (,$(filter-out i386 x386 x86 x86_64,$(CPU_ARCH)))
         DEFINES += -DNSS_X86_OR_X64
 ifdef USE_64
         DEFINES += -DNSS_X64
@@ -102,7 +115,7 @@ ifeq (OS2,$(OS_TARGET))
     DEFINES += -DMP_CHAR_STORE_SLOW -DMP_IS_LITTLE_ENDIAN
 endif
 
-ifeq (,$(filter-out WINNT WIN95,$(OS_TARGET)))  #omits WINCE
+ifeq (,$(filter-out WINNT WIN95,$(OS_TARGET)))
 ifndef USE_64
 # 32-bit Windows
 ifdef NS_USE_GCC
@@ -125,20 +138,21 @@ else
 endif
 else
     # -DMP_NO_MP_WORD
+    DEFINES += -DMP_CHAR_STORE_SLOW -DMP_IS_LITTLE_ENDIAN
+ifdef NS_USE_GCC
+# Ideally, we should use amd64 assembly code, but it's not yet mingw-w64
+# compatible.
+else
+# MSVC
     ifdef BUILD_OPT
 	OPTIMIZER += -Ox  # maximum optimization for freebl
     endif
     ASFILES  = arcfour-amd64-masm.asm mpi_amd64_masm.asm mp_comba_amd64_masm.asm
     DEFINES += -DNSS_BEVAND_ARCFOUR -DMPI_AMD64 -DMP_ASSEMBLY_MULTIPLY
     DEFINES += -DNSS_USE_COMBA
-    DEFINES += -DMP_CHAR_STORE_SLOW -DMP_IS_LITTLE_ENDIAN
     MPI_SRCS += mpi_amd64.c
 endif
 endif
-
-ifeq ($(OS_TARGET),WINCE)
-    DEFINES += -DMP_ARGCHK=0	# no assert in WinCE
-    DEFINES += -DSHA_NO_LONG_LONG # avoid 64-bit arithmetic in SHA512
 endif
 
 ifeq ($(OS_TARGET),IRIX)
@@ -154,6 +168,15 @@ ifeq ($(USE_N32),1)
 endif
 endif
 
+ifeq ($(OS_TARGET),Darwin)
+ifeq ($(CPU_ARCH),x86)
+    ASFILES  = mpi_sse2.s
+    DEFINES += -DMP_USE_UINT_DIGIT
+    DEFINES += -DMP_ASSEMBLY_MULTIPLY -DMP_ASSEMBLY_SQUARE
+    DEFINES += -DMP_ASSEMBLY_DIV_2DX1D
+endif
+endif # Darwin
+
 ifeq ($(OS_TARGET),Linux)
 ifeq ($(CPU_ARCH),x86_64)
     ASFILES  = arcfour-amd64-gas.s mpi_amd64_gas.s
@@ -163,8 +186,8 @@ ifeq ($(CPU_ARCH),x86_64)
     DEFINES += -DMP_CHAR_STORE_SLOW -DMP_IS_LITTLE_ENDIAN
 #   DEFINES += -DMPI_AMD64_ADD
     # comment the next two lines to turn off intel HW accelleration
-#    DEFINES += -DUSE_HW_AES
-#    ASFILES += intel-aes.s
+    DEFINES += -DUSE_HW_AES
+    ASFILES += intel-aes.s
     MPI_SRCS += mpi_amd64.c mp_comba.c
 endif
 ifeq ($(CPU_ARCH),x86)
@@ -174,6 +197,12 @@ ifeq ($(CPU_ARCH),x86)
     DEFINES += -DMP_CHAR_STORE_SLOW -DMP_IS_LITTLE_ENDIAN
     # The floating point ECC code doesn't work on Linux x86 (bug 311432).
     #ECL_USE_FP = 1
+endif
+ifeq ($(CPU_ARCH),arm)
+    DEFINES += -DMP_ASSEMBLY_MULTIPLY -DMP_ASSEMBLY_SQUARE 
+    DEFINES += -DMP_USE_UINT_DIGIT
+    DEFINES += -DSHA_NO_LONG_LONG # avoid 64-bit arithmetic in SHA512
+    MPI_SRCS += mpi_arm.c
 endif
 endif # Linux
 
@@ -210,7 +239,9 @@ else
     MPI_SRCS += mpi_hp.c 
     ASFILES  += hpma512.s hppa20.s 
     DEFINES  += -DMP_ASSEMBLY_MULTIPLY -DMP_ASSEMBLY_SQUARE
+ifndef NS_USE_GCC
     ARCHFLAG = -Aa +e +DA2.0 +DS2.0
+endif
 endif
 endif
 endif
@@ -410,8 +441,8 @@ else
 	DEFINES += -DNSS_BEVAND_ARCFOUR -DMPI_AMD64 -DMP_ASSEMBLY_MULTIPLY
 	DEFINES += -DNSS_USE_COMBA -DMP_CHAR_STORE_SLOW -DMP_IS_LITTLE_ENDIAN
 	# comment the next two lines to turn off intel HW accelleration
-#	DEFINES += -DUSE_HW_AES
-#	ASFILES += intel-aes.s
+	DEFINES += -DUSE_HW_AES
+	ASFILES += intel-aes.s
 	MPI_SRCS += mpi_amd64.c
     else
 	# Solaris x86

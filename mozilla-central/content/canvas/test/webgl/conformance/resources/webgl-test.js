@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2009 Apple Computer, Inc.  All rights reserved.
+Copyright (C) 2011 Apple Computer, Inc.  All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions
@@ -42,19 +42,16 @@ function create3DContext(canvas, attributes)
 {
     if (!canvas)
         canvas = document.createElement("canvas");
+    var names = ["webgl", "experimental-webgl"];
     var context = null;
-    try {
-        context = canvas.getContext("experimental-webgl", attributes);
-    } catch(e) {}
-    if (!context) {
-        try {
-            context = canvas.getContext("webkit-3d", attributes);
-        } catch(e) {}
-    }
-    if (!context) {
-        try {
-            context = canvas.getContext("moz-webgl", attributes);
-        } catch(e) {}
+    for (var i = 0; i < names.length; ++i) {
+      try {
+        context = canvas.getContext(names[i], attributes);
+      } catch (e) {
+      }
+      if (context) {
+        break;
+      }
     }
     if (!context) {
         throw "Unable to fetch WebGL rendering context for Canvas";
@@ -102,10 +99,14 @@ function getGLErrorAsString(ctx, err) {
       return name;
     }
   }
-  return err.toString();
+  return "0x" + err.toString(16);
 }
 
-function shouldGenerateGLError(ctx, glError, evalStr) {
+// Pass undefined for glError to test that it at least throws some error
+function shouldGenerateGLError(ctx, glErrors, evalStr) {
+  if (!glErrors.length) {
+    glErrors = [glErrors];
+  }
   var exception;
   try {
     eval(evalStr);
@@ -116,10 +117,14 @@ function shouldGenerateGLError(ctx, glError, evalStr) {
     testFailed(evalStr + " threw exception " + exception);
   } else {
     var err = ctx.getError();
-    if (err != glError) {
-      testFailed(evalStr + " expected: " + getGLErrorAsString(ctx, glError) + ". Was " + getGLErrorAsString(ctx, err) + ".");
+    if (glErrors.indexOf(err) < 0) {
+      var errStrs = [];
+      for (var ii = 0; ii < glErrors.length; ++ii) {
+        errStrs.push(getGLErrorAsString(ctx, glErrors[ii]));
+      }
+      testFailed(evalStr + " expected: " + errStrs.join(" or ") + ". Was " + getGLErrorAsString(ctx, err) + ".");
     } else {
-      testPassed(evalStr + " generated expected GL error: " + getGLErrorAsString(ctx, glError) + ".");
+      testPassed(evalStr + " generated expected GL error: " + getGLErrorAsString(ctx, err) + ".");
     }
   }
 }
@@ -127,18 +132,33 @@ function shouldGenerateGLError(ctx, glError, evalStr) {
 /**
  * Tests that the first error GL returns is the specified error.
  * @param {!WebGLContext} gl The WebGLContext to use.
- * @param {number} glError The expected gl error.
+ * @param {number|!Array.<number>} glError The expected gl
+ *        error. Multiple errors can be passed in using an
+ *        array.
  * @param {string} opt_msg Optional additional message.
  */
-function glErrorShouldBe(gl, glError, opt_msg) {
+function glErrorShouldBe(gl, glErrors, opt_msg) {
+  if (!glErrors.length) {
+    glErrors = [glErrors];
+  }
   opt_msg = opt_msg || "";
   var err = gl.getError();
-  if (err != glError) {
-    testFailed("getError expected: " + getGLErrorAsString(gl, glError) +
-               ". Was " + getGLErrorAsString(gl, err) + " : " + opt_msg);
+  var ndx = glErrors.indexOf(err);
+  if (ndx < 0) {
+    if (glErrors.length == 1) {
+      testFailed("getError expected: " + getGLErrorAsString(gl, glErrors[0]) +
+                 ". Was " + getGLErrorAsString(gl, err) + " : " + opt_msg);
+    } else {
+      var errs = [];
+      for (var ii = 0; ii < glErrors.length; ++ii) {
+        errs.push(getGLErrorAsString(gl, glErrors[ii]));
+      }
+      testFailed("getError expected one of: [" + errs.join(", ") +
+                 "]. Was " + getGLErrorAsString(gl, err) + " : " + opt_msg);
+    }
   } else {
     testPassed("getError was expected value: " +
-                getGLErrorAsString(gl, glError) + " : " + opt_msg);
+                getGLErrorAsString(gl, err) + " : " + opt_msg);
   }
 };
 
@@ -151,55 +171,55 @@ function glErrorShouldBe(gl, glError, opt_msg) {
 //
 function createProgram(gl, vshaders, fshaders, attribs)
 {
-    if (typeof(vshaders) == "string")
-  vshaders = [vshaders];
-    if (typeof(fshaders) == "string")
-  fshaders = [fshaders];
+  if (typeof(vshaders) == "string")
+    vshaders = [vshaders];
+  if (typeof(fshaders) == "string")
+    fshaders = [fshaders];
 
-    var shaders = [];
-    var i;
+  var shaders = [];
+  var i;
 
-    for (i = 0; i < vshaders.length; ++i) {
-  var shader = loadShader(gl, vshaders[i], gl.VERTEX_SHADER);
-  if (!shader)
+  for (i = 0; i < vshaders.length; ++i) {
+    var shader = loadShader(gl, vshaders[i], gl.VERTEX_SHADER);
+    if (!shader)
       return null;
-  shaders.push(shader);
-    }
-
-    for (i = 0; i < fshaders.length; ++i) {
-  var shader = loadShader(gl, fshaders[i], gl.FRAGMENT_SHADER);
-  if (!shader)
-      return null;
-  shaders.push(shader);
-    }
-
-    var prog = gl.createProgram();
-    for (i = 0; i < shaders.length; ++i) {
-  gl.attachShader(prog, shaders[i]);
-    }
-
-    if (attribs) {
-        for (var i in attribs) {
-            gl.bindAttribLocation (prog, i, attribs[i]);
+    shaders.push(shader);
   }
+
+  for (i = 0; i < fshaders.length; ++i) {
+    var shader = loadShader(gl, fshaders[i], gl.FRAGMENT_SHADER);
+    if (!shader)
+      return null;
+    shaders.push(shader);
+  }
+
+  var prog = gl.createProgram();
+  for (i = 0; i < shaders.length; ++i) {
+    gl.attachShader(prog, shaders[i]);
+  }
+
+  if (attribs) {
+    for (var i = 0; i < attribs.length; ++i) {
+      gl.bindAttribLocation(prog, i, attribs[i]);
     }
+  }
 
-    gl.linkProgram(prog);
+  gl.linkProgram(prog);
 
-    // Check the link status
-    var linked = gl.getProgramParameter(prog, gl.LINK_STATUS);
-    if (!linked) {
-        // something went wrong with the link
-        var error = gl.getProgramInfoLog(prog);
-        webglTestLog("Error in program linking:" + error);
+  // Check the link status
+  var linked = gl.getProgramParameter(prog, gl.LINK_STATUS);
+  if (!linked) {
+    // something went wrong with the link
+    var error = gl.getProgramInfoLog(prog);
+    webglTestLog("Error in program linking:" + error);
 
-        gl.deleteProgram(prog);
-  for (i = 0; i < shaders.length; ++i)
+    gl.deleteProgram(prog);
+    for (i = 0; i < shaders.length; ++i)
       gl.deleteShader(shaders[i]);
-        return null;
-    }
+    return null;
+  }
 
-    return prog;
+  return prog;
 }
 
 //
@@ -342,12 +362,34 @@ function loadProgram(context, vertexShaderPath, fragmentShaderPath, isFile) {
     return program;
 }
 
+var getBasePathForResources = function() {
+  var expectedBase = "webgl-test.js";
+  var scripts = document.getElementsByTagName('script');
+  for (var script, i = 0; script = scripts[i]; i++) {
+    var src = script.src;
+    var l = src.length;
+    if (src.substr(l - expectedBase.length) == expectedBase) {
+      return src.substr(0, l - expectedBase.length);
+    }
+  }
+  throw 'oops';
+};
+
+
 function loadStandardVertexShader(context) {
-    return loadShader(context, "resources/vertexShader.vert", context.VERTEX_SHADER, true);
+    return loadShader(
+        context,
+        getBasePathForResources() + "vertexShader.vert",
+        context.VERTEX_SHADER,
+        true);
 }
 
 function loadStandardFragmentShader(context) {
-    return loadShader(context, "resources/fragmentShader.frag", context.FRAGMENT_SHADER, true);
+    return loadShader(
+        context,
+        getBasePathForResources() + "fragmentShader.frag",
+        context.FRAGMENT_SHADER,
+        true);
 }
 
 //
@@ -707,7 +749,7 @@ function doLoadImageTexture(ctx, image, texture)
 {
     ctx.enable(ctx.TEXTURE_2D);
     ctx.bindTexture(ctx.TEXTURE_2D, texture);
-    ctx.texImage2D(ctx.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    ctx.texImage2D(ctx.TEXTURE_2D, 0, ctx.RGBA, ctx.RGBA, ctx.UNSIGNED_BYTE, image);
     ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_MAG_FILTER, ctx.LINEAR);
     ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_MIN_FILTER, ctx.LINEAR_MIPMAP_LINEAR);
     ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_S, ctx.CLAMP_TO_EDGE);

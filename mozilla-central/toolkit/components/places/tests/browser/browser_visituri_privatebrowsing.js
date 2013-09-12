@@ -3,13 +3,10 @@
  * http://creativecommons.org/publicdomain/zero/1.0/
  */
 
-Components.utils.import("resource://gre/modules/XPCOMUtils.jsm");
-Components.utils.import("resource://gre/modules/Services.jsm");
-
 const INITIAL_URL = "http://example.com/tests/toolkit/components/places/tests/browser/begin.html";
 const FINAL_URL = "http://example.com/tests/toolkit/components/places/tests/browser/final.html";
 
-let gTab = gBrowser.selectedTab = gBrowser.addTab();
+let gTab;
 
 /**
  * One-time observer callback.
@@ -40,24 +37,15 @@ function waitForLoad(callback)
   }, true);
 }
 
-/**
- * Clears history invoking callback when done.
- */
-function waitForClearHistory(aCallback)
-{
-  let observer = {
-    observe: function(aSubject, aTopic, aData)
-    {
-      Services.obs.removeObserver(this, PlacesUtils.TOPIC_EXPIRATION_FINISHED);
-      aCallback(aSubject, aTopic, aData);
-    }
-  };
-  Services.obs.addObserver(observer, PlacesUtils.TOPIC_EXPIRATION_FINISHED, false);
-  PlacesUtils.bhistory.removeAllPages();
-}
-
 function test()
 {
+  if (!("@mozilla.org/privatebrowsing;1" in Cc)) {
+    todo(false, "PB service is not available, bail out");
+    return;
+  }
+
+  gTab = gBrowser.selectedTab = gBrowser.addTab();
+
   waitForExplicitFinish();
 
   Services.prefs.setBoolPref("browser.privatebrowsing.keep_current_session", true);
@@ -72,7 +60,7 @@ function test()
     if (uri.spec != FINAL_URL)
       return;
     gBrowser.removeCurrentTab();
-    waitForClearHistory(finish);
+    promiseClearHistory().then(finish);
   });
 
   content.location.href = INITIAL_URL;

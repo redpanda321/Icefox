@@ -1,40 +1,8 @@
 /* -*- Mode: Java; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set ts=2 sw=2 sts=2 et: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla SMIL Test Code.
- *
- * The Initial Developer of the Original Code is the Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Daniel Holbert <dholbert@mozilla.com> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* testcase data for simple "from-to" animations of CSS properties */
 
@@ -105,7 +73,33 @@ var _fromToTestLists = {
                                      "#gradB\") rgb(0, 0, 255)" },
                            "need support for URI-based paints"),
   ],
+  lengthNoUnits: [
+    new AnimTestcaseFromTo("0",  "20", { fromComp:  "0px",
+                                         midComp:  "10px",
+                                         toComp:   "20px"}),
+    new AnimTestcaseFromTo("50",  "0", { fromComp: "50px",
+                                         midComp:  "25px",
+                                         toComp:    "0px"}),
+    new AnimTestcaseFromTo("30", "80", { fromComp: "30px",
+                                         midComp:  "55px",
+                                         toComp:   "80px"}),
+  ],
+  lengthNoUnitsSVG: [
+    new AnimTestcaseFromTo("0",  "20", { fromComp:  "0",
+                                         midComp:  "10",
+                                         toComp:   "20"}),
+    new AnimTestcaseFromTo("50",  "0", { fromComp: "50",
+                                         midComp:  "25",
+                                         toComp:    "0"}),
+    new AnimTestcaseFromTo("30", "80", { fromComp: "30",
+                                         midComp:  "55",
+                                         toComp:   "80"}),
+  ],
   lengthPx: [
+    new AnimTestcaseFromTo("0px", "12px", { fromComp: "0px",
+                                            midComp:  "6px"}),
+    new AnimTestcaseFromTo("16px", "0px", { midComp: "8px",
+                                            toComp:  "0px"}),
     new AnimTestcaseFromTo("10px", "20px", { midComp: "15px"}),
     new AnimTestcaseFromTo("41px", "1px", { midComp: "21px"}),
   ],
@@ -266,7 +260,8 @@ var gFromToBundles = [
     new AnimTestcaseFromTo("cursive", "monospace"),
   ]),
   new TestcaseBundle(gPropList.font_size,
-                     [].concat(_fromToTestLists.lengthPx, [
+                     [].concat(_fromToTestLists.lengthNoUnits,
+                               _fromToTestLists.lengthPx, [
     new AnimTestcaseFromTo("10px", "40%", { midComp: "15px", toComp: "20px" }),
     new AnimTestcaseFromTo("160%", "80%",
                            { fromComp: "80px",
@@ -331,7 +326,8 @@ var gFromToBundles = [
                              toComp: "optimizespeed" }),
   ]),
   new TestcaseBundle(gPropList.letter_spacing,
-                     [].concat(_fromToTestLists.lengthPx,
+                     [].concat(_fromToTestLists.lengthNoUnits,
+                               _fromToTestLists.lengthPx,
                                _fromToTestLists.lengthPxPctSVG)),
   new TestcaseBundle(gPropList.letter_spacing,
                      _fromToTestLists.lengthPctSVG,
@@ -388,7 +384,8 @@ var gFromToBundles = [
                              midComp:  "1, 3, 3, 5, 5, 2, 2, 4, 4, 6"}),
   ])),
   new TestcaseBundle(gPropList.stroke_dashoffset,
-                     [].concat(_fromToTestLists.lengthPx,
+                     [].concat(_fromToTestLists.lengthNoUnitsSVG,
+                               _fromToTestLists.lengthPx,
                                _fromToTestLists.lengthPxPctSVG,
                                _fromToTestLists.lengthPctSVG)),
   new TestcaseBundle(gPropList.stroke_linecap, [
@@ -405,7 +402,8 @@ var gFromToBundles = [
   ]),
   new TestcaseBundle(gPropList.stroke_opacity, _fromToTestLists.opacity),
   new TestcaseBundle(gPropList.stroke_width,
-                     [].concat(_fromToTestLists.lengthPx,
+                     [].concat(_fromToTestLists.lengthNoUnitsSVG,
+                               _fromToTestLists.lengthPx,
                                _fromToTestLists.lengthPxPctSVG,
                                _fromToTestLists.lengthPctSVG, [
     new AnimTestcaseFromTo("inherit", "7px",
@@ -433,12 +431,16 @@ var gFromToBundles = [
   new TestcaseBundle(gPropList.unicode_bidi, [
     new AnimTestcaseFromTo("embed", "bidi-override"),
   ]),
+  new TestcaseBundle(gPropList.vector_effect, [
+    new AnimTestcaseFromTo("none", "non-scaling-stroke"),
+  ]),
   new TestcaseBundle(gPropList.visibility, [
     new AnimTestcaseFromTo("visible", "hidden"),
     new AnimTestcaseFromTo("hidden", "collapse"),
   ]),
   new TestcaseBundle(gPropList.word_spacing,
-                     [].concat(_fromToTestLists.lengthPx,
+                     [].concat(_fromToTestLists.lengthNoUnits,
+                               _fromToTestLists.lengthPx,
                                _fromToTestLists.lengthPxPctSVG)),
   new TestcaseBundle(gPropList.word_spacing,
                      _fromToTestLists.lengthPctSVG,

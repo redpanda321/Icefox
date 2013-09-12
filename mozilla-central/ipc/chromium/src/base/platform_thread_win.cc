@@ -24,7 +24,7 @@ DWORD __stdcall ThreadFunc(void* closure) {
   PlatformThread::Delegate* delegate =
       static_cast<PlatformThread::Delegate*>(closure);
   delegate->ThreadMain();
-  return NULL;
+  return 0;
 }
 
 }  // namespace
@@ -57,10 +57,10 @@ void PlatformThread::SetName(const char* name) {
   info.dwThreadID = CurrentId();
   info.dwFlags = 0;
 
-  __try {
+  MOZ_SEH_TRY {
     RaiseException(kVCThreadNameException, 0, sizeof(info)/sizeof(DWORD),
                    reinterpret_cast<DWORD_PTR*>(&info));
-  } __except(EXCEPTION_CONTINUE_EXECUTION) {
+  } MOZ_SEH_EXCEPT(EXCEPTION_CONTINUE_EXECUTION) {
   }
 }
 

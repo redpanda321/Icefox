@@ -1,42 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set ts=2 sw=2 et tw=80: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Ryan Jones <sciguyryan@gmail.com>
- *   Laurent Jouanneau <laurent.jouanneau@disruptive-innovations.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * nsIContentSerializer implementation that can be used with an
@@ -47,10 +13,8 @@
 #include "nsHTMLContentSerializer.h"
 
 #include "nsIDOMElement.h"
-#include "nsIDOMText.h"
 #include "nsIContent.h"
 #include "nsIDocument.h"
-#include "nsIDOMDocument.h"
 #include "nsINameSpaceManager.h"
 #include "nsString.h"
 #include "nsUnicharUtils.h"
@@ -68,8 +32,16 @@
 #include "nsLWBrkCIID.h"
 #include "nsIScriptElement.h"
 #include "nsAttrName.h"
+#include "nsIDocShell.h"
+#include "nsIEditorDocShell.h"
+#include "nsIEditor.h"
+#include "nsIHTMLEditor.h"
+#include "mozilla/dom/Element.h"
+#include "nsParserConstants.h"
 
-static const PRInt32 kLongLineLen = 128;
+using namespace mozilla::dom;
+
+static const int32_t kLongLineLen = 128;
 
 nsresult NS_NewHTMLContentSerializer(nsIContentSerializer** aSerializer)
 {
@@ -83,7 +55,7 @@ nsresult NS_NewHTMLContentSerializer(nsIContentSerializer** aSerializer)
 
 nsHTMLContentSerializer::nsHTMLContentSerializer()
 {
-    mIsHTMLSerializer = PR_TRUE;
+    mIsHTMLSerializer = true;
 }
 
 nsHTMLContentSerializer::~nsHTMLContentSerializer()
@@ -104,9 +76,10 @@ nsHTMLContentSerializer::SerializeHTMLAttributes(nsIContent* aContent,
                                                  nsAString& aTagPrefix,
                                                  const nsAString& aTagNamespaceURI,
                                                  nsIAtom* aTagName,
+                                                 int32_t aNamespace,
                                                  nsAString& aStr)
 {
-  PRInt32 count = aContent->GetAttrCount();
+  int32_t count = aContent->GetAttrCount();
   if (!count)
     return;
 
@@ -114,10 +87,10 @@ nsHTMLContentSerializer::SerializeHTMLAttributes(nsIContent* aContent,
   nsAutoString valueStr;
   NS_NAMED_LITERAL_STRING(_mozStr, "_moz");
 
-  for (PRInt32 index = count; index > 0;) {
+  for (int32_t index = count; index > 0;) {
     --index;
     const nsAttrName* name = aContent->GetAttrNameAt(index);
-    PRInt32 namespaceID = name->NamespaceID();
+    int32_t namespaceID = name->NamespaceID();
     nsIAtom* attrName = name->LocalName();
 
     // Filter out any attribute starting with [-|_]moz
@@ -132,20 +105,24 @@ nsHTMLContentSerializer::SerializeHTMLAttributes(nsIContent* aContent,
     // Filter out special case of <br type="_moz"> or <br _moz*>,
     // used by the editor.  Bug 16988.  Yuck.
     //
-    if (aTagName == nsGkAtoms::br && attrName == nsGkAtoms::type &&
+    if (aTagName == nsGkAtoms::br && aNamespace == kNameSpaceID_XHTML &&
+        attrName == nsGkAtoms::type && namespaceID == kNameSpaceID_None &&
         StringBeginsWith(valueStr, _mozStr)) {
       continue;
     }
 
-    if (mIsCopying && mIsFirstChildOfOL && (aTagName == nsGkAtoms::li) && 
-        (attrName == nsGkAtoms::value)){
+    if (mIsCopying && mIsFirstChildOfOL &&
+        aTagName == nsGkAtoms::li && aNamespace == kNameSpaceID_XHTML &&
+        attrName == nsGkAtoms::value && namespaceID == kNameSpaceID_None){
       // This is handled separately in SerializeLIValueAttribute()
       continue;
     }
-    PRBool isJS = IsJavaScript(aContent, attrName, namespaceID, valueStr);
+    bool isJS = IsJavaScript(aContent, attrName, namespaceID, valueStr);
     
-    if (((attrName == nsGkAtoms::href) || 
-         (attrName == nsGkAtoms::src))) {
+    if (((attrName == nsGkAtoms::href &&
+          (namespaceID == kNameSpaceID_None ||
+           namespaceID == kNameSpaceID_XLink)) ||
+         (attrName == nsGkAtoms::src && namespaceID == kNameSpaceID_None))) {
       // Make all links absolute when converting only the selection:
       if (mFlags & nsIDocumentEncoder::OutputAbsoluteLinks) {
         // Would be nice to handle OBJECT and APPLET tags,
@@ -168,7 +145,8 @@ nsHTMLContentSerializer::SerializeHTMLAttributes(nsIContent* aContent,
     }
 
     if (mRewriteEncodingDeclaration && aTagName == nsGkAtoms::meta &&
-        attrName == nsGkAtoms::content) {
+        aNamespace == kNameSpaceID_XHTML && attrName == nsGkAtoms::content
+        && namespaceID == kNameSpaceID_None) {
       // If we're serializing a <meta http-equiv="content-type">,
       // use the proper value, rather than what's in the document.
       nsAutoString header;
@@ -180,31 +158,42 @@ nsHTMLContentSerializer::SerializeHTMLAttributes(nsIContent* aContent,
     }
 
     nsDependentAtomString nameStr(attrName);
+    nsAutoString prefix;
+    if (namespaceID == kNameSpaceID_XML) {
+      prefix.Assign(NS_LITERAL_STRING("xml"));
+    } else if (namespaceID == kNameSpaceID_XLink) {
+      prefix.Assign(NS_LITERAL_STRING("xlink"));
+    }
 
     // Expand shorthand attribute.
-    if (IsShorthandAttr(attrName, aTagName) && valueStr.IsEmpty()) {
+    if (aNamespace == kNameSpaceID_XHTML &&
+        namespaceID == kNameSpaceID_None &&
+        IsShorthandAttr(attrName, aTagName) &&
+        valueStr.IsEmpty()) {
       valueStr = nameStr;
     }
-    SerializeAttr(EmptyString(), nameStr, valueStr, aStr, !isJS);
+    SerializeAttr(prefix, nameStr, valueStr, aStr, !isJS);
   }
 }
 
 NS_IMETHODIMP
-nsHTMLContentSerializer::AppendElementStart(nsIContent *aElement,
-                                            nsIContent *aOriginalElement,
+nsHTMLContentSerializer::AppendElementStart(Element* aElement,
+                                            Element* aOriginalElement,
                                             nsAString& aStr)
 {
   NS_ENSURE_ARG(aElement);
 
   nsIContent* content = aElement;
 
-  PRBool forceFormat = PR_FALSE;
+  bool forceFormat = false;
   if (!CheckElementStart(content, forceFormat, aStr)) {
     return NS_OK;
   }
 
   nsIAtom *name = content->Tag();
-  PRBool lineBreakBeforeOpen = LineBreakBeforeOpen(content->GetNameSpaceID(), name);
+  int32_t ns = content->GetNameSpaceID();
+
+  bool lineBreakBeforeOpen = LineBreakBeforeOpen(ns, name);
 
   if ((mDoFormat || forceFormat) && !mPreLevel && !mDoRaw) {
     if (mColPos && lineBreakBeforeOpen) {
@@ -218,19 +207,19 @@ nsHTMLContentSerializer::AppendElementStart(nsIContent *aElement,
     }
     else if (mAddSpace) {
       AppendToString(PRUnichar(' '), aStr);
-      mAddSpace = PR_FALSE;
+      mAddSpace = false;
     }
   }
   else if (mAddSpace) {
     AppendToString(PRUnichar(' '), aStr);
-    mAddSpace = PR_FALSE;
+    mAddSpace = false;
   }
   else {
     MaybeAddNewlineForRootNode(aStr);
   }
   // Always reset to avoid false newlines in case MaybeAddNewlineForRootNode wasn't
   // called
-  mAddNewlineForRootNode = PR_FALSE;
+  mAddNewlineForRootNode = false;
   
   AppendToString(kLessThan, aStr);
 
@@ -244,15 +233,15 @@ nsHTMLContentSerializer::AppendElementStart(nsIContent *aElement,
 
   // Need to keep track of OL and LI elements in order to get ordinal number 
   // for the LI.
-  if (mIsCopying && name == nsGkAtoms::ol){
+  if (mIsCopying && name == nsGkAtoms::ol && ns == kNameSpaceID_XHTML){
     // We are copying and current node is an OL;
     // Store its start attribute value in olState->startVal.
     nsAutoString start;
-    PRInt32 startAttrVal = 0;
+    int32_t startAttrVal = 0;
 
     aElement->GetAttr(kNameSpaceID_None, nsGkAtoms::start, start);
     if (!start.IsEmpty()){
-      PRInt32 rv = 0;
+      nsresult rv = NS_OK;
       startAttrVal = start.ToInteger(&rv);
       //If OL has "start" attribute, first LI element has to start with that value
       //Therefore subtracting 1 as all the LI elements are incrementing it before using it;
@@ -262,10 +251,10 @@ nsHTMLContentSerializer::AppendElementStart(nsIContent *aElement,
       else
         startAttrVal = 0;
     }
-    mOLStateStack.AppendElement(olState(startAttrVal, PR_TRUE));
+    mOLStateStack.AppendElement(olState(startAttrVal, true));
   }
 
-  if (mIsCopying && name == nsGkAtoms::li) {
+  if (mIsCopying && name == nsGkAtoms::li && ns == kNameSpaceID_XHTML) {
     mIsFirstChildOfOL = IsFirstChildOfOL(aOriginalElement);
     if (mIsFirstChildOfOL){
       // If OL is parent of this LI, serialize attributes in different manner.
@@ -276,19 +265,26 @@ nsHTMLContentSerializer::AppendElementStart(nsIContent *aElement,
   // Even LI passed above have to go through this 
   // for serializing attributes other than "value".
   nsAutoString dummyPrefix;
-  SerializeHTMLAttributes(content, aOriginalElement, dummyPrefix, EmptyString(), name, aStr);
+  SerializeHTMLAttributes(content,
+                          aOriginalElement,
+                          dummyPrefix,
+                          EmptyString(),
+                          name,
+                          ns,
+                          aStr);
 
   AppendToString(kGreaterThan, aStr);
 
-  if (name == nsGkAtoms::script ||
-      name == nsGkAtoms::style ||
-      name == nsGkAtoms::noscript ||
-      name == nsGkAtoms::noframes) {
+  if (ns == kNameSpaceID_XHTML &&
+      (name == nsGkAtoms::script ||
+       name == nsGkAtoms::style ||
+       name == nsGkAtoms::noscript ||
+       name == nsGkAtoms::noframes)) {
     ++mDisableEntityEncoding;
   }
 
   if ((mDoFormat || forceFormat) && !mPreLevel &&
-    !mDoRaw && LineBreakAfterOpen(content->GetNameSpaceID(), name)) {
+    !mDoRaw && LineBreakAfterOpen(ns, name)) {
     AppendNewLineToString(aStr);
   }
 
@@ -298,7 +294,7 @@ nsHTMLContentSerializer::AppendElementStart(nsIContent *aElement,
 }
   
 NS_IMETHODIMP 
-nsHTMLContentSerializer::AppendElementEnd(nsIContent *aElement,
+nsHTMLContentSerializer::AppendElementEnd(Element* aElement,
                                           nsAString& aStr)
 {
   NS_ENSURE_ARG(aElement);
@@ -306,16 +302,18 @@ nsHTMLContentSerializer::AppendElementEnd(nsIContent *aElement,
   nsIContent* content = aElement;
 
   nsIAtom *name = content->Tag();
+  int32_t ns = content->GetNameSpaceID();
 
-  if (name == nsGkAtoms::script ||
-      name == nsGkAtoms::style ||
-      name == nsGkAtoms::noscript ||
-      name == nsGkAtoms::noframes) {
+  if (ns == kNameSpaceID_XHTML &&
+      (name == nsGkAtoms::script ||
+       name == nsGkAtoms::style ||
+       name == nsGkAtoms::noscript ||
+       name == nsGkAtoms::noframes)) {
     --mDisableEntityEncoding;
   }
 
-  PRBool forceFormat = content->HasAttr(kNameSpaceID_None,
-                                        nsGkAtoms::mozdirty);
+  bool forceFormat = !(mFlags & nsIDocumentEncoder::OutputIgnoreMozDirty) &&
+                     content->HasAttr(kNameSpaceID_None, nsGkAtoms::mozdirty);
 
   if ((mDoFormat || forceFormat) && !mPreLevel && !mDoRaw) {
     DecrIndentation(name);
@@ -332,7 +330,7 @@ nsHTMLContentSerializer::AppendElementEnd(nsIContent *aElement,
       return NS_OK;
     }
   }
-  else if (mIsCopying && name == nsGkAtoms::ol) {
+  else if (mIsCopying && name == nsGkAtoms::ol && ns == kNameSpaceID_XHTML) {
     NS_ASSERTION((!mOLStateStack.IsEmpty()), "Cannot have an empty OL Stack");
     /* Though at this point we must always have an state to be deleted as all 
     the OL opening tags are supposed to push an olState object to the stack*/
@@ -341,21 +339,24 @@ nsHTMLContentSerializer::AppendElementEnd(nsIContent *aElement,
     }
   }
   
-  nsIParserService* parserService = nsContentUtils::GetParserService();
+  if (ns == kNameSpaceID_XHTML) {
+    nsIParserService* parserService = nsContentUtils::GetParserService();
 
-  if (parserService) {
-    PRBool isContainer;
+    if (parserService) {
+      bool isContainer;
 
-    parserService->
-      IsContainer(parserService->HTMLCaseSensitiveAtomTagToId(name),
-                  isContainer);
-    if (!isContainer)
-      return NS_OK;
+      parserService->
+        IsContainer(parserService->HTMLCaseSensitiveAtomTagToId(name),
+                    isContainer);
+      if (!isContainer) {
+        return NS_OK;
+      }
+    }
   }
 
   if ((mDoFormat || forceFormat) && !mPreLevel && !mDoRaw) {
 
-    PRBool lineBreakBeforeClose = LineBreakBeforeClose(content->GetNameSpaceID(), name);
+    bool lineBreakBeforeClose = LineBreakBeforeClose(ns, name);
 
     if (mColPos && lineBreakBeforeClose) {
       AppendNewLineToString(aStr);
@@ -365,12 +366,12 @@ nsHTMLContentSerializer::AppendElementEnd(nsIContent *aElement,
     }
     else if (mAddSpace) {
       AppendToString(PRUnichar(' '), aStr);
-      mAddSpace = PR_FALSE;
+      mAddSpace = false;
     }
   }
   else if (mAddSpace) {
     AppendToString(PRUnichar(' '), aStr);
-    mAddSpace = PR_FALSE;
+    mAddSpace = false;
   }
 
   AppendToString(kEndTag, aStr);
@@ -380,43 +381,78 @@ nsHTMLContentSerializer::AppendElementEnd(nsIContent *aElement,
   MaybeLeaveFromPreContent(content);
 
   if ((mDoFormat || forceFormat) && !mPreLevel
-      && !mDoRaw && LineBreakAfterClose(content->GetNameSpaceID(), name)) {
+      && !mDoRaw && LineBreakAfterClose(ns, name)) {
     AppendNewLineToString(aStr);
   }
   else {
     MaybeFlagNewlineForRootNode(aElement);
   }
 
-  if (name == nsGkAtoms::body) {
+  if (name == nsGkAtoms::body && ns == kNameSpaceID_XHTML) {
     --mInBody;
   }
 
   return NS_OK;
 }
 
-static const PRUint16 kValNBSP = 160;
-static const char kEntityNBSP[] = "&nbsp;";
-
-static const PRUint16 kGTVal = 62;
+static const uint16_t kValNBSP = 160;
 static const char* kEntities[] = {
-  "", "", "", "", "", "", "", "", "", "",
-  "", "", "", "", "", "", "", "", "", "",
-  "", "", "", "", "", "", "", "", "", "",
-  "", "", "", "", "", "", "", "", "&amp;", "",
-  "", "", "", "", "", "", "", "", "", "",
-  "", "", "", "", "", "", "", "", "", "",
-  "&lt;", "", "&gt;"
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "&amp;", nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  "&lt;", nullptr, "&gt;", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  "&nbsp;"
 };
 
 static const char* kAttrEntities[] = {
-  "", "", "", "", "", "", "", "", "", "",
-  "", "", "", "", "", "", "", "", "", "",
-  "", "", "", "", "", "", "", "", "", "",
-  "", "", "", "", "&quot;", "", "", "", "&amp;", "",
-  "", "", "", "", "", "", "", "", "", "",
-  "", "", "", "", "", "", "", "", "", "",
-  "&lt;", "", "&gt;"
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, "&quot;", nullptr, nullptr, nullptr, "&amp;", nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  "&lt;", nullptr, "&gt;", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+  "&nbsp;"
 };
+
+uint32_t FindNextBasicEntity(const nsAString& aStr,
+                             const uint32_t aLen,
+                             uint32_t aIndex,
+                             const char** aEntityTable,
+                             const char** aEntity)
+{
+  for (; aIndex < aLen; ++aIndex) {
+    // for each character in this chunk, check if it
+    // needs to be replaced
+    PRUnichar val = aStr[aIndex];
+    if (val <= kValNBSP && aEntityTable[val]) {
+      *aEntity = aEntityTable[val];
+      return aIndex;
+    }
+  }
+  return aIndex;
+}
 
 void
 nsHTMLContentSerializer::AppendAndTranslateEntities(const nsAString& aStr,
@@ -431,10 +467,30 @@ nsHTMLContentSerializer::AppendAndTranslateEntities(const nsAString& aStr,
     return;
   }
 
-  if (mFlags & (nsIDocumentEncoder::OutputEncodeBasicEntities  |
-                nsIDocumentEncoder::OutputEncodeLatin1Entities |
-                nsIDocumentEncoder::OutputEncodeHTMLEntities   |
-                nsIDocumentEncoder::OutputEncodeW3CEntities)) {
+  bool nonBasicEntities =
+    !!(mFlags & (nsIDocumentEncoder::OutputEncodeLatin1Entities |
+                 nsIDocumentEncoder::OutputEncodeHTMLEntities   |
+                 nsIDocumentEncoder::OutputEncodeW3CEntities));
+
+  if (!nonBasicEntities &&
+      (mFlags & (nsIDocumentEncoder::OutputEncodeBasicEntities))) {
+    const char **entityTable = mInAttribute ? kAttrEntities : kEntities;
+    uint32_t start = 0;
+    const uint32_t len = aStr.Length();
+    for (uint32_t i = 0; i < len; ++i) {
+      const char* entity = nullptr;
+      i = FindNextBasicEntity(aStr, len, i, entityTable, &entity);
+      uint32_t normalTextLen = i - start; 
+      if (normalTextLen) {
+        aOutputStr.Append(Substring(aStr, start, normalTextLen));
+      }
+      if (entity) {
+        aOutputStr.AppendASCII(entity);
+        start = i + 1;
+      }
+    }
+    return;
+  } else if (nonBasicEntities) {
     nsIParserService* parserService = nsContentUtils::GetParserService();
 
     if (!parserService) {
@@ -446,35 +502,31 @@ nsHTMLContentSerializer::AppendAndTranslateEntities(const nsAString& aStr,
     aStr.EndReading(done_reading);
 
     // for each chunk of |aString|...
-    PRUint32 advanceLength = 0;
+    uint32_t advanceLength = 0;
     nsReadingIterator<PRUnichar> iter;
 
     const char **entityTable = mInAttribute ? kAttrEntities : kEntities;
-    nsCAutoString entityReplacement;
+    nsAutoCString entityReplacement;
 
     for (aStr.BeginReading(iter);
          iter != done_reading;
-         iter.advance(PRInt32(advanceLength))) {
-      PRUint32 fragmentLength = iter.size_forward();
-      PRUint32 lengthReplaced = 0; // the number of UTF-16 codepoints
+         iter.advance(int32_t(advanceLength))) {
+      uint32_t fragmentLength = iter.size_forward();
+      uint32_t lengthReplaced = 0; // the number of UTF-16 codepoints
                                     //  replaced by a particular entity
       const PRUnichar* c = iter.get();
       const PRUnichar* fragmentStart = c;
       const PRUnichar* fragmentEnd = c + fragmentLength;
-      const char* entityText = nsnull;
-      const char* fullConstEntityText = nsnull;
-      char* fullEntityText = nsnull;
+      const char* entityText = nullptr;
+      const char* fullConstEntityText = nullptr;
+      char* fullEntityText = nullptr;
 
       advanceLength = 0;
       // for each character in this chunk, check if it
       // needs to be replaced
       for (; c < fragmentEnd; c++, advanceLength++) {
         PRUnichar val = *c;
-        if (val == kValNBSP) {
-          fullConstEntityText = kEntityNBSP;
-          break;
-        }
-        else if ((val <= kGTVal) && (entityTable[val][0] != 0)) {
+        if (val <= kValNBSP && entityTable[val]) {
           fullConstEntityText = entityTable[val];
           break;
         } else if (val > 127 &&
@@ -495,7 +547,7 @@ nsHTMLContentSerializer::AppendAndTranslateEntities(const nsAString& aStr,
           if (NS_IS_HIGH_SURROGATE(val) &&
               c + 1 < fragmentEnd &&
               NS_IS_LOW_SURROGATE(*(c + 1))) {
-            PRUint32 valUTF32 = SURROGATE_TO_UCS4(val, *(++c));
+            uint32_t valUTF32 = SURROGATE_TO_UCS4(val, *(++c));
             if (NS_SUCCEEDED(mEntityConverter->ConvertUTF32ToEntity(valUTF32,
                               nsIEntityConverter::entityW3C, &fullEntityText))) {
               lengthReplaced = 2;

@@ -1,43 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Bradley Baetz <bbaetz@cs.mcgill.ca>
- *   Christopher A. Aillon <christopher@aillon.com>
- *   Dão Gottwald <dao@design-noir.de>
- *   Ehsan Akhgari <ehsan.akhgari@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsIndexedToHTML.h"
 #include "nsNetUtil.h"
@@ -54,6 +18,7 @@
 #include "nsIPrefService.h"
 #include "nsIPrefBranch.h"
 #include "nsIPrefLocalizedString.h"
+#include "nsIChromeRegistry.h"
 
 NS_IMPL_ISUPPORTS4(nsIndexedToHTML,
                    nsIDirIndexListener,
@@ -88,7 +53,7 @@ nsIndexedToHTML::Create(nsISupports *aOuter, REFNSIID aIID, void **aResult) {
         return NS_ERROR_NO_AGGREGATION;
     
     nsIndexedToHTML* _s = new nsIndexedToHTML();
-    if (_s == nsnull)
+    if (_s == nullptr)
         return NS_ERROR_OUT_OF_MEMORY;
     
     rv = _s->QueryInterface(aIID, aResult);
@@ -126,7 +91,7 @@ nsIndexedToHTML::Init(nsIStreamListener* aListener) {
     if (NS_FAILED(rv)) return rv;
     rv = sbs->CreateBundle(NECKO_MSGS_URL, getter_AddRefs(mBundle));
 
-    mExpectAbsLoc = PR_FALSE;
+    mExpectAbsLoc = false;
 
     return rv;
 }
@@ -150,6 +115,29 @@ nsIndexedToHTML::AsyncConvertData(const char *aFromType,
 
 NS_IMETHODIMP
 nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
+    nsString buffer;
+    nsresult rv = DoOnStartRequest(request, aContext, buffer);
+    if (NS_FAILED(rv)) {
+        request->Cancel(rv);
+    }
+    
+    rv = mListener->OnStartRequest(request, aContext);
+    if (NS_FAILED(rv)) return rv;
+
+    // The request may have been canceled, and if that happens, we want to
+    // suppress calls to OnDataAvailable.
+    request->GetStatus(&rv);
+    if (NS_FAILED(rv)) return rv;
+
+    // Push our buffer to the listener.
+
+    rv = FormatInputStream(request, aContext, buffer);
+    return rv;
+}
+
+nsresult
+nsIndexedToHTML::DoOnStartRequest(nsIRequest* request, nsISupports *aContext,
+                                  nsString& aBuffer) {
     nsresult rv;
 
     nsCOMPtr<nsIChannel> channel = do_QueryInterface(request);
@@ -157,7 +145,7 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
     rv = channel->GetURI(getter_AddRefs(uri));
     if (NS_FAILED(rv)) return rv;
 
-    channel->SetContentType(NS_LITERAL_CSTRING("application/xhtml+xml"));
+    channel->SetContentType(NS_LITERAL_CSTRING("text/html"));
 
     mParser = do_CreateInstance("@mozilla.org/dirIndexParser;1",&rv);
     if (NS_FAILED(rv)) return rv;
@@ -168,7 +156,7 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
     rv = mParser->OnStartRequest(request, aContext);
     if (NS_FAILED(rv)) return rv;
 
-    nsCAutoString baseUri, titleUri;
+    nsAutoCString baseUri, titleUri;
     rv = uri->GetAsciiSpec(baseUri);
     if (NS_FAILED(rv)) return rv;
     titleUri = baseUri;
@@ -183,15 +171,15 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
     // would muck up the XUL display
     // - bbaetz
 
-    PRBool isScheme = PR_FALSE;
-    PRBool isSchemeFile = PR_FALSE;
+    bool isScheme = false;
+    bool isSchemeFile = false;
     if (NS_SUCCEEDED(uri->SchemeIs("ftp", &isScheme)) && isScheme) {
 
         // strip out the password here, so it doesn't show in the page title
         // This is done by the 300: line generation in ftp, but we don't use
         // that - see above
         
-        nsCAutoString pw;
+        nsAutoCString pw;
         rv = uri->GetPassword(pw);
         if (NS_FAILED(rv)) return rv;
         if (!pw.IsEmpty()) {
@@ -204,7 +192,7 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
              if (NS_FAILED(rv)) return rv;
         }
 
-        nsCAutoString path;
+        nsAutoCString path;
         rv = uri->GetPath(path);
         if (NS_FAILED(rv)) return rv;
 
@@ -217,11 +205,9 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
         nsCOMPtr<nsIFile> file;
         rv = fileUrl->GetFile(getter_AddRefs(file));
         if (NS_FAILED(rv)) return rv;
-        nsCOMPtr<nsILocalFile> lfile = do_QueryInterface(file, &rv);
-        if (NS_FAILED(rv)) return rv;
-        lfile->SetFollowLinks(PR_TRUE);
+        file->SetFollowLinks(true);
         
-        nsCAutoString url;
+        nsAutoCString url;
         rv = net_GetURLSpecFromFile(file, url);
         if (NS_FAILED(rv)) return rv;
         baseUri.Assign(url);
@@ -240,7 +226,7 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
         NS_ENSURE_SUCCESS(rv, rv);
 
     } else if (NS_SUCCEEDED(uri->SchemeIs("jar", &isScheme)) && isScheme) {
-        nsCAutoString path;
+        nsAutoCString path;
         rv = uri->GetPath(path);
         if (NS_FAILED(rv)) return rv;
 
@@ -258,7 +244,7 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
     else {
         // default behavior for other protocols is to assume the channel's
         // URL references a directory ending in '/' -- fixup if necessary.
-        nsCAutoString path;
+        nsAutoCString path;
         rv = uri->GetPath(path);
         if (NS_FAILED(rv)) return rv;
         if (baseUri.Last() != '/') {
@@ -273,7 +259,9 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
     }
 
     nsString buffer;
-    buffer.AppendLiteral("<?xml version=\"1.0\" encoding=\"");
+    buffer.AppendLiteral("<!DOCTYPE html>\n"
+                         "<html>\n<head>\n"
+                         "<meta http-equiv=\"content-type\" content=\"text/html; charset=");
     
     // Get the encoding from the parser
     // XXX - this won't work for any encoding set via a 301: line in the
@@ -285,13 +273,8 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
     if (NS_FAILED(rv)) return rv;
 
     AppendASCIItoUTF16(encoding, buffer);
-    buffer.AppendLiteral("\"?>\n"
-                         "<!DOCTYPE html ["
-                         " <!ENTITY % globalDTD SYSTEM \"chrome://global/locale/global.dtd\">\n"
-                         " %globalDTD;\n"
-                         "]>\n"
-                         "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n<head>\n"
-                         "<style type=\"text/css\"><![CDATA[\n"
+    buffer.AppendLiteral("\">\n"
+                         "<style type=\"text/css\">\n"
                          ":root {\n"
                          "  font-family: sans-serif;\n"
                          "}\n"
@@ -372,15 +355,17 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
                          ".file > img {\n"
                          "  -moz-margin-end: 4px;\n"
                          "  -moz-margin-start: -20px;\n"
+                         "  max-width: 16px;\n"
+                         "  max-height: 16px;\n"
                          "  vertical-align: middle;\n"
                          "}\n"
                          ".dir::before {\n"
                          "  content: url(resource://gre/res/html/folder.png);\n"
                          "}\n"
-                         "]]></style>\n"
+                         "</style>\n"
                          "<link rel=\"stylesheet\" media=\"screen, projection\" type=\"text/css\""
-                         " href=\"chrome://global/skin/dirListing/dirListing.css\" />\n"
-                         "<script type=\"application/javascript\"><![CDATA[\n"
+                         " href=\"chrome://global/skin/dirListing/dirListing.css\">\n"
+                         "<script type=\"application/javascript\">\n"
                          "var gTable, gOrderBy, gTBody, gRows, gUI_showHidden;\n"
                          "document.addEventListener(\"DOMContentLoaded\", function() {\n"
                          "  gTable = document.getElementsByTagName(\"table\")[0];\n"
@@ -458,7 +443,7 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
                          "                     \"\" :\n"
                          "                     \"remove-hidden\";\n"
                          "}\n"
-                         "]]></script>\n");
+                         "</script>\n");
 
     buffer.AppendLiteral("<link rel=\"icon\" type=\"image/png\" href=\"");
     nsCOMPtr<nsIURI> innerUri = NS_GetInnermostURI(uri);
@@ -509,7 +494,7 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
                              "BYWFOWicuqppoNTnStHzPFCPQhBEBOyGAX4JMADFetubi4BS"
                              "YAAAAABJRU5ErkJggg%3D%3D");
     }
-    buffer.AppendLiteral("\" />\n<title>");
+    buffer.AppendLiteral("\">\n<title>");
 
     // Everything needs to end in a /,
     // otherwise we end up linking to file:///foo/dirfile
@@ -529,7 +514,7 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
     if (NS_FAILED(rv) && isSchemeFile) {
         nsCOMPtr<nsIPlatformCharset> platformCharset(do_GetService(NS_PLATFORMCHARSET_CONTRACTID, &rv));
         NS_ENSURE_SUCCESS(rv, rv);
-        nsCAutoString charset;
+        nsAutoCString charset;
         rv = platformCharset->GetCharset(kPlatformCharsetSel_FileName, charset);
         NS_ENSURE_SUCCESS(rv, rv);
 
@@ -585,7 +570,20 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
         NS_ERROR("broken protocol handler didn't escape double-quote.");
     }
 
-    buffer.AppendLiteral("</head>\n<body dir=\"&locale.dir;\">\n<h1>");
+    nsAutoString direction(NS_LITERAL_STRING("ltr"));
+    nsCOMPtr<nsIXULChromeRegistry> reg =
+      mozilla::services::GetXULChromeRegistryService();
+    if (reg) {
+      bool isRTL = false;
+      reg->IsLocaleRTL(NS_LITERAL_CSTRING("global"), &isRTL);
+      if (isRTL) {
+        direction.AssignLiteral("rtl");
+      }
+    }
+
+    buffer.AppendLiteral("</head>\n<body dir=\"");
+    buffer.Append(direction);
+    buffer.AppendLiteral("\">\n<h1>");
     
     const PRUnichar* formatHeading[] = {
         htmlEscSpec.get()
@@ -623,7 +621,7 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
                                         getter_Copies(showHiddenText));
         if (NS_FAILED(rv)) return rv;
 
-        buffer.AppendLiteral("<p id=\"UI_showHidden\" style=\"display:none\"><label><input type=\"checkbox\" checked=\"checked\" onchange=\"updateHidden()\" />");
+        buffer.AppendLiteral("<p id=\"UI_showHidden\" style=\"display:none\"><label><input type=\"checkbox\" checked onchange=\"updateHidden()\">");
         AppendNonAsciiToNCR(showHiddenText, buffer);
         buffer.AppendLiteral("</label></p>\n");
     }
@@ -659,18 +657,7 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
                          " </thead>\n");
     buffer.AppendLiteral(" <tbody>\n");
 
-    // Push buffer to the listener now, so the initial HTML will not
-    // be parsed in OnDataAvailable().
-
-    rv = mListener->OnStartRequest(request, aContext);
-    if (NS_FAILED(rv)) return rv;
-
-    // The request may have been canceled, and if that happens, we want to
-    // suppress calls to OnDataAvailable.
-    request->GetStatus(&rv);
-    if (NS_FAILED(rv)) return rv;
-
-    rv = FormatInputStream(request, aContext, buffer);
+    aBuffer = buffer;
     return rv;
 }
 
@@ -706,15 +693,15 @@ nsIndexedToHTML::FormatInputStream(nsIRequest* aRequest, nsISupports *aContext, 
                                                           getter_AddRefs(mUnicodeEncoder));
         if (NS_SUCCEEDED(rv))
             rv = mUnicodeEncoder->SetOutputErrorBehavior(nsIUnicodeEncoder::kOnError_Replace, 
-                                                       nsnull, (PRUnichar)'?');
+                                                       nullptr, (PRUnichar)'?');
       }
     }
 
     // convert the data with unicode encoder
-    char *buffer = nsnull;
-    PRInt32 dstLength;
+    char *buffer = nullptr;
+    int32_t dstLength;
     if (NS_SUCCEEDED(rv)) {
-      PRInt32 unicharLength = aBuffer.Length();
+      int32_t unicharLength = aBuffer.Length();
       rv = mUnicodeEncoder->GetMaxLength(PromiseFlatString(aBuffer).get(), 
                                          unicharLength, &dstLength);
       if (NS_SUCCEEDED(rv)) {
@@ -724,7 +711,7 @@ nsIndexedToHTML::FormatInputStream(nsIRequest* aRequest, nsISupports *aContext, 
         rv = mUnicodeEncoder->Convert(PromiseFlatString(aBuffer).get(), &unicharLength, 
                                       buffer, &dstLength);
         if (NS_SUCCEEDED(rv)) {
-          PRInt32 finLen = 0;
+          int32_t finLen = 0;
           rv = mUnicodeEncoder->Finish(buffer + dstLength, &finLen);
           if (NS_SUCCEEDED(rv))
             dstLength += finLen;
@@ -737,13 +724,13 @@ nsIndexedToHTML::FormatInputStream(nsIRequest* aRequest, nsISupports *aContext, 
       rv = NS_OK;
       if (buffer) {
         nsMemory::Free(buffer);
-        buffer = nsnull;
+        buffer = nullptr;
       }
     }
 
     nsCOMPtr<nsIInputStream> inputData;
     if (buffer) {
-      rv = NS_NewCStringInputStream(getter_AddRefs(inputData), Substring(buffer, buffer + dstLength));
+      rv = NS_NewCStringInputStream(getter_AddRefs(inputData), Substring(buffer, dstLength));
       nsMemory::Free(buffer);
       NS_ENSURE_SUCCESS(rv, rv);
       rv = mListener->OnDataAvailable(aRequest, aContext,
@@ -763,8 +750,8 @@ NS_IMETHODIMP
 nsIndexedToHTML::OnDataAvailable(nsIRequest *aRequest,
                                  nsISupports *aCtxt,
                                  nsIInputStream* aInput,
-                                 PRUint32 aOffset,
-                                 PRUint32 aCount) {
+                                 uint64_t aOffset,
+                                 uint32_t aCount) {
     return mParser->OnDataAvailable(aRequest, aCtxt, aInput, aOffset, aCount);
 }
 
@@ -788,7 +775,7 @@ nsIndexedToHTML::OnIndexAvailable(nsIRequest *aRequest,
 
     // The sort key is the name of the item, prepended by either 0, 1 or 2
     // in order to group items.
-    PRUint32 type;
+    uint32_t type;
     aIndex->GetType(&type);
     switch (type) {
         case nsIDirIndex::TYPE_SYMLINK:
@@ -835,7 +822,7 @@ nsIndexedToHTML::OnIndexAvailable(nsIRequest *aRequest,
         descriptionAffix.Cut(0, descriptionAffix.Length() - 25);
         if (NS_IS_LOW_SURROGATE(descriptionAffix.First()))
             descriptionAffix.Cut(0, 1);
-        description.Truncate(PR_MIN(71, description.Length() - 28));
+        description.Truncate(NS_MIN<uint32_t>(71, description.Length() - 28));
         if (NS_IS_HIGH_SURROGATE(description.Last()))
             description.Truncate(description.Length() - 1);
 
@@ -875,7 +862,7 @@ nsIndexedToHTML::OnIndexAvailable(nsIRequest *aRequest,
     if (NS_FAILED(rv)) return rv;
 
     // need to escape links
-    nsCAutoString escapeBuf;
+    nsAutoCString escapeBuf;
 
     NS_ConvertUTF16toUTF8 utf8UnEscapeSpec(unEscapeSpec);
 
@@ -887,12 +874,12 @@ nsIndexedToHTML::OnIndexAvailable(nsIRequest *aRequest,
     }
 
     // now minimally re-escape the location...
-    PRUint32 escFlags;
+    uint32_t escFlags;
     // for some protocols, we expect the location to be absolute.
     // if so, and if the location indeed appears to be a valid URI, then go
     // ahead and treat it like one.
     if (mExpectAbsLoc &&
-        NS_SUCCEEDED(net_ExtractURLScheme(utf8UnEscapeSpec, nsnull, nsnull, nsnull))) {
+        NS_SUCCEEDED(net_ExtractURLScheme(utf8UnEscapeSpec, nullptr, nullptr, nullptr))) {
         // escape as absolute 
         escFlags = esc_Forced | esc_OnlyASCII | esc_AlwaysCopy | esc_Minimal;
     }
@@ -917,7 +904,7 @@ nsIndexedToHTML::OnIndexAvailable(nsIRequest *aRequest,
 
     if (type == nsIDirIndex::TYPE_FILE || type == nsIDirIndex::TYPE_UNKNOWN) {
         pushBuffer.AppendLiteral("<img src=\"moz-icon://");
-        PRInt32 lastDot = escapeBuf.RFindChar('.');
+        int32_t lastDot = escapeBuf.RFindChar('.');
         if (lastDot != kNotFound) {
             escapeBuf.Cut(0, lastDot);
             NS_ConvertUTF8toUTF16 utf16EscapeBuf(escapeBuf);
@@ -934,7 +921,7 @@ nsIndexedToHTML::OnIndexAvailable(nsIRequest *aRequest,
                                         getter_Copies(altText));
         if (NS_FAILED(rv)) return rv;
         AppendNonAsciiToNCR(altText, pushBuffer);
-        pushBuffer.AppendLiteral("\" />");
+        pushBuffer.AppendLiteral("\">");
     }
 
     pushBuffer.Append(escapedShort);
@@ -943,10 +930,10 @@ nsIndexedToHTML::OnIndexAvailable(nsIRequest *aRequest,
     if (type == nsIDirIndex::TYPE_DIRECTORY || type == nsIDirIndex::TYPE_SYMLINK) {
         pushBuffer.AppendLiteral(">");
     } else {
-        PRInt64 size;
+        int64_t size;
         aIndex->GetSize(&size);
 
-        if (PRUint64(size) != LL_MAXUINT) {
+        if (uint64_t(size) != UINT64_MAX) {
             pushBuffer.AppendLiteral(" sortable-data=\"");
             pushBuffer.AppendInt(size);
             pushBuffer.AppendLiteral("\">");
@@ -966,17 +953,17 @@ nsIndexedToHTML::OnIndexAvailable(nsIRequest *aRequest,
         pushBuffer.AppendLiteral("></td>\n <td>");
     } else {
         pushBuffer.AppendLiteral(" sortable-data=\"");
-        pushBuffer.AppendInt(t);
+        pushBuffer.AppendInt(static_cast<int64_t>(t));
         pushBuffer.AppendLiteral("\">");
         nsAutoString formatted;
-        mDateTime->FormatPRTime(nsnull,
+        mDateTime->FormatPRTime(nullptr,
                                 kDateFormatShort,
                                 kTimeFormatNone,
                                 t,
                                 formatted);
         AppendNonAsciiToNCR(formatted, pushBuffer);
         pushBuffer.AppendLiteral("</td>\n <td>");
-        mDateTime->FormatPRTime(nsnull,
+        mDateTime->FormatPRTime(nullptr,
                                 kDateFormatNone,
                                 kTimeFormatSeconds,
                                 t,
@@ -1006,12 +993,12 @@ nsIndexedToHTML::OnInformationAvailable(nsIRequest *aRequest,
     return FormatInputStream(aRequest, aCtxt, pushBuffer);
 }
 
-void nsIndexedToHTML::FormatSizeString(PRInt64 inSize, nsString& outSizeString)
+void nsIndexedToHTML::FormatSizeString(int64_t inSize, nsString& outSizeString)
 {
     outSizeString.Truncate();
-    if (inSize > PRInt64(0)) {
+    if (inSize > int64_t(0)) {
         // round up to the nearest Kilobyte
-        PRInt64  upperSize = (inSize + PRInt64(1023)) / PRInt64(1024);
+        int64_t  upperSize = (inSize + int64_t(1023)) / int64_t(1024);
         outSizeString.AppendInt(upperSize);
         outSizeString.AppendLiteral(" KB");
     }

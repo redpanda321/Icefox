@@ -25,6 +25,10 @@ const CL_EXPECT_FAILURE = 0x1;
 const CL_EXPECT_GZIP = 0x2;
 const CL_EXPECT_3S_DELAY = 0x4;
 const CL_SUSPEND = 0x8;
+const CL_ALLOW_UNKNOWN_CL = 0x10;
+const CL_EXPECT_LATE_FAILURE = 0x20;
+const CL_FROM_CACHE = 0x40; // Response must be from the cache
+const CL_NOT_FROM_CACHE = 0x80; // Response must NOT be from the cache
 
 const SUSPEND_DELAY = 3000;
 
@@ -37,7 +41,8 @@ const SUSPEND_DELAY = 3000;
  *
  * This listener makes sure that various parts of the channel API are
  * implemented correctly and that the channel's status is a success code
- * (you can pass CL_EXPECT_FAILURE as flags to allow a failure code)
+ * (you can pass CL_EXPECT_FAILURE or CL_EXPECT_LATE_FAILURE as flags
+ * to allow a failure code)
  *
  * Note that it also requires a valid content length on the channel and
  * is thus not fully generic.
@@ -76,11 +81,24 @@ ChannelListener.prototype = {
         this._contentLen = request.contentLength;
       }
       catch (ex) {
-        if (!(this._flags & CL_EXPECT_FAILURE))
+        if (!(this._flags & (CL_EXPECT_FAILURE | CL_ALLOW_UNKNOWN_CL)))
           do_throw("Could not get contentLength");
       }
-      if (this._contentLen == -1 && !(this._flags & CL_EXPECT_FAILURE))
+      if (this._contentLen == -1 && !(this._flags & (CL_EXPECT_FAILURE | CL_ALLOW_UNKNOWN_CL)))
         do_throw("Content length is unknown in onStartRequest!");
+
+      if ((this._flags & CL_FROM_CACHE)) {
+        request.QueryInterface(Ci.nsICachingChannel);
+        if (!request.isFromCache()) {
+          do_throw("Response is not from the cache (CL_FROM_CACHE)");
+        }
+      }
+      if ((this._flags & CL_NOT_FROM_CACHE)) {
+        request.QueryInterface(Ci.nsICachingChannel);
+        if (request.isFromCache()) {
+          do_throw("Response is from the cache (CL_NOT_FROM_CACHE)");
+        }
+      }
 
       if (this._flags & CL_SUSPEND) {
         request.suspend();
@@ -124,21 +142,21 @@ ChannelListener.prototype = {
 
   onStopRequest: function(request, context, status) {
     try {
+      var success = Components.isSuccessCode(status);
       if (!this._got_onstartrequest)
         do_throw("onStopRequest without onStartRequest event!");
       if (this._got_onstoprequest)
         do_throw("Got second onStopRequest event!");
       this._got_onstoprequest = true;
-      var success = Components.isSuccessCode(status);
-      if ((this._flags & CL_EXPECT_FAILURE) && success)
+      if ((this._flags & (CL_EXPECT_FAILURE | CL_EXPECT_LATE_FAILURE)) && success)
         do_throw("Should have failed to load URL (status is " + status.toString(16) + ")");
-      else if (!(this._flags & CL_EXPECT_FAILURE) && !success)
+      else if (!(this._flags & (CL_EXPECT_FAILURE | CL_EXPECT_LATE_FAILURE)) && !success)
         do_throw("Failed to load URL: " + status.toString(16));
       if (status != request.status)
         do_throw("request.status does not match status arg to onStopRequest!");
       if (request.isPending())
         do_throw("request reports itself as pending from onStopRequest!");
-      if (!(this._flags & CL_EXPECT_FAILURE) &&
+      if (!(this._flags & (CL_EXPECT_FAILURE | CL_EXPECT_LATE_FAILURE)) &&
           !(this._flags & CL_EXPECT_GZIP) &&
           this._contentLen != -1)
           do_check_eq(this._buffer.length, this._contentLen)
@@ -181,3 +199,37 @@ ChannelEventSink.prototype = {
     callback.onRedirectVerifyCallback(Cr.NS_OK);
   }
 };
+
+
+/**
+ * Class that implements nsILoadContext.  Use it as callbacks for channel when
+ * test needs it.
+ */
+function LoadContextCallback(appId, inBrowserElement, isPrivate, isContent) {
+  this.appId = appId;
+  this.isInBrowserElement = inBrowserElement;
+  this.usePrivateBrowsing = isPrivate;
+  this.isContent = isContent;
+}
+
+LoadContextCallback.prototype = {
+  associatedWindow: null,
+  topWindow : null,
+  isAppOfType: function(appType) {
+    throw Cr.NS_ERROR_NOT_IMPLEMENTED;
+  },
+  QueryInterface: function(iid) {
+    if (iid == Ci.nsILoadContext ||
+               Ci.nsIInterfaceRequestor ||
+               Ci.nsISupports) {
+        return this;
+    }
+    throw Cr.NS_ERROR_NO_INTERFACE;
+  },
+  getInterface: function(iid) {
+    if (iid.equals(Ci.nsILoadContext))
+      return this;
+    throw Cr.NS_ERROR_NO_INTERFACE;
+  },
+}
+

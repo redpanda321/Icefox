@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=462957
 -->
 <head>
   <title>Test for Bug 462957</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
   <script type="text/javascript" src="manifest.js"></script>
@@ -39,51 +38,41 @@ function ended(e) {
   try {
     b.start(-1);
   } catch (e) {
-    caught = e.code == DOMException.INDEX_SIZE_ERR;
+    caught = e.name == "IndexSizeError" && e.code == DOMException.INDEX_SIZE_ERR;
   }
-  is(caught, true, "Should throw INDEX_SIZE_ERR on under start bounds range");
+  is(caught, true, v._name + ": Should throw INDEX_SIZE_ERR on under start bounds range");
   
   caught = false;
   try {
     b.end(-1);
   } catch (e) {
-    caught = e.code == DOMException.INDEX_SIZE_ERR;
+    caught = e.name == "IndexSizeError" && e.code == DOMException.INDEX_SIZE_ERR;
   }
-  is(caught, true, "Should throw INDEX_SIZE_ERR on under end bounds range");
+  is(caught, true, v._name + ": Should throw INDEX_SIZE_ERR on under end bounds range");
 
   caught = false;
   try {
     b.start(b.length);
   } catch (e) {
-    caught = e.code == DOMException.INDEX_SIZE_ERR;
+    caught = e.name == "IndexSizeError" && e.code == DOMException.INDEX_SIZE_ERR;
   }
-  is(caught, true, "Should throw INDEX_SIZE_ERR on over start bounds range");
+  is(caught, true, v._name + ": Should throw INDEX_SIZE_ERR on over start bounds range");
   
   caught = false;
   try {
     b.end(b.length);
   } catch (e) {
-    caught = e.code == DOMException.INDEX_SIZE_ERR;
+    caught = e.name == "IndexSizeError" && e.code == DOMException.INDEX_SIZE_ERR;
   }
-  is(caught, true, "Should throw INDEX_SIZE_ERR on over end bounds range");
-  
+  is(caught, true, v._name + ": Should throw INDEX_SIZE_ERR on over end bounds range");
+
+  v.src = "";
   v.parentNode.removeChild(v);
   manager.finished(v.token);
-
-  return false;
-}
-
-// Only support for buffered is available for Ogg and WAV.
-// Eventually we'll support WebM as well.
-function supportsBuffered(type) {
-  var s = type.toLowerCase();
-  return /ogg$/.test(s) || /wav$/.test(s)
 }
 
 function startTest(test, token) {
   var v = document.createElement('video');
-  if (!supportsBuffered(test.type))
-    return;
   v.token = token;
   manager.started(token);
 

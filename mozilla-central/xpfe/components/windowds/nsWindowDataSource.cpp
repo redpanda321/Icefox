@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 200
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsWindowDataSource.h"
 #include "nsIXULWindow.h"
@@ -50,15 +18,15 @@
 #include "nsIInterfaceRequestorUtils.h"
 #include "nsIDocShell.h"
 
-PRUint32 nsWindowDataSource::windowCount = 0;
+uint32_t nsWindowDataSource::windowCount = 0;
 
-nsIRDFResource* nsWindowDataSource::kNC_Name = nsnull;
-nsIRDFResource* nsWindowDataSource::kNC_WindowRoot = nsnull;
-nsIRDFResource* nsWindowDataSource::kNC_KeyIndex = nsnull;
+nsIRDFResource* nsWindowDataSource::kNC_Name = nullptr;
+nsIRDFResource* nsWindowDataSource::kNC_WindowRoot = nullptr;
+nsIRDFResource* nsWindowDataSource::kNC_KeyIndex = nullptr;
 
-nsIRDFService*  nsWindowDataSource::gRDFService = nsnull;
+nsIRDFService*  nsWindowDataSource::gRDFService = nullptr;
 
-PRUint32 nsWindowDataSource::gRefCnt = 0;
+uint32_t nsWindowDataSource::gRefCnt = 0;
 
 static const char kURINC_WindowRoot[] = "NC:WindowMediatorRoot";
 
@@ -100,7 +68,7 @@ nsWindowDataSource::Init()
         do_GetService(NS_OBSERVERSERVICE_CONTRACTID, &rv);
     if (NS_SUCCEEDED(rv)) {
         rv = observerService->AddObserver(this, NS_XPCOM_SHUTDOWN_OBSERVER_ID,
-                                          PR_FALSE);
+                                          false);
     }
     return NS_OK;
 }
@@ -121,8 +89,8 @@ nsWindowDataSource::Observe(nsISupports *aSubject, const char* aTopic, const PRU
     if (strcmp(aTopic, NS_XPCOM_SHUTDOWN_OBSERVER_ID) == 0) {
         // release these objects so that they release their reference
         // to us
-        mContainer = nsnull;
-        mInner = nsnull;
+        mContainer = nullptr;
+        mInner = nullptr;
     }
 
     return NS_OK;
@@ -132,13 +100,11 @@ NS_IMPL_CYCLE_COLLECTION_CLASS(nsWindowDataSource)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_0(nsWindowDataSource)
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN(nsWindowDataSource)
     // XXX mContainer?
-    NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mInner)
+    NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mInner)
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
-NS_IMPL_CYCLE_COLLECTING_ADDREF_AMBIGUOUS(nsWindowDataSource,
-                                          nsIObserver)
-NS_IMPL_CYCLE_COLLECTING_RELEASE_AMBIGUOUS(nsWindowDataSource,
-                                           nsIObserver)
+NS_IMPL_CYCLE_COLLECTING_ADDREF(nsWindowDataSource)
+NS_IMPL_CYCLE_COLLECTING_RELEASE(nsWindowDataSource)
 
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(nsWindowDataSource)
     NS_INTERFACE_MAP_ENTRY(nsIObserver)
@@ -181,7 +147,7 @@ nsWindowDataSource::OnWindowTitleChange(nsIXULWindow *window,
 
     // get the old title
     nsCOMPtr<nsIRDFNode> oldTitleNode;
-    rv = GetTarget(windowResource, kNC_Name, PR_TRUE,
+    rv = GetTarget(windowResource, kNC_Name, true,
                    getter_AddRefs(oldTitleNode));
     
     // assert the change
@@ -190,7 +156,7 @@ nsWindowDataSource::OnWindowTitleChange(nsIXULWindow *window,
         rv = Change(windowResource, kNC_Name, oldTitleNode, newTitleLiteral);
     else
         // removed from the tasklist
-        rv = Assert(windowResource, kNC_Name, newTitleLiteral, PR_TRUE);
+        rv = Assert(windowResource, kNC_Name, newTitleLiteral, true);
 
     if (rv != NS_RDF_ASSERTION_ACCEPTED)
     {
@@ -204,7 +170,7 @@ nsWindowDataSource::OnWindowTitleChange(nsIXULWindow *window,
 NS_IMETHODIMP
 nsWindowDataSource::OnOpenWindow(nsIXULWindow *window)
 {
-    nsCAutoString windowId(NS_LITERAL_CSTRING("window-"));
+    nsAutoCString windowId(NS_LITERAL_CSTRING("window-"));
     windowId.AppendInt(windowCount++, 10);
 
     nsCOMPtr<nsIRDFResource> windowResource;
@@ -239,7 +205,7 @@ nsWindowDataSource::OnCloseWindow(nsIXULWindow *window)
     nsCOMPtr<nsIRDFInt> oldKeyInt;
     
     // get the old keyIndex, if any
-    rv = GetTarget(resource, kNC_KeyIndex, PR_TRUE,
+    rv = GetTarget(resource, kNC_KeyIndex, true,
                    getter_AddRefs(oldKeyNode));
     if (NS_SUCCEEDED(rv) && (rv != NS_RDF_NO_VALUE))
         oldKeyInt = do_QueryInterface(oldKeyNode);
@@ -247,21 +213,21 @@ nsWindowDataSource::OnCloseWindow(nsIXULWindow *window)
     
     // update RDF and keyindex - from this point forward we'll ignore
     // errors, because they just indicate some kind of RDF inconsistency
-    PRInt32 winIndex = -1;
+    int32_t winIndex = -1;
     rv = mContainer->IndexOf(resource, &winIndex);
         
     if (NS_FAILED(rv))
         return NS_OK;
             
     // unassert the old window, ignore any error
-    mContainer->RemoveElement(resource, PR_TRUE);
+    mContainer->RemoveElement(resource, true);
     
     nsCOMPtr<nsISimpleEnumerator> children;
     rv = mContainer->GetElements(getter_AddRefs(children));
     if (NS_FAILED(rv))
         return NS_OK;
 
-    PRBool more = PR_FALSE;
+    bool more = false;
 
     while (NS_SUCCEEDED(rv = children->HasMoreElements(&more)) && more) {
         nsCOMPtr<nsISupports> sup;
@@ -273,7 +239,7 @@ nsWindowDataSource::OnCloseWindow(nsIXULWindow *window)
         if (NS_FAILED(rv))
             continue;
 
-        PRInt32 currentIndex = -1;
+        int32_t currentIndex = -1;
         mContainer->IndexOf(windowResource, &currentIndex);
 
         // can skip updating windows with lower indexes
@@ -284,7 +250,7 @@ nsWindowDataSource::OnCloseWindow(nsIXULWindow *window)
         nsCOMPtr<nsIRDFNode> newKeyNode;
         nsCOMPtr<nsIRDFInt> newKeyInt;
 
-        rv = GetTarget(windowResource, kNC_KeyIndex, PR_TRUE,
+        rv = GetTarget(windowResource, kNC_KeyIndex, true,
                        getter_AddRefs(newKeyNode));
         if (NS_SUCCEEDED(rv) && (rv != NS_RDF_NO_VALUE))
             newKeyInt = do_QueryInterface(newKeyNode);
@@ -295,7 +261,7 @@ nsWindowDataSource::OnCloseWindow(nsIXULWindow *window)
         // creating a new keyindex - probably window going
         // from (none) to "9"
         else if (newKeyInt)
-            Assert(windowResource, kNC_KeyIndex, newKeyInt, PR_TRUE);
+            Assert(windowResource, kNC_KeyIndex, newKeyInt, true);
         
         // somehow inserting a window above this one,
         // "9" to (none)
@@ -311,7 +277,7 @@ struct findWindowClosure {
     nsIXULWindow *resultWindow;
 };
 
-static PRBool
+static bool
 findWindow(nsHashKey* aKey, void *aData, void* aClosure)
 {
     nsVoidKey *thisKey = static_cast<nsVoidKey*>(aKey);
@@ -326,34 +292,33 @@ findWindow(nsHashKey* aKey, void *aData, void* aClosure)
         closure->resultWindow =
             static_cast<nsIXULWindow*>
                        (thisKey->GetValue());
-        return PR_FALSE;         // stop enumerating
+        return false;         // stop enumerating
     }
-    return PR_TRUE;
+    return true;
 }
 
 // nsIWindowDataSource implementation
 
 NS_IMETHODIMP
 nsWindowDataSource::GetWindowForResource(const char *aResourceString,
-                                         nsIDOMWindowInternal** aResult)
+                                         nsIDOMWindow** aResult)
 {
     nsCOMPtr<nsIRDFResource> windowResource;
     gRDFService->GetResource(nsDependentCString(aResourceString),
                              getter_AddRefs(windowResource));
 
     // now reverse-lookup in the hashtable
-    findWindowClosure closure = { windowResource.get(), nsnull };
+    findWindowClosure closure = { windowResource.get(), nullptr };
     mWindowResources.Enumerate(findWindow, (void*)&closure);
     if (closure.resultWindow) {
 
         // this sucks, we have to jump through docshell to go from
-        // nsIXULWindow -> nsIDOMWindowInternal
+        // nsIXULWindow -> nsIDOMWindow
         nsCOMPtr<nsIDocShell> docShell;
         closure.resultWindow->GetDocShell(getter_AddRefs(docShell));
 
         if (docShell) {
-            nsCOMPtr<nsIDOMWindowInternal> result =
-                do_GetInterface(docShell);
+            nsCOMPtr<nsIDOMWindow> result = do_GetInterface(docShell);
         
             *aResult = result;
             NS_IF_ADDREF(*aResult);
@@ -384,7 +349,7 @@ NS_IMETHODIMP nsWindowDataSource::GetURI(char * *aURI)
 }
 
 /* nsIRDFNode GetTarget (in nsIRDFResource aSource, in nsIRDFResource aProperty, in boolean aTruthValue); */
-NS_IMETHODIMP nsWindowDataSource::GetTarget(nsIRDFResource *aSource, nsIRDFResource *aProperty, PRBool aTruthValue, nsIRDFNode **_retval)
+NS_IMETHODIMP nsWindowDataSource::GetTarget(nsIRDFResource *aSource, nsIRDFResource *aProperty, bool aTruthValue, nsIRDFNode **_retval)
 {
     NS_ENSURE_ARG_POINTER(_retval);
 
@@ -395,7 +360,7 @@ NS_IMETHODIMP nsWindowDataSource::GetTarget(nsIRDFResource *aSource, nsIRDFResou
     // special case kNC_KeyIndex before we forward to mInner
     if (aProperty == kNC_KeyIndex) {
 
-        PRInt32 theIndex = 0;
+        int32_t theIndex = 0;
         nsresult rv = mContainer->IndexOf(aSource, &theIndex);
         if (NS_FAILED(rv)) return rv;
 
@@ -415,7 +380,7 @@ NS_IMETHODIMP nsWindowDataSource::GetTarget(nsIRDFResource *aSource, nsIRDFResou
 }
 
 /* nsIRDFResource GetSource (in nsIRDFResource aProperty, in nsIRDFNode aTarget, in boolean aTruthValue); */
-NS_IMETHODIMP nsWindowDataSource::GetSource(nsIRDFResource *aProperty, nsIRDFNode *aTarget, PRBool aTruthValue, nsIRDFResource **_retval)
+NS_IMETHODIMP nsWindowDataSource::GetSource(nsIRDFResource *aProperty, nsIRDFNode *aTarget, bool aTruthValue, nsIRDFResource **_retval)
 {
     if (mInner)
         return mInner->GetSource(aProperty, aTarget, aTruthValue, _retval);
@@ -423,7 +388,7 @@ NS_IMETHODIMP nsWindowDataSource::GetSource(nsIRDFResource *aProperty, nsIRDFNod
 }
 
 /* nsISimpleEnumerator GetSources (in nsIRDFResource aProperty, in nsIRDFNode aTarget, in boolean aTruthValue); */
-NS_IMETHODIMP nsWindowDataSource::GetSources(nsIRDFResource *aProperty, nsIRDFNode *aTarget, PRBool aTruthValue, nsISimpleEnumerator **_retval)
+NS_IMETHODIMP nsWindowDataSource::GetSources(nsIRDFResource *aProperty, nsIRDFNode *aTarget, bool aTruthValue, nsISimpleEnumerator **_retval)
 {
     if (mInner)
         return mInner->GetSources(aProperty, aTarget, aTruthValue, _retval);
@@ -431,7 +396,7 @@ NS_IMETHODIMP nsWindowDataSource::GetSources(nsIRDFResource *aProperty, nsIRDFNo
 }
 
 /* nsISimpleEnumerator GetTargets (in nsIRDFResource aSource, in nsIRDFResource aProperty, in boolean aTruthValue); */
-NS_IMETHODIMP nsWindowDataSource::GetTargets(nsIRDFResource *aSource, nsIRDFResource *aProperty, PRBool aTruthValue, nsISimpleEnumerator **_retval)
+NS_IMETHODIMP nsWindowDataSource::GetTargets(nsIRDFResource *aSource, nsIRDFResource *aProperty, bool aTruthValue, nsISimpleEnumerator **_retval)
 {
     if (mInner)
         return mInner->GetTargets(aSource, aProperty, aTruthValue, _retval);
@@ -439,7 +404,7 @@ NS_IMETHODIMP nsWindowDataSource::GetTargets(nsIRDFResource *aSource, nsIRDFReso
 }
 
 /* void Assert (in nsIRDFResource aSource, in nsIRDFResource aProperty, in nsIRDFNode aTarget, in boolean aTruthValue); */
-NS_IMETHODIMP nsWindowDataSource::Assert(nsIRDFResource *aSource, nsIRDFResource *aProperty, nsIRDFNode *aTarget, PRBool aTruthValue)
+NS_IMETHODIMP nsWindowDataSource::Assert(nsIRDFResource *aSource, nsIRDFResource *aProperty, nsIRDFNode *aTarget, bool aTruthValue)
 {
     if (mInner)
         return mInner->Assert(aSource, aProperty, aTarget, aTruthValue);
@@ -471,7 +436,7 @@ NS_IMETHODIMP nsWindowDataSource::Move(nsIRDFResource *aOldSource, nsIRDFResourc
 }
 
 /* boolean HasAssertion (in nsIRDFResource aSource, in nsIRDFResource aProperty, in nsIRDFNode aTarget, in boolean aTruthValue); */
-NS_IMETHODIMP nsWindowDataSource::HasAssertion(nsIRDFResource *aSource, nsIRDFResource *aProperty, nsIRDFNode *aTarget, PRBool aTruthValue, PRBool *_retval)
+NS_IMETHODIMP nsWindowDataSource::HasAssertion(nsIRDFResource *aSource, nsIRDFResource *aProperty, nsIRDFNode *aTarget, bool aTruthValue, bool *_retval)
 {
     if (mInner)
         return mInner->HasAssertion(aSource, aProperty, aTarget, aTruthValue, _retval);
@@ -519,7 +484,7 @@ NS_IMETHODIMP nsWindowDataSource::GetAllResources(nsISimpleEnumerator **_retval)
 }
 
 /* boolean IsCommandEnabled (in nsISupportsArray aSources, in nsIRDFResource aCommand, in nsISupportsArray aArguments); */
-NS_IMETHODIMP nsWindowDataSource::IsCommandEnabled(nsISupportsArray *aSources, nsIRDFResource *aCommand, nsISupportsArray *aArguments, PRBool *_retval)
+NS_IMETHODIMP nsWindowDataSource::IsCommandEnabled(nsISupportsArray *aSources, nsIRDFResource *aCommand, nsISupportsArray *aArguments, bool *_retval)
 {
     if (mInner)
         return mInner->IsCommandEnabled(aSources, aCommand, aArguments, _retval);
@@ -543,7 +508,7 @@ NS_IMETHODIMP nsWindowDataSource::GetAllCmds(nsIRDFResource *aSource, nsISimpleE
 }
 
 /* boolean hasArcIn (in nsIRDFNode aNode, in nsIRDFResource aArc); */
-NS_IMETHODIMP nsWindowDataSource::HasArcIn(nsIRDFNode *aNode, nsIRDFResource *aArc, PRBool *_retval)
+NS_IMETHODIMP nsWindowDataSource::HasArcIn(nsIRDFNode *aNode, nsIRDFResource *aArc, bool *_retval)
 {
     if (mInner)
         return mInner->HasArcIn(aNode, aArc, _retval);
@@ -551,7 +516,7 @@ NS_IMETHODIMP nsWindowDataSource::HasArcIn(nsIRDFNode *aNode, nsIRDFResource *aA
 }
 
 /* boolean hasArcOut (in nsIRDFResource aSource, in nsIRDFResource aArc); */
-NS_IMETHODIMP nsWindowDataSource::HasArcOut(nsIRDFResource *aSource, nsIRDFResource *aArc, PRBool *_retval)
+NS_IMETHODIMP nsWindowDataSource::HasArcOut(nsIRDFResource *aSource, nsIRDFResource *aArc, bool *_retval)
 {
     if (mInner)
         return mInner->HasArcOut(aSource, aArc, _retval);

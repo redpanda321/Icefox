@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsXMLHttpRequest_h__
 #define nsXMLHttpRequest_h__
@@ -41,10 +9,9 @@
 #include "nsIXMLHttpRequest.h"
 #include "nsISupportsUtils.h"
 #include "nsString.h"
-#include "nsIDOMLoadListener.h"
-#include "nsIDOMDocument.h"
 #include "nsIURI.h"
 #include "nsIHttpChannel.h"
+#include "nsIJARChannel.h"
 #include "nsIDocument.h"
 #include "nsIStreamListener.h"
 #include "nsWeakReference.h"
@@ -60,132 +27,97 @@
 #include "nsTArray.h"
 #include "nsIJSNativeInitializer.h"
 #include "nsIDOMLSProgressEvent.h"
-#include "nsClassHashtable.h"
-#include "nsHashKeys.h"
-#include "prclist.h"
-#include "prtime.h"
-#include "nsIDOMNSEvent.h"
 #include "nsITimer.h"
-#include "nsIPrivateDOMEvent.h"
-#include "nsDOMProgressEvent.h"
-#include "nsDOMEventTargetWrapperCache.h"
+#include "nsIDOMProgressEvent.h"
+#include "nsDOMEventTargetHelper.h"
+#include "nsContentUtils.h"
+#include "nsDOMFile.h"
+#include "nsDOMBlobBuilder.h"
+#include "nsIPrincipal.h"
+#include "nsIScriptObjectPrincipal.h"
+
+#include "mozilla/Assertions.h"
+#include "mozilla/dom/BindingUtils.h"
+#include "mozilla/dom/TypedArray.h"
+#include "mozilla/dom/XMLHttpRequestBinding.h"
+#include "mozilla/dom/XMLHttpRequestUploadBinding.h"
+#include "mozilla/dom/EventHandlerBinding.h"
+
+#ifdef Status
+/* Xlib headers insist on this for some reason... Nuke it because
+   it'll override our member name */
+#undef Status
+#endif
 
 class nsILoadGroup;
 class AsyncVerifyRedirectCallbackForwarder;
+class nsIUnicodeDecoder;
+class nsFormData;
 
-class nsAccessControlLRUCache
-{
-public:
-  struct TokenTime
-  {
-    nsCString token;
-    PRTime expirationTime;
-  };
-
-  struct CacheEntry : public PRCList
-  {
-    CacheEntry(nsCString& aKey)
-      : mKey(aKey)
-    {
-      MOZ_COUNT_CTOR(nsAccessControlLRUCache::CacheEntry);
-    }
-    
-    ~CacheEntry()
-    {
-      MOZ_COUNT_DTOR(nsAccessControlLRUCache::CacheEntry);
-    }
-
-    void PurgeExpired(PRTime now);
-    PRBool CheckRequest(const nsCString& aMethod,
-                        const nsTArray<nsCString>& aCustomHeaders);
-
-    nsCString mKey;
-    nsTArray<TokenTime> mMethods;
-    nsTArray<TokenTime> mHeaders;
-  };
-
-  nsAccessControlLRUCache()
-  {
-    MOZ_COUNT_CTOR(nsAccessControlLRUCache);
-    PR_INIT_CLIST(&mList);
-  }
-
-  ~nsAccessControlLRUCache()
-  {
-    Clear();
-    MOZ_COUNT_DTOR(nsAccessControlLRUCache);
-  }
-
-  PRBool Initialize()
-  {
-    return mTable.Init();
-  }
-
-  CacheEntry* GetEntry(nsIURI* aURI, nsIPrincipal* aPrincipal,
-                       PRBool aWithCredentials, PRBool aCreate);
-  void RemoveEntries(nsIURI* aURI, nsIPrincipal* aPrincipal);
-
-  void Clear();
-
-private:
-  static PLDHashOperator
-    RemoveExpiredEntries(const nsACString& aKey, nsAutoPtr<CacheEntry>& aValue,
-                         void* aUserData);
-
-  static PRBool GetCacheKey(nsIURI* aURI, nsIPrincipal* aPrincipal,
-                            PRBool aWithCredentials, nsACString& _retval);
-
-  nsClassHashtable<nsCStringHashKey, CacheEntry> mTable;
-  PRCList mList;
-};
-
-class nsXHREventTarget : public nsDOMEventTargetWrapperCache,
+class nsXHREventTarget : public nsDOMEventTargetHelper,
                          public nsIXMLHttpRequestEventTarget
 {
 public:
+  typedef mozilla::dom::XMLHttpRequestResponseType
+          XMLHttpRequestResponseType;
+  typedef mozilla::ErrorResult
+          ErrorResult;
+
   virtual ~nsXHREventTarget() {}
   NS_DECL_ISUPPORTS_INHERITED
   NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED(nsXHREventTarget,
-                                           nsDOMEventTargetWrapperCache)
+                                           nsDOMEventTargetHelper)
   NS_DECL_NSIXMLHTTPREQUESTEVENTTARGET
   NS_FORWARD_NSIDOMEVENTTARGET(nsDOMEventTargetHelper::)
-  NS_FORWARD_NSIDOMNSEVENTTARGET(nsDOMEventTargetHelper::)
 
-protected:
-  nsRefPtr<nsDOMEventListenerWrapper> mOnLoadListener;
-  nsRefPtr<nsDOMEventListenerWrapper> mOnErrorListener;
-  nsRefPtr<nsDOMEventListenerWrapper> mOnAbortListener;
-  nsRefPtr<nsDOMEventListenerWrapper> mOnLoadStartListener;
-  nsRefPtr<nsDOMEventListenerWrapper> mOnProgressListener;
+  IMPL_EVENT_HANDLER(loadstart)
+  IMPL_EVENT_HANDLER(progress)
+  IMPL_EVENT_HANDLER(abort)
+  IMPL_EVENT_HANDLER(error)
+  IMPL_EVENT_HANDLER(load)
+  IMPL_EVENT_HANDLER(timeout)
+  IMPL_EVENT_HANDLER(loadend)
+  
+  virtual void DisconnectFromOwner();
 };
 
 class nsXMLHttpRequestUpload : public nsXHREventTarget,
                                public nsIXMLHttpRequestUpload
 {
 public:
-  nsXMLHttpRequestUpload(nsPIDOMWindow* aOwner,
-                         nsIScriptContext* aScriptContext)
+  nsXMLHttpRequestUpload(nsDOMEventTargetHelper* aOwner)
   {
-    mOwner = aOwner;
-    mScriptContext = aScriptContext;
-  }
-  virtual ~nsXMLHttpRequestUpload();
+    BindToOwner(aOwner);
+    SetIsDOMBinding();
+  }                                         
   NS_DECL_ISUPPORTS_INHERITED
   NS_FORWARD_NSIXMLHTTPREQUESTEVENTTARGET(nsXHREventTarget::)
   NS_FORWARD_NSIDOMEVENTTARGET(nsXHREventTarget::)
-  NS_FORWARD_NSIDOMNSEVENTTARGET(nsXHREventTarget::)
   NS_DECL_NSIXMLHTTPREQUESTUPLOAD
 
-  PRBool HasListeners()
+  virtual JSObject* WrapObject(JSContext *cx, JSObject *scope,
+                               bool *triedToWrap)
+  {
+    return mozilla::dom::XMLHttpRequestUploadBinding::Wrap(cx, scope, this, triedToWrap);
+  }
+  nsISupports* GetParentObject()
+  {
+    return GetOwner();
+  }
+
+  bool HasListeners()
   {
     return mListenerManager && mListenerManager->HasListeners();
   }
 };
 
+class nsXMLHttpRequestXPCOMifier;
+
+// Make sure that any non-DOM interfaces added here are also added to
+// nsXMLHttpRequestXPCOMifier.
 class nsXMLHttpRequest : public nsXHREventTarget,
                          public nsIXMLHttpRequest,
                          public nsIJSXMLHttpRequest,
-                         public nsIDOMLoadListener,
                          public nsIStreamListener,
                          public nsIChannelEventSink,
                          public nsIProgressEventSink,
@@ -194,30 +126,86 @@ class nsXMLHttpRequest : public nsXHREventTarget,
                          public nsIJSNativeInitializer,
                          public nsITimerCallback
 {
+  friend class nsXHRParseEndListener;
+  friend class nsXMLHttpRequestXPCOMifier;
+
 public:
   nsXMLHttpRequest();
   virtual ~nsXMLHttpRequest();
+
+  virtual JSObject* WrapObject(JSContext *cx, JSObject *scope,
+                               bool *triedToWrap)
+  {
+    return mozilla::dom::XMLHttpRequestBinding::Wrap(cx, scope, this, triedToWrap);
+  }
+  nsISupports* GetParentObject()
+  {
+    return GetOwner();
+  }
+
+  // The WebIDL constructors.
+  static already_AddRefed<nsXMLHttpRequest>
+  Constructor(JSContext* aCx,
+              nsISupports* aGlobal,
+              const mozilla::dom::MozXMLHttpRequestParameters& aParams,
+              ErrorResult& aRv)
+  {
+    nsCOMPtr<nsPIDOMWindow> window = do_QueryInterface(aGlobal);
+    nsCOMPtr<nsIScriptObjectPrincipal> principal = do_QueryInterface(aGlobal);
+    if (!window || ! principal) {
+      aRv.Throw(NS_ERROR_FAILURE);
+      return NULL;
+    }
+
+    nsRefPtr<nsXMLHttpRequest> req = new nsXMLHttpRequest();
+    req->Construct(principal->GetPrincipal(), window);
+    req->InitParameters(aParams.mMozAnon, aParams.mMozSystem);
+    return req.forget();
+  }
+
+  static already_AddRefed<nsXMLHttpRequest>
+  Constructor(JSContext* aCx,
+              nsISupports* aGlobal,
+              const nsAString& ignored,
+              ErrorResult& aRv)
+  {
+    // Pretend like someone passed null, so we can pick up the default values
+    mozilla::dom::MozXMLHttpRequestParameters params;
+    if (!params.Init(aCx, nullptr, JS::NullValue())) {
+      aRv.Throw(NS_ERROR_UNEXPECTED);
+      return nullptr;
+    }
+
+    return Constructor(aCx, aGlobal, params, aRv);
+  }
+
+  void Construct(nsIPrincipal* aPrincipal,
+                 nsPIDOMWindow* aOwnerWindow,
+                 nsIURI* aBaseURI = NULL)
+  {
+    MOZ_ASSERT(aPrincipal);
+    MOZ_ASSERT_IF(aOwnerWindow, aOwnerWindow->IsInnerWindow());
+    mPrincipal = aPrincipal;
+    BindToOwner(aOwnerWindow);
+    mBaseURI = aBaseURI;
+  }
+
+  // Initialize XMLHttpRequestParameter object.
+  nsresult InitParameters(JSContext* aCx, const jsval* aParams);
+  void InitParameters(bool aAnon, bool aSystem);
+
+  void SetParameters(bool aAnon, bool aSystem)
+  {
+    mIsAnon = aAnon;
+    mIsSystem = aSystem;
+  }
 
   NS_DECL_ISUPPORTS_INHERITED
 
   // nsIXMLHttpRequest
   NS_DECL_NSIXMLHTTPREQUEST
 
-  // nsIJSXMLHttpRequest
-  NS_IMETHOD GetOnuploadprogress(nsIDOMEventListener** aOnuploadprogress);
-  NS_IMETHOD SetOnuploadprogress(nsIDOMEventListener* aOnuploadprogress);
-
   NS_FORWARD_NSIXMLHTTPREQUESTEVENTTARGET(nsXHREventTarget::)
-
-  // nsIDOMEventListener
-  NS_DECL_NSIDOMEVENTLISTENER
-
-  // nsIDOMLoadListener
-  NS_IMETHOD Load(nsIDOMEvent* aEvent);
-  NS_IMETHOD BeforeUnload(nsIDOMEvent* aEvent);
-  NS_IMETHOD Unload(nsIDOMEvent* aEvent);
-  NS_IMETHOD Abort(nsIDOMEvent* aEvent);
-  NS_IMETHOD Error(nsIDOMEvent* aEvent);
 
   // nsIStreamListener
   NS_DECL_NSISTREAMLISTENER
@@ -239,98 +227,296 @@ public:
 
   // nsIJSNativeInitializer
   NS_IMETHOD Initialize(nsISupports* aOwner, JSContext* cx, JSObject* obj,
-                       PRUint32 argc, jsval* argv);
+                       uint32_t argc, jsval* argv);
 
   NS_FORWARD_NSIDOMEVENTTARGET(nsXHREventTarget::)
-  NS_FORWARD_NSIDOMNSEVENTTARGET(nsXHREventTarget::)
+
+#ifdef DEBUG
+  void StaticAssertions();
+#endif
+
+  // event handler
+  IMPL_EVENT_HANDLER(readystatechange)
+
+  // states
+  uint16_t ReadyState();
+
+  // request
+  void Open(const nsAString& aMethod, const nsAString& aUrl, bool aAsync,
+            const mozilla::dom::Optional<nsAString>& aUser,
+            const mozilla::dom::Optional<nsAString>& aPassword,
+            ErrorResult& aRv)
+  {
+    aRv = Open(NS_ConvertUTF16toUTF8(aMethod), NS_ConvertUTF16toUTF8(aUrl),
+               aAsync, aUser, aPassword);
+  }
+  void SetRequestHeader(const nsAString& aHeader, const nsAString& aValue,
+                        ErrorResult& aRv)
+  {
+    aRv = SetRequestHeader(NS_ConvertUTF16toUTF8(aHeader),
+                           NS_ConvertUTF16toUTF8(aValue));
+  }
+  uint32_t Timeout()
+  {
+    return mTimeoutMilliseconds;
+  }
+  void SetTimeout(uint32_t aTimeout, ErrorResult& aRv);
+  bool WithCredentials();
+  void SetWithCredentials(bool aWithCredentials, ErrorResult& aRv);
+  nsXMLHttpRequestUpload* Upload();
+
+private:
+  class RequestBody
+  {
+  public:
+    RequestBody() : mType(Uninitialized)
+    {
+    }
+    RequestBody(mozilla::dom::ArrayBuffer* aArrayBuffer) : mType(ArrayBuffer)
+    {
+      mValue.mArrayBuffer = aArrayBuffer;
+    }
+    RequestBody(mozilla::dom::ArrayBufferView* aArrayBufferView) : mType(ArrayBufferView)
+    {
+      mValue.mArrayBufferView = aArrayBufferView;
+    }
+    RequestBody(nsIDOMBlob* aBlob) : mType(Blob)
+    {
+      mValue.mBlob = aBlob;
+    }
+    RequestBody(nsIDocument* aDocument) : mType(Document)
+    {
+      mValue.mDocument = aDocument;
+    }
+    RequestBody(const nsAString& aString) : mType(DOMString)
+    {
+      mValue.mString = &aString;
+    }
+    RequestBody(nsFormData& aFormData) : mType(FormData)
+    {
+      mValue.mFormData = &aFormData;
+    }
+    RequestBody(nsIInputStream* aStream) : mType(InputStream)
+    {
+      mValue.mStream = aStream;
+    }
+
+    enum Type {
+      Uninitialized,
+      ArrayBuffer,
+      ArrayBufferView,
+      Blob,
+      Document,
+      DOMString,
+      FormData,
+      InputStream
+    };
+    union Value {
+      mozilla::dom::ArrayBuffer* mArrayBuffer;
+      mozilla::dom::ArrayBufferView* mArrayBufferView;
+      nsIDOMBlob* mBlob;
+      nsIDocument* mDocument;
+      const nsAString* mString;
+      nsFormData* mFormData;
+      nsIInputStream* mStream;
+    };
+
+    Type GetType() const
+    {
+      MOZ_ASSERT(mType != Uninitialized);
+      return mType;
+    }
+    Value GetValue() const
+    {
+      MOZ_ASSERT(mType != Uninitialized);
+      return mValue;
+    }
+
+  private:
+    Type mType;
+    Value mValue;
+  };
+
+  static nsresult GetRequestBody(nsIVariant* aVariant,
+                                 const Nullable<RequestBody>& aBody,
+                                 nsIInputStream** aResult,
+                                 uint64_t* aContentLength,
+                                 nsACString& aContentType,
+                                 nsACString& aCharset);
+
+  nsresult Send(nsIVariant* aVariant, const Nullable<RequestBody>& aBody);
+  nsresult Send(const Nullable<RequestBody>& aBody)
+  {
+    return Send(nullptr, aBody);
+  }
+  nsresult Send(const RequestBody& aBody)
+  {
+    return Send(Nullable<RequestBody>(aBody));
+  }
+
+public:
+  void Send(ErrorResult& aRv)
+  {
+    aRv = Send(Nullable<RequestBody>());
+  }
+  void Send(mozilla::dom::ArrayBuffer& aArrayBuffer, ErrorResult& aRv)
+  {
+    aRv = Send(RequestBody(&aArrayBuffer));
+  }
+  void Send(mozilla::dom::ArrayBufferView& aArrayBufferView, ErrorResult& aRv)
+  {
+    aRv = Send(RequestBody(&aArrayBufferView));
+  }
+  void Send(nsIDOMBlob* aBlob, ErrorResult& aRv)
+  {
+    NS_ASSERTION(aBlob, "Null should go to string version");
+    aRv = Send(RequestBody(aBlob));
+  }
+  void Send(nsIDocument* aDoc, ErrorResult& aRv)
+  {
+    NS_ASSERTION(aDoc, "Null should go to string version");
+    aRv = Send(RequestBody(aDoc));
+  }
+  void Send(const nsAString& aString, ErrorResult& aRv)
+  {
+    if (DOMStringIsNull(aString)) {
+      Send(aRv);
+    }
+    else {
+      aRv = Send(RequestBody(aString));
+    }
+  }
+  void Send(nsFormData& aFormData, ErrorResult& aRv)
+  {
+    aRv = Send(RequestBody(aFormData));
+  }
+  void Send(nsIInputStream* aStream, ErrorResult& aRv)
+  {
+    NS_ASSERTION(aStream, "Null should go to string version");
+    aRv = Send(RequestBody(aStream));
+  }
+  void SendAsBinary(const nsAString& aBody, ErrorResult& aRv);
+
+  void Abort();
+
+  // response
+  uint32_t Status();
+  void GetStatusText(nsString& aStatusText);
+  void GetResponseHeader(const nsACString& aHeader, nsACString& aResult,
+                         ErrorResult& aRv);
+  void GetResponseHeader(const nsAString& aHeader, nsString& aResult,
+                         ErrorResult& aRv)
+  {
+    nsCString result;
+    GetResponseHeader(NS_ConvertUTF16toUTF8(aHeader), result, aRv);
+    if (result.IsVoid()) {
+      aResult.SetIsVoid(true);
+    }
+    else {
+      // The result value should be inflated:
+      CopyASCIItoUTF16(result, aResult);
+    }
+  }
+  void GetAllResponseHeaders(nsString& aResponseHeaders);
+  void OverrideMimeType(const nsAString& aMimeType)
+  {
+    // XXX Should we do some validation here?
+    mOverrideMimeType = aMimeType;
+  }
+  XMLHttpRequestResponseType ResponseType()
+  {
+    return XMLHttpRequestResponseType(mResponseType);
+  }
+  void SetResponseType(XMLHttpRequestResponseType aType, ErrorResult& aRv);
+  JS::Value GetResponse(JSContext* aCx, ErrorResult& aRv);
+  void GetResponseText(nsString& aResponseText, ErrorResult& aRv);
+  nsIDocument* GetResponseXML(ErrorResult& aRv);
+
+  bool MozBackgroundRequest();
+  void SetMozBackgroundRequest(bool aMozBackgroundRequest, nsresult& aRv);
+  bool Multipart();
+  void SetMultipart(bool aMultipart, nsresult& aRv);
+
+  bool MozAnon();
+  bool MozSystem();
+
+  nsIChannel* GetChannel()
+  {
+    return mChannel;
+  }
+
+  // We need a GetInterface callable from JS for chrome JS
+  JS::Value GetInterface(JSContext* aCx, nsIJSID* aIID, ErrorResult& aRv);
 
   // This creates a trusted readystatechange event, which is not cancelable and
   // doesn't bubble.
   static nsresult CreateReadystatechangeEvent(nsIDOMEvent** aDOMEvent);
   // For backwards compatibility aPosition should contain the headers for upload
-  // and aTotalSize is LL_MAXUINT when unknown. Both those values are
+  // and aTotalSize is UINT64_MAX when unknown. Both those values are
   // used by nsXMLHttpProgressEvent. Normal progress event should not use
   // headers in aLoaded and aTotal is 0 when unknown.
-  void DispatchProgressEvent(nsPIDOMEventTarget* aTarget,
+  void DispatchProgressEvent(nsDOMEventTargetHelper* aTarget,
                              const nsAString& aType,
                              // Whether to use nsXMLHttpProgressEvent,
                              // which implements LS Progress Event.
-                             PRBool aUseLSEventWrapper,
-                             PRBool aLengthComputable,
+                             bool aUseLSEventWrapper,
+                             bool aLengthComputable,
                              // For Progress Events
-                             PRUint64 aLoaded, PRUint64 aTotal,
+                             uint64_t aLoaded, uint64_t aTotal,
                              // For LS Progress Events
-                             PRUint64 aPosition, PRUint64 aTotalSize);
-  void DispatchProgressEvent(nsPIDOMEventTarget* aTarget,
+                             uint64_t aPosition, uint64_t aTotalSize);
+  void DispatchProgressEvent(nsDOMEventTargetHelper* aTarget,
                              const nsAString& aType,
-                             PRBool aLengthComputable,
-                             PRUint64 aLoaded, PRUint64 aTotal)
+                             bool aLengthComputable,
+                             uint64_t aLoaded, uint64_t aTotal)
   {
-    DispatchProgressEvent(aTarget, aType, PR_FALSE,
+    DispatchProgressEvent(aTarget, aType, false,
                           aLengthComputable, aLoaded, aTotal,
-                          aLoaded, aLengthComputable ? aTotal : LL_MAXUINT);
+                          aLoaded, aLengthComputable ? aTotal : UINT64_MAX);
   }
+
+  // Dispatch the "progress" event on the XHR or XHR.upload object if we've
+  // received data since the last "progress" event. Also dispatches
+  // "uploadprogress" as needed.
+  void MaybeDispatchProgressEvents(bool aFinalProgress);
 
   // This is called by the factory constructor.
   nsresult Init();
 
   void SetRequestObserver(nsIRequestObserver* aObserver);
 
-  NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED(nsXMLHttpRequest,
-                                           nsXHREventTarget)
+  NS_DECL_CYCLE_COLLECTION_SKIPPABLE_SCRIPT_HOLDER_CLASS_INHERITED(nsXMLHttpRequest,
+                                                                   nsXHREventTarget)
+  bool AllowUploadProgress();
+  void RootJSResultObjects();
 
-  static PRBool EnsureACCache()
-  {
-    if (sAccessControlCache)
-      return PR_TRUE;
-
-    nsAutoPtr<nsAccessControlLRUCache> newCache(new nsAccessControlLRUCache());
-    NS_ENSURE_TRUE(newCache, PR_FALSE);
-
-    if (newCache->Initialize()) {
-      sAccessControlCache = newCache.forget();
-      return PR_TRUE;
-    }
-
-    return PR_FALSE;
-  }
-
-  static void ShutdownACCache()
-  {
-    delete sAccessControlCache;
-    sAccessControlCache = nsnull;
-  }
-
-  PRBool AllowUploadProgress();
-
-  static nsAccessControlLRUCache* sAccessControlCache;
-
+  virtual void DisconnectFromOwner();
 protected:
   friend class nsMultipartProxyListener;
 
-  nsresult DetectCharset(nsACString& aCharset);
-  nsresult ConvertBodyToText(nsAString& aOutBuffer);
+  nsresult DetectCharset();
+  nsresult AppendToResponseText(const char * aBuffer, uint32_t aBufferLen);
   static NS_METHOD StreamReaderFunc(nsIInputStream* in,
                 void* closure,
                 const char* fromRawSegment,
-                PRUint32 toOffset,
-                PRUint32 count,
-                PRUint32 *writeCount);
+                uint32_t toOffset,
+                uint32_t count,
+                uint32_t *writeCount);
+  nsresult CreateResponseParsedJSON(JSContext* aCx);
+  void CreatePartialBlob();
+  bool CreateDOMFile(nsIRequest *request);
   // Change the state of the object with this. The broadcast argument
   // determines if the onreadystatechange listener should be called.
-  nsresult ChangeState(PRUint32 aState, PRBool aBroadcast = PR_TRUE);
-  nsresult RequestCompleted();
-  nsresult GetLoadGroup(nsILoadGroup **aLoadGroup);
+  nsresult ChangeState(uint32_t aState, bool aBroadcast = true);
+  already_AddRefed<nsILoadGroup> GetLoadGroup() const;
   nsIURI *GetBaseURI();
 
-  nsresult RemoveAddEventListener(const nsAString& aType,
-                                  nsRefPtr<nsDOMEventListenerWrapper>& aCurrent,
-                                  nsIDOMEventListener* aNew);
-
-  nsresult GetInnerEventListener(nsRefPtr<nsDOMEventListenerWrapper>& aWrapper,
-                                 nsIDOMEventListener** aListener);
-
   already_AddRefed<nsIHttpChannel> GetCurrentHttpChannel();
+  already_AddRefed<nsIJARChannel> GetCurrentJARChannel();
+
+  bool IsSystemXHR();
+
+  void ChangeStateToDone();
 
   /**
    * Check if aChannel is ok for a cross-site request by making sure no
@@ -345,17 +531,20 @@ protected:
   friend class AsyncVerifyRedirectCallbackForwarder;
   void OnRedirectVerifyCallback(nsresult result);
 
+  nsresult Open(const nsACString& method, const nsACString& url, bool async,
+                const mozilla::dom::Optional<nsAString>& user,
+                const mozilla::dom::Optional<nsAString>& password);
+
+  already_AddRefed<nsXMLHttpRequestXPCOMifier> EnsureXPCOMifier();
+
   nsCOMPtr<nsISupports> mContext;
   nsCOMPtr<nsIPrincipal> mPrincipal;
   nsCOMPtr<nsIChannel> mChannel;
   // mReadRequest is different from mChannel for multipart requests
   nsCOMPtr<nsIRequest> mReadRequest;
-  nsCOMPtr<nsIDOMDocument> mResponseXML;
-  nsCOMPtr<nsIChannel> mACGetChannel;
-  nsTArray<nsCString> mACUnsafeHeaders;
-
-  nsRefPtr<nsDOMEventListenerWrapper> mOnUploadProgressListener;
-  nsRefPtr<nsDOMEventListenerWrapper> mOnReadystatechangeListener;
+  nsCOMPtr<nsIDocument> mResponseXML;
+  nsCOMPtr<nsIChannel> mCORSPreflightChannel;
+  nsTArray<nsCString> mCORSUnsafeHeaders;
 
   nsCOMPtr<nsIStreamListener> mXMLParserStreamListener;
 
@@ -371,17 +560,58 @@ protected:
     nsCString mHeaders;
   };
 
-  // The bytes of our response body
+  // The bytes of our response body. Only used for DEFAULT, ARRAYBUFFER and
+  // BLOB responseTypes
   nsCString mResponseBody;
 
-  // The Unicode version of our response body.  This is just a cache; if the
-  // string is not void, we have a cached value.  This works because we only
-  // allow looking at this value once state is INTERACTIVE, and at that
-  // point our charset can only change due to more data coming in, which
-  // will cause us to clear the cached value anyway.
-  nsString mResponseBodyUnicode;
+  // The text version of our response body. This is incrementally decoded into
+  // as we receive network data. However for the DEFAULT responseType we
+  // lazily decode into this from mResponseBody only when .responseText is
+  // accessed.
+  // Only used for DEFAULT and TEXT responseTypes.
+  nsString mResponseText;
+  
+  // For DEFAULT responseType we use this to keep track of how far we've
+  // lazily decoded from mResponseBody to mResponseText
+  uint32_t mResponseBodyDecodedPos;
 
-  nsCString mOverrideMimeType;
+  // Decoder used for decoding into mResponseText
+  // Only used for DEFAULT, TEXT and JSON responseTypes.
+  // In cases where we've only received half a surrogate, the decoder itself
+  // carries the state to remember this. Next time we receive more data we
+  // simply feed the new data into the decoder which will handle the second
+  // part of the surrogate.
+  nsCOMPtr<nsIUnicodeDecoder> mDecoder;
+
+  nsCString mResponseCharset;
+
+  enum ResponseTypeEnum {
+    XML_HTTP_RESPONSE_TYPE_DEFAULT,
+    XML_HTTP_RESPONSE_TYPE_ARRAYBUFFER,
+    XML_HTTP_RESPONSE_TYPE_BLOB,
+    XML_HTTP_RESPONSE_TYPE_DOCUMENT,
+    XML_HTTP_RESPONSE_TYPE_JSON,
+    XML_HTTP_RESPONSE_TYPE_TEXT,
+    XML_HTTP_RESPONSE_TYPE_CHUNKED_TEXT,
+    XML_HTTP_RESPONSE_TYPE_CHUNKED_ARRAYBUFFER,
+    XML_HTTP_RESPONSE_TYPE_MOZ_BLOB
+  };
+
+  void SetResponseType(nsXMLHttpRequest::ResponseTypeEnum aType, ErrorResult& aRv);
+
+  ResponseTypeEnum mResponseType;
+
+  // It is either a cached blob-response from the last call to GetResponse,
+  // but is also explicitly set in OnStopRequest.
+  nsCOMPtr<nsIDOMBlob> mResponseBlob;
+  // Non-null only when we are able to get a os-file representation of the
+  // response, i.e. when loading from a file.
+  nsRefPtr<nsDOMFile> mDOMFile;
+  // We stream data to mBlobSet when response type is "blob" or "moz-blob"
+  // and mDOMFile is null.
+  nsAutoPtr<BlobSet> mBlobSet;
+
+  nsString mOverrideMimeType;
 
   /**
    * The notification callbacks the channel had when Send() was
@@ -400,85 +630,153 @@ protected:
 
   nsCOMPtr<nsIURI> mBaseURI;
 
-  PRUint32 mState;
+  uint32_t mState;
 
   nsRefPtr<nsXMLHttpRequestUpload> mUpload;
-  PRUint64 mUploadTransferred;
-  PRUint64 mUploadTotal;
-  PRPackedBool mUploadComplete;
-  PRUint64 mUploadProgress; // For legacy
-  PRUint64 mUploadProgressMax; // For legacy
+  uint64_t mUploadTransferred;
+  uint64_t mUploadTotal;
+  bool mUploadLengthComputable;
+  bool mUploadComplete;
+  bool mProgressSinceLastProgressEvent;
+  uint64_t mUploadProgress; // For legacy
+  uint64_t mUploadProgressMax; // For legacy
 
-  PRPackedBool mErrorLoad;
+  // Timeout support
+  PRTime mRequestSentTime;
+  uint32_t mTimeoutMilliseconds;
+  nsCOMPtr<nsITimer> mTimeoutTimer;
+  void StartTimeoutTimer();
+  void HandleTimeoutCallback();
 
-  PRPackedBool mTimerIsActive;
-  PRPackedBool mProgressEventWasDelayed;
-  PRPackedBool mLoadLengthComputable;
-  PRUint64 mLoadTotal; // 0 if not known.
+  bool mErrorLoad;
+  bool mWaitingForOnStopRequest;
+  bool mProgressTimerIsActive;
+  bool mProgressEventWasDelayed;
+  bool mIsHtml;
+  bool mWarnAboutMultipartHtml;
+  bool mWarnAboutSyncHtml;
+  bool mLoadLengthComputable;
+  uint64_t mLoadTotal; // 0 if not known.
+  uint64_t mLoadTransferred;
   nsCOMPtr<nsITimer> mProgressNotifier;
+  void HandleProgressTimerCallback();
 
-  PRPackedBool mFirstStartRequestSeen;
+  bool mIsSystem;
+  bool mIsAnon;
+
+  /**
+   * Close the XMLHttpRequest's channels and dispatch appropriate progress
+   * events.
+   *
+   * @param aType The progress event type.
+   * @param aFlag A XML_HTTP_REQUEST_* state flag defined in
+   *              nsXMLHttpRequest.cpp.
+   */
+  void CloseRequestWithError(const nsAString& aType, const uint32_t aFlag);
+
+  bool mFirstStartRequestSeen;
+  bool mInLoadProgressEvent;
   
   nsCOMPtr<nsIAsyncVerifyRedirectCallback> mRedirectCallback;
   nsCOMPtr<nsIChannel> mNewRedirectChannel;
+  
+  jsval mResultJSON;
+  JSObject* mResultArrayBuffer;
+
+  void ResetResponse();
+
+  struct RequestHeader
+  {
+    nsCString header;
+    nsCString value;
+  };
+  nsTArray<RequestHeader> mModifiedRequestHeaders;
+
+  // Helper object to manage our XPCOM scriptability bits
+  nsXMLHttpRequestXPCOMifier* mXPCOMifier;
+};
+
+// A shim class designed to expose the non-DOM interfaces of
+// XMLHttpRequest via XPCOM stuff.
+class nsXMLHttpRequestXPCOMifier MOZ_FINAL : public nsIStreamListener,
+                                             public nsIChannelEventSink,
+                                             public nsIProgressEventSink,
+                                             public nsIInterfaceRequestor,
+                                             public nsITimerCallback,
+                                             public nsCycleCollectionParticipant
+{
+  NS_DECL_CYCLE_COLLECTING_ISUPPORTS
+  NS_DECL_CYCLE_COLLECTION_CLASS_AMBIGUOUS(nsXMLHttpRequestXPCOMifier,
+                                           nsIStreamListener)
+
+  nsXMLHttpRequestXPCOMifier(nsXMLHttpRequest* aXHR) :
+    mXHR(aXHR)
+  {
+  }
+
+  ~nsXMLHttpRequestXPCOMifier() {
+    if (mXHR) {
+      mXHR->mXPCOMifier = nullptr;
+    }
+  }
+
+  NS_FORWARD_NSISTREAMLISTENER(mXHR->)
+  NS_FORWARD_NSIREQUESTOBSERVER(mXHR->)
+  NS_FORWARD_NSICHANNELEVENTSINK(mXHR->)
+  NS_FORWARD_NSIPROGRESSEVENTSINK(mXHR->)
+  NS_FORWARD_NSITIMERCALLBACK(mXHR->)
+
+  NS_DECL_NSIINTERFACEREQUESTOR
+
+private:
+  nsRefPtr<nsXMLHttpRequest> mXHR;
 };
 
 // helper class to expose a progress DOM Event
 
 class nsXMLHttpProgressEvent : public nsIDOMProgressEvent,
-                               public nsIDOMLSProgressEvent,
-                               public nsIDOMNSEvent,
-                               public nsIPrivateDOMEvent
+                               public nsIDOMLSProgressEvent
 {
 public:
   nsXMLHttpProgressEvent(nsIDOMProgressEvent* aInner,
-                         PRUint64 aCurrentProgress,
-                         PRUint64 aMaxProgress);
+                         uint64_t aCurrentProgress,
+                         uint64_t aMaxProgress,
+                         nsPIDOMWindow* aWindow);
   virtual ~nsXMLHttpProgressEvent();
 
   NS_DECL_CYCLE_COLLECTING_ISUPPORTS
-  NS_DECL_CYCLE_COLLECTION_CLASS_AMBIGUOUS(nsXMLHttpProgressEvent, nsIDOMNSEvent)
+  NS_DECL_CYCLE_COLLECTION_CLASS_AMBIGUOUS(nsXMLHttpProgressEvent, nsIDOMProgressEvent)
   NS_FORWARD_NSIDOMEVENT(mInner->)
-  NS_FORWARD_NSIDOMNSEVENT(mInner->)
   NS_FORWARD_NSIDOMPROGRESSEVENT(mInner->)
   NS_DECL_NSIDOMLSPROGRESSEVENT
-  // nsPrivateDOMEvent
-  NS_IMETHOD DuplicatePrivateData()
-  {
-    return mInner->DuplicatePrivateData();
-  }
-  NS_IMETHOD SetTarget(nsIDOMEventTarget* aTarget)
-  {
-    return mInner->SetTarget(aTarget);
-  }
-  NS_IMETHOD_(PRBool) IsDispatchStopped()
-  {
-    return mInner->IsDispatchStopped();
-  }
-  NS_IMETHOD_(nsEvent*) GetInternalNSEvent()
-  {
-    return mInner->GetInternalNSEvent();
-  }
-  NS_IMETHOD SetTrusted(PRBool aTrusted)
-  {
-    return mInner->SetTrusted(aTrusted);
-  }
-  virtual void Serialize(IPC::Message* aMsg,
-                         PRBool aSerializeInterfaceType)
-  {
-    mInner->Serialize(aMsg, aSerializeInterfaceType);
-  }
-  virtual PRBool Deserialize(const IPC::Message* aMsg, void** aIter)
-  {
-    return mInner->Deserialize(aMsg, aIter);
-  }
 
 protected:
-  // Use nsDOMProgressEvent so that we can forward
-  // most of the method calls easily.
-  nsRefPtr<nsDOMProgressEvent> mInner;
-  PRUint64 mCurProgress;
-  PRUint64 mMaxProgress;
+  void WarnAboutLSProgressEvent(nsIDocument::DeprecatedOperations);
+
+  nsCOMPtr<nsIDOMProgressEvent> mInner;
+  nsCOMPtr<nsPIDOMWindow> mWindow;
+  uint64_t mCurProgress;
+  uint64_t mMaxProgress;
+};
+
+class nsXHRParseEndListener : public nsIDOMEventListener
+{
+public:
+  NS_DECL_ISUPPORTS
+  NS_IMETHOD HandleEvent(nsIDOMEvent *event)
+  {
+    nsCOMPtr<nsIXMLHttpRequest> xhr = do_QueryReferent(mXHR);
+    if (xhr) {
+      static_cast<nsXMLHttpRequest*>(xhr.get())->ChangeStateToDone();
+    }
+    mXHR = nullptr;
+    return NS_OK;
+  }
+  nsXHRParseEndListener(nsIXMLHttpRequest* aXHR)
+    : mXHR(do_GetWeakReference(aXHR)) {}
+  virtual ~nsXHRParseEndListener() {}
+private:
+  nsWeakPtr mXHR;
 };
 
 #endif

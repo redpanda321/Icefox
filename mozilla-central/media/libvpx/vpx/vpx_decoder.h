@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license 
+ *  Use of this source code is governed by a BSD-style license
  *  that can be found in the LICENSE file in the root of the source
  *  tree. An additional intellectual property rights grant can be found
- *  in the file PATENTS.  All contributing project authors may 
+ *  in the file PATENTS.  All contributing project authors may
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
@@ -17,7 +17,7 @@
  * @{
  */
 
-/*!\file vpx_decoder.h
+/*!\file
  * \brief Describes the decoder algorithm interface to applications.
  *
  * This file describes the interface between an application and a
@@ -48,11 +48,15 @@ extern "C" {
      *  ::vpx_codec_iface_t interface structure. Capabilities are extra interfaces
      *  or functionality, and are not required to be supported by a decoder.
      *
-     *  The available flags are specifiedby VPX_CODEC_CAP_* defines.
+     *  The available flags are specified by VPX_CODEC_CAP_* defines.
      */
 #define VPX_CODEC_CAP_PUT_SLICE  0x10000 /**< Will issue put_slice callbacks */
 #define VPX_CODEC_CAP_PUT_FRAME  0x20000 /**< Will issue put_frame callbacks */
 #define VPX_CODEC_CAP_POSTPROC   0x40000 /**< Can postprocess decoded frame */
+#define VPX_CODEC_CAP_ERROR_CONCEALMENT   0x80000 /**< Can conceal errors due to
+                                                       packet loss */
+#define VPX_CODEC_CAP_INPUT_FRAGMENTS   0x100000 /**< Can receive encoded frames
+                                                    one fragment at a time */
 
     /*! \brief Initialization-time Feature Enabling
      *
@@ -62,6 +66,11 @@ extern "C" {
      *  The available flags are specified by VPX_CODEC_USE_* defines.
      */
 #define VPX_CODEC_USE_POSTPROC   0x10000 /**< Postprocess decoded frame */
+#define VPX_CODEC_USE_ERROR_CONCEALMENT 0x20000 /**< Conceal errors in decoded
+                                                     frames */
+#define VPX_CODEC_USE_INPUT_FRAGMENTS   0x40000 /**< The input frame should be
+                                                    passed to the decoder one
+                                                    fragment at a time */
 
     /*!\brief Stream properties
      *
@@ -109,7 +118,7 @@ extern "C" {
      * kept readable and stable until all memory maps have been set.
      *
      * \param[in]    ctx     Pointer to this instance's context.
-     * \param[in]    iface   Pointer to the alogrithm interface to use.
+     * \param[in]    iface   Pointer to the algorithm interface to use.
      * \param[in]    cfg     Configuration to use, if known. May be NULL.
      * \param[in]    flags   Bitfield of VPX_CODEC_USE_* flags
      * \param[in]    ver     ABI version number. Must be set to
@@ -139,7 +148,7 @@ extern "C" {
      * context is not necessary. Can be used to determine if the bitstream is
      * of the proper format, and to extract information from the stream.
      *
-     * \param[in]      iface   Pointer to the alogrithm interface
+     * \param[in]      iface   Pointer to the algorithm interface
      * \param[in]      data    Pointer to a block of data to parse
      * \param[in]      data_sz Size of the data buffer
      * \param[in,out]  si      Pointer to stream info to update. The size member
@@ -180,6 +189,13 @@ extern "C" {
      * generated, as appropriate. Encoded data \ref MUST be passed in DTS (decode
      * time stamp) order. Frames produced will always be in PTS (presentation
      * time stamp) order.
+     * If the decoder is configured with VPX_CODEC_USE_INPUT_FRAGMENTS enabled,
+     * data and data_sz can contain a fragment of the encoded frame. Fragment #n
+     * must contain at least partition #n, but can also contain subsequent
+     * partitions (#n+1 - #n+i), and if so, fragments #n+1, .., #n+i must be
+     * empty. When no more data is available, this function should be called
+     * with NULL as data and 0 as data_sz. The memory passed to this function
+     * must be available until the frame has been decoded.
      *
      * \param[in] ctx          Pointer to this instance's context
      * \param[in] data         Pointer to this block of new coded data. If

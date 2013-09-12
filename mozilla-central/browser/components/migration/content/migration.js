@@ -1,42 +1,15 @@
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is The Browser Profile Migrator.
-#
-# The Initial Developer of the Original Code is Ben Goodger.
-# Portions created by the Initial Developer are Copyright (C) 2004
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Ben Goodger <ben@bengoodger.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-const kIMig = Components.interfaces.nsIBrowserProfileMigrator;
-const kIPStartup = Components.interfaces.nsIProfileStartup;
-const kProfileMigratorContractIDPrefix = "@mozilla.org/profile/migrator;1?app=browser&type=";
+const Cc = Components.classes;
+const Ci = Components.interfaces;
+const Cu = Components.utils;
+
+const kIMig = Ci.nsIBrowserProfileMigrator;
+const kIPStartup = Ci.nsIProfileStartup;
+
+Cu.import("resource:///modules/MigrationUtils.jsm");
 
 var MigrationWizard = {
   _source: "",                  // Source Profile Migrator ContractID suffix
@@ -45,7 +18,6 @@ var MigrationWizard = {
   _wiz: null,
   _migrator: null,
   _autoMigrate: null,
-  _bookmarks: false,
 
   init: function ()
   {
@@ -54,14 +26,17 @@ var MigrationWizard = {
     os.addObserver(this, "Migration:Started", false);
     os.addObserver(this, "Migration:ItemBeforeMigrate", false);
     os.addObserver(this, "Migration:ItemAfterMigrate", false);
+    os.addObserver(this, "Migration:ItemError", false);
     os.addObserver(this, "Migration:Ended", false);
 
     this._wiz = document.documentElement;
 
     if ("arguments" in window && window.arguments.length > 1) {
       this._source = window.arguments[0];
-      this._migrator = window.arguments[1].QueryInterface(kIMig);
+      this._migrator = window.arguments[1] instanceof kIMig ?
+                       window.arguments[1] : null;
       this._autoMigrate = window.arguments[2].QueryInterface(kIPStartup);
+      this._skipImportSourcePage = window.arguments[3];
 
       if (this._autoMigrate) {
         // Show the "nothing" option in the automigrate case to provide an
@@ -81,54 +56,28 @@ var MigrationWizard = {
     os.removeObserver(this, "Migration:Started");
     os.removeObserver(this, "Migration:ItemBeforeMigrate");
     os.removeObserver(this, "Migration:ItemAfterMigrate");
+    os.removeObserver(this, "Migration:ItemError");
     os.removeObserver(this, "Migration:Ended");
+    MigrationUtils.finishMigration();
   },
 
   // 1 - Import Source
   onImportSourcePageShow: function ()
   {
-    // Reference to the "From File" radio button 
-    var fromfile = null;
-
-    //XXXquark This function is called before init, so check for bookmarks here
-    if ("arguments" in window && window.arguments[0] == "bookmarks") {
-      this._bookmarks = true;
-
-      fromfile = document.getElementById("fromfile");
-      fromfile.hidden = false;
-
-      var importBookmarks = document.getElementById("importBookmarks");
-      importBookmarks.hidden = false;
-
-      var importAll = document.getElementById("importAll");
-      importAll.hidden = true;
-    }
-
     this._wiz.canRewind = false;
 
-    // The migrator to select. If the "fromfile" migrator is available, use it
-    // as the default in case we have no other migrators.
-    var selectedMigrator = fromfile;
+    var selectedMigrator = null;
 
     // Figure out what source apps are are available to import from:
     var group = document.getElementById("importSourceGroup");
     for (var i = 0; i < group.childNodes.length; ++i) {
-      var suffix = group.childNodes[i].id;
-      if (suffix != "nothing" && suffix != "fromfile") {
-        var contractID = kProfileMigratorContractIDPrefix + suffix;
-        try {
-          var migrator = Components.classes[contractID].createInstance(kIMig);
-        }
-        catch (e) {
-          dump("*** invalid contractID =" + contractID + "\n");
-          return;
-        }
-
-        if (migrator.sourceExists &&
-            !(suffix == "phoenix" && !this._autoMigrate)) {
+      var migratorKey = group.childNodes[i].id;
+      if (migratorKey != "nothing") {
+        var migrator = MigrationUtils.getMigrator(migratorKey);
+        if (migrator) {
           // Save this as the first selectable item, if we don't already have
           // one, or if it is the migrator that was passed to us.
-          if (!selectedMigrator || this._source == suffix)
+          if (!selectedMigrator || this._source == migratorKey)
             selectedMigrator = group.childNodes[i];
         } else {
           // Hide this option
@@ -148,23 +97,26 @@ var MigrationWizard = {
       document.getElementById("importBookmarks").hidden = true;
       document.getElementById("importAll").hidden = true;
     }
+
+    // Advance to the next page if the caller told us to.
+    if (this._migrator && this._skipImportSourcePage) {
+      this._wiz.advance();
+      this._wiz.canRewind = false;
+    }
   },
   
   onImportSourcePageAdvanced: function ()
   {
     var newSource = document.getElementById("importSourceGroup").selectedItem.id;
     
-    if (newSource == "nothing" || newSource == "fromfile") {
-      if(newSource == "fromfile")
-        window.opener.fromFile = true;
+    if (newSource == "nothing") {
       document.documentElement.cancel();
       return false;
     }
     
     if (!this._migrator || (newSource != this._source)) {
       // Create the migrator for the selected source.
-      var contractID = kProfileMigratorContractIDPrefix + newSource;
-      this._migrator = Components.classes[contractID].createInstance(kIMig);
+      this._migrator = MigrationUtils.getMigrator(newSource);
 
       this._itemsFlags = kIMig.ALL;
       this._selectedProfile = null;
@@ -172,21 +124,18 @@ var MigrationWizard = {
     this._source = newSource;
       
     // check for more than one source profile
-    if (this._migrator.sourceHasMultipleProfiles)
+    var sourceProfiles = this._migrator.sourceProfiles;    
+    if (sourceProfiles && sourceProfiles.length > 1) {
       this._wiz.currentPage.next = "selectProfile";
+    }
     else {
       if (this._autoMigrate)
         this._wiz.currentPage.next = "homePageImport";
-      else if (this._bookmarks)
-        this._wiz.currentPage.next = "migrating"
       else
         this._wiz.currentPage.next = "importItems";
 
-      var sourceProfiles = this._migrator.sourceProfiles;
-      if (sourceProfiles && sourceProfiles.Count() == 1) {
-        var profileName = sourceProfiles.QueryElementAt(0, Components.interfaces.nsISupportsString);
-        this._selectedProfile = profileName.data;
-      }
+      if (sourceProfiles && sourceProfiles.length == 1)
+        this._selectedProfile = sourceProfiles[0];
       else
         this._selectedProfile = "";
     }
@@ -208,12 +157,10 @@ var MigrationWizard = {
     // and we canceled the dialog.  When that happens, _migrator will be null.
     if (this._migrator) {
       var sourceProfiles = this._migrator.sourceProfiles;
-      var count = sourceProfiles.Count();
-      for (var i = 0; i < count; ++i) {
+      for (var i = 0; i < sourceProfiles.length; ++i) {
         var item = document.createElement("radio");
-        var str = sourceProfiles.QueryElementAt(i, Components.interfaces.nsISupportsString);
-        item.id = str.data;
-        item.setAttribute("label", str.data);
+        item.id = sourceProfiles[i];
+        item.setAttribute("label", sourceProfiles[i]);
         profiles.appendChild(item);
       }
     }
@@ -235,8 +182,6 @@ var MigrationWizard = {
     // If we're automigrating or just doing bookmarks don't show the item selection page
     if (this._autoMigrate)
       this._wiz.currentPage.next = "homePageImport";
-    else if (this._bookmarks)
-      this._wiz.currentPage.next = "migrating"
   },
   
   // 3 - ImportItems
@@ -245,16 +190,15 @@ var MigrationWizard = {
     var dataSources = document.getElementById("dataSources");
     while (dataSources.hasChildNodes())
       dataSources.removeChild(dataSources.firstChild);
-    
-    var bundle = document.getElementById("bundle");
-    
+
     var items = this._migrator.getMigrateData(this._selectedProfile, this._autoMigrate);
     for (var i = 0; i < 16; ++i) {
       var itemID = (items >> i) & 0x1 ? Math.pow(2, i) : 0;
       if (itemID > 0) {
         var checkbox = document.createElement("checkbox");
         checkbox.id = itemID;
-        checkbox.setAttribute("label", bundle.getString(itemID + "_" + this._source));
+        checkbox.setAttribute("label", 
+          MigrationUtils.getLocalizedString(itemID + "_" + this._source));
         dataSources.appendChild(checkbox);
         if (!this._itemsFlags || this._itemsFlags & itemID)
           checkbox.checked = true;
@@ -304,13 +248,13 @@ var MigrationWizard = {
       return;
     }
 
-    var bundle = document.getElementById("brandBundle");
+    var brandBundle = document.getElementById("brandBundle");
     // These strings don't exist when not using official branding. If that's
     // the case, just skip this page.
     try {
-      var pageTitle = bundle.getString("homePageMigrationPageTitle");
-      var pageDesc = bundle.getString("homePageMigrationDescription");
-      var mainStr = bundle.getString("homePageSingleStartMain");
+      var pageTitle = brandBundle.getString("homePageMigrationPageTitle");
+      var pageDesc = brandBundle.getString("homePageMigrationDescription");
+      var mainStr = brandBundle.getString("homePageSingleStartMain");
     }
     catch (e) {
       this._wiz.advance();
@@ -329,20 +273,16 @@ var MigrationWizard = {
     var source = null;
     switch (this._source) {
       case "ie":
-      case "macie":
         source = "sourceNameIE";
-        break;
-      case "opera":
-        source = "sourceNameOpera";
-        break;
-      case "dogbert":
-        source = "sourceNameDogbert";
         break;
       case "safari":
         source = "sourceNameSafari";
         break;
-      case "seamonkey":
-        source = "sourceNameSeamonkey";
+      case "chrome":
+        source = "sourceNameChrome";
+        break;
+      case "firefox":
+        source = "sourceNameFirefox";
         break;
     }
 
@@ -352,10 +292,9 @@ var MigrationWizard = {
     var oldHomePageURL = this._migrator.sourceHomePageURL;
 
     if (oldHomePageURL && source) {
-      var bundle2 = document.getElementById("bundle");
-      var appName = bundle2.getString(source);
-      var oldHomePageLabel = bundle.getFormattedString("homePageImport",
-                                                       [appName]);
+      var appName = MigrationUtils.getLocalizedString(source);
+      var oldHomePageLabel =
+        brandBundle.getFormattedString("homePageImport", [appName]);
       var oldHomePage = document.getElementById("oldHomePage");
       oldHomePage.setAttribute("label", oldHomePageLabel);
       oldHomePage.setAttribute("value", oldHomePageURL);
@@ -388,10 +327,6 @@ var MigrationWizard = {
     if (this._autoMigrate)
       this._itemsFlags = this._migrator.getMigrateData(this._selectedProfile, this._autoMigrate);
 
-    // When importing bookmarks, show only bookmarks
-    if (this._bookmarks)
-      this._itemsFlags = 32;
-
     this._listItems("migratingItems");
     setTimeout(this.onMigratingMigrate, 0, this);
   },
@@ -406,8 +341,7 @@ var MigrationWizard = {
     var items = document.getElementById(aID);
     while (items.hasChildNodes())
       items.removeChild(items.firstChild);
-    
-    var bundle = document.getElementById("bundle");
+
     var brandBundle = document.getElementById("brandBundle");
     var itemID;
     for (var i = 0; i < 16; ++i) {
@@ -416,7 +350,8 @@ var MigrationWizard = {
         var label = document.createElement("label");
         label.id = itemID + "_migrated";
         try {
-          label.setAttribute("value", bundle.getString(itemID + "_" + this._source));
+          label.setAttribute("value",
+            MigrationUtils.getLocalizedString(itemID + "_" + this._source));
           items.appendChild(label);
         }
         catch (e) {
@@ -453,10 +388,7 @@ var MigrationWizard = {
             var prefBranch = prefSvc.getBranch(null);
 
             if (this._newHomePage == "DEFAULT") {
-              try {
-                prefBranch.clearUserPref("browser.startup.homepage");
-              }
-              catch (e) { }
+              prefBranch.clearUserPref("browser.startup.homepage");
             }
             else {
               var str = Components.classes["@mozilla.org/supports-string;1"]
@@ -488,6 +420,35 @@ var MigrationWizard = {
         var nextButton = this._wiz.getButton("next");
         nextButton.click();
       }
+      break;
+    case "Migration:ItemError":
+      var type = "undefined";
+      switch (parseInt(aData)) {
+      case Ci.nsIBrowserProfileMigrator.SETTINGS:
+        type = "settings";
+        break;
+      case Ci.nsIBrowserProfileMigrator.COOKIES:
+        type = "cookies";
+        break;
+      case Ci.nsIBrowserProfileMigrator.HISTORY:
+        type = "history";
+        break;
+      case Ci.nsIBrowserProfileMigrator.FORMDATA:
+        type = "form data";
+        break;
+      case Ci.nsIBrowserProfileMigrator.PASSWORDS:
+        type = "passwords";
+        break;
+      case Ci.nsIBrowserProfileMigrator.BOOKMARKS:
+        type = "bookmarks";
+        break;
+      case Ci.nsIBrowserProfileMigrator.OTHERDATA:
+        type = "misc. data";
+        break;
+      }
+      Cc["@mozilla.org/consoleservice;1"]
+        .getService(Ci.nsIConsoleService)
+        .logStringMessage("some " + type + " did not successfully migrate.");
       break;
     }
   },

@@ -1,42 +1,10 @@
 /*
- * sha512.c - implementation of SHA256, SHA384 and SHA512
+ * sha512.c - implementation of SHA224, SHA256, SHA384 and SHA512
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-/* $Id: sha512.c,v 1.14 2009/04/09 22:11:07 julien.pierre.boogz%sun.com Exp $ */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+/* $Id: sha512.c,v 1.21 2012/07/27 20:00:39 wtc%google.com Exp $ */
 
 #ifdef FREEBL_NO_DEPEND
 #include "stubs.h"
@@ -48,6 +16,7 @@
 #undef HAVE_LONG_LONG
 #endif
 #include "prtypes.h"	/* for PRUintXX */
+#include "prlong.h"
 #include "secport.h"	/* for PORT_XXX */
 #include "blapi.h"
 #include "sha256.h"	/* for struct SHA256ContextStr */
@@ -62,6 +31,7 @@
 #define SHL(x,n) (x << n)
 #define Ch(x,y,z)  ((x & y) ^ (~x & z))
 #define Maj(x,y,z) ((x & y) ^ (x & z) ^ (y & z))
+#define SHA_MIN(a,b) (a < b ? a : b)
 
 /* Padding used with all flavors of SHA */
 static const PRUint8 pad[240] = { 
@@ -70,7 +40,7 @@ static const PRUint8 pad[240] = {
    /* compiler will fill the rest in with zeros */
 };
 
-/* ============= SHA256 implemenmtation ================================== */
+/* ============= SHA256 implementation ================================== */
 
 /* SHA-256 constants, K256. */
 static const PRUint32 K256[64] = {
@@ -134,7 +104,27 @@ static __inline__ PRUint32 swap4b(PRUint32 value)
 #define SHA_HTONL(x) swap4b(x)
 #define BYTESWAP4(x)  x = SHA_HTONL(x)
 
-#else /* neither windows nor Linux PC */
+#elif defined(__GNUC__) && (defined(__thumb2__) || \
+      (!defined(__thumb__) && \
+      (defined(__ARM_ARCH_6__) || \
+       defined(__ARM_ARCH_6J__) || \
+       defined(__ARM_ARCH_6K__) || \
+       defined(__ARM_ARCH_6Z__) || \
+       defined(__ARM_ARCH_6ZK__) || \
+       defined(__ARM_ARCH_6T2__) || \
+       defined(__ARM_ARCH_7__) || \
+       defined(__ARM_ARCH_7A__) || \
+       defined(__ARM_ARCH_7R__))))
+static __inline__ PRUint32 swap4b(PRUint32 value)
+{
+    PRUint32 ret;
+    __asm__("rev %0, %1" : "=r" (ret) : "r"(value));
+    return ret;
+}
+#define SHA_HTONL(x) swap4b(x)
+#define BYTESWAP4(x)  x = SHA_HTONL(x)
+
+#else
 #define SWAP4MASK  0x00FF00FF
 #define SHA_HTONL(x) (t1 = (x), t1 = (t1 << 16) | (t1 >> 16), \
                       ((t1 & SWAP4MASK) << 8) | ((t1 >> 8) & SWAP4MASK))
@@ -166,8 +156,9 @@ SHA256_NewContext(void)
 void 
 SHA256_DestroyContext(SHA256Context *ctx, PRBool freeit)
 {
+    memset(ctx, 0, sizeof *ctx);
     if (freeit) {
-        PORT_ZFree(ctx, sizeof *ctx);
+        PORT_Free(ctx);
     }
 }
 
@@ -481,6 +472,7 @@ SHA256_HashBuf(unsigned char *dest, const unsigned char *src,
     SHA256_Begin(&ctx);
     SHA256_Update(&ctx, src, src_length);
     SHA256_End(&ctx, dest, &outLen, SHA256_LENGTH);
+    memset(&ctx, 0, sizeof ctx);
 
     return SECSuccess;
 }
@@ -520,6 +512,94 @@ SHA256_Resurrect(unsigned char *space, void *arg)
 void SHA256_Clone(SHA256Context *dest, SHA256Context *src) 
 {
     memcpy(dest, src, sizeof *dest);
+}
+
+/* ============= SHA224 implementation ================================== */
+
+/* SHA-224 initial hash values */
+static const PRUint32 H224[8] = {
+    0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939, 
+    0xffc00b31, 0x68581511, 0x64f98fa7, 0xbefa4fa4
+};
+
+SHA224Context *
+SHA224_NewContext(void)
+{
+    return SHA256_NewContext();
+}
+
+void
+SHA224_DestroyContext(SHA224Context *ctx, PRBool freeit)
+{
+    SHA256_DestroyContext(ctx, freeit);
+}
+
+void
+SHA224_Begin(SHA224Context *ctx)
+{
+    memset(ctx, 0, sizeof *ctx);
+    memcpy(H, H224, sizeof H224);
+}
+
+void
+SHA224_Update(SHA224Context *ctx, const unsigned char *input,
+		    unsigned int inputLen)
+{
+    SHA256_Update(ctx, input, inputLen);
+}
+
+void
+SHA224_End(SHA256Context *ctx, unsigned char *digest,
+           unsigned int *digestLen, unsigned int maxDigestLen)
+{
+    unsigned int maxLen = SHA_MIN(maxDigestLen, SHA224_LENGTH);
+    SHA256_End(ctx, digest, digestLen, maxLen);
+}
+
+SECStatus 
+SHA224_HashBuf(unsigned char *dest, const unsigned char *src,
+               uint32 src_length)
+{
+    SHA256Context ctx;
+    unsigned int outLen;
+
+    SHA224_Begin(&ctx);
+    SHA256_Update(&ctx, src, src_length);
+    SHA256_End(&ctx, dest, &outLen, SHA224_LENGTH);
+    memset(&ctx, 0, sizeof ctx);
+
+    return SECSuccess;
+}
+
+SECStatus
+SHA224_Hash(unsigned char *dest, const char *src)
+{
+    return SHA224_HashBuf(dest, (const unsigned char *)src, PORT_Strlen(src));
+}
+
+void SHA224_TraceState(SHA224Context *ctx) { }
+
+unsigned int
+SHA224_FlattenSize(SHA224Context *ctx)
+{
+    return SHA256_FlattenSize(ctx);
+}
+
+SECStatus
+SHA224_Flatten(SHA224Context *ctx, unsigned char *space)
+{
+    return SHA256_Flatten(ctx, space);
+}
+
+SHA224Context *
+SHA224_Resurrect(unsigned char *space, void *arg)
+{
+    return SHA256_Resurrect(space, arg);
+}
+
+void SHA224_Clone(SHA224Context *dest, SHA224Context *src) 
+{
+    SHA256_Clone(dest, src);
 }
 
 
@@ -710,8 +790,9 @@ SHA512_NewContext(void)
 void 
 SHA512_DestroyContext(SHA512Context *ctx, PRBool freeit)
 {
+    memset(ctx, 0, sizeof *ctx);
     if (freeit) {
-        PORT_ZFree(ctx, sizeof *ctx);
+        PORT_Free(ctx);
     }
 }
 
@@ -1106,16 +1187,14 @@ SHA512_End(SHA512Context *ctx, unsigned char *digest,
 {
 #if defined(HAVE_LONG_LONG)
     unsigned int inBuf  = (unsigned int)ctx->sizeLo & 0x7f;
-    unsigned int padLen = (inBuf < 112) ? (112 - inBuf) : (112 + 128 - inBuf);
-    PRUint64 lo, t1;
-    lo = (ctx->sizeLo << 3);
+    PRUint64 t1;
 #else
     unsigned int inBuf  = (unsigned int)ctx->sizeLo.lo & 0x7f;
-    unsigned int padLen = (inBuf < 112) ? (112 - inBuf) : (112 + 128 - inBuf);
-    PRUint64 lo = ctx->sizeLo;
     PRUint32 t1;
-    lo.lo <<= 3;
 #endif
+    unsigned int padLen = (inBuf < 112) ? (112 - inBuf) : (112 + 128 - inBuf);
+    PRUint64 lo;
+    LL_SHL(lo, ctx->sizeLo, 3);
 
     SHA512_Update(ctx, pad, padLen);
 
@@ -1159,6 +1238,7 @@ SHA512_HashBuf(unsigned char *dest, const unsigned char *src,
     SHA512_Begin(&ctx);
     SHA512_Update(&ctx, src, src_length);
     SHA512_End(&ctx, dest, &outLen, SHA512_LENGTH);
+    memset(&ctx, 0, sizeof ctx);
 
     return SECSuccess;
 }
@@ -1252,7 +1332,6 @@ void
 SHA384_End(SHA384Context *ctx, unsigned char *digest,
 		 unsigned int *digestLen, unsigned int maxDigestLen)
 {
-#define SHA_MIN(a,b) (a < b ? a : b)
     unsigned int maxLen = SHA_MIN(maxDigestLen, SHA384_LENGTH);
     SHA512_End(ctx, digest, digestLen, maxLen);
 }
@@ -1267,6 +1346,7 @@ SHA384_HashBuf(unsigned char *dest, const unsigned char *src,
     SHA384_Begin(&ctx);
     SHA512_Update(&ctx, src, src_length);
     SHA512_End(&ctx, dest, &outLen, SHA384_LENGTH);
+    memset(&ctx, 0, sizeof ctx);
 
     return SECSuccess;
 }
@@ -1338,6 +1418,38 @@ void test256(void)
     dumpHash32(outBuf, sizeof outBuf);
 }
 
+void test224(void)
+{
+    SHA224Context ctx;
+    unsigned char a1000times[1000];
+    unsigned int outLen;
+    unsigned char outBuf[SHA224_LENGTH];
+    int i;
+
+    /* Test Vector 1 */
+    printf("SHA224, input = %s\n", abc);
+    SHA224_Hash(outBuf, abc);
+    dumpHash32(outBuf, sizeof outBuf);
+
+    /* Test Vector 2 */
+    printf("SHA224, input = %s\n", abcdbc);
+    SHA224_Hash(outBuf, abcdbc);
+    dumpHash32(outBuf, sizeof outBuf);
+
+    /* Test Vector 3 */
+
+    /* to hash one million 'a's perform 1000
+     * sha224 updates on a buffer with 1000 'a's 
+     */
+    memset(a1000times, 'a', 1000);
+    printf("SHA224, input = %s\n", "a one million times");
+    SHA224_Begin(&ctx);
+    for (i = 0; i < 1000; i++)
+        SHA224_Update(&ctx, a1000times, 1000);
+    SHA224_End(&ctx, outBuf, &outLen, SHA224_LENGTH);
+    dumpHash32(outBuf, sizeof outBuf);
+}
+
 void
 dumpHash64(const unsigned char *buf, unsigned int bufLen)
 {
@@ -1393,9 +1505,10 @@ int main (int argc, char *argv[], char *envp[])
     	i = atoi(argv[1]);
     }
     if (i < 2) {
+	test224();
 	test256();
-	test512();
 	test384();
+	test512();
     } else {
     	while (i-- > 0) {
 	    time512();

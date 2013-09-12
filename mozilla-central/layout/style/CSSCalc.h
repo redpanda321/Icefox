@@ -1,39 +1,7 @@
 /* vim: set shiftwidth=2 tabstop=8 autoindent cindent expandtab: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is CSSCalc.h.
- *
- * The Initial Developer of the Original Code is the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   L. David Baron <dbaron@dbaron.org>, Mozilla Corporation (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef CSSCalc_h_
 #define CSSCalc_h_
 
@@ -54,8 +22,8 @@ namespace css {
  *   // expectations (which happen to be met by two classes (nsCSSValue
  *   // and nsStyleCoord).  There must be methods (roughly):
  *   //   input_array_type* input_type::GetArrayValue();
- *   //   PRUint32 input_array_type::Count() const;
- *   //   input_type& input_array_type::Item(PRUint32);
+ *   //   uint32_t input_array_type::Count() const;
+ *   //   input_type& input_array_type::Item(uint32_t);
  *   typedef ... input_type;
  *   typedef ... input_array_type;
  *
@@ -100,7 +68,7 @@ namespace css {
  * NumbersAlreadyNormalizedCalcOps.)
  *
  * For non-leaves, one of the Merge functions will be called:
- *   MergeAdditive for Plus, Minus, Minimum, and Maximum
+ *   MergeAdditive for Plus and Minus
  *   MergeMultiplicativeL for Times_L (number * value)
  *   MergeMultiplicativeR for Times_R (value * number) and Divided
  */
@@ -137,52 +105,10 @@ ComputeCalc(const typename CalcOps::input_type& aValue, CalcOps &aOps)
       float rhs = aOps.ComputeNumber(arr->Item(1));
       return aOps.MergeMultiplicativeR(CalcOps::GetUnit(aValue), lhs, rhs);
     }
-    case eCSSUnit_Calc_Minimum:
-    case eCSSUnit_Calc_Maximum: {
-      typename CalcOps::input_array_type *arr = aValue.GetArrayValue();
-      typename CalcOps::result_type result = ComputeCalc(arr->Item(0), aOps);
-      for (size_t i = 1, i_end = arr->Count(); i < i_end; ++i) {
-        typename CalcOps::result_type tmp = ComputeCalc(arr->Item(i), aOps);
-        result = aOps.MergeAdditive(CalcOps::GetUnit(aValue), result, tmp);
-      }
-      return result;
-    }
     default: {
       return aOps.ComputeLeafValue(aValue);
     }
   }
-}
-
-#define CHECK_UNIT(u_)                                                        \
-  PR_STATIC_ASSERT(int(eCSSUnit_##u_) + 14 == int(eStyleUnit_##u_));          \
-  PR_STATIC_ASSERT(eCSSUnit_##u_ >= eCSSUnit_Calc);                           \
-  PR_STATIC_ASSERT(eCSSUnit_##u_ <= eCSSUnit_Calc_Maximum);
-
-CHECK_UNIT(Calc)
-CHECK_UNIT(Calc_Plus)
-CHECK_UNIT(Calc_Minus)
-CHECK_UNIT(Calc_Times_L)
-CHECK_UNIT(Calc_Times_R)
-CHECK_UNIT(Calc_Divided)
-CHECK_UNIT(Calc_Minimum)
-CHECK_UNIT(Calc_Maximum)
-
-#undef CHECK_UNIT
-
-inline nsStyleUnit
-ConvertCalcUnit(nsCSSUnit aUnit)
-{
-  NS_ABORT_IF_FALSE(eCSSUnit_Calc <= aUnit &&
-                    aUnit <= eCSSUnit_Calc_Maximum, "out of range");
-  return nsStyleUnit(aUnit + 14);
-}
-
-inline nsCSSUnit
-ConvertCalcUnit(nsStyleUnit aUnit)
-{
-  NS_ABORT_IF_FALSE(eStyleUnit_Calc <= aUnit &&
-                    aUnit <= eStyleUnit_Calc_Maximum, "out of range");
-  return nsCSSUnit(aUnit - 14);
 }
 
 /**
@@ -198,30 +124,6 @@ struct CSSValueInputCalcOps
     return aValue.GetUnit();
   }
 
-};
-
-/**
- * The input unit operation for input_type being nsStyleCoord
- */
-struct StyleCoordInputCalcOps
-{
-  typedef nsStyleCoord input_type;
-  typedef nsStyleCoord::Array input_array_type;
-
-  static nsCSSUnit GetUnit(const nsStyleCoord& aValue)
-  {
-    if (aValue.IsCalcUnit()) {
-      return css::ConvertCalcUnit(aValue.GetUnit());
-    }
-    return eCSSUnit_Null;
-  }
-
-  float ComputeNumber(const nsStyleCoord& aValue)
-  {
-    NS_ABORT_IF_FALSE(PR_FALSE, "SpecifiedToComputedCalcOps should not "
-                                "leave numbers in structure");
-    return 0.0f;
-  }
 };
 
 /**
@@ -241,15 +143,9 @@ struct BasicCoordCalcOps
     if (aCalcFunction == eCSSUnit_Calc_Plus) {
       return NSCoordSaturatingAdd(aValue1, aValue2);
     }
-    if (aCalcFunction == eCSSUnit_Calc_Minus) {
-      return NSCoordSaturatingSubtract(aValue1, aValue2, 0);
-    }
-    if (aCalcFunction == eCSSUnit_Calc_Minimum) {
-      return NS_MIN(aValue1, aValue2);
-    }
-    NS_ABORT_IF_FALSE(aCalcFunction == eCSSUnit_Calc_Maximum,
+    NS_ABORT_IF_FALSE(aCalcFunction == eCSSUnit_Calc_Minus,
                       "unexpected unit");
-    return NS_MAX(aValue1, aValue2);
+    return NSCoordSaturatingSubtract(aValue1, aValue2, 0);
   }
 
   result_type
@@ -286,15 +182,9 @@ struct BasicFloatCalcOps
     if (aCalcFunction == eCSSUnit_Calc_Plus) {
       return aValue1 + aValue2;
     }
-    if (aCalcFunction == eCSSUnit_Calc_Minus) {
-      return aValue1 - aValue2;
-    }
-    if (aCalcFunction == eCSSUnit_Calc_Minimum) {
-      return NS_MIN(aValue1, aValue2);
-    }
-    NS_ABORT_IF_FALSE(aCalcFunction == eCSSUnit_Calc_Maximum,
+    NS_ABORT_IF_FALSE(aCalcFunction == eCSSUnit_Calc_Minus,
                       "unexpected unit");
-    return NS_MAX(aValue1, aValue2);
+    return aValue1 - aValue2;
   }
 
   result_type
@@ -341,8 +231,8 @@ struct NumbersAlreadyNormalizedOps : public CSSValueInputCalcOps
  *   // expectations (which happen to be met by two classes (nsCSSValue
  *   // and nsStyleCoord).  There must be methods (roughly):
  *   //   input_array_type* input_type::GetArrayValue();
- *   //   PRUint32 input_array_type::Count() const;
- *   //   input_type& input_array_type::Item(PRUint32);
+ *   //   uint32_t input_array_type::Count() const;
+ *   //   input_type& input_array_type::Item(uint32_t);
  *   typedef ... input_type;
  *   typedef ... input_array_type;
  *
@@ -366,11 +256,8 @@ template <class CalcOps>
 static void
 SerializeCalc(const typename CalcOps::input_type& aValue, CalcOps &aOps)
 {
-  aOps.Append("-moz-");
+  aOps.Append("calc(");
   nsCSSUnit unit = CalcOps::GetUnit(aValue);
-  if (unit != eCSSUnit_Calc_Minimum && unit != eCSSUnit_Calc_Maximum) {
-    aOps.Append("calc(");
-  }
   if (unit == eCSSUnit_Calc) {
     const typename CalcOps::input_array_type *array = aValue.GetArrayValue();
     NS_ABORT_IF_FALSE(array->Count() == 1, "unexpected length");
@@ -378,19 +265,17 @@ SerializeCalc(const typename CalcOps::input_type& aValue, CalcOps &aOps)
   } else {
     SerializeCalcInternal(aValue, aOps);
   }
-  if (unit != eCSSUnit_Calc_Minimum && unit != eCSSUnit_Calc_Maximum) {
-    aOps.Append(")");
-  }
+  aOps.Append(")");
 }
 
-static inline PRBool
+static inline bool
 IsCalcAdditiveUnit(nsCSSUnit aUnit)
 {
   return aUnit == eCSSUnit_Calc_Plus ||
          aUnit == eCSSUnit_Calc_Minus;
 }
 
-static inline PRBool
+static inline bool
 IsCalcMultiplicativeUnit(nsCSSUnit aUnit)
 {
   return aUnit == eCSSUnit_Calc_Times_L ||
@@ -405,23 +290,7 @@ template <class CalcOps>
 SerializeCalcInternal(const typename CalcOps::input_type& aValue, CalcOps &aOps)
 {
   nsCSSUnit unit = CalcOps::GetUnit(aValue);
-  if (eCSSUnit_Calc_Minimum == unit || eCSSUnit_Calc_Maximum == unit) {
-    const typename CalcOps::input_array_type *array = aValue.GetArrayValue();
-    if (eCSSUnit_Calc_Minimum == unit) {
-      aOps.Append("min(");
-    } else {
-      aOps.Append("max(");
-    }
-
-    for (size_t i = 0, i_end = array->Count(); i < i_end; ++i) {
-      if (i != 0) {
-        aOps.Append(", ");
-      }
-      SerializeCalcInternal(array->Item(i), aOps);
-    }
-
-    aOps.Append(")");
-  } else if (IsCalcAdditiveUnit(unit)) {
+  if (IsCalcAdditiveUnit(unit)) {
     const typename CalcOps::input_array_type *array = aValue.GetArrayValue();
     NS_ABORT_IF_FALSE(array->Count() == 2, "unexpected length");
 
@@ -434,7 +303,7 @@ SerializeCalcInternal(const typename CalcOps::input_type& aValue, CalcOps &aOps)
       aOps.Append(" - ");
     }
 
-    PRBool needParens = IsCalcAdditiveUnit(CalcOps::GetUnit(array->Item(1)));
+    bool needParens = IsCalcAdditiveUnit(CalcOps::GetUnit(array->Item(1)));
     if (needParens) {
       aOps.Append("(");
     }
@@ -446,7 +315,7 @@ SerializeCalcInternal(const typename CalcOps::input_type& aValue, CalcOps &aOps)
     const typename CalcOps::input_array_type *array = aValue.GetArrayValue();
     NS_ABORT_IF_FALSE(array->Count() == 2, "unexpected length");
 
-    PRBool needParens = IsCalcAdditiveUnit(CalcOps::GetUnit(array->Item(0)));
+    bool needParens = IsCalcAdditiveUnit(CalcOps::GetUnit(array->Item(0)));
     if (needParens) {
       aOps.Append("(");
     }

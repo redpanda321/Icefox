@@ -1,46 +1,13 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef nsIFormControl_h___
 #define nsIFormControl_h___
 
 #include "nsISupports.h"
 class nsIDOMHTMLFormElement;
 class nsPresState;
-class nsIContent;
 class nsString;
 class nsIFormProcessor;
 class nsFormSubmission;
@@ -86,6 +53,7 @@ enum InputElementTypes {
   NS_FORM_INPUT_HIDDEN,
   NS_FORM_INPUT_RESET,
   NS_FORM_INPUT_IMAGE,
+  NS_FORM_INPUT_NUMBER,
   NS_FORM_INPUT_PASSWORD,
   NS_FORM_INPUT_RADIO,
   NS_FORM_INPUT_SEARCH,
@@ -96,13 +64,13 @@ enum InputElementTypes {
   eInputElementTypesMax
 };
 
-PR_STATIC_ASSERT((PRUint32)eFormControlsWithoutSubTypesMax < (PRUint32)NS_FORM_BUTTON_ELEMENT);
-PR_STATIC_ASSERT((PRUint32)eButtonElementTypesMax < (PRUint32)NS_FORM_INPUT_ELEMENT);
-PR_STATIC_ASSERT((PRUint32)eInputElementTypesMax  < 1<<8);
+PR_STATIC_ASSERT((uint32_t)eFormControlsWithoutSubTypesMax < (uint32_t)NS_FORM_BUTTON_ELEMENT);
+PR_STATIC_ASSERT((uint32_t)eButtonElementTypesMax < (uint32_t)NS_FORM_INPUT_ELEMENT);
+PR_STATIC_ASSERT((uint32_t)eInputElementTypesMax  < 1<<8);
 
 #define NS_IFORMCONTROL_IID   \
-{ 0x218eb090, 0x32eb, 0x4e2a, \
- { 0x96, 0x42, 0xcd, 0xcd, 0x33, 0xae, 0xdb, 0x95 } }
+{ 0xbc53dcf5, 0xbd4f, 0x4991, \
+ { 0xa1, 0x87, 0xc4, 0x57, 0x98, 0x54, 0xda, 0x6e } }
 
 /**
  * Interface which all form controls (e.g. buttons, checkboxes, text,
@@ -137,15 +105,14 @@ public:
    *
    * @param aRemoveFromForm set false if you do not want this element removed
    *        from the form.  (Used by nsFormControlList::Clear())
-   * @param aNotify If true, send nsIDocumentObserver notifications as needed.
    */
-  virtual void ClearForm(PRBool aRemoveFromForm, PRBool aNotify) = 0;
+  virtual void ClearForm(bool aRemoveFromForm) = 0;
 
   /**
    * Get the type of this control as an int (see NS_FORM_* above)
    * @return the type of this control
    */
-  NS_IMETHOD_(PRUint32) GetType() const = 0 ;
+  NS_IMETHOD_(uint32_t) GetType() const = 0 ;
 
   /**
    * Reset this form control (as it should be when the user clicks the Reset
@@ -174,46 +141,132 @@ public:
    * control will grab its state from there.
    *
    * @param aState the pres state to use to restore the control
-   * @return PR_TRUE if the form control was a checkbox and its
-   *         checked state was restored, PR_FALSE otherwise.
+   * @return true if the form control was a checkbox and its
+   *         checked state was restored, false otherwise.
    */
-  virtual PRBool RestoreState(nsPresState* aState) = 0;
+  virtual bool RestoreState(nsPresState* aState) = 0;
 
-  virtual PRBool AllowDrop() = 0;
+  virtual bool AllowDrop() = 0;
 
   /**
-   * Returns true if this is a control which submits the form when
-   * activated by the user.
-   * @return Whether this is a submit control.
+   * Returns whether this is a control which submits the form when activated by
+   * the user.
+   * @return whether this is a submit control.
    */
-  virtual PRBool IsSubmitControl() const = 0;
+  inline bool IsSubmitControl() const;
 
   /**
-   * Returns true if this is a control which has a text field.
+   * Returns whether this is a text control.
    * @param  aExcludePassword  to have NS_FORM_INPUT_PASSWORD returning false.
-   * @return Whether this is a text control.
+   * @return whether this is a text control.
    */
-  virtual PRBool IsTextControl(PRBool aExcludePassword) const = 0;
+  inline bool IsTextControl(bool aExcludePassword) const ;
 
   /**
-   * Returns true if this is a control which has a single line text field.
+   * Returns whether this is a single line text control.
    * @param  aExcludePassword  to have NS_FORM_INPUT_PASSWORD returning false.
-   * @return Whether this is a single line text control.
+   * @return whether this is a single line text control.
    */
-  virtual PRBool IsSingleLineTextControl(PRBool aExcludePassword) const = 0;
+  inline bool IsSingleLineTextControl(bool aExcludePassword) const;
 
   /**
-   * Returns true if this is a labelable form control.
-   * @return Whether this is a labelable form control.
+   * Returns whether this is a submittable form control.
+   * @return whether this is a submittable form control.
    */
-  virtual PRBool IsLabelableControl() const = 0;
+  inline bool IsSubmittableControl() const;
 
   /**
-   * Returns true if this is a submittable form control.
-   * @return Whether this is a submittable form control.
+   * Returns whether this form control can have draggable children.
+   * @return whether this form control can have draggable children.
    */
-  virtual PRBool IsSubmittableControl() const = 0;
+  inline bool AllowDraggableChildren() const;
+
+protected:
+
+  /**
+   * Returns whether mType corresponds to a single line text control type.
+   * @param aExcludePassword to have NS_FORM_INPUT_PASSWORD ignored.
+   * @param aType the type to be tested.
+   * @return whether mType corresponds to a single line text control type.
+   */
+  inline static bool IsSingleLineTextControl(bool aExcludePassword, uint32_t aType);
+
+  /**
+   * Returns whether this is a auto-focusable form control.
+   * @return whether this is a auto-focusable form control.
+   */
+  inline bool IsAutofocusable() const;
 };
+
+bool
+nsIFormControl::IsSubmitControl() const
+{
+  uint32_t type = GetType();
+  return type == NS_FORM_INPUT_SUBMIT ||
+         type == NS_FORM_INPUT_IMAGE ||
+         type == NS_FORM_BUTTON_SUBMIT;
+}
+
+bool
+nsIFormControl::IsTextControl(bool aExcludePassword) const
+{
+  uint32_t type = GetType();
+  return type == NS_FORM_TEXTAREA ||
+         IsSingleLineTextControl(aExcludePassword, type);
+}
+
+bool
+nsIFormControl::IsSingleLineTextControl(bool aExcludePassword) const
+{
+  return IsSingleLineTextControl(aExcludePassword, GetType());
+}
+
+/*static*/
+bool
+nsIFormControl::IsSingleLineTextControl(bool aExcludePassword, uint32_t aType)
+{
+  return aType == NS_FORM_INPUT_TEXT ||
+         aType == NS_FORM_INPUT_EMAIL ||
+         aType == NS_FORM_INPUT_SEARCH ||
+         aType == NS_FORM_INPUT_TEL ||
+         aType == NS_FORM_INPUT_URL ||
+         // TODO: this is temporary until bug 635240 is fixed.
+         aType == NS_FORM_INPUT_NUMBER ||
+         (!aExcludePassword && aType == NS_FORM_INPUT_PASSWORD);
+}
+
+bool
+nsIFormControl::IsSubmittableControl() const
+{
+  // TODO: keygen should be in that list, see bug 101019.
+  uint32_t type = GetType();
+  return type == NS_FORM_OBJECT ||
+         type == NS_FORM_TEXTAREA ||
+         type == NS_FORM_SELECT ||
+         // type == NS_FORM_KEYGEN ||
+         type & NS_FORM_BUTTON_ELEMENT ||
+         type & NS_FORM_INPUT_ELEMENT;
+}
+
+bool
+nsIFormControl::AllowDraggableChildren() const
+{
+  uint32_t type = GetType();
+  return type == NS_FORM_OBJECT ||
+         type == NS_FORM_LABEL ||
+         type == NS_FORM_FIELDSET ||
+         type == NS_FORM_OUTPUT;
+}
+
+bool
+nsIFormControl::IsAutofocusable() const
+{
+  uint32_t type = GetType();
+  return type & NS_FORM_INPUT_ELEMENT ||
+         type & NS_FORM_BUTTON_ELEMENT ||
+         type == NS_FORM_TEXTAREA ||
+         type == NS_FORM_SELECT;
+}
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsIFormControl, NS_IFORMCONTROL_IID)
 

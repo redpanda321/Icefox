@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Spellchecker Component.
- *
- * The Initial Developer of the Original Code is
- * David Einstein.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s): David Einstein <Deinst@world.std.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "mozPersonalDictionary.h"
 #include "nsIUnicharInputStream.h"
@@ -41,11 +9,9 @@
 #include "nsIFile.h"
 #include "nsAppDirectoryServiceDefs.h"
 #include "nsICharsetConverterManager.h"
-#include "nsICharsetAlias.h"
 #include "nsIObserverService.h"
 #include "nsIPrefService.h"
 #include "nsIPrefBranch.h"
-#include "nsIPrefBranch2.h"
 #include "nsIWeakReference.h"
 #include "nsCRT.h"
 #include "nsNetUtil.h"
@@ -82,7 +48,7 @@ NS_INTERFACE_MAP_END
 NS_IMPL_CYCLE_COLLECTION_1(mozPersonalDictionary, mEncoder)
 
 mozPersonalDictionary::mozPersonalDictionary()
- : mDirty(PR_FALSE)
+ : mDirty(false)
 {
 }
 
@@ -92,15 +58,15 @@ mozPersonalDictionary::~mozPersonalDictionary()
 
 nsresult mozPersonalDictionary::Init()
 {
-  if (!mDictionaryTable.Init() || !mIgnoreTable.Init())
-    return NS_ERROR_OUT_OF_MEMORY;
+  mDictionaryTable.Init();
+  mIgnoreTable.Init();
 
   nsresult rv;
   nsCOMPtr<nsIObserverService> svc = 
            do_GetService("@mozilla.org/observer-service;1", &rv);
    
   if (NS_SUCCEEDED(rv) && svc) 
-    rv = svc->AddObserver(this, "profile-do-change", PR_TRUE); // we want to reload the dictionary if the profile switches
+    rv = svc->AddObserver(this, "profile-do-change", true); // we want to reload the dictionary if the profile switches
 
   if (NS_FAILED(rv)) return rv;
 
@@ -115,7 +81,7 @@ NS_IMETHODIMP mozPersonalDictionary::Load()
   //FIXME Deinst  -- get dictionary name from prefs;
   nsresult res;
   nsCOMPtr<nsIFile> theFile;
-  PRBool dictExists;
+  bool dictExists;
 
   res = NS_GetSpecialDirectory(NS_APP_USER_PROFILE_50_DIR, getter_AddRefs(theFile));
   if(NS_FAILED(res)) return res;
@@ -142,23 +108,23 @@ NS_IMETHODIMP mozPersonalDictionary::Load()
   mDictionaryTable.Clear();
 
   PRUnichar c;
-  PRUint32 nRead;
-  PRBool done = PR_FALSE;
+  uint32_t nRead;
+  bool done = false;
   do{  // read each line of text into the string array.
     if( (NS_OK != convStream->Read(&c, 1, &nRead)) || (nRead != 1)) break;
     while(!done && ((c == '\n') || (c == '\r'))){
-      if( (NS_OK != convStream->Read(&c, 1, &nRead)) || (nRead != 1)) done = PR_TRUE;
+      if( (NS_OK != convStream->Read(&c, 1, &nRead)) || (nRead != 1)) done = true;
     }
     if (!done){ 
       nsAutoString word;
       while((c != '\n') && (c != '\r') && !done){
         word.Append(c);
-        if( (NS_OK != convStream->Read(&c, 1, &nRead)) || (nRead != 1)) done = PR_TRUE;
+        if( (NS_OK != convStream->Read(&c, 1, &nRead)) || (nRead != 1)) done = true;
       }
       mDictionaryTable.PutEntry(word.get());
     }
   } while(!done);
-  mDirty = PR_FALSE;
+  mDirty = false;
   
   return res;
 }
@@ -167,7 +133,7 @@ NS_IMETHODIMP mozPersonalDictionary::Load()
 // This is not threadsafe, and only safe if the consumer does not 
 // modify the list.
 static PLDHashOperator
-AddHostToStringArray(nsUniCharEntry *aEntry, void *aArg)
+AddHostToStringArray(nsUnicharPtrHashKey *aEntry, void *aArg)
 {
   static_cast<nsTArray<nsString>*>(aArg)->AppendElement(nsDependentString(aEntry->GetKey()));
   return PL_DHASH_NEXT;
@@ -199,9 +165,9 @@ NS_IMETHODIMP mozPersonalDictionary::Save()
   nsTArray<nsString> array(mDictionaryTable.Count());
   mDictionaryTable.EnumerateEntries(AddHostToStringArray, &array);
 
-  PRUint32 bytesWritten;
-  nsCAutoString utf8Key;
-  for (PRUint32 i = 0; i < array.Length(); ++i ) {
+  uint32_t bytesWritten;
+  nsAutoCString utf8Key;
+  for (uint32_t i = 0; i < array.Length(); ++i ) {
     CopyUTF16toUTF8(array[i], utf8Key);
 
     bufferedOutputStream->Write(utf8Key.get(), utf8Key.Length(), &bytesWritten);
@@ -214,7 +180,7 @@ NS_IMETHODIMP mozPersonalDictionary::Save()
 NS_IMETHODIMP mozPersonalDictionary::GetWordList(nsIStringEnumerator **aWords)
 {
   NS_ENSURE_ARG_POINTER(aWords);
-  *aWords = nsnull;
+  *aWords = nullptr;
 
   nsTArray<nsString> *array = new nsTArray<nsString>(mDictionaryTable.Count());
   if (!array)
@@ -228,7 +194,7 @@ NS_IMETHODIMP mozPersonalDictionary::GetWordList(nsIStringEnumerator **aWords)
 }
 
 /* boolean Check (in wstring word, in wstring language); */
-NS_IMETHODIMP mozPersonalDictionary::Check(const PRUnichar *aWord, const PRUnichar *aLanguage, PRBool *aResult)
+NS_IMETHODIMP mozPersonalDictionary::Check(const PRUnichar *aWord, const PRUnichar *aLanguage, bool *aResult)
 {
   NS_ENSURE_ARG_POINTER(aWord);
   NS_ENSURE_ARG_POINTER(aResult);
@@ -241,7 +207,7 @@ NS_IMETHODIMP mozPersonalDictionary::Check(const PRUnichar *aWord, const PRUnich
 NS_IMETHODIMP mozPersonalDictionary::AddWord(const PRUnichar *aWord, const PRUnichar *aLang)
 {
   mDictionaryTable.PutEntry(aWord);
-  mDirty = PR_TRUE;
+  mDirty = true;
   return NS_OK;
 }
 
@@ -249,7 +215,7 @@ NS_IMETHODIMP mozPersonalDictionary::AddWord(const PRUnichar *aWord, const PRUni
 NS_IMETHODIMP mozPersonalDictionary::RemoveWord(const PRUnichar *aWord, const PRUnichar *aLang)
 {
   mDictionaryTable.RemoveEntry(aWord);
-  mDirty = PR_TRUE;
+  mDirty = true;
   return NS_OK;
 }
 
@@ -282,8 +248,8 @@ NS_IMETHODIMP mozPersonalDictionary::RemoveCorrection(const PRUnichar *word, con
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
-/* void GetCorrection (in wstring word, [array, size_is (count)] out wstring words, out PRUint32 count); */
-NS_IMETHODIMP mozPersonalDictionary::GetCorrection(const PRUnichar *word, PRUnichar ***words, PRUint32 *count)
+/* void GetCorrection (in wstring word, [array, size_is (count)] out wstring words, out uint32_t count); */
+NS_IMETHODIMP mozPersonalDictionary::GetCorrection(const PRUnichar *word, PRUnichar ***words, uint32_t *count)
 {
     return NS_ERROR_NOT_IMPLEMENTED;
 }

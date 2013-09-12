@@ -1,40 +1,10 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "mozilla/Util.h"
 
 #include "nsFormSubmission.h"
 
@@ -43,15 +13,14 @@
 #include "nsILinkHandler.h"
 #include "nsIDocument.h"
 #include "nsGkAtoms.h"
-#include "nsIHTMLDocument.h"
 #include "nsIFormControl.h"
 #include "nsIDOMHTMLFormElement.h"
-#include "nsDOMError.h"
+#include "nsError.h"
 #include "nsGenericHTMLElement.h"
+#include "nsAttrValueInlines.h"
 #include "nsISaveAsCharset.h"
-
-// JBK added for submit move from content frame
 #include "nsIFile.h"
+#include "nsIDOMFile.h"
 #include "nsDirectoryServiceDefs.h"
 #include "nsStringStream.h"
 #include "nsIURI.h"
@@ -59,7 +28,6 @@
 #include "nsNetUtil.h"
 #include "nsLinebreakConverter.h"
 #include "nsICharsetConverterManager.h"
-#include "nsICharsetAlias.h"
 #include "nsEscape.h"
 #include "nsUnicharUtils.h"
 #include "nsIMultiplexInputStream.h"
@@ -70,20 +38,23 @@
 #include "nsIStringBundle.h"
 #include "nsCExternalHandlerService.h"
 #include "nsIFileStreams.h"
+#include "nsContentUtils.h"
+
+#include "mozilla/dom/EncodingUtils.h"
+
+using namespace mozilla;
+using mozilla::dom::EncodingUtils;
 
 static void
 SendJSWarning(nsIDocument* aDocument,
               const char* aWarningName,
-              const PRUnichar** aWarningArgs, PRUint32 aWarningArgsLen)
+              const PRUnichar** aWarningArgs, uint32_t aWarningArgsLen)
 {
-  nsContentUtils::ReportToConsole(nsContentUtils::eFORMS_PROPERTIES,
+  nsContentUtils::ReportToConsole(nsIScriptError::warningFlag,
+                                  "HTML", aDocument,
+                                  nsContentUtils::eFORMS_PROPERTIES,
                                   aWarningName,
-                                  aWarningArgs, aWarningArgsLen,
-                                  aDocument ? aDocument->GetDocumentURI() :
-                                              nsnull,
-                                  EmptyString(), 0, 0,
-                                  nsIScriptError::warningFlag,
-                                  "HTML");
+                                  aWarningArgs, aWarningArgsLen);
 }
 
 // --------------------------------------------------------------------------
@@ -97,26 +68,26 @@ public:
    *        NS_FORM_METHOD_POST).
    */
   nsFSURLEncoded(const nsACString& aCharset,
-                 PRInt32 aMethod,
+                 int32_t aMethod,
                  nsIDocument* aDocument,
                  nsIContent* aOriginatingElement)
     : nsEncodingFormSubmission(aCharset, aOriginatingElement),
       mMethod(aMethod),
       mDocument(aDocument),
-      mWarnedFileControl(PR_FALSE)
+      mWarnedFileControl(false)
   {
   }
 
   virtual nsresult AddNameValuePair(const nsAString& aName,
                                     const nsAString& aValue);
   virtual nsresult AddNameFilePair(const nsAString& aName,
-                                   nsIFile* aFile);
+                                   nsIDOMBlob* aBlob);
   virtual nsresult GetEncodedSubmission(nsIURI* aURI,
                                         nsIInputStream** aPostDataStream);
 
-  virtual PRBool SupportsIsindexSubmission()
+  virtual bool SupportsIsindexSubmission()
   {
-    return PR_TRUE;
+    return true;
   }
 
   virtual nsresult AddIsindex(const nsAString& aValue);
@@ -138,7 +109,7 @@ private:
    * The method of the submit (either NS_FORM_METHOD_GET or
    * NS_FORM_METHOD_POST).
    */
-  PRInt32 mMethod;
+  int32_t mMethod;
 
   /** The query string so far (the part after the ?) */
   nsCString mQueryString;
@@ -147,7 +118,7 @@ private:
   nsCOMPtr<nsIDocument> mDocument;
 
   /** Whether or not we have warned about a file control not being submitted */
-  PRBool mWarnedFileControl;
+  bool mWarnedFileControl;
 };
 
 nsresult
@@ -160,7 +131,7 @@ nsFSURLEncoded::AddNameValuePair(const nsAString& aName,
   NS_ENSURE_SUCCESS(rv, rv);
 
   // Encode name
-  nsCAutoString convName;
+  nsAutoCString convName;
   rv = URLEncode(aName, convName);
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -196,16 +167,17 @@ nsFSURLEncoded::AddIsindex(const nsAString& aValue)
 
 nsresult
 nsFSURLEncoded::AddNameFilePair(const nsAString& aName,
-                                nsIFile* aFile)
+                                nsIDOMBlob* aBlob)
 {
   if (!mWarnedFileControl) {
-    SendJSWarning(mDocument, "ForgotFileEnctypeWarning", nsnull, 0);
-    mWarnedFileControl = PR_TRUE;
+    SendJSWarning(mDocument, "ForgotFileEnctypeWarning", nullptr, 0);
+    mWarnedFileControl = true;
   }
 
   nsAutoString filename;
-  if (aFile) {
-    aFile->GetLeafName(filename);
+  nsCOMPtr<nsIDOMFile> file = do_QueryInterface(aBlob);
+  if (file) {
+    file->GetName(filename);
   }
 
   return AddNameValuePair(aName, filename);
@@ -215,16 +187,16 @@ static void
 HandleMailtoSubject(nsCString& aPath) {
 
   // Walk through the string and see if we have a subject already.
-  PRBool hasSubject = PR_FALSE;
-  PRBool hasParams = PR_FALSE;
-  PRInt32 paramSep = aPath.FindChar('?');
-  while (paramSep != kNotFound && paramSep < (PRInt32)aPath.Length()) {
-    hasParams = PR_TRUE;
+  bool hasSubject = false;
+  bool hasParams = false;
+  int32_t paramSep = aPath.FindChar('?');
+  while (paramSep != kNotFound && paramSep < (int32_t)aPath.Length()) {
+    hasParams = true;
 
     // Get the end of the name at the = op.  If it is *after* the next &,
     // assume that someone made a parameter without an = in it
-    PRInt32 nameEnd = aPath.FindChar('=', paramSep+1);
-    PRInt32 nextParamSep = aPath.FindChar('&', paramSep+1);
+    int32_t nameEnd = aPath.FindChar('=', paramSep+1);
+    int32_t nextParamSep = aPath.FindChar('&', paramSep+1);
     if (nextParamSep == kNotFound) {
       nextParamSep = aPath.Length();
     }
@@ -238,7 +210,7 @@ HandleMailtoSubject(nsCString& aPath) {
     if (nameEnd != kNotFound) {
       if (Substring(aPath, paramSep+1, nameEnd-(paramSep+1)).
           LowerCaseEqualsLiteral("subject")) {
-        hasSubject = PR_TRUE;
+        hasSubject = true;
         break;
       }
     }
@@ -267,7 +239,6 @@ HandleMailtoSubject(nsCString& aPath) {
                                            nsContentUtils::eFORMS_PROPERTIES,
                                            "DefaultFormSubject",
                                            formatStrings,
-                                           NS_ARRAY_LENGTH(formatStrings),
                                            subjectStr);
     if (NS_FAILED(rv))
       return;
@@ -284,15 +255,15 @@ nsFSURLEncoded::GetEncodedSubmission(nsIURI* aURI,
 {
   nsresult rv = NS_OK;
 
-  *aPostDataStream = nsnull;
+  *aPostDataStream = nullptr;
 
   if (mMethod == NS_FORM_METHOD_POST) {
 
-    PRBool isMailto = PR_FALSE;
+    bool isMailto = false;
     aURI->SchemeIs("mailto", &isMailto);
     if (isMailto) {
 
-      nsCAutoString path;
+      nsAutoCString path;
       rv = aURI->GetPath(path);
       NS_ENSURE_SUCCESS(rv, rv);
 
@@ -329,7 +300,7 @@ nsFSURLEncoded::GetEncodedSubmission(nsIURI* aURI,
       mimeStream->AddHeader("Content-Type",
                             "application/x-www-form-urlencoded");
 #endif
-      mimeStream->SetAddContentLength(PR_TRUE);
+      mimeStream->SetAddContentLength(true);
       mimeStream->SetData(dataStream);
 
       *aPostDataStream = mimeStream;
@@ -338,7 +309,7 @@ nsFSURLEncoded::GetEncodedSubmission(nsIURI* aURI,
 
   } else {
     // Get the full query string
-    PRBool schemeIsJavaScript;
+    bool schemeIsJavaScript;
     rv = aURI->SchemeIs("javascript", &schemeIsJavaScript);
     NS_ENSURE_SUCCESS(rv, rv);
     if (schemeIsJavaScript) {
@@ -350,12 +321,12 @@ nsFSURLEncoded::GetEncodedSubmission(nsIURI* aURI,
       url->SetQuery(mQueryString);
     }
     else {
-      nsCAutoString path;
+      nsAutoCString path;
       rv = aURI->GetPath(path);
       NS_ENSURE_SUCCESS(rv, rv);
       // Bug 42616: Trim off named anchor and save it to add later
-      PRInt32 namedAnchorPos = path.FindChar('#');
-      nsCAutoString namedAnchor;
+      int32_t namedAnchorPos = path.FindChar('#');
+      nsAutoCString namedAnchor;
       if (kNotFound != namedAnchorPos) {
         path.Right(namedAnchor, (path.Length() - namedAnchorPos));
         path.Truncate(namedAnchorPos);
@@ -363,7 +334,7 @@ nsFSURLEncoded::GetEncodedSubmission(nsIURI* aURI,
 
       // Chop off old query string (bug 25330, 57333)
       // Only do this for GET not POST (bug 41585)
-      PRInt32 queryStart = path.FindChar('?');
+      int32_t queryStart = path.FindChar('?');
       if (kNotFound != queryStart) {
         path.Truncate(queryStart);
       }
@@ -390,8 +361,8 @@ nsFSURLEncoded::URLEncode(const nsAString& aStr, nsCString& aEncoded)
                                                    nsLinebreakConverter::eLinebreakNet);
   NS_ENSURE_TRUE(convertedBuf, NS_ERROR_OUT_OF_MEMORY);
 
-  nsCAutoString encodedBuf;
-  nsresult rv = EncodeVal(nsDependentString(convertedBuf), encodedBuf);
+  nsAutoCString encodedBuf;
+  nsresult rv = EncodeVal(nsDependentString(convertedBuf), encodedBuf, false);
   nsMemory::Free(convertedBuf);
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -410,6 +381,7 @@ nsFSMultipartFormData::nsFSMultipartFormData(const nsACString& aCharset,
 {
   mPostDataStream =
     do_CreateInstance("@mozilla.org/io/multiplex-input-stream;1");
+  mTotalLength = 0;
 
   mBoundary.AssignLiteral("---------------------------");
   mBoundary.AppendInt(rand());
@@ -423,7 +395,7 @@ nsFSMultipartFormData::~nsFSMultipartFormData()
 }
 
 nsIInputStream*
-nsFSMultipartFormData::GetSubmissionBody()
+nsFSMultipartFormData::GetSubmissionBody(uint64_t* aContentLength)
 {
   // Finish data
   mPostDataChunk += NS_LITERAL_CSTRING("--") + mBoundary
@@ -432,6 +404,7 @@ nsFSMultipartFormData::GetSubmissionBody()
   // Add final data input stream
   AddPostDataStream();
 
+  *aContentLength = mTotalLength;
   return mPostDataStream;
 }
 
@@ -440,8 +413,8 @@ nsFSMultipartFormData::AddNameValuePair(const nsAString& aName,
                                         const nsAString& aValue)
 {
   nsCString valueStr;
-  nsCAutoString encodedVal;
-  nsresult rv = EncodeVal(aValue, encodedVal);
+  nsAutoCString encodedVal;
+  nsresult rv = EncodeVal(aValue, encodedVal, false);
   NS_ENSURE_SUCCESS(rv, rv);
 
   valueStr.Adopt(nsLinebreakConverter::
@@ -449,8 +422,8 @@ nsFSMultipartFormData::AddNameValuePair(const nsAString& aName,
                                    nsLinebreakConverter::eLinebreakAny,
                                    nsLinebreakConverter::eLinebreakNet));
 
-  nsCAutoString nameStr;
-  rv = EncodeVal(aName, nameStr);
+  nsAutoCString nameStr;
+  rv = EncodeVal(aName, nameStr, true);
   NS_ENSURE_SUCCESS(rv, rv);
 
   // Make MIME block for name/value pair
@@ -469,44 +442,45 @@ nsFSMultipartFormData::AddNameValuePair(const nsAString& aName,
 
 nsresult
 nsFSMultipartFormData::AddNameFilePair(const nsAString& aName,
-                                       nsIFile* aFile)
+                                       nsIDOMBlob* aBlob)
 {
   // Encode the control name
-  nsCAutoString nameStr;
-  nsresult rv = EncodeVal(aName, nameStr);
+  nsAutoCString nameStr;
+  nsresult rv = EncodeVal(aName, nameStr, true);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  nsCString filenameStr;
-  nsCAutoString contentType;
+  nsCString filename, contentType;
   nsCOMPtr<nsIInputStream> fileStream;
-  if (aFile) {
+  if (aBlob) {
     // Get and encode the filename
-    nsAutoString filename;
-    aFile->GetLeafName(filename);
-    nsCAutoString encodedFileName;
-    rv = EncodeVal(filename, encodedFileName);
+    nsAutoString filename16;
+    nsCOMPtr<nsIDOMFile> file = do_QueryInterface(aBlob);
+    if (file) {
+      rv = file->GetName(filename16);
+      NS_ENSURE_SUCCESS(rv, rv);
+    }
+
+    if (filename16.IsEmpty()) {
+      filename16.AssignLiteral("blob");
+    }
+
+    rv = EncodeVal(filename16, filename, true);
     NS_ENSURE_SUCCESS(rv, rv);
-  
-    filenameStr.Adopt(nsLinebreakConverter::
-                      ConvertLineBreaks(encodedFileName.get(),
-                                        nsLinebreakConverter::eLinebreakAny,
-                                        nsLinebreakConverter::eLinebreakNet));
   
     // Get content type
-    nsCOMPtr<nsIMIMEService> MIMEService =
-      do_GetService(NS_MIMESERVICE_CONTRACTID, &rv);
-    NS_ENSURE_SUCCESS(rv, rv);
-
-    rv = MIMEService->GetTypeFromFile(aFile, contentType);
-    if (NS_FAILED(rv)) {
-      contentType.AssignLiteral("application/octet-stream");
+    nsAutoString contentType16;
+    rv = aBlob->GetType(contentType16);
+    if (NS_FAILED(rv) || contentType16.IsEmpty()) {
+      contentType16.AssignLiteral("application/octet-stream");
     }
+    contentType.Adopt(nsLinebreakConverter::
+                      ConvertLineBreaks(NS_ConvertUTF16toUTF8(contentType16).get(),
+                                        nsLinebreakConverter::eLinebreakAny,
+                                        nsLinebreakConverter::eLinebreakSpace));
   
     // Get input stream
-    rv = NS_NewLocalFileInputStream(getter_AddRefs(fileStream),
-                                    aFile, -1, -1,
-                                    nsIFileInputStream::CLOSE_ON_EOF |
-                                    nsIFileInputStream::REOPEN_ON_REWIND);
+    rv = aBlob->GetInternalStream(getter_AddRefs(fileStream));
+    NS_ENSURE_SUCCESS(rv, rv);
     if (fileStream) {
       // Create buffered stream (for efficiency)
       nsCOMPtr<nsIInputStream> bufferedStream;
@@ -533,9 +507,9 @@ nsFSMultipartFormData::AddNameFilePair(const nsAString& aName,
   mPostDataChunk +=
          NS_LITERAL_CSTRING("Content-Disposition: form-data; name=\"")
        + nameStr + NS_LITERAL_CSTRING("\"; filename=\"")
-       + filenameStr + NS_LITERAL_CSTRING("\"" CRLF)
-       + NS_LITERAL_CSTRING("Content-Type: ") + contentType
-       + NS_LITERAL_CSTRING(CRLF CRLF);
+       + filename + NS_LITERAL_CSTRING("\"" CRLF)
+       + NS_LITERAL_CSTRING("Content-Type: ")
+       + contentType + NS_LITERAL_CSTRING(CRLF CRLF);
 
   // Add the file to the stream
   if (fileStream) {
@@ -544,6 +518,11 @@ nsFSMultipartFormData::AddNameFilePair(const nsAString& aName,
     AddPostDataStream();
 
     mPostDataStream->AppendStream(fileStream);
+
+    uint64_t size;
+    nsresult rv = aBlob->GetSize(&size);
+    NS_ENSURE_SUCCESS(rv, rv);
+    mTotalLength += size;
   }
 
   // CRLF after file
@@ -563,11 +542,12 @@ nsFSMultipartFormData::GetEncodedSubmission(nsIURI* aURI,
     = do_CreateInstance("@mozilla.org/network/mime-input-stream;1", &rv);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  nsCAutoString contentType;
+  nsAutoCString contentType;
   GetContentType(contentType);
   mimeStream->AddHeader("Content-Type", contentType.get());
-  mimeStream->SetAddContentLength(PR_TRUE);
-  mimeStream->SetData(GetSubmissionBody());
+  mimeStream->SetAddContentLength(true);
+  uint64_t unused;
+  mimeStream->SetData(GetSubmissionBody(&unused));
 
   *aPostDataStream = mimeStream.forget().get();
 
@@ -585,6 +565,7 @@ nsFSMultipartFormData::AddPostDataStream()
   NS_ASSERTION(postDataChunkStream, "Could not open a stream for POST!");
   if (postDataChunkStream) {
     mPostDataStream->AppendStream(postDataChunkStream);
+    mTotalLength += mPostDataChunk.Length();
   }
 
   mPostDataChunk.Truncate();
@@ -605,7 +586,7 @@ public:
   virtual nsresult AddNameValuePair(const nsAString& aName,
                                     const nsAString& aValue);
   virtual nsresult AddNameFilePair(const nsAString& aName,
-                                   nsIFile* aFile);
+                                   nsIDOMBlob* aBlob);
   virtual nsresult GetEncodedSubmission(nsIURI* aURI,
                                         nsIInputStream** aPostDataStream);
 
@@ -628,11 +609,12 @@ nsFSTextPlain::AddNameValuePair(const nsAString& aName,
 
 nsresult
 nsFSTextPlain::AddNameFilePair(const nsAString& aName,
-                               nsIFile* aFile)
+                               nsIDOMBlob* aBlob)
 {
   nsAutoString filename;
-  if (aFile) {
-    aFile->GetLeafName(filename);
+  nsCOMPtr<nsIDOMFile> file = do_QueryInterface(aBlob);
+  if (file) {
+    file->GetName(filename);
   }
     
   AddNameValuePair(aName, filename);
@@ -648,10 +630,10 @@ nsFSTextPlain::GetEncodedSubmission(nsIURI* aURI,
   // XXX HACK We are using the standard URL mechanism to give the body to the
   // mailer instead of passing the post data stream to it, since that sounds
   // hard.
-  PRBool isMailto = PR_FALSE;
+  bool isMailto = false;
   aURI->SchemeIs("mailto", &isMailto);
   if (isMailto) {
-    nsCAutoString path;
+    nsAutoCString path;
     rv = aURI->GetPath(path);
     NS_ENSURE_SUCCESS(rv, rv);
 
@@ -669,10 +651,20 @@ nsFSTextPlain::GetEncodedSubmission(nsIURI* aURI,
     rv = aURI->SetPath(path);
 
   } else {
-    // Create data stream
+    // Create data stream.
+    // We do want to send the data through the charset encoder and we want to
+    // normalize linebreaks to use the "standard net" format (\r\n), but we
+    // don't want to perform any other encoding. This means that names and
+    // values which contains '=' or newlines are potentially ambigiously
+    // encoded, but that how text/plain is specced.
+    nsCString cbody;
+    EncodeVal(mBody, cbody, false);
+    cbody.Adopt(nsLinebreakConverter::
+                ConvertLineBreaks(cbody.get(),
+                                  nsLinebreakConverter::eLinebreakAny,
+                                  nsLinebreakConverter::eLinebreakNet));
     nsCOMPtr<nsIInputStream> bodyStream;
-    rv = NS_NewStringInputStream(getter_AddRefs(bodyStream),
-                                          mBody);
+    rv = NS_NewCStringInputStream(getter_AddRefs(bodyStream), cbody);
     if (!bodyStream) {
       return NS_ERROR_OUT_OF_MEMORY;
     }
@@ -683,7 +675,7 @@ nsFSTextPlain::GetEncodedSubmission(nsIURI* aURI,
     NS_ENSURE_SUCCESS(rv, rv);
 
     mimeStream->AddHeader("Content-Type", "text/plain");
-    mimeStream->SetAddContentLength(PR_TRUE);
+    mimeStream->SetAddContentLength(true);
     mimeStream->SetData(bodyStream);
     CallQueryInterface(mimeStream, aPostDataStream);
   }
@@ -697,18 +689,21 @@ nsEncodingFormSubmission::nsEncodingFormSubmission(const nsACString& aCharset,
                                                    nsIContent* aOriginatingElement)
   : nsFormSubmission(aCharset, aOriginatingElement)
 {
-  nsCAutoString charset(aCharset);
+  nsAutoCString charset(aCharset);
   // canonical name is passed so that we just have to check against
   // *our* canonical names listed in charsetaliases.properties
   if (charset.EqualsLiteral("ISO-8859-1")) {
     charset.AssignLiteral("windows-1252");
   }
 
-  // use UTF-8 for UTF-16* and UTF-32* (per WHATWG and existing practice of
-  // MS IE/Opera). 
-  if (StringBeginsWith(charset, NS_LITERAL_CSTRING("UTF-16")) || 
-      StringBeginsWith(charset, NS_LITERAL_CSTRING("UTF-32"))) {
-    charset.AssignLiteral("UTF-8");
+  if (!(charset.EqualsLiteral("UTF-8") || charset.EqualsLiteral("gb18030"))) {
+    NS_ConvertUTF8toUTF16 charsetUtf16(charset);
+    const PRUnichar* charsetPtr = charsetUtf16.get();
+    SendJSWarning(aOriginatingElement ? aOriginatingElement->GetOwnerDocument()
+                                      : nullptr,
+                  "CannotEncodeAllUnicode",
+                  &charsetPtr,
+                  1);
   }
 
   mEncoder = do_CreateInstance(NS_SAVEASCHARSET_CONTRACTID);
@@ -719,7 +714,7 @@ nsEncodingFormSubmission::nsEncodingFormSubmission(const nsACString& aCharset,
                       nsISaveAsCharset::attr_FallbackDecimalNCR),
                      0);
     if (NS_FAILED(rv)) {
-      mEncoder = nsnull;
+      mEncoder = nullptr;
     }
   }
 }
@@ -730,17 +725,30 @@ nsEncodingFormSubmission::~nsEncodingFormSubmission()
 
 // i18n helper routines
 nsresult
-nsEncodingFormSubmission::EncodeVal(const nsAString& aStr, nsACString& aOut)
+nsEncodingFormSubmission::EncodeVal(const nsAString& aStr, nsCString& aOut,
+                                    bool aHeaderEncode)
 {
-  if (mEncoder) {
+  if (mEncoder && !aStr.IsEmpty()) {
     aOut.Truncate();
-    return aStr.IsEmpty() ? NS_OK :
-           mEncoder->Convert(PromiseFlatString(aStr).get(),
-                             getter_Copies(aOut));
+    nsresult rv = mEncoder->Convert(PromiseFlatString(aStr).get(),
+                                    getter_Copies(aOut));
+    NS_ENSURE_SUCCESS(rv, rv);
+  }
+  else {
+    // fall back to UTF-8
+    CopyUTF16toUTF8(aStr, aOut);
   }
 
-  // fall back to UTF-8
-  CopyUTF16toUTF8(aStr, aOut);
+  if (aHeaderEncode) {
+    aOut.Adopt(nsLinebreakConverter::
+               ConvertLineBreaks(aOut.get(),
+                                 nsLinebreakConverter::eLinebreakAny,
+                                 nsLinebreakConverter::eLinebreakSpace));
+    aOut.ReplaceSubstring(NS_LITERAL_CSTRING("\""),
+                          NS_LITERAL_CSTRING("\\\""));
+  }
+
+
   return NS_OK;
 }
 
@@ -752,36 +760,27 @@ GetSubmitCharset(nsGenericHTMLElement* aForm,
 {
   oCharset.AssignLiteral("UTF-8"); // default to utf-8
 
-  nsresult rv = NS_OK;
   nsAutoString acceptCharsetValue;
   aForm->GetAttr(kNameSpaceID_None, nsGkAtoms::acceptcharset,
                  acceptCharsetValue);
 
-  PRInt32 charsetLen = acceptCharsetValue.Length();
+  int32_t charsetLen = acceptCharsetValue.Length();
   if (charsetLen > 0) {
-    PRInt32 offset=0;
-    PRInt32 spPos=0;
+    int32_t offset=0;
+    int32_t spPos=0;
     // get charset from charsets one by one
-    nsCOMPtr<nsICharsetAlias> calias(do_GetService(NS_CHARSETALIAS_CONTRACTID, &rv));
-    if (NS_FAILED(rv)) {
-      return;
-    }
-    if (calias) {
-      do {
-        spPos = acceptCharsetValue.FindChar(PRUnichar(' '), offset);
-        PRInt32 cnt = ((-1==spPos)?(charsetLen-offset):(spPos-offset));
-        if (cnt > 0) {
-          nsAutoString uCharset;
-          acceptCharsetValue.Mid(uCharset, offset, cnt);
+    do {
+      spPos = acceptCharsetValue.FindChar(PRUnichar(' '), offset);
+      int32_t cnt = ((-1==spPos)?(charsetLen-offset):(spPos-offset));
+      if (cnt > 0) {
+        nsAutoString uCharset;
+        acceptCharsetValue.Mid(uCharset, offset, cnt);
 
-          if (NS_SUCCEEDED(calias->
-                           GetPreferred(NS_LossyConvertUTF16toASCII(uCharset),
-                                        oCharset)))
-            return;
-        }
-        offset = spPos + 1;
-      } while (spPos != -1);
-    }
+        if (EncodingUtils::FindEncodingForLabel(uCharset, oCharset))
+          return;
+      }
+      offset = spPos + 1;
+    } while (spPos != -1);
   }
   // if there are no accept-charset or all the charset are not supported
   // Get the charset from document
@@ -793,7 +792,7 @@ GetSubmitCharset(nsGenericHTMLElement* aForm,
 
 static void
 GetEnumAttr(nsGenericHTMLElement* aContent,
-            nsIAtom* atom, PRInt32* aValue)
+            nsIAtom* atom, int32_t* aValue)
 {
   const nsAttrValue* value = aContent->GetParsedAttr(atom);
   if (value && value->Type() == nsAttrValue::eEnum) {
@@ -811,7 +810,7 @@ GetSubmissionFromForm(nsGenericHTMLElement* aForm,
                "Should have doc if we're building submission!");
 
   // Get encoding type (default: urlencoded)
-  PRInt32 enctype = NS_FORM_ENCTYPE_URLENCODED;
+  int32_t enctype = NS_FORM_ENCTYPE_URLENCODED;
   if (aOriginatingElement &&
       aOriginatingElement->HasAttr(kNameSpaceID_None, nsGkAtoms::formenctype)) {
     GetEnumAttr(aOriginatingElement, nsGkAtoms::formenctype, &enctype);
@@ -820,7 +819,7 @@ GetSubmissionFromForm(nsGenericHTMLElement* aForm,
   }
 
   // Get method (default: GET)
-  PRInt32 method = NS_FORM_METHOD_GET;
+  int32_t method = NS_FORM_METHOD_GET;
   if (aOriginatingElement &&
       aOriginatingElement->HasAttr(kNameSpaceID_None, nsGkAtoms::formmethod)) {
     GetEnumAttr(aOriginatingElement, nsGkAtoms::formmethod, &method);
@@ -829,8 +828,17 @@ GetSubmissionFromForm(nsGenericHTMLElement* aForm,
   }
 
   // Get charset
-  nsCAutoString charset;
+  nsAutoCString charset;
   GetSubmitCharset(aForm, charset);
+
+  // We now have a canonical charset name, so we only have to check it
+  // against canonical names.
+
+  // use UTF-8 for UTF-16* (per WHATWG and existing practice of
+  // MS IE/Opera).
+  if (StringBeginsWith(charset, NS_LITERAL_CSTRING("UTF-16"))) {
+    charset.AssignLiteral("UTF-8");
+  }
 
   // Choose encoder
   if (method == NS_FORM_METHOD_POST &&
@@ -840,7 +848,7 @@ GetSubmissionFromForm(nsGenericHTMLElement* aForm,
              enctype == NS_FORM_ENCTYPE_TEXTPLAIN) {
     *aFormSubmission = new nsFSTextPlain(charset, aOriginatingElement);
   } else {
-    nsIDocument* doc = aForm->GetOwnerDoc();
+    nsIDocument* doc = aForm->OwnerDoc();
     if (enctype == NS_FORM_ENCTYPE_MULTIPART ||
         enctype == NS_FORM_ENCTYPE_TEXTPLAIN) {
       nsAutoString enctypeStr;

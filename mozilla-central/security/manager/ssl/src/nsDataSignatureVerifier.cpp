@@ -1,34 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * Contributor(s):
- *  Dave Townsend <dtownsend@oxymoronical.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsDataSignatureVerifier.h"
 #include "nsCOMPtr.h"
@@ -47,7 +19,7 @@ NS_IMPL_ISUPPORTS1(nsDataSignatureVerifier, nsIDataSignatureVerifier)
 const SEC_ASN1Template CERT_SignatureDataTemplate[] =
 {
     { SEC_ASN1_SEQUENCE,
-        0, NULL, sizeof(CERTSignedData) },
+        0, nullptr, sizeof(CERTSignedData) },
     { SEC_ASN1_INLINE | SEC_ASN1_XTRN,
         offsetof(CERTSignedData,signatureAlgorithm),
         SEC_ASN1_SUB(SECOID_AlgorithmIDTemplate), },
@@ -60,10 +32,10 @@ NS_IMETHODIMP
 nsDataSignatureVerifier::VerifyData(const nsACString & aData,
                                     const nsACString & aSignature,
                                     const nsACString & aPublicKey,
-                                    PRBool *_retval)
+                                    bool *_retval)
 {
     // Allocate an arena to handle the majority of the allocations
-    PRArenaPool *arena;
+    PLArenaPool *arena;
     arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
     if (!arena)
         return NS_ERROR_OUT_OF_MEMORY;
@@ -74,22 +46,22 @@ nsDataSignatureVerifier::VerifyData(const nsACString & aData,
     if (!NSSBase64_DecodeBuffer(arena, &keyItem,
                                 nsPromiseFlatCString(aPublicKey).get(),
                                 aPublicKey.Length())) {
-        PORT_FreeArena(arena, PR_FALSE);
+        PORT_FreeArena(arena, false);
         return NS_ERROR_FAILURE;
     }
     
     // Extract the public key from the data
     CERTSubjectPublicKeyInfo *pki = SECKEY_DecodeDERSubjectPublicKeyInfo(&keyItem);
     if (!pki) {
-        PORT_FreeArena(arena, PR_FALSE);
+        PORT_FreeArena(arena, false);
         return NS_ERROR_FAILURE;
     }
     SECKEYPublicKey *publicKey = SECKEY_ExtractPublicKey(pki);
     SECKEY_DestroySubjectPublicKeyInfo(pki);
-    pki = nsnull;
+    pki = nullptr;
     
     if (!publicKey) {
-        PORT_FreeArena(arena, PR_FALSE);
+        PORT_FreeArena(arena, false);
         return NS_ERROR_FAILURE;
     }
     
@@ -100,7 +72,7 @@ nsDataSignatureVerifier::VerifyData(const nsACString & aData,
                                 nsPromiseFlatCString(aSignature).get(),
                                 aSignature.Length())) {
         SECKEY_DestroyPublicKey(publicKey);
-        PORT_FreeArena(arena, PR_FALSE);
+        PORT_FreeArena(arena, false);
         return NS_ERROR_FAILURE;
     }
     
@@ -112,7 +84,7 @@ nsDataSignatureVerifier::VerifyData(const nsACString & aData,
                                           &signatureItem);
     if (ss != SECSuccess) {
         SECKEY_DestroyPublicKey(publicKey);
-        PORT_FreeArena(arena, PR_FALSE);
+        PORT_FreeArena(arena, false);
         return NS_ERROR_FAILURE;
     }
     
@@ -122,11 +94,11 @@ nsDataSignatureVerifier::VerifyData(const nsACString & aData,
                                        aData.Length(), publicKey,
                                        &(sigData.signature),
                                        &(sigData.signatureAlgorithm),
-                                       NULL, NULL);
+                                       nullptr, nullptr);
     
     // Clean up remaining objects
     SECKEY_DestroyPublicKey(publicKey);
-    PORT_FreeArena(arena, PR_FALSE);
+    PORT_FreeArena(arena, false);
     
     *_retval = (ss == SECSuccess);
 

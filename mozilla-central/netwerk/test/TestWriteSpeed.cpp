@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "prio.h"
 #include "prinrval.h"
@@ -61,18 +29,18 @@ NS_MeanAndStdDev(double n, double sumOfValues, double sumOfSquaredValues,
 }
 
 int
-Test(const char* filename, PRInt32 minSize, PRInt32 maxSize, 
-     PRInt32 sizeIncrement, PRInt32 iterations)
+Test(const char* filename, int32_t minSize, int32_t maxSize, 
+     int32_t sizeIncrement, int32_t iterations)
 {
     fprintf(stdout, "      size  write:    mean     stddev      iters  total:    mean     stddev      iters\n");
-    for (PRInt32 size = minSize; size <= maxSize; size += sizeIncrement) {
+    for (int32_t size = minSize; size <= maxSize; size += sizeIncrement) {
         // create a buffer of stuff to write
         char* buf = (char*)PR_Malloc(size);
         if (buf == NULL)
             return -1;
 
         // initialize it with a pattern
-        PRInt32 i;
+        int32_t i;
         char hex[] = "0123456789ABCDEF";
         for (i = 0; i < size; i++) {
             buf[i] = hex[i & 0xF];
@@ -90,7 +58,7 @@ Test(const char* filename, PRInt32 minSize, PRInt32 maxSize,
                 return -1;
 
             PRIntervalTime writeStart = PR_IntervalNow();
-            PRInt32 rv = PR_Write(fd, buf, size);
+            int32_t rv = PR_Write(fd, buf, size);
             if (rv < 0) return rv;
             if (rv != size) return -1;
             PRIntervalTime writeStop = PR_IntervalNow();
@@ -126,8 +94,8 @@ Test(const char* filename, PRInt32 minSize, PRInt32 maxSize,
         NS_MeanAndStdDev(totalCount, totalRate, totalRateSquared,
                          &totalMean, &totalStddev);
         fprintf(stdout, "%10d      %10.2f %10.2f %10d      %10.2f %10.2f %10d\n",
-                size, writeMean, writeStddev, (PRInt32)writeCount, 
-                totalMean, totalStddev, (PRInt32)totalCount);
+                size, writeMean, writeStddev, (int32_t)writeCount, 
+                totalMean, totalStddev, (int32_t)totalCount);
     }
     return 0;
 }

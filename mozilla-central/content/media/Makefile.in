@@ -1,43 +1,12 @@
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is Mozilla code.
-#
-# The Initial Developer of the Original Code is the Mozilla Corporation.
-# Portions created by the Initial Developer are Copyright (C) 2007
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#  Chris Double <chris.double@double.co.nz>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH     = ../..
+DEPTH     = @DEPTH@
 topsrcdir = @top_srcdir@
 srcdir    = @srcdir@
 VPATH     = @srcdir@
+FAIL_ON_WARNINGS := 1
 
 include $(DEPTH)/config/autoconf.mk
 
@@ -46,35 +15,60 @@ LIBRARY_NAME = gkconmedia_s
 LIBXUL_LIBRARY = 1
 
 EXPORTS = \
-  nsMediaDecoder.h \
-  nsMediaStream.h \
-  nsMediaCache.h \
-  nsBuiltinDecoder.h \
-  nsBuiltinDecoderStateMachine.h \
-  nsBuiltinDecoderReader.h \
+  AbstractMediaDecoder.h \
+  AudioSampleFormat.h \
+  AudioSegment.h \
+  BufferMediaResource.h \
+  DecoderTraits.h \
+  FileBlockCache.h \
+  MediaDecoderOwner.h \
+  MediaResource.h \
+  MediaSegment.h \
+  MediaStreamGraph.h \
+  AudioAvailableEventManager.h \
+  MediaDecoder.h \
+  MediaDecoderStateMachine.h \
+  MediaDecoderReader.h \
+  nsDOMMediaStream.h \
+  MediaCache.h \
+  SharedBuffer.h \
+  StreamBuffer.h \
+  TimeVarying.h \
+  VideoFrameContainer.h \
   VideoUtils.h \
-  nsAudioAvailableEventManager.h \
+  VideoSegment.h \
+  VorbisUtils.h \
+  MediaMetadataManager.h \
   $(NULL)
 
 CPPSRCS = \
-  nsMediaDecoder.cpp \
-  nsMediaCache.cpp \
-  nsMediaStream.cpp \
-  nsBuiltinDecoder.cpp \
-  nsBuiltinDecoderStateMachine.cpp \
-  nsBuiltinDecoderReader.cpp \
+  AudioSegment.cpp \
+  DecoderTraits.cpp \
+  FileBlockCache.cpp \
+  MediaResource.cpp \
+  MediaStreamGraph.cpp \
+  AudioAvailableEventManager.cpp \
+  MediaDecoder.cpp \
+  MediaDecoderStateMachine.cpp \
+  MediaDecoderReader.cpp \
+  nsDOMMediaStream.cpp \
+  MediaCache.cpp \
+  StreamBuffer.cpp \
+  VideoFrameContainer.cpp \
+  VideoSegment.cpp \
   VideoUtils.cpp \
-  nsAudioAvailableEventManager.cpp \
   $(NULL)
 
 ifdef MOZ_SYDNEYAUDIO
 EXPORTS += \
-  nsAudioStream.h \
+  AudioStream.h \
   $(NULL)
 CPPSRCS += \
-  nsAudioStream.cpp \
+  AudioStream.cpp \
   $(NULL)
 endif
+
+PARALLEL_DIRS += webaudio
 
 ifdef MOZ_RAW
 PARALLEL_DIRS += raw
@@ -92,15 +86,34 @@ ifdef MOZ_WEBM
 PARALLEL_DIRS += webm
 endif
 
-ifdef ENABLE_TESTS
-PARALLEL_DIRS += test
+ifdef MOZ_GSTREAMER
+PARALLEL_DIRS += gstreamer
 endif
+
+ifdef MOZ_DASH
+PARALLEL_DIRS += dash
+endif
+
+ifdef MOZ_MEDIA_PLUGINS
+PARALLEL_DIRS += plugins
+endif
+
+ifdef MOZ_WMF
+PARALLEL_DIRS += wmf
+endif
+
+PARALLEL_DIRS += webrtc
+
+ifeq (gonk,$(MOZ_WIDGET_TOOLKIT))
+PARALLEL_DIRS += omx
+endif
+
+TEST_DIRS += test
 
 FORCE_STATIC_LIB = 1
 
+include $(topsrcdir)/config/config.mk
+include $(topsrcdir)/ipc/chromium/chromium-config.mk
 include $(topsrcdir)/config/rules.mk
 
-INCLUDES += \
-  -I$(srcdir)/../base/src \
-  -I$(srcdir)/../html/content/src \
-  $(NULL)
+DEFINES += -D_IMPL_NS_LAYOUT

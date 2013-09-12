@@ -1,42 +1,10 @@
 /*
  * softoken.h - private data structures and prototypes for the softoken lib
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-/* $Id: softoken.h,v 1.23 2009/02/26 06:57:15 nelson%bolyard.com Exp $ */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+/* $Id: softoken.h,v 1.28 2012/04/25 14:50:10 gerv%gerv.net Exp $ */
 
 #ifndef _SOFTOKEN_H_
 #define _SOFTOKEN_H_
@@ -94,6 +62,12 @@ SECStatus RSA_HashSign(SECOidTag hashOid,
 			unsigned int *sigLen, unsigned int maxLen,
 			unsigned char *hash, unsigned int hashLen);
 extern
+SECStatus RSA_SignPSS(CK_RSA_PKCS_PSS_PARAMS *pss_params,
+		      NSSLOWKEYPrivateKey *key, 
+		      unsigned char *output, unsigned int *output_len, 
+		      unsigned int max_output_len, const unsigned char *input,
+		      unsigned int input_len);
+extern
 SECStatus RSA_CheckSign(NSSLOWKEYPublicKey *key, unsigned char *sign,
 			    unsigned int signLength, unsigned char *hash,
 			    unsigned int hashLength);
@@ -102,6 +76,11 @@ SECStatus RSA_HashCheckSign(SECOidTag hashOid,
 			    NSSLOWKEYPublicKey *key, unsigned char *sig,
 			    unsigned int sigLen, unsigned char *digest,
 			    unsigned int digestLen);
+extern
+SECStatus RSA_CheckSignPSS(CK_RSA_PKCS_PSS_PARAMS *pss_params,
+			   NSSLOWKEYPublicKey *key,
+			   const unsigned char *sign, unsigned int sign_len,
+			   const unsigned char *hash, unsigned int hash_len);
 extern
 SECStatus RSA_CheckSignRecover(NSSLOWKEYPublicKey *key, unsigned char *data,
     			    unsigned int *data_len,unsigned int max_output_len, 
@@ -265,7 +244,7 @@ extern PRBool sftk_fatalError;
 /*
 ** macros to check for forked child process after C_Initialize
 */
-#if defined(XP_UNIX) && !defined(NO_CHECK_FORK)
+#if defined(XP_UNIX) && !defined(NO_FORK_CHECK)
 
 #ifdef DEBUG
 

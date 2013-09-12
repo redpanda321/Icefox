@@ -1,41 +1,9 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: pkibase.c,v $ $Revision: 1.33 $ $Date: 2010/04/03 18:27:32 $";
+static const char CVS_ID[] = "@(#) $RCSfile: pkibase.c,v $ $Revision: 1.36 $ $Date: 2012/07/27 21:41:52 $";
 #endif /* DEBUG */
 
 #ifndef DEV_H
@@ -364,8 +332,8 @@ nssPKIObject_GetNicknameForToken (
 	if ((!tokenOpt && object->instances[i]->label) ||
 	    (object->instances[i]->token == tokenOpt)) 
 	{
-            /* XXX should be copy? safe as long as caller has reference */
-	    nickname = object->instances[i]->label; 
+            /* Must copy, see bug 745548 */
+	    nickname = nssUTF8_Duplicate(object->instances[i]->label, NULL);
 	    break;
 	}
     }
@@ -466,9 +434,12 @@ nssCertificateArray_FindBestCertificate (
 )
 {
     NSSCertificate *bestCert = NULL;
+    nssDecodedCert *bestdc = NULL;
     NSSTime *time, sTime;
-    PRBool haveUsageMatch = PR_FALSE;
+    PRBool bestCertMatches = PR_FALSE;
     PRBool thisCertMatches;
+    PRBool bestCertIsValidAtTime = PR_FALSE;
+    PRBool bestCertIsTrusted = PR_FALSE;
 
     if (timeOpt) {
 	time = timeOpt;
@@ -480,7 +451,7 @@ nssCertificateArray_FindBestCertificate (
 	return (NSSCertificate *)NULL;
     }
     for (; *certs; certs++) {
-	nssDecodedCert *dc, *bestdc;
+	nssDecodedCert *dc;
 	NSSCertificate *c = *certs;
 	dc = nssCertificate_GetDecoding(c);
 	if (!dc) continue;
@@ -490,34 +461,31 @@ nssCertificateArray_FindBestCertificate (
 	     * the usage matched 
 	     */
 	    bestCert = nssCertificate_AddRef(c);
-	    haveUsageMatch = thisCertMatches;
+	    bestCertMatches = thisCertMatches;
+	    bestdc = dc;
 	    continue;
 	} else {
-	    if (haveUsageMatch && !thisCertMatches) {
+	    if (bestCertMatches && !thisCertMatches) {
 		/* if already have a cert for this usage, and if this cert 
 		 * doesn't have the correct usage, continue
 		 */
 		continue;
-	    } else if (!haveUsageMatch && thisCertMatches) {
+	    } else if (!bestCertMatches && thisCertMatches) {
 		/* this one does match usage, replace the other */
 		nssCertificate_Destroy(bestCert);
 		bestCert = nssCertificate_AddRef(c);
-		haveUsageMatch = PR_TRUE;
+		bestCertMatches = thisCertMatches;
+		bestdc = dc;
 		continue;
 	    }
 	    /* this cert match as well as any cert we've found so far, 
 	     * defer to time/policies 
 	     * */
 	}
-	bestdc = nssCertificate_GetDecoding(bestCert);
-	if (!bestdc) {
-	    nssCertificate_Destroy(bestCert);
-	    bestCert = nssCertificate_AddRef(c);
-	    continue;
-	}
 	/* time */
-	if (bestdc->isValidAtTime(bestdc, time)) {
+	if (bestCertIsValidAtTime || bestdc->isValidAtTime(bestdc, time)) {
 	    /* The current best cert is valid at time */
+	    bestCertIsValidAtTime = PR_TRUE;
 	    if (!dc->isValidAtTime(dc, time)) {
 		/* If the new cert isn't valid at time, it's not better */
 		continue;
@@ -528,14 +496,36 @@ nssCertificateArray_FindBestCertificate (
 		/* If the new cert is valid at time, it's better */
 		nssCertificate_Destroy(bestCert);
 		bestCert = nssCertificate_AddRef(c);
+		bestdc = dc;
+		bestCertIsValidAtTime = PR_TRUE;
+		continue;
 	    }
 	}
-	/* either they are both valid at time, or neither valid; 
-	 * take the newer one
+	/* Either they are both valid at time, or neither valid.
+	 * If only one is trusted for this usage, take it.
 	 */
+	if (bestCertIsTrusted || bestdc->isTrustedForUsage(bestdc, usage)) {
+	    bestCertIsTrusted = PR_TRUE;
+	    if (!dc->isTrustedForUsage(dc, usage)) {
+	        continue;
+	    }
+	} else {
+	    /* The current best cert is not trusted */
+	    if (dc->isTrustedForUsage(dc, usage)) {
+		/* If the new cert is trusted, it's better */
+		nssCertificate_Destroy(bestCert);
+		bestCert = nssCertificate_AddRef(c);
+		bestdc = dc;
+		bestCertIsTrusted = PR_TRUE;
+	        continue;
+	    }
+	}
+	/* Otherwise, take the newer one. */
 	if (!bestdc->isNewerThan(bestdc, dc)) {
 	    nssCertificate_Destroy(bestCert);
 	    bestCert = nssCertificate_AddRef(c);
+	    bestdc = dc;
+	    continue;
 	}
 	/* policies */
 	/* XXX later -- defer to policies */

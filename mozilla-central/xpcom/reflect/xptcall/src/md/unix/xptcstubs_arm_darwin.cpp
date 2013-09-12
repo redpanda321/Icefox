@@ -44,11 +44,11 @@
 #define DONT_DROP_OR_WARN __attribute__((used))
 
 /* Specify explicitly a symbol for this function, don't try to guess the c++ mangled symbol.  */
-static nsresult PrepareAndDispatch(nsXPTCStubBase* self, uint32 methodIndex, PRUint32* args) asm("_PrepareAndDispatch")
+static nsresult PrepareAndDispatch(nsXPTCStubBase* self, uint32_t methodIndex, PRUint32* args) asm("_PrepareAndDispatch")
 DONT_DROP_OR_WARN;
 
 static nsresult
-PrepareAndDispatch(nsXPTCStubBase* self, uint32 methodIndex, PRUint32* args)
+PrepareAndDispatch(nsXPTCStubBase* self, uint32_t methodIndex, PRUint32* args)
 {
 #define PARAM_BUFFER_COUNT     16
 

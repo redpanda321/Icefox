@@ -2,46 +2,13 @@
  * PKCS#1 encoding and decoding functions.
  * This file is believed to contain no code licensed from other parties.
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-/* $Id: rsawrapr.c,v 1.11 2006/10/23 21:24:38 wtchang%redhat.com Exp $ */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+/* $Id: rsawrapr.c,v 1.21 2012/06/26 22:27:31 rrelyea%redhat.com Exp $ */
 
 #include "blapi.h"
 #include "softoken.h"
-#include "sechash.h"
 
 #include "lowkeyi.h"
 #include "secerr.h"
@@ -57,6 +24,9 @@
 #define OAEP_PAD_OCTET		0x00
 
 #define FLAT_BUFSIZE 512	/* bytes to hold flattened SHA1Context. */
+
+/* Needed for RSA-PSS functions */
+static const unsigned char eightZeros[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
 static SHA1Context *
 SHA1_CloneContext(SHA1Context *original)
@@ -193,7 +163,7 @@ rsa_FormatOneBlock(unsigned modulusLen, RSA_BlockType blockType,
     unsigned char *block;
     unsigned char *bp;
     int padLen;
-    int i;
+    int i, j;
     SECStatus rv;
 
     block = (unsigned char *) PORT_Alloc(modulusLen);
@@ -246,28 +216,53 @@ rsa_FormatOneBlock(unsigned modulusLen, RSA_BlockType blockType,
 	 * 0x00 || BT || Pad || 0x00 || ActualData
 	 *   1      1   padLen    1      data->len
 	 * Pad is all non-zero random bytes.
+	 *
+	 * Build the block left to right.
+	 * Fill the entire block from Pad to the end with random bytes.
+	 * Use the bytes after Pad as a supply of extra random bytes from 
+	 * which to find replacements for the zero bytes in Pad.
+	 * If we need more than that, refill the bytes after Pad with 
+	 * new random bytes as necessary.
 	 */
-	padLen = modulusLen - data->len - 3;
+	padLen = modulusLen - (data->len + 3);
 	PORT_Assert (padLen >= RSA_BLOCK_MIN_PAD_LEN);
 	if (padLen < RSA_BLOCK_MIN_PAD_LEN) {
 	    PORT_Free (block);
 	    return NULL;
 	}
-	for (i = 0; i < padLen; i++) {
-	    /* Pad with non-zero random data. */
-	    do {
-		rv = RNG_GenerateGlobalRandomBytes(bp + i, 1);
-	    } while (rv == SECSuccess && bp[i] == RSA_BLOCK_AFTER_PAD_OCTET);
-	    if (rv != SECSuccess) {
-		sftk_fatalError = PR_TRUE;
-		PORT_Free (block);
-		return NULL;
+	j = modulusLen - 2;
+	rv = RNG_GenerateGlobalRandomBytes(bp, j);
+	if (rv == SECSuccess) {
+	    for (i = 0; i < padLen; ) {
+		unsigned char repl;
+		/* Pad with non-zero random data. */
+		if (bp[i] != RSA_BLOCK_AFTER_PAD_OCTET) {
+		    ++i;
+		    continue;
+		}
+		if (j <= padLen) {
+		    rv = RNG_GenerateGlobalRandomBytes(bp + padLen,
+					  modulusLen - (2 + padLen));
+		    if (rv != SECSuccess)
+		    	break;
+		    j = modulusLen - 2;
+		}
+		do {
+		    repl = bp[--j];
+		} while (repl == RSA_BLOCK_AFTER_PAD_OCTET && j > padLen);
+		if (repl != RSA_BLOCK_AFTER_PAD_OCTET) {
+		    bp[i++] = repl;
+		}
 	    }
+	}
+	if (rv != SECSuccess) {
+	    sftk_fatalError = PR_TRUE;
+	    PORT_Free (block);
+	    return NULL;
 	}
 	bp += padLen;
 	*bp++ = RSA_BLOCK_AFTER_PAD_OCTET;
 	PORT_Memcpy (bp, data->data, data->len);
-
 	break;
 
       /*
@@ -914,4 +909,345 @@ RSA_DecryptRaw(NSSLOWKEYPrivateKey *key,
 
 failure:
     return SECFailure;
+}
+
+/*
+ * Mask generation function MGF1 as defined in PKCS #1 v2.1 / RFC 3447.
+ */
+static SECStatus
+MGF1(HASH_HashType hashAlg, unsigned char *mask, unsigned int maskLen,
+     const unsigned char *mgfSeed, unsigned int mgfSeedLen)
+{
+    unsigned int digestLen;
+    PRUint32 counter, rounds;
+    unsigned char *tempHash, *temp;
+    const SECHashObject *hash;
+    void *hashContext;
+    unsigned char C[4];
+
+    hash = HASH_GetRawHashObject(hashAlg);
+    if (hash == NULL)
+        return SECFailure;
+
+    hashContext = (*hash->create)();
+    rounds = (maskLen + hash->length - 1) / hash->length;
+    for (counter = 0; counter < rounds; counter++) {
+        C[0] = (unsigned char)((counter >> 24) & 0xff);
+        C[1] = (unsigned char)((counter >> 16) & 0xff);
+        C[2] = (unsigned char)((counter >> 8) & 0xff);
+        C[3] = (unsigned char)(counter & 0xff);
+
+        /* This could be optimized when the clone functions in
+         * rawhash.c are implemented. */
+        (*hash->begin)(hashContext);
+        (*hash->update)(hashContext, mgfSeed, mgfSeedLen); 
+        (*hash->update)(hashContext, C, sizeof C);
+
+        tempHash = mask + counter * hash->length;
+        if (counter != (rounds-1)) {
+            (*hash->end)(hashContext, tempHash, &digestLen, hash->length);
+        } else { /* we're in the last round and need to cut the hash */
+            temp = PORT_Alloc(hash->length);
+            (*hash->end)(hashContext, temp, &digestLen, hash->length);
+            PORT_Memcpy(tempHash, temp, maskLen - counter * hash->length);
+            PORT_Free(temp);
+        }
+    }
+    (*hash->destroy)(hashContext, PR_TRUE);
+
+    return SECSuccess;
+}
+
+/*
+ * Encode a RSA-PSS signature.
+ * Described in RFC 3447, section 9.1.1.
+ * We use mHash instead of M as input.
+ * emBits from the RFC is just modBits - 1, see section 8.1.1.
+ * We only support MGF1 as the MGF.
+ *
+ * NOTE: this code assumes modBits is a multiple of 8.
+ */
+static SECStatus
+emsa_pss_encode(unsigned char *em, unsigned int emLen,
+                const unsigned char *mHash, HASH_HashType hashAlg,
+                HASH_HashType maskHashAlg, unsigned int sLen)
+{
+    const SECHashObject *hash;
+    void *hash_context;
+    unsigned char *dbMask;
+    unsigned int dbMaskLen, i;
+    SECStatus rv;
+
+    hash = HASH_GetRawHashObject(hashAlg);
+    dbMaskLen = emLen - hash->length - 1;
+
+    /* Step 3 */
+    if (emLen < hash->length + sLen + 2) {
+	PORT_SetError(SEC_ERROR_OUTPUT_LEN);
+	return SECFailure;
+    }
+
+    /* Step 4 */
+    rv = RNG_GenerateGlobalRandomBytes(&em[dbMaskLen - sLen], sLen);
+    if (rv != SECSuccess) {
+	return rv;
+    }
+
+    /* Step 5 + 6 */
+    /* Compute H and store it at its final location &em[dbMaskLen]. */
+    hash_context = (*hash->create)();
+    if (hash_context == NULL) {
+	PORT_SetError(SEC_ERROR_NO_MEMORY);
+	return SECFailure;
+    }
+    (*hash->begin)(hash_context);
+    (*hash->update)(hash_context, eightZeros, 8);
+    (*hash->update)(hash_context, mHash, hash->length);
+    (*hash->update)(hash_context, &em[dbMaskLen - sLen], sLen);
+    (*hash->end)(hash_context, &em[dbMaskLen], &i, hash->length);
+    (*hash->destroy)(hash_context, PR_TRUE);
+
+    /* Step 7 + 8 */
+    memset(em, 0, dbMaskLen - sLen - 1);
+    em[dbMaskLen - sLen - 1] = 0x01;
+
+    /* Step 9 */
+    dbMask = (unsigned char *)PORT_Alloc(dbMaskLen);
+    if (dbMask == NULL) {
+	PORT_SetError(SEC_ERROR_NO_MEMORY);
+	return SECFailure;
+    }
+    MGF1(maskHashAlg, dbMask, dbMaskLen, &em[dbMaskLen], hash->length);
+
+    /* Step 10 */
+    for (i = 0; i < dbMaskLen; i++)
+	em[i] ^= dbMask[i];
+    PORT_Free(dbMask);
+
+    /* Step 11 */
+    em[0] &= 0x7f;
+
+    /* Step 12 */
+    em[emLen - 1] = 0xbc;
+
+    return SECSuccess;
+}
+
+/*
+ * Verify a RSA-PSS signature.
+ * Described in RFC 3447, section 9.1.2.
+ * We use mHash instead of M as input.
+ * emBits from the RFC is just modBits - 1, see section 8.1.2.
+ * We only support MGF1 as the MGF.
+ *
+ * NOTE: this code assumes modBits is a multiple of 8.
+ */
+static SECStatus
+emsa_pss_verify(const unsigned char *mHash,
+                const unsigned char *em, unsigned int emLen,
+                HASH_HashType hashAlg, HASH_HashType maskHashAlg,
+                unsigned int sLen)
+{
+    const SECHashObject *hash;
+    void *hash_context;
+    unsigned char *db;
+    unsigned char *H_;  /* H' from the RFC */
+    unsigned int i, dbMaskLen;
+    SECStatus rv;
+
+    hash = HASH_GetRawHashObject(hashAlg);
+    dbMaskLen = emLen - hash->length - 1;
+
+    /* Step 3 + 4 + 6 */
+    if ((emLen < (hash->length + sLen + 2)) ||
+	(em[emLen - 1] != 0xbc) ||
+	((em[0] & 0x80) != 0)) {
+	PORT_SetError(SEC_ERROR_BAD_SIGNATURE);
+	return SECFailure;
+    }
+
+    /* Step 7 */
+    db = (unsigned char *)PORT_Alloc(dbMaskLen);
+    if (db == NULL) {
+	PORT_SetError(SEC_ERROR_NO_MEMORY);
+	return SECFailure;
+    }
+    /* &em[dbMaskLen] points to H, used as mgfSeed */
+    MGF1(maskHashAlg, db, dbMaskLen, &em[dbMaskLen], hash->length);
+
+    /* Step 8 */
+    for (i = 0; i < dbMaskLen; i++) {
+	db[i] ^= em[i];
+    }
+
+    /* Step 9 */
+    db[0] &= 0x7f;
+
+    /* Step 10 */
+    for (i = 0; i < (dbMaskLen - sLen - 1); i++) {
+	if (db[i] != 0) {
+	    PORT_Free(db);
+	    PORT_SetError(SEC_ERROR_BAD_SIGNATURE);
+	    return SECFailure;
+	}
+    }
+    if (db[dbMaskLen - sLen - 1] != 0x01) {
+	PORT_Free(db);
+	PORT_SetError(SEC_ERROR_BAD_SIGNATURE);
+	return SECFailure;
+    }
+
+    /* Step 12 + 13 */
+    H_ = (unsigned char *)PORT_Alloc(hash->length);
+    if (H_ == NULL) {
+	PORT_Free(db);
+	PORT_SetError(SEC_ERROR_NO_MEMORY);
+	return SECFailure;
+    }
+    hash_context = (*hash->create)();
+    if (hash_context == NULL) {
+	PORT_Free(db);
+	PORT_Free(H_);
+	PORT_SetError(SEC_ERROR_NO_MEMORY);
+	return SECFailure;
+    }
+    (*hash->begin)(hash_context);
+    (*hash->update)(hash_context, eightZeros, 8);
+    (*hash->update)(hash_context, mHash, hash->length);
+    (*hash->update)(hash_context, &db[dbMaskLen - sLen], sLen);
+    (*hash->end)(hash_context, H_, &i, hash->length);
+    (*hash->destroy)(hash_context, PR_TRUE);
+
+    PORT_Free(db);
+
+    /* Step 14 */
+    if (PORT_Memcmp(H_, &em[dbMaskLen], hash->length) != 0) {
+	PORT_SetError(SEC_ERROR_BAD_SIGNATURE);
+	rv = SECFailure;
+    } else {
+	rv = SECSuccess;
+    }
+
+    PORT_Free(H_);
+    return rv;
+}
+
+static HASH_HashType
+GetHashTypeFromMechanism(CK_MECHANISM_TYPE mech)
+{
+    switch (mech) {
+        case CKM_SHA_1:
+        case CKG_MGF1_SHA1:
+	    return HASH_AlgSHA1;
+        case CKM_SHA224:
+        case CKG_MGF1_SHA224:
+	    return HASH_AlgSHA224;
+        case CKM_SHA256:
+        case CKG_MGF1_SHA256:
+	    return HASH_AlgSHA256;
+        case CKM_SHA384:
+        case CKG_MGF1_SHA384:
+	    return HASH_AlgSHA384;
+        case CKM_SHA512:
+        case CKG_MGF1_SHA512:
+	    return HASH_AlgSHA512;
+        default:
+	    return HASH_AlgNULL;
+    }
+}
+
+/* MGF1 is the only supported MGF. */
+SECStatus
+RSA_CheckSignPSS(CK_RSA_PKCS_PSS_PARAMS *pss_params,
+		 NSSLOWKEYPublicKey *key,
+		 const unsigned char *sign, unsigned int sign_len,
+		 const unsigned char *hash, unsigned int hash_len)
+{
+    HASH_HashType hashAlg;
+    HASH_HashType maskHashAlg;
+    SECStatus rv;
+    unsigned int modulus_len = nsslowkey_PublicModulusLen(key);
+    unsigned char *buffer;
+
+    if (sign_len != modulus_len) {
+	PORT_SetError(SEC_ERROR_BAD_SIGNATURE);
+	return SECFailure;
+    }
+
+    hashAlg = GetHashTypeFromMechanism(pss_params->hashAlg);
+    maskHashAlg = GetHashTypeFromMechanism(pss_params->mgf);
+    if ((hashAlg == HASH_AlgNULL) || (maskHashAlg == HASH_AlgNULL)) {
+	PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
+	return SECFailure;
+    }
+
+    buffer = (unsigned char *)PORT_Alloc(modulus_len);
+    if (!buffer) {
+	PORT_SetError(SEC_ERROR_NO_MEMORY);
+	return SECFailure;
+    }
+
+    rv = RSA_PublicKeyOp(&key->u.rsa, buffer, sign);
+    if (rv != SECSuccess) {
+	PORT_Free(buffer);
+	PORT_SetError(SEC_ERROR_BAD_SIGNATURE);
+	return SECFailure;
+    }
+
+    rv = emsa_pss_verify(hash, buffer, modulus_len, hashAlg,
+			 maskHashAlg, pss_params->sLen);
+    PORT_Free(buffer);
+
+    return rv;
+}
+
+/* MGF1 is the only supported MGF. */
+SECStatus
+RSA_SignPSS(CK_RSA_PKCS_PSS_PARAMS *pss_params, NSSLOWKEYPrivateKey *key,
+	    unsigned char *output, unsigned int *output_len,
+	    unsigned int max_output_len,
+	    const unsigned char *input, unsigned int input_len)
+{
+    SECStatus rv = SECSuccess;
+    unsigned int modulus_len = nsslowkey_PrivateModulusLen(key);
+    unsigned char *pss_encoded = NULL;
+    HASH_HashType hashAlg;
+    HASH_HashType maskHashAlg;
+
+    if (max_output_len < modulus_len) {
+	PORT_SetError(SEC_ERROR_OUTPUT_LEN);
+	return SECFailure;
+    }
+    PORT_Assert(key->keyType == NSSLOWKEYRSAKey);
+    if (key->keyType != NSSLOWKEYRSAKey) {
+	PORT_SetError(SEC_ERROR_INVALID_KEY);
+	return SECFailure;
+    }
+
+    hashAlg = GetHashTypeFromMechanism(pss_params->hashAlg);
+    maskHashAlg = GetHashTypeFromMechanism(pss_params->mgf);
+    if ((hashAlg == HASH_AlgNULL) || (maskHashAlg == HASH_AlgNULL)) {
+	PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
+	return SECFailure;
+    }
+
+    pss_encoded = (unsigned char *)PORT_Alloc(modulus_len);
+    if (pss_encoded == NULL) {
+	PORT_SetError(SEC_ERROR_NO_MEMORY);
+	return SECFailure;
+    }
+    rv = emsa_pss_encode(pss_encoded, modulus_len, input, hashAlg,
+			 maskHashAlg, pss_params->sLen);
+    if (rv != SECSuccess) 
+	goto done;
+
+    rv = RSA_PrivateKeyOpDoubleChecked(&key->u.rsa, output, pss_encoded);
+    if (rv != SECSuccess && PORT_GetError() == SEC_ERROR_LIBRARY_FAILURE) {
+	sftk_fatalError = PR_TRUE;
+    }
+    *output_len = modulus_len;
+
+done:
+    PORT_Free(pss_encoded);
+    return rv;
 }

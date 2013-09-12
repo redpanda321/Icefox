@@ -1,4 +1,4 @@
-# Usage: cp $1/update.sh <vorbis_src_directory>
+# Usage: /bin/sh update.sh <vorbis_src_directory>
 #
 # Copies the needed files from a directory containing the original
 # libvorbis source that we need for the Mozilla HTML5 media support.
@@ -47,4 +47,5 @@ cp $1/COPYING ./COPYING
 cp $1/README ./README
 cp $1/AUTHORS ./AUTHORS
 patch -p3 < ./alloca.diff
-patch -p3 <bug487519.patch
+patch -p3 < ./bug719612.patch
+patch -p3 < ./bug722924.patch

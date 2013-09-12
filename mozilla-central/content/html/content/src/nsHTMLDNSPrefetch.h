@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Patrick McManus <mcmanus@ducksong.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsHTMLDNSPrefetch_h___
 #define nsHTMLDNSPrefetch_h___
@@ -68,7 +35,7 @@ public:
   // The required aDocument parameter is the context requesting the prefetch - under
   // certain circumstances (e.g. headers, or security context) associated with
   // the context the prefetch will not be performed. 
-  static PRBool   IsAllowed(nsIDocument *aDocument);
+  static bool     IsAllowed(nsIDocument *aDocument);
  
   static nsresult Initialize();
   static nsresult Shutdown();
@@ -84,16 +51,25 @@ public:
   static nsresult PrefetchHigh(mozilla::dom::Link *aElement);
   static nsresult PrefetchMedium(mozilla::dom::Link *aElement);
   static nsresult PrefetchLow(mozilla::dom::Link *aElement);
-  static nsresult PrefetchHigh(nsAString &host);
-  static nsresult PrefetchMedium(nsAString &host);
-  static nsresult PrefetchLow(nsAString &host);
+  static nsresult PrefetchHigh(const nsAString &host);
+  static nsresult PrefetchMedium(const nsAString &host);
+  static nsresult PrefetchLow(const nsAString &host);
+  static nsresult CancelPrefetchLow(const nsAString &host, nsresult aReason);
+  static nsresult CancelPrefetchLow(mozilla::dom::Link *aElement,
+                                    nsresult aReason);
 
 private:
-  static nsresult Prefetch(nsAString &host, PRUint16 flags);
-  static nsresult Prefetch(mozilla::dom::Link *aElement, PRUint16 flags);
+  static nsresult Prefetch(const nsAString &host, uint16_t flags);
+  static nsresult Prefetch(mozilla::dom::Link *aElement, uint16_t flags);
+  static nsresult CancelPrefetch(const nsAString &hostname,
+                                 uint16_t flags,
+                                 nsresult aReason);
+  static nsresult CancelPrefetch(mozilla::dom::Link *aElement,
+                                 uint16_t flags,
+                                 nsresult aReason);
   
 public:
-  class nsListener : public nsIDNSListener
+  class nsListener MOZ_FINAL : public nsIDNSListener
   {
     // This class exists to give a safe callback no-op DNSListener
   public:
@@ -105,9 +81,9 @@ public:
     ~nsListener() {}
   };
   
-  class nsDeferrals : public nsIWebProgressListener
-                    , public nsSupportsWeakReference
-                    , public nsIObserver
+  class nsDeferrals MOZ_FINAL: public nsIWebProgressListener
+                             , public nsSupportsWeakReference
+                             , public nsIObserver
   {
   public:
     NS_DECL_ISUPPORTS
@@ -117,7 +93,7 @@ public:
     nsDeferrals();
     
     void Activate();
-    nsresult Add(PRUint16 flags, mozilla::dom::Link *aElement);
+    nsresult Add(uint16_t flags, mozilla::dom::Link *aElement);
     
   private:
     ~nsDeferrals();
@@ -125,12 +101,12 @@ public:
     
     void SubmitQueue();
     
-    PRUint16                  mHead;
-    PRUint16                  mTail;
-    PRUint32                  mActiveLoaderCount;
+    uint16_t                  mHead;
+    uint16_t                  mTail;
+    uint32_t                  mActiveLoaderCount;
 
     nsCOMPtr<nsITimer>        mTimer;
-    PRBool                    mTimerArmed;
+    bool                      mTimerArmed;
     static void Tick(nsITimer *aTimer, void *aClosure);
     
     static const int          sMaxDeferred = 512;  // keep power of 2 for masking
@@ -138,14 +114,12 @@ public:
     
     struct deferred_entry
     {
-      PRUint16                         mFlags;
+      uint16_t                         mFlags;
       nsWeakPtr                        mElement;
     } mEntries[sMaxDeferred];
   };
 
-#ifdef MOZ_IPC
   friend class mozilla::net::NeckoParent;
-#endif
 };
 
 #endif 

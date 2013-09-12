@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Akkana Peck <akkana@netscape.com> (original author)
- *   Darin Fisher <darin@meer.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsURIChecker.h"
 #include "nsIServiceManager.h"
@@ -47,10 +13,10 @@
 
 //-----------------------------------------------------------------------------
 
-static PRBool
+static bool
 ServerIsNES3x(nsIHttpChannel *httpChannel)
 {
-    nsCAutoString server;
+    nsAutoCString server;
     httpChannel->GetResponseHeader(NS_LITERAL_CSTRING("Server"), server);
     // case sensitive string comparison is OK here.  the server string
     // is a well-known value, so we should not have to worry about it
@@ -71,8 +37,8 @@ NS_IMPL_ISUPPORTS6(nsURIChecker,
 
 nsURIChecker::nsURIChecker()
     : mStatus(NS_OK)
-    , mIsPending(PR_FALSE)
-    , mAllowHead(PR_TRUE)
+    , mIsPending(false)
+    , mAllowHead(true)
 {
 }
 
@@ -80,13 +46,13 @@ void
 nsURIChecker::SetStatusAndCallBack(nsresult aStatus)
 {
     mStatus = aStatus;
-    mIsPending = PR_FALSE;
+    mIsPending = false;
 
     if (mObserver) {
         mObserver->OnStartRequest(this, mObserverContext);
         mObserver->OnStopRequest(this, mObserverContext, mStatus);
-        mObserver = nsnull;
-        mObserverContext = nsnull;
+        mObserver = nullptr;
+        mObserverContext = nullptr;
     }
 }
 
@@ -107,7 +73,7 @@ nsURIChecker::CheckStatus()
     if (!httpChannel)
         return NS_BINDING_SUCCEEDED;
 
-    PRUint32 responseStatus;
+    uint32_t responseStatus;
     rv = httpChannel->GetResponseStatus(&responseStatus);
     if (NS_FAILED(rv))
         return NS_BINDING_FAILED;
@@ -122,17 +88,20 @@ nsURIChecker::CheckStatus()
     // retried without the head.
     if (responseStatus == 404) {
         if (mAllowHead && ServerIsNES3x(httpChannel)) {
-            mAllowHead = PR_FALSE;
+            mAllowHead = false;
 
             // save the current value of mChannel in case we can't issue
             // the new request for some reason.
             nsCOMPtr<nsIChannel> lastChannel = mChannel;
 
             nsCOMPtr<nsIURI> uri;
-            PRUint32 loadFlags;
+            uint32_t loadFlags;
 
             rv  = lastChannel->GetOriginalURI(getter_AddRefs(uri));
-            rv |= lastChannel->GetLoadFlags(&loadFlags);
+            nsresult tmp = lastChannel->GetLoadFlags(&loadFlags);
+            if (NS_FAILED(tmp)) {
+              rv = tmp;
+            }
 
             // XXX we are carrying over the load flags, but what about other
             // parameters that may have been set on lastChannel??
@@ -175,14 +144,14 @@ nsURIChecker::Init(nsIURI *aURI)
     if (NS_FAILED(rv)) return rv;
 
     if (mAllowHead) {
-        mAllowHead = PR_FALSE;
+        mAllowHead = false;
         // See if it's an http channel, which needs special treatment:
         nsCOMPtr<nsIHttpChannel> httpChannel = do_QueryInterface(mChannel);
         if (httpChannel) {
             // We can have an HTTP channel that has a non-HTTP URL if
             // we're doing FTP via an HTTP proxy, for example.  See for
             // example bug 148813
-            PRBool isReallyHTTP = PR_FALSE;
+            bool isReallyHTTP = false;
             aURI->SchemeIs("http", &isReallyHTTP);
             if (!isReallyHTTP)
                 aURI->SchemeIs("https", &isReallyHTTP);
@@ -192,7 +161,7 @@ nsURIChecker::Init(nsIURI *aURI)
                 // a HEAD request.  this is used down in OnStartRequest to
                 // handle cases where we need to repeat the request as a normal
                 // GET to deal with server borkage.
-                mAllowHead = PR_TRUE;
+                mAllowHead = true;
             }
         }
     }
@@ -210,12 +179,12 @@ nsURIChecker::AsyncCheck(nsIRequestObserver *aObserver,
     mChannel->SetNotificationCallbacks(this);
     
     // and start the request:
-    nsresult rv = mChannel->AsyncOpen(this, nsnull);
+    nsresult rv = mChannel->AsyncOpen(this, nullptr);
     if (NS_FAILED(rv))
-        mChannel = nsnull;
+        mChannel = nullptr;
     else {
         // ok, wait for OnStartRequest to fire.
-        mIsPending = PR_TRUE;
+        mIsPending = true;
         mObserver = aObserver;
         mObserverContext = aObserverContext;
     }
@@ -242,7 +211,7 @@ nsURIChecker::GetName(nsACString &aName)
 }
 
 NS_IMETHODIMP
-nsURIChecker::IsPending(PRBool *aPendingRet)
+nsURIChecker::IsPending(bool *aPendingRet)
 {
     *aPendingRet = mIsPending;
     return NS_OK;
@@ -330,7 +299,7 @@ nsURIChecker::OnStopRequest(nsIRequest *request, nsISupports *ctxt,
     if (mChannel == request) {
         // break reference cycle between us and the channel (see comment in
         // AsyncCheckURI)
-        mChannel = nsnull;
+        mChannel = nullptr;
     }
     return NS_OK;
 }
@@ -341,8 +310,8 @@ nsURIChecker::OnStopRequest(nsIRequest *request, nsISupports *ctxt,
 
 NS_IMETHODIMP
 nsURIChecker::OnDataAvailable(nsIRequest *aRequest, nsISupports *aCtxt,
-                               nsIInputStream *aInput, PRUint32 aOffset,
-                               PRUint32 aCount)
+                               nsIInputStream *aInput, uint64_t aOffset,
+                               uint32_t aCount)
 {
     NS_NOTREACHED("nsURIChecker::OnDataAvailable");
     return NS_BINDING_ABORTED;
@@ -370,7 +339,7 @@ nsURIChecker::GetInterface(const nsIID & aIID, void **aResult)
 NS_IMETHODIMP
 nsURIChecker::AsyncOnChannelRedirect(nsIChannel *aOldChannel,
                                      nsIChannel *aNewChannel,
-                                     PRUint32 aFlags,
+                                     uint32_t aFlags,
                                      nsIAsyncVerifyRedirectCallback *callback)
 {
     // We have a new channel

@@ -1,50 +1,18 @@
 /* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code, released
- * March 31, 1998.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Samir Gehani <sgehani@netscape.com>
- *   Benjamin Smedberg <bsmedberg@covad.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "nsINIParser.h"
-#include "nsError.h"
-#include "nsILocalFile.h"
+// Moz headers (alphabetical)
 #include "nsCRTGlue.h"
+#include "nsError.h"
+#include "nsIFile.h"
+#include "nsINIParser.h"
+#include "mozilla/FileUtils.h" // AutoFILE
 
-#include <stdlib.h>
+// System headers (alphabetical)
 #include <stdio.h>
+#include <stdlib.h>
 #ifdef XP_WIN
 #include <windows.h>
 #endif
@@ -76,7 +44,7 @@ inline FILE *TS_tfopen (const char *path, const char *mode)
 
 class AutoFILE {
 public:
-  AutoFILE(FILE *fp = nsnull) : fp_(fp) {}
+  AutoFILE(FILE *fp = nullptr) : fp_(fp) {}
   ~AutoFILE() { if (fp_) fclose(fp_); }
   operator FILE *() { return fp_; }
   FILE** operator &() { return &fp_; }
@@ -86,10 +54,8 @@ private:
 };
 
 nsresult
-nsINIParser::Init(nsILocalFile* aFile)
+nsINIParser::Init(nsIFile* aFile)
 {
-    nsresult rv;
-
     /* open the file. Don't use OpenANSIFileDesc, because you mustn't
        pass FILE* across shared library boundaries, which may be using
        different CRTs */
@@ -98,13 +64,13 @@ nsINIParser::Init(nsILocalFile* aFile)
 
 #ifdef XP_WIN
     nsAutoString path;
-    rv = aFile->GetPath(path);
+    nsresult rv = aFile->GetPath(path);
     NS_ENSURE_SUCCESS(rv, rv);
 
     fd = _wfopen(path.get(), READ_BINARYMODE);
 #else
-    nsCAutoString path;
-    rv = aFile->GetNativePath(path);
+    nsAutoCString path;
+    aFile->GetNativePath(path);
 
     fd = fopen(path.get(), READ_BINARYMODE);
 #endif
@@ -135,8 +101,7 @@ static const char kRBracket[] = "]";
 nsresult
 nsINIParser::InitFromFILE(FILE *fd)
 {
-    if (!mSections.Init())
-        return NS_ERROR_OUT_OF_MEMORY;
+    mSections.Init();
 
     /* get file size */
     if (fseek(fd, 0, SEEK_END) != 0)
@@ -147,7 +112,7 @@ nsINIParser::InitFromFILE(FILE *fd)
         return NS_ERROR_FAILURE;
 
     /* malloc an internal buf the size of the file */
-    mFileContents = new char[flen + 1];
+    mFileContents = new char[flen + 2];
     if (!mFileContents)
         return NS_ERROR_OUT_OF_MEMORY;
 
@@ -159,10 +124,57 @@ nsINIParser::InitFromFILE(FILE *fd)
     if (rd != flen)
         return NS_BASE_STREAM_OSERROR;
 
-    mFileContents[flen] = '\0';
+    // We write a UTF16 null so that the file is easier to convert to UTF8
+    mFileContents[flen] = mFileContents[flen + 1] = '\0';
 
-    char *buffer = mFileContents;
-    char *currSection = nsnull;
+    char *buffer = &mFileContents[0];
+
+    if (flen >= 3
+    && mFileContents[0] == static_cast<char>(0xEF)
+    && mFileContents[1] == static_cast<char>(0xBB)
+    && mFileContents[2] == static_cast<char>(0xBF)) {
+      // Someone set us up the Utf-8 BOM
+      // This case is easy, since we assume that BOM-less
+      // files are Utf-8 anyway.  Just skip the BOM and process as usual.
+      buffer = &mFileContents[3];
+    }
+
+#ifdef XP_WIN
+    if (flen >= 2
+     && mFileContents[0] == static_cast<char>(0xFF)
+     && mFileContents[1] == static_cast<char>(0xFE)) {
+        // Someone set us up the Utf-16LE BOM
+        buffer = &mFileContents[2];
+        // Get the size required for our Utf8 buffer
+        flen = WideCharToMultiByte(CP_UTF8,
+                                   0,
+                                   reinterpret_cast<LPWSTR>(buffer),
+                                   -1,
+                                   NULL,
+                                   0,
+                                   NULL,
+                                   NULL);
+        if (0 == flen) {
+            return NS_ERROR_FAILURE;
+        }
+
+        nsAutoArrayPtr<char> utf8Buffer(new char[flen]);
+        if (0 == WideCharToMultiByte(CP_UTF8,
+                                     0,
+                                     reinterpret_cast<LPWSTR>(buffer),
+                                     -1,
+                                     utf8Buffer,
+                                     flen,
+                                     NULL,
+                                     NULL)) {
+            return NS_ERROR_FAILURE;
+        }
+        mFileContents = utf8Buffer.forget();
+        buffer = mFileContents;
+    }
+#endif
+
+    char *currSection = nullptr;
 
     // outer loop tokenizes into lines
     while (char *token = NS_strtok(kNL, &buffer)) {
@@ -183,7 +195,7 @@ nsINIParser::InitFromFILE(FILE *fd)
                 // we could frankly decide that this INI file is malformed right
                 // here and stop, but we won't... keep going, looking for
                 // a well-formed [section] to continue working with
-                currSection = nsnull;
+                currSection = nullptr;
             }
 
             continue;
@@ -252,7 +264,7 @@ nsINIParser::GetString(const char *aSection, const char *aKey,
 
 nsresult
 nsINIParser::GetString(const char *aSection, const char *aKey, 
-                       char *aResult, PRUint32 aResultLen)
+                       char *aResult, uint32_t aResultLen)
 {
     INIValue *val;
     mSections.Get(aSection, &val);

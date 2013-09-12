@@ -2,7 +2,6 @@
 <html>
 <head>
   <title>Test for serialization and equivalence of time units</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
 </head>
@@ -30,20 +29,16 @@ var tests = {
 var p = document.getElementById("display");
 
 for (var test in tests) {
-  p.setAttribute("style", "pause-before: " + test);
-  is(p.style.getPropertyValue("pause-before"), test,
+  p.setAttribute("style", "transition-duration: " + test);
+  is(p.style.getPropertyValue("transition-duration"), test,
      test + " serializes to exactly itself");
-  // We can't test any equivalence since we don't have any properties
-  // with angle values that we compute.
-/*
   var equiv = tests[test];
   if (equiv) {
-    var cm1 = getComputedStyle(p, "").pauseBefore;
-    p.style.pauseBefore = equiv;
-    var cm2 = getComputedStyle(p, "").pauseBefore;
+    var cm1 = getComputedStyle(p, "").transitionDuration;
+    p.style.transitionDuration = equiv;
+    var cm2 = getComputedStyle(p, "").transitionDuration;
     is(cm1, cm2, test + " should compute to the same as " + equiv);
   }
-*/
 }
 
 </script>

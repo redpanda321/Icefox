@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsAgg_h___
 #define nsAgg_h___
@@ -69,9 +37,9 @@ public:                                                                     \
     nsISupports* InnerObject(void) { return &fAggregated; }                 \
                                                                             \
     /**                                                                     \
-     * Returns PR_TRUE if this object is part of an aggregated object.      \
+     * Returns true if this object is part of an aggregated object.      \
      */                                                                     \
-    PRBool IsPartOfAggregated(void) { return fOuter != InnerObject(); }     \
+    bool IsPartOfAggregated(void) { return fOuter != InnerObject(); }     \
                                                                             \
 private:                                                                    \
                                                                             \
@@ -104,12 +72,13 @@ class NS_CYCLE_COLLECTION_INNERCLASS                                        \
  : public nsXPCOMCycleCollectionParticipant                                 \
 {                                                                           \
 public:                                                                     \
-  NS_IMETHOD Unlink(void *p);                                               \
-  NS_IMETHOD Traverse(void *p,                                              \
-                      nsCycleCollectionTraversalCallback &cb);              \
-  NS_IMETHOD_(void) UnmarkPurple(nsISupports *p)                            \
+  static NS_METHOD UnlinkImpl(void *p);                                     \
+  static NS_METHOD TraverseImpl(NS_CYCLE_COLLECTION_INNERCLASS *that,       \
+                                void *p,                                    \
+                                nsCycleCollectionTraversalCallback &cb);    \
+  static NS_METHOD_(void) UnmarkIfPurpleImpl(void *p)                       \
   {                                                                         \
-    Downcast(p)->UnmarkPurple();                                            \
+    Downcast(static_cast<nsISupports *>(p))->UnmarkIfPurple();              \
   }                                                                         \
   static _class* Downcast(nsISupports* s)                                   \
   {                                                                         \
@@ -119,8 +88,16 @@ public:                                                                     \
   {                                                                         \
     return p->InnerObject();                                                \
   }                                                                         \
-};                                                                          \
-NS_CYCLE_COLLECTION_PARTICIPANT_INSTANCE
+  static nsXPCOMCycleCollectionParticipant* GetParticipant()                   \
+  {                                                                            \
+    static const CCParticipantVTable<NS_CYCLE_COLLECTION_CLASSNAME(_class)>    \
+    ::Type participant = {                                                     \
+      NS_IMPL_CYCLE_COLLECTION_VTABLE(NS_CYCLE_COLLECTION_CLASSNAME(_class))   \
+    };                                                                         \
+    return NS_PARTICIPANT_AS(nsXPCOMCycleCollectionParticipant,                \
+                                    &participant);                             \
+  }                                                                            \
+};
 
 // Put this in your class's constructor:
 #define NS_INIT_AGGREGATED(outer)                                           \
@@ -138,7 +115,7 @@ NS_IMETHODIMP_(nsrefcnt)                                                    \
 _class::Internal::AddRef(void)                                              \
 {                                                                           \
     _class* agg = (_class*)((char*)(this) - offsetof(_class, fAggregated)); \
-    NS_PRECONDITION(PRInt32(agg->mRefCnt) >= 0, "illegal refcnt");          \
+    NS_PRECONDITION(int32_t(agg->mRefCnt) >= 0, "illegal refcnt");          \
     NS_ASSERT_OWNINGTHREAD(_class);                                         \
     ++agg->mRefCnt;                                                         \
     NS_LOG_ADDREF(this, agg->mRefCnt, #_class, sizeof(*this));              \
@@ -169,7 +146,7 @@ NS_IMETHODIMP_(nsrefcnt)                                                    \
 _class::Internal::AddRef(void)                                              \
 {                                                                           \
     _class* agg = NS_CYCLE_COLLECTION_CLASSNAME(_class)::Downcast(this);    \
-    NS_PRECONDITION(PRInt32(agg->mRefCnt) >= 0, "illegal refcnt");          \
+    NS_PRECONDITION(int32_t(agg->mRefCnt) >= 0, "illegal refcnt");          \
     NS_CheckThreadSafe(agg->_mOwningThread.GetThread(),                     \
                        #_class " not thread-safe");                         \
     nsrefcnt count = agg->mRefCnt.incr(this);                               \
@@ -187,7 +164,7 @@ _class::Internal::Release(void)                                             \
     nsrefcnt count = agg->mRefCnt.decr(this);                               \
     NS_LOG_RELEASE(this, count, #_class);                                   \
     if (count == 0) {                                                       \
-        agg->mRefCnt.stabilizeForDeletion(this);                            \
+        agg->mRefCnt.stabilizeForDeletion();                                \
         delete agg;                                                         \
         return 0;                                                           \
     }                                                                       \
@@ -295,14 +272,14 @@ _class::AggregatedQueryInterface(REFNSIID aIID, void** aInstancePtr)        \
   if (aIID.Equals(IsPartOfAggregated() ?                                    \
                   NS_GET_IID(nsCycleCollectionParticipant) :                \
                   NS_GET_IID(nsAggregatedCycleCollectionParticipant)))      \
-    foundInterface = & NS_CYCLE_COLLECTION_NAME(_class);                    \
+    foundInterface = NS_CYCLE_COLLECTION_PARTICIPANT(_class);               \
   else
 
 #define NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_AGGREGATED(_class)          \
-  NS_IMETHODIMP                                                             \
-  NS_CYCLE_COLLECTION_CLASSNAME(_class)::Traverse                           \
-                         (void *p,                                          \
-                          nsCycleCollectionTraversalCallback &cb)           \
+  NS_METHOD                                                                 \
+  NS_CYCLE_COLLECTION_CLASSNAME(_class)::TraverseImpl                       \
+                         (NS_CYCLE_COLLECTION_CLASSNAME(_class) *that,      \
+                          void *p, nsCycleCollectionTraversalCallback &cb)  \
   {                                                                         \
     nsISupports *s = static_cast<nsISupports*>(p);                          \
     NS_ASSERTION(CheckForRightISupports(s),                                 \
@@ -316,7 +293,7 @@ static nsresult                                                             \
 _InstanceClass##Constructor(nsISupports *aOuter, REFNSIID aIID,             \
                             void **aResult)                                 \
 {                                                                           \
-    *aResult = nsnull;                                                      \
+    *aResult = nullptr;                                                      \
                                                                             \
     NS_ENSURE_PROPER_AGGREGATION(aOuter, aIID);                             \
                                                                             \
@@ -339,7 +316,7 @@ static nsresult                                                             \
 _InstanceClass##Constructor(nsISupports *aOuter, REFNSIID aIID,             \
                             void **aResult)                                 \
 {                                                                           \
-    *aResult = nsnull;                                                      \
+    *aResult = nullptr;                                                      \
                                                                             \
     NS_ENSURE_PROPER_AGGREGATION(aOuter, aIID);                             \
                                                                             \

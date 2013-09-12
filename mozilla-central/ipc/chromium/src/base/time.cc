@@ -5,11 +5,9 @@
 #include "base/time.h"
 #include "base/string_util.h"
 #include "base/sys_string_conversions.h"
-#include "base/third_party/nspr/prtime.h"
+#include "prtime.h"
 
 #include "base/logging.h"
-
-using namespace nspr;
 
 namespace base {
 
@@ -31,7 +29,7 @@ double TimeDelta::InSecondsF() const {
   return static_cast<double>(delta_) / Time::kMicrosecondsPerSecond;
 }
 
-int64 TimeDelta::InSeconds() const {
+int64_t TimeDelta::InSeconds() const {
   return delta_ / Time::kMicrosecondsPerSecond;
 }
 
@@ -39,11 +37,11 @@ double TimeDelta::InMillisecondsF() const {
   return static_cast<double>(delta_) / Time::kMicrosecondsPerMillisecond;
 }
 
-int64 TimeDelta::InMilliseconds() const {
+int64_t TimeDelta::InMilliseconds() const {
   return delta_ / Time::kMicrosecondsPerMillisecond;
 }
 
-int64 TimeDelta::InMicroseconds() const {
+int64_t TimeDelta::InMicroseconds() const {
   return delta_;
 }
 

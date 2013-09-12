@@ -18,6 +18,12 @@
 #  define FUNC     ((const char*) ("???"))
 #endif
 
+#if defined (__GNUC__)
+#  define MAYBE_UNUSED  __attribute__((unused))
+#else
+#  define MAYBE_UNUSED
+#endif
+
 #ifndef INT16_MIN
 # define INT16_MIN              (-32767-1)
 #endif
@@ -42,6 +48,15 @@
 # define UINT32_MAX             (4294967295U)
 #endif
 
+#ifndef INT64_MIN
+# define INT64_MIN              (-9223372036854775807-1)
+#endif
+
+#ifndef INT64_MAX
+# define INT64_MAX              (9223372036854775807)
+#endif
+
+
 #ifndef M_PI
 # define M_PI			3.14159265358979323846
 #endif
@@ -50,17 +65,27 @@
 /* 'inline' is available only in C++ in MSVC */
 #   define inline __inline
 #   define force_inline __forceinline
+#   define noinline __declspec(noinline)
 #elif defined __GNUC__ || (defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590))
 #   define inline __inline__
 #   define force_inline __inline__ __attribute__ ((__always_inline__))
+#   define noinline __attribute__((noinline))
 #else
 #   ifndef force_inline
 #      define force_inline inline
 #   endif
+#   ifndef noinline
+#      define noinline
+#   endif
 #endif
 
+/* In libxul builds we don't ever want to export pixman symbols */
+#if 1
+#   define PIXMAN_EXPORT cairo_public
+#else
+
 /* GCC visibility */
-#if defined(__GNUC__) && __GNUC__ >= 4
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(_WIN32)
 #   define PIXMAN_EXPORT __attribute__ ((visibility("default")))
 /* Sun Studio 8 visibility */
 #elif defined(__SUNPRO_C) && (__SUNPRO_C >= 0x550)
@@ -69,20 +94,75 @@
 #   define PIXMAN_EXPORT
 #endif
 
+#endif
+
 /* TLS */
 #if defined(PIXMAN_NO_TLS)
 
-#   define PIXMAN_DEFINE_THREAD_LOCAL(type, name)            \
-    static type name
-#   define PIXMAN_GET_THREAD_LOCAL(name)                \
-    (&name)
-
-#elif defined(TOOLCHAIN_SUPPORTS__THREAD)
-
 #   define PIXMAN_DEFINE_THREAD_LOCAL(type, name)			\
-    static __thread type name
+    static type name
 #   define PIXMAN_GET_THREAD_LOCAL(name)				\
     (&name)
+
+#elif defined(TLS)
+
+#   define PIXMAN_DEFINE_THREAD_LOCAL(type, name)			\
+    static TLS type name
+#   define PIXMAN_GET_THREAD_LOCAL(name)				\
+    (&name)
+
+#elif defined(__MINGW32__)
+
+#   define _NO_W32_PSEUDO_MODIFIERS
+#   include <windows.h>
+
+#   define PIXMAN_DEFINE_THREAD_LOCAL(type, name)			\
+    static volatile int tls_ ## name ## _initialized = 0;		\
+    static void *tls_ ## name ## _mutex = NULL;				\
+    static unsigned tls_ ## name ## _index;				\
+									\
+    static type *							\
+    tls_ ## name ## _alloc (void)					\
+    {									\
+        type *value = calloc (1, sizeof (type));			\
+        if (value)							\
+            TlsSetValue (tls_ ## name ## _index, value);		\
+        return value;							\
+    }									\
+									\
+    static force_inline type *						\
+    tls_ ## name ## _get (void)						\
+    {									\
+	type *value;							\
+	if (!tls_ ## name ## _initialized)				\
+	{								\
+	    if (!tls_ ## name ## _mutex)				\
+	    {								\
+		void *mutex = CreateMutexA (NULL, 0, NULL);		\
+		if (InterlockedCompareExchangePointer (			\
+			&tls_ ## name ## _mutex, mutex, NULL) != NULL)	\
+		{							\
+		    CloseHandle (mutex);				\
+		}							\
+	    }								\
+	    WaitForSingleObject (tls_ ## name ## _mutex, 0xFFFFFFFF);	\
+	    if (!tls_ ## name ## _initialized)				\
+	    {								\
+		tls_ ## name ## _index = TlsAlloc ();			\
+		tls_ ## name ## _initialized = 1;			\
+	    }								\
+	    ReleaseMutex (tls_ ## name ## _mutex);			\
+	}								\
+	if (tls_ ## name ## _index == 0xFFFFFFFF)			\
+	    return NULL;						\
+	value = TlsGetValue (tls_ ## name ## _index);			\
+	if (!value)							\
+	    value = tls_ ## name ## _alloc ();				\
+	return value;							\
+    }
+
+#   define PIXMAN_GET_THREAD_LOCAL(name)				\
+    tls_ ## name ## _get ()
 
 #elif defined(_MSC_VER)
 
@@ -100,9 +180,16 @@
     static pthread_key_t tls_ ## name ## _key;				\
 									\
     static void								\
+    tls_ ## name ## _destroy_value (void *value)			\
+    {									\
+	free (value);							\
+    }									\
+									\
+    static void								\
     tls_ ## name ## _make_key (void)					\
     {									\
-	pthread_key_create (&tls_ ## name ## _key, NULL);		\
+	pthread_key_create (&tls_ ## name ## _key,			\
+			    tls_ ## name ## _destroy_value);		\
     }									\
 									\
     static type *							\

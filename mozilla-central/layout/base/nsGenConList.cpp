@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 // vim:cindent:ts=2:et:sw=2:
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Esben Mose Hansen.
- *
- * Contributor(s):
- *   Esben Mose Hansen <esben@oek.dk> (original author)
- *   L. David Baron <dbaron@dbaron.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* base class for nsCounterList and nsQuoteList */
 
@@ -55,26 +23,26 @@ nsGenConList::Clear()
   }
   delete mFirstNode;
 
-  mFirstNode = nsnull;
+  mFirstNode = nullptr;
   mSize = 0;
 }
 
-PRBool
+bool
 nsGenConList::DestroyNodesFor(nsIFrame* aFrame)
 {
   if (!mFirstNode)
-    return PR_FALSE; // list empty
+    return false; // list empty
   nsGenConNode* node;
-  PRBool destroyed = PR_FALSE;
+  bool destroyed = false;
   while (mFirstNode->mPseudoFrame == aFrame) {
-    destroyed = PR_TRUE;
+    destroyed = true;
     node = Next(mFirstNode);
-    PRBool isLastNode = node == mFirstNode; // before they're dangling
+    bool isLastNode = node == mFirstNode; // before they're dangling
     Remove(mFirstNode);
     delete mFirstNode;
     if (isLastNode) {
-      mFirstNode = nsnull;
-      return PR_TRUE;
+      mFirstNode = nullptr;
+      return true;
     }
     else {
       mFirstNode = node;
@@ -83,7 +51,7 @@ nsGenConList::DestroyNodesFor(nsIFrame* aFrame)
   node = Next(mFirstNode);
   while (node != mFirstNode) {
     if (node->mPseudoFrame == aFrame) {
-      destroyed = PR_TRUE;
+      destroyed = true;
       nsGenConNode *nextNode = Next(node);
       Remove(node);
       delete node;
@@ -103,7 +71,7 @@ nsGenConList::DestroyNodesFor(nsIFrame* aFrame)
  * content), the frame's own element
  * @return -1 for ::before, +1 for ::after, and 0 otherwise.
  */
-inline PRInt32 PseudoCompareType(nsIFrame* aFrame, nsIContent** aContent)
+inline int32_t PseudoCompareType(nsIFrame* aFrame, nsIContent** aContent)
 {
   nsIAtom *pseudo = aFrame->GetStyleContext()->GetPseudo();
   if (pseudo == nsCSSPseudoElements::before) {
@@ -118,7 +86,7 @@ inline PRInt32 PseudoCompareType(nsIFrame* aFrame, nsIContent** aContent)
   return 0;
 }
 
-/* static */ PRBool
+/* static */ bool
 nsGenConList::NodeAfter(const nsGenConNode* aNode1, const nsGenConNode* aNode2)
 {
   nsIFrame *frame1 = aNode1->mPseudoFrame;
@@ -129,8 +97,8 @@ nsGenConList::NodeAfter(const nsGenConNode* aNode1, const nsGenConNode* aNode2)
   }
   nsIContent *content1;
   nsIContent *content2;
-  PRInt32 pseudoType1 = PseudoCompareType(frame1, &content1);
-  PRInt32 pseudoType2 = PseudoCompareType(frame2, &content2);
+  int32_t pseudoType1 = PseudoCompareType(frame1, &content1);
+  int32_t pseudoType2 = PseudoCompareType(frame2, &content2);
   if (pseudoType1 == 0 || pseudoType2 == 0) {
     if (content1 == content2) {
       NS_ASSERTION(pseudoType1 != pseudoType2, "identical");
@@ -147,7 +115,7 @@ nsGenConList::NodeAfter(const nsGenConNode* aNode1, const nsGenConNode* aNode2)
     }
   }
   // XXX Switch to the frame version of DoCompareTreePosition?
-  PRInt32 cmp = nsLayoutUtils::DoCompareTreePosition(content1, content2,
+  int32_t cmp = nsLayoutUtils::DoCompareTreePosition(content1, content2,
                                                      pseudoType1, -pseudoType2);
   NS_ASSERTION(cmp != 0, "same content, different frames");
   return cmp > 0;
@@ -166,14 +134,14 @@ nsGenConList::Insert(nsGenConNode* aNode)
 
       // the range of indices at which |aNode| could end up.
       // (We already know it can't be at index mSize.)
-      PRUint32 first = 0, last = mSize - 1;
+      uint32_t first = 0, last = mSize - 1;
 
       // A cursor to avoid walking more than the length of the list.
       nsGenConNode *curNode = Prev(mFirstNode);
-      PRUint32 curIndex = mSize - 1;
+      uint32_t curIndex = mSize - 1;
 
       while (first != last) {
-        PRUint32 test = (first + last) / 2;
+        uint32_t test = (first + last) / 2;
         if (last == curIndex) {
           for ( ; curIndex != test; --curIndex)
             curNode = Prev(curNode);

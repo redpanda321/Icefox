@@ -1,40 +1,9 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is TransforMiiX XSLT processor code.
- *
- * The Initial Developer of the Original Code is
- * Axel Hecht.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Axel Hecht <axel@pike.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "mozilla/FloatingPoint.h"
 
 #include "nsReadableUtils.h"
 #include "txExecutionState.h"
@@ -44,9 +13,7 @@
 #include "txXMLUtils.h"
 #include "txXSLTFunctions.h"
 #include "nsWhitespaceTokenizer.h"
-#ifndef TX_EXE
 #include "nsIContent.h"
-#endif
 
 /*
  * Returns the default priority of this Pattern.
@@ -56,7 +23,7 @@
 double txUnionPattern::getDefaultPriority()
 {
     NS_ERROR("Don't call getDefaultPriority on txUnionPattern");
-    return Double::NaN;
+    return MOZ_DOUBLE_NaN();
 }
 
 /*
@@ -65,15 +32,15 @@ double txUnionPattern::getDefaultPriority()
  * This should be called on the simple patterns for xsl:template,
  * but is fine for xsl:key and xsl:number
  */
-MBool txUnionPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext)
+bool txUnionPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext)
 {
-    PRUint32 i, len = mLocPathPatterns.Length();
+    uint32_t i, len = mLocPathPatterns.Length();
     for (i = 0; i < len; ++i) {
         if (mLocPathPatterns[i]->matches(aNode, aContext)) {
-            return MB_TRUE;
+            return true;
         }
     }
-    return MB_FALSE;
+    return false;
 }
 
 txPattern::Type
@@ -84,13 +51,13 @@ txUnionPattern::getType()
 
 TX_IMPL_PATTERN_STUBS_NO_SUB_EXPR(txUnionPattern)
 txPattern*
-txUnionPattern::getSubPatternAt(PRUint32 aPos)
+txUnionPattern::getSubPatternAt(uint32_t aPos)
 {
     return mLocPathPatterns.SafeElementAt(aPos);
 }
 
 void
-txUnionPattern::setSubPatternAt(PRUint32 aPos, txPattern* aPattern)
+txUnionPattern::setSubPatternAt(uint32_t aPos, txPattern* aPattern)
 {
     NS_ASSERTION(aPos < mLocPathPatterns.Length(),
                  "setting bad subexpression index");
@@ -105,7 +72,7 @@ txUnionPattern::toString(nsAString& aDest)
 #ifdef DEBUG
     aDest.AppendLiteral("txUnionPattern{");
 #endif
-    for (PRUint32 i = 0; i < mLocPathPatterns.Length(); ++i) {
+    for (uint32_t i = 0; i < mLocPathPatterns.Length(); ++i) {
         if (i != 0)
             aDest.AppendLiteral(" | ");
         mLocPathPatterns[i]->toString(aDest);
@@ -124,7 +91,7 @@ txUnionPattern::toString(nsAString& aDest)
  * (dealt with by the parser)
  */
 
-nsresult txLocPathPattern::addStep(txPattern* aPattern, PRBool isChild)
+nsresult txLocPathPattern::addStep(txPattern* aPattern, bool isChild)
 {
     Step* step = mSteps.AppendElement();
     if (!step)
@@ -136,7 +103,7 @@ nsresult txLocPathPattern::addStep(txPattern* aPattern, PRBool isChild)
     return NS_OK;
 }
 
-MBool txLocPathPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext)
+bool txLocPathPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext)
 {
     NS_ASSERTION(mSteps.Length() > 1, "Internal error");
 
@@ -152,31 +119,31 @@ MBool txLocPathPattern::matches(const txXPathNode& aNode, txIMatchContext* aCont
      * tree.
      */
 
-    PRUint32 pos = mSteps.Length();
+    uint32_t pos = mSteps.Length();
     Step* step = &mSteps[--pos];
     if (!step->pattern->matches(aNode, aContext))
-        return MB_FALSE;
+        return false;
 
     txXPathTreeWalker walker(aNode);
-    PRBool hasParent = walker.moveToParent();
+    bool hasParent = walker.moveToParent();
 
     while (step->isChild) {
         if (!pos)
-            return MB_TRUE; // all steps matched
+            return true; // all steps matched
         step = &mSteps[--pos];
         if (!hasParent || !step->pattern->matches(walker.getCurrentPosition(), aContext))
-            return MB_FALSE; // no more ancestors or no match
+            return false; // no more ancestors or no match
 
         hasParent = walker.moveToParent();
     }
 
     // We have at least one // path separator
     txXPathTreeWalker blockWalker(walker);
-    PRUint32 blockPos = pos;
+    uint32_t blockPos = pos;
 
     while (pos) {
         if (!hasParent)
-            return MB_FALSE; // There are more steps in the current block 
+            return false; // There are more steps in the current block 
                              // than ancestors of the tested node
 
         step = &mSteps[--pos];
@@ -197,7 +164,7 @@ MBool txLocPathPattern::matches(const txXPathNode& aNode, txIMatchContext* aCont
         }
     }
 
-    return MB_TRUE;
+    return true;
 } // txLocPathPattern::matches
 
 double txLocPathPattern::getDefaultPriority()
@@ -209,13 +176,13 @@ double txLocPathPattern::getDefaultPriority()
 
 TX_IMPL_PATTERN_STUBS_NO_SUB_EXPR(txLocPathPattern)
 txPattern*
-txLocPathPattern::getSubPatternAt(PRUint32 aPos)
+txLocPathPattern::getSubPatternAt(uint32_t aPos)
 {
-    return aPos < mSteps.Length() ? mSteps[aPos].pattern.get() : nsnull;
+    return aPos < mSteps.Length() ? mSteps[aPos].pattern.get() : nullptr;
 }
 
 void
-txLocPathPattern::setSubPatternAt(PRUint32 aPos, txPattern* aPattern)
+txLocPathPattern::setSubPatternAt(uint32_t aPos, txPattern* aPattern)
 {
     NS_ASSERTION(aPos < mSteps.Length(), "setting bad subexpression index");
     Step* step = &mSteps[aPos];
@@ -230,7 +197,7 @@ txLocPathPattern::toString(nsAString& aDest)
 #ifdef DEBUG
     aDest.AppendLiteral("txLocPathPattern{");
 #endif
-    for (PRUint32 i = 0; i < mSteps.Length(); ++i) {
+    for (uint32_t i = 0; i < mSteps.Length(); ++i) {
         if (i != 0) {
             if (mSteps[i].isChild)
                 aDest.Append(PRUnichar('/'));
@@ -251,7 +218,7 @@ txLocPathPattern::toString(nsAString& aDest)
  * a txPattern matching the document node, or '/'
  */
 
-MBool txRootPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext)
+bool txRootPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext)
 {
     return txXPathNodeUtils::isRoot(aNode);
 }
@@ -297,29 +264,17 @@ txIdPattern::txIdPattern(const nsSubstring& aString)
     }
 }
 
-MBool txIdPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext)
+bool txIdPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext)
 {
     if (!txXPathNodeUtils::isElement(aNode)) {
-        return PR_FALSE;
+        return false;
     }
 
     // Get a ID attribute, if there is
-#ifdef TX_EXE
-    Element* elem;
-    nsresult rv = txXPathNativeNode::getElement(aNode, &elem);
-    NS_ASSERTION(NS_SUCCEEDED(rv), "So why claim it's an element above?");
-
-    nsAutoString value;
-    if (!elem->getIDValue(value)) {
-        return PR_FALSE;
-    }
-    nsCOMPtr<nsIAtom> id = do_GetAtom(value);
-#else
     nsIContent* content = txXPathNativeNode::getContent(aNode);
     NS_ASSERTION(content, "a Element without nsIContent");
 
     nsIAtom* id = content->GetID();
-#endif // TX_EXE
     return id && mIds.IndexOf(id) > -1;
 }
 
@@ -339,7 +294,7 @@ txIdPattern::toString(nsAString& aDest)
     aDest.AppendLiteral("txIdPattern{");
 #endif
     aDest.AppendLiteral("id('");
-    PRUint32 k, count = mIds.Count() - 1;
+    uint32_t k, count = mIds.Count() - 1;
     for (k = 0; k < count; ++k) {
         nsAutoString str;
         mIds[k]->ToString(str);
@@ -365,16 +320,16 @@ txIdPattern::toString(nsAString& aDest)
  * argument.
  */
 
-MBool txKeyPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext)
+bool txKeyPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext)
 {
     txExecutionState* es = (txExecutionState*)aContext->getPrivateContext();
     nsAutoPtr<txXPathNode> contextDoc(txXPathNodeUtils::getOwnerDocument(aNode));
-    NS_ENSURE_TRUE(contextDoc, PR_FALSE);
+    NS_ENSURE_TRUE(contextDoc, false);
 
     nsRefPtr<txNodeSet> nodes;
-    nsresult rv = es->getKeyNodes(mName, *contextDoc, mValue, PR_TRUE,
+    nsresult rv = es->getKeyNodes(mName, *contextDoc, mValue, true,
                                   getter_AddRefs(nodes));
-    NS_ENSURE_SUCCESS(rv, PR_FALSE);
+    NS_ENSURE_SUCCESS(rv, false);
 
     return nodes->contains(aNode);
 }
@@ -418,21 +373,21 @@ txKeyPattern::toString(nsAString& aDest)
  * a txPattern to hold the NodeTest and the Predicates of a StepPattern
  */
 
-MBool txStepPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext)
+bool txStepPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext)
 {
     NS_ASSERTION(mNodeTest, "Internal error");
 
     if (!mNodeTest->matches(aNode, aContext))
-        return MB_FALSE;
+        return false;
 
     txXPathTreeWalker walker(aNode);
     if ((!mIsAttr &&
          txXPathNodeUtils::isAttribute(walker.getCurrentPosition())) ||
         !walker.moveToParent()) {
-        return MB_FALSE;
+        return false;
     }
     if (isEmpty()) {
-        return MB_TRUE;
+        return true;
     }
 
     /*
@@ -445,7 +400,7 @@ MBool txStepPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext
      *   if the result is a number, check the context position,
      *    otherwise convert to bool
      *   if result is true, copy node to newNodes
-     *  if aNode is not member of newNodes, return MB_FALSE
+     *  if aNode is not member of newNodes, return false
      *  nodes = newNodes
      *
      * For the last Predicate, evaluate Predicate with aNode as
@@ -456,9 +411,9 @@ MBool txStepPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext
     // Create the context node set for evaluating the predicates
     nsRefPtr<txNodeSet> nodes;
     nsresult rv = aContext->recycler()->getNodeSet(getter_AddRefs(nodes));
-    NS_ENSURE_SUCCESS(rv, MB_FALSE);
+    NS_ENSURE_SUCCESS(rv, false);
 
-    PRBool hasNext = mIsAttr ? walker.moveToFirstAttribute() :
+    bool hasNext = mIsAttr ? walker.moveToFirstAttribute() :
                                walker.moveToFirstChild();
     while (hasNext) {
         if (mNodeTest->matches(walker.getCurrentPosition(), aContext)) {
@@ -471,18 +426,18 @@ MBool txStepPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext
     Expr* predicate = mPredicates[0];
     nsRefPtr<txNodeSet> newNodes;
     rv = aContext->recycler()->getNodeSet(getter_AddRefs(newNodes));
-    NS_ENSURE_SUCCESS(rv, MB_FALSE);
+    NS_ENSURE_SUCCESS(rv, false);
 
-    PRUint32 i, predLen = mPredicates.Length();
+    uint32_t i, predLen = mPredicates.Length();
     for (i = 1; i < predLen; ++i) {
         newNodes->clear();
-        MBool contextIsInPredicate = MB_FALSE;
+        bool contextIsInPredicate = false;
         txNodeSetContext predContext(nodes, aContext);
         while (predContext.hasNext()) {
             predContext.next();
             nsRefPtr<txAExprResult> exprResult;
             rv = predicate->evaluate(&predContext, getter_AddRefs(exprResult));
-            NS_ENSURE_SUCCESS(rv, PR_FALSE);
+            NS_ENSURE_SUCCESS(rv, false);
 
             switch(exprResult->getResultType()) {
                 case txAExprResult::NUMBER:
@@ -491,7 +446,7 @@ MBool txStepPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext
                         exprResult->numberValue()) {
                         const txXPathNode& tmp = predContext.getContextNode();
                         if (tmp == aNode)
-                            contextIsInPredicate = MB_TRUE;
+                            contextIsInPredicate = true;
                         newNodes->append(tmp);
                     }
                     break;
@@ -499,7 +454,7 @@ MBool txStepPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext
                     if (exprResult->booleanValue()) {
                         const txXPathNode& tmp = predContext.getContextNode();
                         if (tmp == aNode)
-                            contextIsInPredicate = MB_TRUE;
+                            contextIsInPredicate = true;
                         newNodes->append(tmp);
                     }
                     break;
@@ -509,14 +464,14 @@ MBool txStepPattern::matches(const txXPathNode& aNode, txIMatchContext* aContext
         nodes->clear();
         nodes->append(*newNodes);
         if (!contextIsInPredicate) {
-            return MB_FALSE;
+            return false;
         }
         predicate = mPredicates[i];
     }
     txForwardContext evalContext(aContext, aNode, nodes);
     nsRefPtr<txAExprResult> exprResult;
     rv = predicate->evaluate(&evalContext, getter_AddRefs(exprResult));
-    NS_ENSURE_SUCCESS(rv, PR_FALSE);
+    NS_ENSURE_SUCCESS(rv, false);
 
     if (exprResult->getResultType() == txAExprResult::NUMBER)
         // handle default, [position() == numberValue()]
@@ -540,13 +495,13 @@ txStepPattern::getType()
 
 TX_IMPL_PATTERN_STUBS_NO_SUB_PATTERN(txStepPattern)
 Expr*
-txStepPattern::getSubExprAt(PRUint32 aPos)
+txStepPattern::getSubExprAt(uint32_t aPos)
 {
     return PredicateList::getSubExprAt(aPos);
 }
 
 void
-txStepPattern::setSubExprAt(PRUint32 aPos, Expr* aExpr)
+txStepPattern::setSubExprAt(uint32_t aPos, Expr* aExpr)
 {
     PredicateList::setSubExprAt(aPos, aExpr);
 }

@@ -1,40 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Vipul Gupta <vipul.gupta@sun.com>, Sun Microsystems Laboratories
- *   Douglas Stebila <douglas@stebila.ca>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 **
@@ -43,6 +9,7 @@
 */
 
 #include "secutil.h"
+#include "basicutil.h"
 
 #if defined(XP_UNIX)
 #include <unistd.h>
@@ -193,15 +160,21 @@ handshakeCallback(PRFileDesc *fd, void *client_data)
     }
 }
 
-static void Usage(const char *progName)
+static void PrintUsageHeader(const char *progName)
 {
     fprintf(stderr, 
 "Usage:  %s -h host [-a 1st_hs_name ] [-a 2nd_hs_name ] [-p port]\n"
-                    "[-d certdir] [-n nickname] [-23BTafosvx] [-c ciphers]\n"
-                    "[-r N] [-w passwd] [-W pwfile] [-q]\n", progName);
+                    "[-d certdir] [-n nickname] [-Bafosvx] [-c ciphers] [-Y]\n"
+                    "[-V [min-version]:[max-version]]\n"
+                    "[-r N] [-w passwd] [-W pwfile] [-q [-t seconds]]\n", 
+            progName);
+}
+
+static void PrintParameterUsage(void)
+{
     fprintf(stderr, "%-20s Send different SNI name. 1st_hs_name - at first\n"
                     "%-20s handshake, 2nd_hs_name - at second handshake.\n"
-                    "%-20s Defualt is host from the -h argument.\n", "-a name",
+                    "%-20s Default is host from the -h argument.\n", "-a name",
                     "", "");
     fprintf(stderr, "%-20s Hostname to connect with\n", "-h host");
     fprintf(stderr, "%-20s Port number for SSL server\n", "-p port");
@@ -212,20 +185,40 @@ static void Usage(const char *progName)
                     "-n nickname");
     fprintf(stderr, 
             "%-20s Bypass PKCS11 layer for SSL encryption and MACing.\n", "-B");
-    fprintf(stderr, "%-20s Disable SSL v2.\n", "-2");
-    fprintf(stderr, "%-20s Disable SSL v3.\n", "-3");
-    fprintf(stderr, "%-20s Disable TLS (SSL v3.1).\n", "-T");
+    fprintf(stderr, 
+            "%-20s Restricts the set of enabled SSL/TLS protocols versions.\n"
+            "%-20s All versions are enabled by default.\n"
+            "%-20s Possible values for min/max: ssl2 ssl3 tls1.0 tls1.1\n"
+            "%-20s Example: \"-V ssl3:\" enables SSL 3 and newer.\n",
+            "-V [min]:[max]", "", "", "");
     fprintf(stderr, "%-20s Prints only payload data. Skips HTTP header.\n", "-S");
     fprintf(stderr, "%-20s Client speaks first. \n", "-f");
+    fprintf(stderr, "%-20s Use synchronous certificate validation "
+                    "(required for SSL2)\n", "-O");
     fprintf(stderr, "%-20s Override bad server cert. Make it OK.\n", "-o");
     fprintf(stderr, "%-20s Disable SSL socket locking.\n", "-s");
     fprintf(stderr, "%-20s Verbose progress reporting.\n", "-v");
     fprintf(stderr, "%-20s Use export policy.\n", "-x");
     fprintf(stderr, "%-20s Ping the server and then exit.\n", "-q");
+    fprintf(stderr, "%-20s Timeout for server ping (default: no timeout).\n", "-t seconds");
     fprintf(stderr, "%-20s Renegotiate N times (resuming session if N>1).\n", "-r N");
     fprintf(stderr, "%-20s Enable the session ticket extension.\n", "-u");
     fprintf(stderr, "%-20s Enable compression.\n", "-z");
     fprintf(stderr, "%-20s Enable false start.\n", "-g");
+    fprintf(stderr, "%-20s Restrict ciphers\n", "-c ciphers");
+    fprintf(stderr, "%-20s Print cipher values allowed for parameter -c and exit\n", "-Y");
+}
+
+static void Usage(const char *progName)
+{
+    PrintUsageHeader(progName);
+    PrintParameterUsage();
+    exit(1);
+}
+
+static void PrintCipherUsage(const char *progName)
+{
+    PrintUsageHeader(progName);
     fprintf(stderr, "%-20s Letter(s) chosen from the following list\n", 
                     "-c ciphers");
     fprintf(stderr, 
@@ -293,6 +286,16 @@ disableAllSSLCiphers(void)
     }
 }
 
+typedef struct
+{
+   PRBool shouldPause; /* PR_TRUE if we should use asynchronous peer cert 
+                        * authentication */
+   PRBool isPaused;    /* PR_TRUE if libssl is waiting for us to validate the
+                        * peer's certificate and restart the handshake. */
+   void * dbHandle;    /* Certificate database handle to use while
+                        * authenticating the peer's certificate. */
+} ServerCertAuth;
+
 /*
  * Callback is called when incoming certificate is not valid.
  * Returns SECSuccess to accept the cert anyway, SECFailure to reject.
@@ -305,6 +308,21 @@ ownBadCertHandler(void * arg, PRFileDesc * socket)
     fprintf(stderr, "Bad server certificate: %d, %s\n", err, 
             SECU_Strerror(err));
     return SECSuccess;	/* override, say it's OK. */
+}
+
+static SECStatus 
+ownAuthCertificate(void *arg, PRFileDesc *fd, PRBool checkSig,
+                       PRBool isServer)
+{
+    ServerCertAuth * serverCertAuth = (ServerCertAuth *) arg;
+
+    FPRINTF(stderr, "%s: using asynchronous certificate validation\n",
+	    progName);
+
+    PORT_Assert(serverCertAuth->shouldPause);
+    PORT_Assert(!serverCertAuth->isPaused);
+    serverCertAuth->isPaused = PR_TRUE;
+    return SECWouldBlock;
 }
 
 SECStatus
@@ -498,11 +516,47 @@ separateReqHeader(const PRFileDesc* outFd, const char* buf, const int nb,
 	Usage(progName); \
     }
 
+static SECStatus
+restartHandshakeAfterServerCertIfNeeded(PRFileDesc * fd,
+                                        ServerCertAuth * serverCertAuth,
+                                        PRBool override)
+{
+    SECStatus rv;
+    PRErrorCode status;
+    
+    if (!serverCertAuth->isPaused)
+	return SECSuccess;
+    
+    FPRINTF(stderr, "%s: handshake was paused by auth certificate hook\n",
+            progName);
+
+    serverCertAuth->isPaused = PR_FALSE;
+    rv = SSL_AuthCertificate(serverCertAuth->dbHandle, fd, PR_TRUE, PR_FALSE);
+    if (rv != SECSuccess) {
+        status = PR_GetError();
+        if (status == 0) {
+            PR_NOT_REACHED("SSL_AuthCertificate return SECFailure without "
+                           "setting error code.");
+            status = PR_INVALID_STATE_ERROR;
+        } else if (override) {
+            rv = ownBadCertHandler(NULL, fd);
+        }
+    }
+    if (rv == SECSuccess) {
+        status = 0;
+    }
+
+    if (SSL_AuthCertificateComplete(fd, status) != SECSuccess) {
+        rv = SECFailure;
+    }
+
+    return rv;
+}
+    
 int main(int argc, char **argv)
 {
     PRFileDesc *       s;
     PRFileDesc *       std_out;
-    CERTCertDBHandle * handle;
     char *             host	=  NULL;
     char *             certDir  =  NULL;
     char *             nickname =  NULL;
@@ -514,9 +568,8 @@ int main(int argc, char **argv)
     PRInt32            filesReady;
     int                npds;
     int                override = 0;
-    int                disableSSL2 = 0;
-    int                disableSSL3 = 0;
-    int                disableTLS  = 0;
+    SSLVersionRange    enabledVersions;
+    PRBool             enableSSL2 = PR_TRUE;
     int                bypassPKCS11 = 0;
     int                disableLocking = 0;
     int                useExportPolicy = 0;
@@ -527,9 +580,11 @@ int main(int argc, char **argv)
     PRNetAddr          addr;
     PRPollDesc         pollset[2];
     PRBool             pingServerFirst = PR_FALSE;
+    int                pingTimeoutSeconds = -1;
     PRBool             clientSpeaksFirst = PR_FALSE;
     PRBool             wrStarted = PR_FALSE;
     PRBool             skipProtoHeader = PR_FALSE;
+    ServerCertAuth     serverCertAuth;
     int                headerSeparatorPtrnId = 0;
     int                error = 0;
     PRUint16           portno = 443;
@@ -538,6 +593,10 @@ int main(int argc, char **argv)
     PLOptState *optstate;
     PLOptStatus optstatus;
     PRStatus prStatus;
+
+    serverCertAuth.shouldPause = PR_TRUE;
+    serverCertAuth.isPaused = PR_FALSE;
+    serverCertAuth.dbHandle = NULL;
 
     progName = strrchr(argv[0], '/');
     if (!progName)
@@ -552,22 +611,29 @@ int main(int argc, char **argv)
        }
     }
 
+    SSL_VersionRangeGetSupported(ssl_variant_stream, &enabledVersions);
+
     optstate = PL_CreateOptState(argc, argv,
-                                 "23BSTW:a:c:d:fgh:m:n:op:qr:suvw:xz");
+                                 "BOSV:W:Ya:c:d:fgh:m:n:op:qr:st:uvw:xz");
     while ((optstatus = PL_GetNextOpt(optstate)) == PL_OPT_OK) {
 	switch (optstate->option) {
 	  case '?':
 	  default : Usage(progName); 			break;
 
-          case '2': disableSSL2 = 1; 			break;
-
-          case '3': disableSSL3 = 1; 			break;
-
           case 'B': bypassPKCS11 = 1; 			break;
+
+          case 'O': serverCertAuth.shouldPause = PR_FALSE; break;
 
           case 'S': skipProtoHeader = PR_TRUE;                 break;
 
-          case 'T': disableTLS  = 1; 			break;
+          case 'V': if (SECU_ParseSSLVersionRangeString(optstate->value,
+                            enabledVersions, enableSSL2,
+                            &enabledVersions, &enableSSL2) != SECSuccess) {
+                        Usage(progName);
+                    }
+                    break;
+
+          case 'Y': PrintCipherUsage(progName); exit(0); break;
 
           case 'a': if (!hs1SniHostName) {
                         hs1SniHostName = PORT_Strdup(optstate->value);
@@ -603,6 +669,8 @@ int main(int argc, char **argv)
 	  case 'q': pingServerFirst = PR_TRUE;          break;
 
 	  case 's': disableLocking = 1;                 break;
+          
+          case 't': pingTimeoutSeconds = atoi(optstate->value); break;
 
 	  case 'u': enableSessionTickets = PR_TRUE;	break;
 
@@ -638,39 +706,6 @@ int main(int argc, char **argv)
 
     PK11_SetPasswordFunc(SECU_GetModulePassword);
 
-    /* open the cert DB, the key DB, and the secmod DB. */
-    if (!certDir) {
-	certDir = SECU_DefaultSSLDir();	/* Look in $SSL_DIR */
-	certDir = SECU_ConfigDirectory(certDir);
-    } else {
-	char *certDirTmp = certDir;
-	certDir = SECU_ConfigDirectory(certDirTmp);
-	PORT_Free(certDirTmp);
-    }
-    rv = NSS_Init(certDir);
-    if (rv != SECSuccess) {
-	SECU_PrintError(progName, "unable to open cert database");
-#if 0
-    rv = CERT_OpenVolatileCertDB(handle);
-	CERT_SetDefaultCertDB(handle);
-#else
-	return 1;
-#endif
-    }
-    handle = CERT_GetDefaultCertDB();
-
-    /* set the policy bits true for all the cipher suites. */
-    if (useExportPolicy)
-	NSS_SetExportPolicy();
-    else
-	NSS_SetDomesticPolicy();
-
-    /* all the SSL2 and SSL3 cipher suites are enabled by default. */
-    if (cipherString) {
-	/* disable all the ciphers, then enable the ones we want. */
-	disableAllSSLCiphers();
-    }
-
     status = PR_StringToNetAddr(host, &addr);
     if (status == PR_SUCCESS) {
     	addr.inet.port = PR_htons(portno);
@@ -702,7 +737,13 @@ int main(int argc, char **argv)
     if (pingServerFirst) {
 	int iter = 0;
 	PRErrorCode err;
+        int max_attempts = MAX_WAIT_FOR_SERVER;
+        if (pingTimeoutSeconds >= 0) {
+          /* If caller requested a timeout, let's try just twice. */
+          max_attempts = 2;
+        }
 	do {
+            PRIntervalTime timeoutInterval = PR_INTERVAL_NO_TIMEOUT;
 	    s = PR_OpenTCPSocket(addr.raw.family);
 	    if (s == NULL) {
 		SECU_PrintError(progName, "Failed to create a TCP socket");
@@ -716,13 +757,13 @@ int main(int argc, char **argv)
 		                "Failed to set blocking socket option");
 		return 1;
 	    }
-	    prStatus = PR_Connect(s, &addr, PR_INTERVAL_NO_TIMEOUT);
+            if (pingTimeoutSeconds >= 0) {
+              timeoutInterval = PR_SecondsToInterval(pingTimeoutSeconds);
+            }
+	    prStatus = PR_Connect(s, &addr, timeoutInterval);
 	    if (prStatus == PR_SUCCESS) {
     		PR_Shutdown(s, PR_SHUTDOWN_BOTH);
     		PR_Close(s);
-               if (NSS_Shutdown() != SECSuccess) {
-                   exit(1);
-               }
     		PR_Cleanup();
 		return 0;
 	    }
@@ -734,10 +775,37 @@ int main(int argc, char **argv)
 	    }
 	    PR_Close(s);
 	    PR_Sleep(PR_MillisecondsToInterval(WAIT_INTERVAL));
-	} while (++iter < MAX_WAIT_FOR_SERVER);
+	} while (++iter < max_attempts);
 	SECU_PrintError(progName, 
                      "Client timed out while waiting for connection to server");
 	return 1;
+    }
+
+    /* open the cert DB, the key DB, and the secmod DB. */
+    if (!certDir) {
+        certDir = SECU_DefaultSSLDir(); /* Look in $SSL_DIR */
+        certDir = SECU_ConfigDirectory(certDir);
+    } else {
+        char *certDirTmp = certDir;
+        certDir = SECU_ConfigDirectory(certDirTmp);
+        PORT_Free(certDirTmp);
+    }
+    rv = NSS_Init(certDir);
+    if (rv != SECSuccess) {
+        SECU_PrintError(progName, "unable to open cert database");
+        return 1;
+    }
+
+    /* set the policy bits true for all the cipher suites. */
+    if (useExportPolicy)
+        NSS_SetExportPolicy();
+    else
+        NSS_SetDomesticPolicy();
+
+    /* all the SSL2 and SSL3 cipher suites are enabled by default. */
+    if (cipherString) {
+        /* disable all the ciphers, then enable the ones we want. */
+        disableAllSSLCiphers();
     }
 
     /* Create socket */
@@ -815,29 +883,22 @@ int main(int argc, char **argv)
 	PORT_Free(cstringSaved);
     }
 
-    rv = SSL_OptionSet(s, SSL_ENABLE_SSL2, !disableSSL2);
+    rv = SSL_VersionRangeSet(s, &enabledVersions);
     if (rv != SECSuccess) {
-	SECU_PrintError(progName, "error enabling SSLv2 ");
-	return 1;
+        SECU_PrintError(progName, "error setting SSL/TLS version range ");
+        return 1;
     }
 
-    rv = SSL_OptionSet(s, SSL_ENABLE_SSL3, !disableSSL3);
+    rv = SSL_OptionSet(s, SSL_ENABLE_SSL2, enableSSL2);
     if (rv != SECSuccess) {
-	SECU_PrintError(progName, "error enabling SSLv3 ");
-	return 1;
+       SECU_PrintError(progName, "error enabling SSLv2 ");
+       return 1;
     }
 
-    rv = SSL_OptionSet(s, SSL_ENABLE_TLS, !disableTLS);
+    rv = SSL_OptionSet(s, SSL_V2_COMPATIBLE_HELLO, enableSSL2);
     if (rv != SECSuccess) {
-	SECU_PrintError(progName, "error enabling TLS ");
-	return 1;
-    }
-
-    /* disable ssl2 and ssl2-compatible client hellos. */
-    rv = SSL_OptionSet(s, SSL_V2_COMPATIBLE_HELLO, !disableSSL2);
-    if (rv != SECSuccess) {
-	SECU_PrintError(progName, "error disabling v2 compatibility");
-	return 1;
+        SECU_PrintError(progName, "error enabling SSLv2 compatible hellos ");
+        return 1;
     }
 
     /* enable PKCS11 bypass */
@@ -877,7 +938,13 @@ int main(int argc, char **argv)
 
     SSL_SetPKCS11PinArg(s, &pwdata);
 
-    SSL_AuthCertificateHook(s, SSL_AuthCertificate, (void *)handle);
+    serverCertAuth.dbHandle = CERT_GetDefaultCertDB();
+
+    if (serverCertAuth.shouldPause) {
+	SSL_AuthCertificateHook(s, ownAuthCertificate, &serverCertAuth);
+    } else {
+	SSL_AuthCertificateHook(s, SSL_AuthCertificate, serverCertAuth.dbHandle);
+    }
     if (override) {
 	SSL_BadCertHook(s, ownBadCertHandler, NULL);
     }
@@ -985,6 +1052,14 @@ int main(int argc, char **argv)
 	char buf[4000];	/* buffer for stdin */
 	int nb;		/* num bytes read from stdin. */
 
+	rv = restartHandshakeAfterServerCertIfNeeded(s, &serverCertAuth,
+						     override);
+	if (rv != SECSuccess) {
+	    error = 254; /* 254 (usually) means "handshake failed" */
+	    SECU_PrintError(progName, "authentication of server cert failed");
+	    goto done;
+	}
+	        
 	pollset[SSOCK_FD].out_flags = 0;
 	pollset[STDIN_FD].out_flags = 0;
 
@@ -1043,6 +1118,15 @@ int main(int argc, char **argv)
 		    nb   -= cc;
 		    if (nb <= 0) 
 		    	break;
+
+		    rv = restartHandshakeAfterServerCertIfNeeded(s,
+				&serverCertAuth, override);
+		    if (rv != SECSuccess) {
+			error = 254; /* 254 (usually) means "handshake failed" */
+			SECU_PrintError(progName, "authentication of server cert failed");
+			goto done;
+		    }
+
 		    pollset[SSOCK_FD].in_flags = PR_POLL_WRITE | PR_POLL_EXCEPT;
 		    pollset[SSOCK_FD].out_flags = 0;
 		    FPRINTF(stderr,

@@ -4,7 +4,6 @@
 -->
 <head>
   <title>Test for parsing, storage, and serialization of CSS values</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="text/javascript" src="property_database.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
@@ -72,6 +71,21 @@ function xfail_compute(property, value)
   return false;
 }
 
+var gBadSerialize = {
+  // Font-families which include quotes don't get those escaped when
+  //serializing: see bug 660397
+  "font-family": ["\\\"Times New Roman", "Times, \\\"Times New Roman"],
+};
+
+function xfail_serialize(property, value)
+{
+  if (property in gBadSerialize &&
+      gBadSerialize[property].indexOf(value) != -1)
+    return true;
+
+  return false;
+}
+
 var gElement = document.getElementById("testnode");
 var gDeclaration = gElement.style;
 var gComputedStyle = window.getComputedStyle(gElement, "");
@@ -115,19 +129,26 @@ function test_property(property)
     // We don't care particularly about the whitespace or the placement of
     // semicolons, but for simplicity we'll test the current behavior.
     var expected_serialization = "";
-    if (step1val != "")
-      expected_serialization = property + ": " + step1val + ";";
+    if (step1val != "") {
+      if ("alias_for" in info) {
+        expected_serialization = info.alias_for + ": " + step1val + ";";
+      } else {
+        expected_serialization = property + ": " + step1val + ";";
+      }
+    }
     is(step1ser, expected_serialization,
        "serialization should match property value");
 
     gDeclaration.removeProperty(property);
     gDeclaration.setProperty(property, step1val, "");
 
-    is(gDeclaration.getPropertyValue(property), step1val,
+    var serialize_func = xfail_serialize(property, value) ? todo_is : is;
+
+    serialize_func(gDeclaration.getPropertyValue(property), step1val,
        "parse+serialize should be idempotent for '" +
          property + ": " + value + "'");
     if (test_computed && info.type != CSS_TYPE_TRUE_SHORTHAND) {
-      is(gComputedStyle.getPropertyValue(property), step1comp,
+      serialize_func(gComputedStyle.getPropertyValue(property), step1comp,
          "serialize+parse should be identity transform for '" +
          property + ": " + value + "'");
     }
@@ -135,7 +156,9 @@ function test_property(property)
     if ("subproperties" in info &&
         // Using setProperty over subproperties is not sufficient for
         // system fonts, since the shorthand does more than its parts.
-        (property != "font" || !(value in gSystemFont))) {
+        (property != "font" || !(value in gSystemFont)) &&
+        // Likewise for special compatibility values of transform
+        (property != "-moz-transform" || !value.match(/^matrix.*(px|em|%)/))) {
       gDeclaration.removeProperty(property);
       for (idx in info.subproperties) {
         var subprop = info.subproperties[idx];
@@ -161,7 +184,8 @@ function test_property(property)
     if (test_computed && info.type != CSS_TYPE_TRUE_SHORTHAND) {
       gDeclaration.removeProperty(property);
       gDeclaration.setProperty(property, step1comp, "");
-      var func = xfail_compute(property, value) ? todo_is : is;
+      var func = (xfail_compute(property, value) ||
+        xfail_serialize(property, value)) ? todo_is : is;
       func(gComputedStyle.getPropertyValue(property), step1comp,
            "parse+compute+serialize should be idempotent for '" +
            property + ": " + value + "'");

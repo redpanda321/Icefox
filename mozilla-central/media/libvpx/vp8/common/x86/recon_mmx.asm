@@ -1,62 +1,15 @@
 ;
-;  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+;  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
 ;
-;  Use of this source code is governed by a BSD-style license 
+;  Use of this source code is governed by a BSD-style license
 ;  that can be found in the LICENSE file in the root of the source
 ;  tree. An additional intellectual property rights grant can be found
-;  in the file PATENTS.  All contributing project authors may 
+;  in the file PATENTS.  All contributing project authors may
 ;  be found in the AUTHORS file in the root of the source tree.
 ;
 
 
 %include "vpx_ports/x86_abi_support.asm"
-;void vp8_recon_b_mmx(unsigned char *s, short *q, unsigned char *d, int stride)
-global sym(vp8_recon_b_mmx)
-sym(vp8_recon_b_mmx):
-    push        rbp
-    mov         rbp, rsp
-    SHADOW_ARGS_TO_STACK 4
-    push        rsi
-    push        rdi
-    ; end prolog
-
-        mov       rsi, arg(0) ;s
-        mov       rdi, arg(2) ;d
-        mov       rdx, arg(1) ;q
-        movsxd    rax, dword ptr arg(3) ;stride
-        pxor      mm0, mm0
-
-        movd      mm1, [rsi]
-        punpcklbw mm1, mm0
-        paddsw    mm1, [rdx]
-        packuswb  mm1,  mm0              ; pack and unpack to saturate
-        movd      [rdi], mm1
-
-        movd      mm2, [rsi+16]
-        punpcklbw mm2, mm0
-        paddsw    mm2, [rdx+32]
-        packuswb  mm2, mm0              ; pack and unpack to saturate
-        movd      [rdi+rax], mm2
-
-        movd      mm3, [rsi+32]
-        punpcklbw mm3, mm0
-        paddsw    mm3, [rdx+64]
-        packuswb  mm3,  mm0              ; pack and unpack to saturate
-        movd      [rdi+2*rax], mm3
-
-        add       rdi, rax
-        movd      mm4, [rsi+48]
-        punpcklbw mm4, mm0
-        paddsw    mm4, [rdx+96]
-        packuswb  mm4, mm0              ; pack and unpack to saturate
-        movd      [rdi+2*rax], mm4
-
-    ; begin epilog
-    pop rdi
-    pop rsi
-    UNSHADOW_ARGS
-    pop         rbp
-    ret
 
 
 ;void copy_mem8x8_mmx(

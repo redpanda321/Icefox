@@ -39,27 +39,11 @@ wizardpage {
 }
 
 .wizard-buttons button {
-  -moz-appearance: none;
+  -moz-appearance: toolbarbutton;
   min-height: 22px;
   margin: 0 6px;
-  padding: 0 2px;
+  padding: 0;
   text-shadow: @loweredShadow@;
-  border: 1px solid @toolbarbuttonBorderColor@;
-  -moz-border-radius: @toolbarbuttonCornerRadius@;
-  -moz-box-shadow: @loweredShadow@;
-  background: @toolbarbuttonBackground@;
-  background-origin: border-box;
-}
-
-.wizard-buttons button:hover:active:not([disabled="true"]) {
-  background: @toolbarbuttonPressedBackgroundColor@;
-  text-shadow: @loweredShadow@;
-  -moz-box-shadow: @toolbarbuttonPressedInnerShadow@, @loweredShadow@;
-}
-
-.wizard-buttons button:-moz-window-inactive {
-  border-color: @toolbarbuttonInactiveBorderColor@;
-  background-image: @toolbarbuttonInactiveBackgroundImage@;
 }
 
 .loadingBox {
@@ -76,13 +60,6 @@ wizardpage {
 
 .remoteLoadingThrobber[state="error"] {
   list-style-image: url("chrome://global/skin/icons/notfound.png");
-}
-
-#updates[currentpageid="updatesfoundbasic"] .wizard-button[dlgtype="next"],
-#updates[currentpageid="updatesfoundbillboard"] .wizard-button[dlgtype="next"],
-#updates[currentpageid="finished"] .wizard-button[dlgtype="finish"],
-#updates[currentpageid="finishedBackground"] .wizard-button[dlgtype="finish"] {
-  font-weight: bold !important;
 }
 
 #incompatibleListbox, #finishedBackgroundMore, #acceptDeclineLicense {

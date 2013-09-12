@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 
@@ -87,7 +54,7 @@ private:
 
     nsCOMPtr<nsISimpleEnumerator>   mCurrent;
     nsCOMPtr<nsIRDFNode>            mResult;
-    PRInt32 mNextIndex;
+    int32_t mNextIndex;
 
 public:
     ContainerEnumeratorImpl(nsIRDFDataSource* ds, nsIRDFResource* container);
@@ -118,7 +85,7 @@ ContainerEnumeratorImpl::Init()
     if (gRefCnt++ == 0) {
         nsresult rv;
         nsCOMPtr<nsIRDFService> rdf = do_GetService(kRDFServiceCID);
-        NS_ASSERTION(rdf != nsnull, "unable to acquire resource manager");
+        NS_ASSERTION(rdf != nullptr, "unable to acquire resource manager");
         if (! rdf)
             return NS_ERROR_FAILURE;
 
@@ -146,9 +113,9 @@ NS_IMPL_ISUPPORTS1(ContainerEnumeratorImpl, nsISimpleEnumerator)
 
 
 NS_IMETHODIMP
-ContainerEnumeratorImpl::HasMoreElements(PRBool* aResult)
+ContainerEnumeratorImpl::HasMoreElements(bool* aResult)
 {
-    NS_PRECONDITION(aResult != nsnull, "null ptr");
+    NS_PRECONDITION(aResult != nullptr, "null ptr");
     if (! aResult)
         return NS_ERROR_NULL_POINTER;
 
@@ -156,7 +123,7 @@ ContainerEnumeratorImpl::HasMoreElements(PRBool* aResult)
 
     // If we've already queued up a next value, then we know there are more elements.
     if (mResult) {
-        *aResult = PR_TRUE;
+        *aResult = true;
         return NS_OK;
     }
 
@@ -170,14 +137,14 @@ ContainerEnumeratorImpl::HasMoreElements(PRBool* aResult)
     // Remember that since nextVal is the next index that we'd assign
     // to an element in a container, it's *one more* than count of
     // elements in the container.
-    PRInt32 max = 0;
+    int32_t max = 0;
 
     nsCOMPtr<nsISimpleEnumerator> targets;
-    rv = mDataSource->GetTargets(mContainer, kRDF_nextVal, PR_TRUE, getter_AddRefs(targets));
+    rv = mDataSource->GetTargets(mContainer, kRDF_nextVal, true, getter_AddRefs(targets));
     if (NS_FAILED(rv)) return rv;
 
     while (1) {
-        PRBool hasmore;
+        bool hasmore;
         targets->HasMoreElements(&hasmore);
         if (! hasmore)
             break;
@@ -192,8 +159,8 @@ ContainerEnumeratorImpl::HasMoreElements(PRBool* aResult)
          const PRUnichar *nextValStr;
          nextValLiteral->GetValueConst(&nextValStr);
 		 
-         PRInt32 err;
-         PRInt32 nextVal = nsAutoString(nextValStr).ToInteger(&err);
+         nsresult err;
+         int32_t nextVal = nsAutoString(nextValStr).ToInteger(&err);
 
          if (nextVal > max)
              max = nextVal;
@@ -207,21 +174,21 @@ ContainerEnumeratorImpl::HasMoreElements(PRBool* aResult)
             rv = gRDFC->IndexToOrdinalResource(mNextIndex, getter_AddRefs(mOrdinalProperty));
             if (NS_FAILED(rv)) return rv;
 
-            rv = mDataSource->GetTargets(mContainer, mOrdinalProperty, PR_TRUE, getter_AddRefs(mCurrent));
+            rv = mDataSource->GetTargets(mContainer, mOrdinalProperty, true, getter_AddRefs(mCurrent));
             if (NS_FAILED(rv)) return rv;
 
             ++mNextIndex;
         }
 
         if (mCurrent) {
-            PRBool hasMore;
+            bool hasMore;
             rv = mCurrent->HasMoreElements(&hasMore);
             if (NS_FAILED(rv)) return rv;
 
             // Is the current enumerator depleted? If so, iterate to
             // the next index.
             if (! hasMore) {
-                mCurrent = nsnull;
+                mCurrent = nullptr;
                 continue;
             }
 
@@ -233,13 +200,13 @@ ContainerEnumeratorImpl::HasMoreElements(PRBool* aResult)
             mResult = do_QueryInterface(result, &rv);
             if (NS_FAILED(rv)) return rv;
 
-            *aResult = PR_TRUE;
+            *aResult = true;
             return NS_OK;
         }
     }
 
     // If we get here, we ran out of elements. The cursor is empty.
-    *aResult = PR_FALSE;
+    *aResult = false;
     return NS_OK;
 }
 
@@ -249,7 +216,7 @@ ContainerEnumeratorImpl::GetNext(nsISupports** aResult)
 {
     nsresult rv;
 
-    PRBool hasMore;
+    bool hasMore;
     rv = HasMoreElements(&hasMore);
     if (NS_FAILED(rv)) return rv;
 
@@ -257,7 +224,7 @@ ContainerEnumeratorImpl::GetNext(nsISupports** aResult)
         return NS_ERROR_UNEXPECTED;
 
     NS_ADDREF(*aResult = mResult);
-    mResult = nsnull;
+    mResult = nullptr;
 
     return NS_OK;
 }
@@ -270,15 +237,15 @@ NS_NewContainerEnumerator(nsIRDFDataSource* aDataSource,
                           nsIRDFResource* aContainer,
                           nsISimpleEnumerator** aResult)
 {
-    NS_PRECONDITION(aDataSource != nsnull, "null ptr");
+    NS_PRECONDITION(aDataSource != nullptr, "null ptr");
     if (! aDataSource)
         return NS_ERROR_NULL_POINTER;
 
-    NS_PRECONDITION(aContainer != nsnull, "null ptr");
+    NS_PRECONDITION(aContainer != nullptr, "null ptr");
     if (! aContainer)
         return NS_ERROR_NULL_POINTER;
 
-    NS_PRECONDITION(aResult != nsnull, "null ptr");
+    NS_PRECONDITION(aResult != nullptr, "null ptr");
     if (! aResult)
         return NS_ERROR_NULL_POINTER;
 

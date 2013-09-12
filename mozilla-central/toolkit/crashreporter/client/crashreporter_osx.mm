@@ -1,46 +1,14 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Toolkit Crash Reporter
- *
- * The Initial Developer of the Original Code is
- *   Mozilla Corporation
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dave Camp <dcamp@mozilla.com>
- *   Ted Mielczarek <ted.mielczarek@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #import <Cocoa/Cocoa.h>
 #import <CoreFoundation/CoreFoundation.h>
 #include "crashreporter.h"
 #include "crashreporter_osx.h"
+#include <crt_externs.h>
+#include <spawn.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fcntl.h>
@@ -62,6 +30,16 @@ static vector<string> gRestartArgs;
 static bool gDidTrySend = false;
 static bool gRTLlayout = false;
 
+static cpu_type_t pref_cpu_types[2] = {
+#if defined(__i386__)
+                                 CPU_TYPE_X86,
+#elif defined(__x86_64__)
+                                 CPU_TYPE_X86_64,
+#elif defined(__ppc__)
+                                 CPU_TYPE_POWERPC,
+#endif
+                                 CPU_TYPE_ANY };
+
 #define NSSTR(s) [NSString stringWithUTF8String:(s).c_str()]
 
 static NSString* Str(const char* aName)
@@ -73,10 +51,24 @@ static NSString* Str(const char* aName)
 
 static bool RestartApplication()
 {
-  char** argv = reinterpret_cast<char**>(
-    malloc(sizeof(char*) * (gRestartArgs.size() + 1)));
+  vector<char*> argv(gRestartArgs.size() + 1);
 
-  if (!argv) return false;
+  posix_spawnattr_t spawnattr;
+  if (posix_spawnattr_init(&spawnattr) != 0) {
+    return false;
+  }
+
+  // Set spawn attributes.
+  size_t attr_count = sizeof(pref_cpu_types) / sizeof(pref_cpu_types[0]);
+  size_t attr_ocount = 0;
+  if (posix_spawnattr_setbinpref_np(&spawnattr,
+                                    attr_count,
+                                    pref_cpu_types,
+                                    &attr_ocount) != 0 ||
+      attr_ocount != attr_count) {
+    posix_spawnattr_destroy(&spawnattr);
+    return false;
+  }
 
   unsigned int i;
   for (i = 0; i < gRestartArgs.size(); i++) {
@@ -84,17 +76,20 @@ static bool RestartApplication()
   }
   argv[i] = 0;
 
-  pid_t pid = fork();
-  if (pid == -1)
-    return false;
-  else if (pid == 0) {
-    (void)execv(argv[0], argv);
-    _exit(1);
-  }
+  char **env = NULL;
+  char ***nsEnv = _NSGetEnviron();
+  if (nsEnv)
+    env = *nsEnv;
+  int result = posix_spawnp(NULL,
+                            argv[0],
+                            NULL,
+                            &spawnattr,
+                            &argv[0],
+                            env);
 
-  free(argv);
+  posix_spawnattr_destroy(&spawnattr);
 
-  return true;
+  return result == 0;
 }
 
 @implementation CrashReporterUI
@@ -559,7 +554,7 @@ static bool RestartApplication()
 
 -(bool)setupPost
 {
-  NSURL* url = [NSURL URLWithString:NSSTR(gSendURL)];
+  NSURL* url = [NSURL URLWithString:[NSSTR(gSendURL) stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]];
   if (!url) return false;
 
   mPost = [[HTTPMultipartUpload alloc] initWithURL: url];
@@ -878,7 +873,7 @@ bool UIMoveFile(const string& file, const string& newfile)
   if (!source || !dest)
     return false;
 
-  [fileManager movePath:source toPath:dest handler:nil];
+  [fileManager moveItemAtPath:source toPath:dest error:NULL];
   return UIFileExists(newfile);
 }
 

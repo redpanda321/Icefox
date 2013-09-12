@@ -20,8 +20,10 @@ var gServer;
 var gAddonInstalled = false;
 
 function test() {
+  requestLongerTimeout(2);
   // Turn on searching for this test
   Services.prefs.setIntPref(PREF_SEARCH_MAXRESULTS, 15);
+  Services.prefs.setBoolPref(PREF_STRICT_COMPAT, true);
 
   waitForExplicitFinish();
 
@@ -59,9 +61,10 @@ function test() {
     sourceURI: "http://example.com/fail-install1.xpi"
   }]);
 
-  installs.forEach(function(aInstall) { aInstall.install(); });
+  for (let install of installs )
+    install.install();
 
-  open_manager(null, function(aWindow) {
+  open_manager("addons://list/extension", function(aWindow) {
     gManagerWindow = aWindow;
     gCategoryUtilities = new CategoryUtilities(gManagerWindow);
     run_next_test();
@@ -74,8 +77,7 @@ function end_test() {
     installedAddon.uninstall();
 
     AddonManager.getAllInstalls(function(aInstallsList) {
-      for (var i = 0; i < aInstallsList.length; i++) {
-        var install = aInstallsList[i];
+      for (var install of aInstallsList) {
         var sourceURI = install.sourceURI.spec;
         if (sourceURI == REMOTE_INSTALL_URL ||
             sourceURI.match(/^http:\/\/example\.com\/(.+)\.xpi$/) != null)
@@ -100,12 +102,8 @@ function getAnonymousElementByAttribute(aElement, aName, aValue) {
  *         The expected isSearching state
  */
 function check_is_searching(aExpectedSearching) {
-  is(gManagerWindow.gHeader.isSearching, aExpectedSearching,
-     "Should get expected isSearching state");
-
-  var throbber = gManagerWindow.document.getElementById("header-searching");
-  var style = gManagerWindow.document.defaultView.getComputedStyle(throbber, "");
-  is(style.visibility, aExpectedSearching ? "visible" : "hidden",
+  var loading = gManagerWindow.document.getElementById("search-loading");
+  is(!is_hidden(loading), aExpectedSearching,
      "Search throbber should be showing iff currently searching");
 }
 
@@ -133,7 +131,7 @@ function search(aQuery, aFinishImmediately, aCallback, aCategoryType) {
   var searchBox = gManagerWindow.document.getElementById("header-search");
   searchBox.value = aQuery;
 
-  EventUtils.synthesizeMouse(searchBox, 2, 2, { }, gManagerWindow);
+  EventUtils.synthesizeMouseAtCenter(searchBox, { }, gManagerWindow);
   EventUtils.synthesizeKey("VK_RETURN", { }, gManagerWindow);
 
   var finishImmediately = true;
@@ -163,8 +161,7 @@ function get_actual_results() {
   var rows = list.getElementsByTagName("richlistitem");
 
   var results = [];
-  for (var i = 0; i < rows.length; i++) {
-    var item = rows[i];
+  for (var item of rows) {
 
     // Only consider items that are currently showing
     var style = gManagerWindow.document.defaultView.getComputedStyle(item, "");
@@ -215,8 +212,8 @@ function get_expected_results(aSortBy, aLocalExpected) {
   var expectedOrder = null, unknownOrder = null;
   switch (aSortBy) {
     case "relevancescore":
-      expectedOrder = [ "remote4" , "addon2", "remote1" , "remote2",
-                        "install2", "addon1", "install1", "remote3" ];
+      expectedOrder = [ "addon2"  , "remote1", "install2", "addon1",
+                        "install1", "remote2", "remote3" , "remote4" ];
       unknownOrder = [];
       break;
     case "name":
@@ -291,6 +288,26 @@ function check_results(aQuery, aSortBy, aReverseOrder, aShowLocal) {
   var totalExpectedResults = expectedOrder.length + unknownOrder.length;
   is(actualOrder.length, totalExpectedResults, "Should get correct number of results");
 
+  // Check the "first" and "last" attributes are set correctly
+  for (let i = 0; i < actualResults.length; i++) {
+    if (i == 0) {
+      is(actualResults[0].item.hasAttribute("first"), true,
+         "First item should have 'first' attribute set");
+      is(actualResults[0].item.hasAttribute("last"), false,
+         "First item should not have 'last' attribute set");
+    } else if (i == (actualResults.length - 1)) {
+      is(actualResults[actualResults.length - 1].item.hasAttribute("first"), false,
+         "Last item should not have 'first' attribute set");
+      is(actualResults[actualResults.length - 1].item.hasAttribute("last"), true,
+         "Last item should have 'last' attribute set");
+    } else {
+      is(actualResults[i].item.hasAttribute("first"), false,
+         "Item " + i + " should not have 'first' attribute set");
+      is(actualResults[i].item.hasAttribute("last"), false,
+         "Item " + i + " should not have 'last' attribute set");
+    }
+  }
+
   var i = 0;
   for (; i < expectedOrder.length; i++)
     is(actualOrder[i], expectedOrder[i], "Should have seen expected item");
@@ -327,11 +344,11 @@ function check_filtered_results(aQuery, aSortBy, aReverseOrder) {
   list.ensureElementIsVisible(localFilter);
 
   // Check with showing local add-ons
-  EventUtils.synthesizeMouse(localFilter, 2, 2, { }, gManagerWindow);
+  EventUtils.synthesizeMouseAtCenter(localFilter, { }, gManagerWindow);
   check_results(aQuery, aSortBy, aReverseOrder, true);
 
   // Check with showing remote add-ons
-  EventUtils.synthesizeMouse(remoteFilter, 2, 2, { }, gManagerWindow);
+  EventUtils.synthesizeMouseAtCenter(remoteFilter, { }, gManagerWindow);
   check_results(aQuery, aSortBy, aReverseOrder, false);
 }
 
@@ -346,8 +363,7 @@ function get_addon_item(aName) {
   var id = aName + "@tests.mozilla.org";
   var list = gManagerWindow.document.getElementById("search-list");
   var rows = list.getElementsByTagName("richlistitem");
-  for (var i = 0; i < rows.length; i++) {
-    var row = rows[i];
+  for (var row of rows) {
     if (row.mAddon && row.mAddon.id == id)
       return row;
   }
@@ -366,8 +382,7 @@ function get_install_item(aName) {
   var sourceURI = "http://example.com/" + aName + ".xpi";
   var list = gManagerWindow.document.getElementById("search-list");
   var rows = list.getElementsByTagName("richlistitem");
-  for (var i = 0; i < rows.length; i++) {
-    var row = rows[i];
+  for (var row of rows) {
     if (row.mInstall && row.mInstall.sourceURI.spec == sourceURI)
       return row;
   }
@@ -385,7 +400,7 @@ function get_install_item(aName) {
 function get_install_button(aItem) {
   isnot(aItem, null, "Item should not be null when checking state of install button");
   var installStatus = getAnonymousElementByAttribute(aItem, "anonid", "install-status");
-  return getAnonymousElementByAttribute(installStatus, "anonid", "install-remote");
+  return getAnonymousElementByAttribute(installStatus, "anonid", "install-remote-btn");
 }
 
 
@@ -407,8 +422,7 @@ add_test(function() {
 
     var list = gManagerWindow.document.getElementById("search-list");
     var results = get_actual_results();
-    for (var i = 0; i < results.length; i++) {
-      var result = results[i];
+    for (var result of results) {
       var installBtn = get_install_button(result.item);
       is(installBtn.hidden, result.name.indexOf("remote") != 0,
          "Install button should only be showing for remote items");
@@ -430,15 +444,16 @@ add_test(function() {
 
       var item = result.item;
       list.ensureElementIsVisible(item);
-      EventUtils.synthesizeMouse(item, 2, 2, { clickCount: 2 }, gManagerWindow);
+      EventUtils.synthesizeMouseAtCenter(item, { clickCount: 1 }, gManagerWindow);
+      EventUtils.synthesizeMouseAtCenter(item, { clickCount: 2 }, gManagerWindow);
       wait_for_view_load(gManagerWindow, function() {
-        var name = gManagerWindow.document.getElementById("detail-name").value;
+        var name = gManagerWindow.document.getElementById("detail-name").textContent;
         is(name, item.mAddon.name, "Name in detail view should be correct");
         var version = gManagerWindow.document.getElementById("detail-version").value;
         is(version, item.mAddon.version, "Version in detail view should be correct");
 
-        EventUtils.synthesizeMouse(gManagerWindow.document.getElementById("back-btn"),
-                                   2, 2, { }, gManagerWindow);
+        EventUtils.synthesizeMouseAtCenter(gManagerWindow.document.getElementById("category-search"),
+                                           { }, gManagerWindow);
         wait_for_view_load(gManagerWindow, run_next_double_click_test);
       });
     }
@@ -453,7 +468,7 @@ add_test(function() {
   var originalHandler = sorters.handler;
 
   var sorterNames = ["name", "dateUpdated"];
-  var buttonIds = ["btn-name", "btn-date"];
+  var buttonIds = ["name-btn", "date-btn"];
   var currentIndex = 0;
   var currentReversed = false;
 
@@ -461,12 +476,14 @@ add_test(function() {
     if (currentIndex >= sorterNames.length) {
       sorters.handler = originalHandler;
       run_next_test();
+      return;
     }
 
     // Simulate clicking on a specific sorter
     var buttonId = buttonIds[currentIndex];
     var sorter = getAnonymousElementByAttribute(sorters, "anonid", buttonId);
-    EventUtils.synthesizeMouse(sorter, 2, 2, { }, gManagerWindow);
+    is_element_visible(sorter);
+    EventUtils.synthesizeMouseAtCenter(sorter, { }, gManagerWindow);
   }
 
   sorters.handler = {
@@ -548,7 +565,7 @@ add_test(function() {
     installBtn = get_install_button(remoteItem);
     is(installBtn.hidden, false, "Install button should be showing before install");
     remoteItem.mAddon.install.addListener(listener);
-    EventUtils.synthesizeMouse(installBtn, 2, 2, { }, gManagerWindow);
+    EventUtils.synthesizeMouseAtCenter(installBtn, { }, gManagerWindow);
   });
 });
 
@@ -569,11 +586,52 @@ add_test(function() {
   });
 });
 
+// Tests that incompatible add-ons are shown with a warning if compatibility checking is disabled
+add_test(function() {
+  AddonManager.checkCompatibility = false;
+  search("incompatible", false, function() {
+    var item = get_addon_item("remote5");
+    is_element_visible(item, "Incompatible addon should be visible");
+    is(item.getAttribute("notification"), "warning", "Compatibility warning should be shown");
+
+    item = get_addon_item("remote6");
+    is(item, null, "Addon incompatible with the product should not be visible");
+
+    AddonManager.checkCompatibility = true;
+    run_next_test();
+  });
+});
+
+// Tests that compatible-by-default addons are shown if strict compatibility checking is disabled
+add_test(function() {
+  restart_manager(gManagerWindow, null, function(aWindow) {
+    gManagerWindow = aWindow;
+    gCategoryUtilities = new CategoryUtilities(gManagerWindow);
+
+    Services.prefs.setBoolPref(PREF_STRICT_COMPAT, false);
+    search("incompatible", false, function() {
+      var item = get_addon_item("remote5");
+      is_element_visible(item, "Incompatible addon should be visible");
+      isnot(item.getAttribute("notification"), "warning", "Compatibility warning should not be shown");
+  
+      var item = get_addon_item("remote6");
+      is(item, null, "Addon incompatible with the product should not be visible");
+  
+      Services.prefs.setBoolPref(PREF_STRICT_COMPAT, true);
+      run_next_test();
+    });
+  });
+});
+
+
 // Tests that restarting the manager doesn't change search results
 add_test(function() {
   restart_manager(gManagerWindow, null, function(aWindow) {
     gManagerWindow = aWindow;
     gCategoryUtilities = new CategoryUtilities(gManagerWindow);
+
+    // We never restore to the search pane
+    is(gCategoryUtilities.selectedCategory, "discover", "View should have changed to discover");
 
     // Installed add-on is considered local on new search
     gAddonInstalled = true;

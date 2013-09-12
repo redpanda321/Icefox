@@ -45,6 +45,7 @@
 
 #include "cairo-ft.h"
 #include "cairo-qt.h"
+#include "cairo-error-private.h"
 
 #include <memory>
 
@@ -55,16 +56,10 @@
 #include <QtGui/QPixmap>
 #include <QtGui/QBrush>
 #include <QtGui/QPen>
-#include <QtGui/QWidget>
-#include <QtGui/QX11Info>
+#include <QWidget>
 #include <QtCore/QVarLengthArray>
 
 #include <sys/time.h>
-
-
-#if (QT_VERSION >= QT_VERSION_CHECK(4, 7, 0)) || defined(QT_GLYPHS_API_BACKPORT)
-extern void qt_draw_glyphs(QPainter *, const quint32 *glyphs, const QPointF *positions, int count);
-#endif
 
 /* Enable workaround slow regional Qt paths */
 #define ENABLE_FAST_FILL 0
@@ -309,7 +304,7 @@ _qmatrix_from_cairo_matrix (const cairo_matrix_t& m)
 /** Path conversion **/
 typedef struct _qpainter_path_transform {
     QPainterPath path;
-    cairo_matrix_t *ctm_inverse;
+    const cairo_matrix_t *ctm_inverse;
 } qpainter_path_data;
 
 /* cairo path -> execute in context */
@@ -377,7 +372,7 @@ _cairo_path_to_qpainterpath_close_path (void *closure)
 
 static inline QPainterPath
 path_to_qt (cairo_path_fixed_t *path,
-	    cairo_matrix_t *ctm_inverse = NULL)
+	    const cairo_matrix_t *ctm_inverse = NULL)
 {
     qpainter_path_data data;
     cairo_status_t status;
@@ -469,7 +464,7 @@ _cairo_qt_surface_finish (void *abstract_surface)
     /* Only delete p if we created it */
     if (qs->image || qs->pixmap)
         delete qs->p;
-    else
+    else if (qs->p)
 	qs->p->restore ();
 
     if (qs->image_equiv)
@@ -746,7 +741,7 @@ _cairo_qt_surface_set_clip (cairo_qt_surface_t *qs,
 {
     cairo_int_status_t status;
 
-    D(fprintf(stderr, "q[%p] intersect_clip_path %s\n", abstract_surface, path ? "(path)" : "(clear)"));
+    D(fprintf(stderr, "q[%p] intersect_clip_path %s\n", qs, clip ? "(path)" : "(clear)"));
 
     if (clip == NULL) {
 	_cairo_surface_clipper_reset (&qs->clipper);
@@ -1021,7 +1016,7 @@ struct PatternToBrushConverter {
 
 struct PatternToPenConverter {
     PatternToPenConverter (const cairo_pattern_t *source,
-                           cairo_stroke_style_t *style) :
+                           const cairo_stroke_style_t *style) :
         mBrushConverter(source)
     {
         Qt::PenJoinStyle join = Qt::MiterJoin;
@@ -1309,9 +1304,9 @@ _cairo_qt_surface_stroke (void *abstract_surface,
 			  cairo_operator_t op,
 			  const cairo_pattern_t *source,
 			  cairo_path_fixed_t *path,
-			  cairo_stroke_style_t *style,
-			  cairo_matrix_t *ctm,
-			  cairo_matrix_t *ctm_inverse,
+			  const cairo_stroke_style_t *style,
+			  const cairo_matrix_t *ctm,
+			  const cairo_matrix_t *ctm_inverse,
 			  double tolerance,
 			  cairo_antialias_t antialias,
 			  cairo_clip_t *clip)
@@ -1366,40 +1361,7 @@ _cairo_qt_surface_show_glyphs (void *abstract_surface,
 			       cairo_clip_t *clip,
 			       int *remaining_glyphs)
 {
-#if (QT_VERSION >= QT_VERSION_CHECK(4, 7, 0)) || defined(QT_GLYPHS_API_BACKPORT)
-    cairo_qt_surface_t *qs = (cairo_qt_surface_t *) abstract_surface;
-
-    // pick out the colour to use from the cairo source
-    cairo_solid_pattern_t *solid = (cairo_solid_pattern_t*) source;
-    cairo_scaled_glyph_t* glyph;
-    // documentation says you have to freeze the cache, but I don't believe it
-    _cairo_scaled_font_freeze_cache(scaled_font);
-
-    QColor tempColour(solid->color.red * 255, solid->color.green * 255, solid->color.blue * 255);
-    QVarLengthArray<QPointF> positions(num_glyphs);
-    QVarLengthArray<unsigned int> glyphss(num_glyphs);
-    FT_Face face = cairo_ft_scaled_font_lock_face (scaled_font);
-    const FT_Size_Metrics& ftMetrics = face->size->metrics;
-    QFont font(face->family_name);
-    font.setStyleStrategy(QFont::NoFontMerging);
-    font.setBold(face->style_flags & FT_STYLE_FLAG_BOLD);
-    font.setItalic(face->style_flags & FT_STYLE_FLAG_ITALIC);
-    font.setKerning(face->face_flags & FT_FACE_FLAG_KERNING);
-    font.setPixelSize(ftMetrics.y_ppem);
-    cairo_ft_scaled_font_unlock_face(scaled_font);
-    qs->p->setFont(font);
-    qs->p->setPen(tempColour);
-    for (int currentGlyph = 0; currentGlyph < num_glyphs; currentGlyph++) {
-        positions[currentGlyph].setX(glyphs[currentGlyph].x);
-        positions[currentGlyph].setY(glyphs[currentGlyph].y);
-        glyphss[currentGlyph] = glyphs[currentGlyph].index;
-    }
-    qt_draw_glyphs(qs->p, glyphss.data(), positions.data(), num_glyphs);
-    _cairo_scaled_font_thaw_cache(scaled_font);
-    return CAIRO_INT_STATUS_SUCCESS;
-#else
     return CAIRO_INT_STATUS_UNSUPPORTED;
-#endif
 }
 
 static cairo_int_status_t
@@ -1605,6 +1567,7 @@ cairo_qt_surface_create (QPainter *painter)
 
     _cairo_surface_init (&qs->base,
 			 &cairo_qt_surface_backend,
+			 NULL,
 			 CAIRO_CONTENT_COLOR_ALPHA);
 
     _cairo_surface_clipper_init (&qs->clipper,
@@ -1643,11 +1606,21 @@ cairo_qt_surface_create_with_qimage (cairo_format_t format,
 
     _cairo_surface_init (&qs->base,
 			 &cairo_qt_surface_backend,
+			 NULL,
 			 _cairo_content_from_format (format));
 
     _cairo_surface_clipper_init (&qs->clipper,
 				 _cairo_qt_surface_clipper_intersect_clip_path);
 
+    if (CAIRO_FORMAT_A8 == format) {
+        qs->image = NULL;
+        qs->image_equiv = cairo_image_surface_create(format,
+                                                     width, height);
+        qs->p = NULL;
+        qs->supports_porter_duff = false;
+        qs->window = QRect(0, 0, width, height);
+        return &qs->base;
+    }
 
     QImage *image = new QImage (width, height,
 				_qimage_format_from_cairo_format (format));
@@ -1701,7 +1674,7 @@ cairo_qt_surface_create_with_qpixmap (cairo_content_t content,
     if (content == CAIRO_CONTENT_COLOR_ALPHA)
 	pixmap->fill(Qt::transparent);
 
-    _cairo_surface_init (&qs->base, &cairo_qt_surface_backend, content);
+    _cairo_surface_init (&qs->base, &cairo_qt_surface_backend, NULL, content);
 
     _cairo_surface_clipper_init (&qs->clipper,
 				 _cairo_qt_surface_clipper_intersect_clip_path);

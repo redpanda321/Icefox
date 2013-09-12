@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 /* Toolbar Button */
 
 #feedback-menu-button {
@@ -19,9 +23,8 @@
   -moz-padding-start: 5px;
 }
 
-
-#pilot-notifications-button {
-  margin-right: 10px;
+#tp-notification-popup-icon {
+  list-style-image: url("chrome://testpilot/skin/testpilot_16x16.png");
 }
 
 /* Popup Bounding Box */
@@ -32,14 +35,13 @@
   margin-top: -6px;
   margin-right: -3px;
   width: 480px;
-}
-
-.tail-up {
- -moz-border-image: url(chrome://testpilot-os/skin/notification-tail-up.png) 26 56 22 18 / 26px 56px 22px 18px round stretch;
-}
-
-.tail-down {
- -moz-border-image: url(chrome://testpilot-os/skin/notification-tail-down.png) 26 56 22 18 / 26px 56px 22px 18px round stretch;
+  /* FIXES: #725850  based on #717262
+  /* Needed whilst we support Gecko < 13 */
+  border-image: url(chrome://testpilot-os/skin/notification-tail-up.png) 26 56 22 18 / 26px 56px 22px 18px round stretch;
+  /* Supported in Gecko >= 13 */
+  border-image: url(chrome://testpilot-os/skin/notification-tail-up.png) 26 50 22 18 fill stretch;
+  border-width: 26px 56px 22px 18px;
+  border-style: solid;
 }
 
 
@@ -54,9 +56,14 @@
   margin-bottom: 12px;
 }
 
-#pilot-notification-text,
+#pilot-notification-text {
+  margin-bottom: 5px;
+}
+
 #pilot-notification-link {
   margin-bottom: 5px;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 #pilot-notification-close {
@@ -172,7 +179,7 @@ image.study-result {
     color: white;
     font-weight: bold;
     padding: 2px;
-    -moz-border-radius: 100%;
+    border-radius: 100%;
     margin-right: 25px;
     margin-bottom: 13px;
 }
@@ -225,11 +232,6 @@ image.results-thumbnail {
     max-height: 90px;
     max-width:  90px;
     margin: 10px;
-}
-
-.notification-link {
-    text-decoration: underline;
-    cursor: pointer;
 }
 
 prefpane .groupbox-body {

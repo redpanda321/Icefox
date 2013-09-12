@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=463039
 -->
 <head>
   <title>Test for Bug 463039</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="text/javascript" src="geolocation_common.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
@@ -19,7 +18,9 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=463039
 <pre id="test">
 <script class="testbody" type="text/javascript">
 
-/** Test for Bug 463039 **/
+resume_geolocationProvider();
+force_prompt(true);
+navigator.geolocation.watchPosition(function(){});
 
 // there are no watches, so this should always throw
 for (x=-10; x<10; x++) {
@@ -30,6 +31,7 @@ for (x=-10; x<10; x++) {
 // lets try something huge
 navigator.geolocation.clearWatch(Number.MAX_VALUE);
 ok(1, "clearWatch should not throw");
+reset_prompt();
     
 </script>
 </pre>

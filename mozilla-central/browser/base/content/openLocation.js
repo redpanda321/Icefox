@@ -1,47 +1,13 @@
-# -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
-#
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is Mozilla Communicator client code, released
-# March 31, 1998.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1998
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Michael Lowe <michael.lowe@bigfoot.com>
-#   Blake Ross   <blaker@netscape.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 var browser;
 var dialog = {};
 var pref = null;
+let openLocationModule = {};
 try {
   pref = Components.classes["@mozilla.org/preferences-service;1"]
                    .getService(Components.interfaces.nsIPrefBranch);
@@ -49,7 +15,8 @@ try {
   // not critical, remain silent
 }
 
-Components.utils.import("resource:///modules/openLocationLastURL.jsm");
+Components.utils.import("resource:///modules/openLocationLastURL.jsm", openLocationModule);
+let gOpenLocationLastURL = new openLocationModule.OpenLocationLastURL(window.opener);
 
 function onLoad()
 {
@@ -96,8 +63,9 @@ function open()
 {
   var url;
   var postData = {};
+  var mayInheritPrincipal = {value: false};
   if (browser)
-    url = browser.getShortcutOrURI(dialog.input.value, postData);
+    url = browser.getShortcutOrURI(dialog.input.value, postData, mayInheritPrincipal);
   else
     url = dialog.input.value;
 
@@ -106,7 +74,11 @@ function open()
     // fixup the URI
     switch (dialog.openWhereList.value) {
       case "0":
-        browser.loadURI(url, null, postData.value, true);
+        var webNav = Components.interfaces.nsIWebNavigation;
+        var flags = webNav.LOAD_FLAGS_ALLOW_THIRD_PARTY_FIXUP;
+        if (!mayInheritPrincipal.value)
+          flags |= webNav.LOAD_FLAGS_DISALLOW_INHERIT_OWNER;
+        browser.gBrowser.loadURIWithFlags(url, flags, null, null, postData.value);
         break;
       case "1":
         window.opener.delayedOpenWindow(getBrowserURL(), "all,dialog=no",
@@ -140,15 +112,22 @@ const nsIFilePicker = Components.interfaces.nsIFilePicker;
 function onChooseFile()
 {
   try {
-    var fp = Components.classes["@mozilla.org/filepicker;1"].createInstance(nsIFilePicker);
-    fp.init(window, dialog.bundle.getString("chooseFileDialogTitle"), nsIFilePicker.modeOpen);
-    fp.appendFilters(nsIFilePicker.filterHTML | nsIFilePicker.filterText |
-                     nsIFilePicker.filterAll | nsIFilePicker.filterImages | nsIFilePicker.filterXML);
+    let fp = Components.classes["@mozilla.org/filepicker;1"].
+             createInstance(nsIFilePicker);
+    let fpCallback = function fpCallback_done(aResult) {
+      if (aResult == nsIFilePicker.returnOK && fp.fileURL.spec &&
+          fp.fileURL.spec.length > 0) {
+        dialog.input.value = fp.fileURL.spec;
+      }
+      doEnabling();
+    };
 
-    if (fp.show() == nsIFilePicker.returnOK && fp.fileURL.spec && fp.fileURL.spec.length > 0)
-      dialog.input.value = fp.fileURL.spec;
+    fp.init(window, dialog.bundle.getString("chooseFileDialogTitle"),
+            nsIFilePicker.modeOpen);
+    fp.appendFilters(nsIFilePicker.filterAll | nsIFilePicker.filterText |
+                     nsIFilePicker.filterImages | nsIFilePicker.filterXML |
+                     nsIFilePicker.filterHTML);
+    fp.open(fpCallback);
+  } catch (ex) {
   }
-  catch(ex) {
-  }
-  doEnabling();
 }

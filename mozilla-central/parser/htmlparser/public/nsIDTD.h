@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsIDTD_h___
 #define nsIDTD_h___
@@ -59,9 +27,8 @@
 #include "nsITokenizer.h"
 
 #define NS_IDTD_IID \
-{ 0xcc374204, 0xcea2, 0x41a2, \
-  { 0xb2, 0x7f, 0x83, 0x75, 0xe2, 0xcf, 0x97, 0xcf } }
-
+{ 0x3de05873, 0xefa7, 0x410d, \
+  { 0xa4, 0x61, 0x80, 0x33, 0xaf, 0xd9, 0xe3, 0x26 } }
 
 enum eAutoDetectResult {
     eUnknownDetect,
@@ -109,8 +76,6 @@ public:
      * the document model via the sink provided to WillBuildModel.
      *
      * @param   aTokenizer - tokenizer providing the token stream to be parsed
-     * @param   aCanInterrupt - informs the DTD whether the parser can handle
-     *                          interruptions of the model building process
      * @param   aCountLines - informs the DTD whether to count newlines
      *                        (not wanted, e.g., when handling document.write)
      * @param   aCharsetPtr - address of an nsCString containing the charset
@@ -118,8 +83,7 @@ public:
      *                        opts to ignore this parameter)
      */
     NS_IMETHOD BuildModel(nsITokenizer* aTokenizer,
-                          PRBool aCanInterrupt,
-                          PRBool aCountLines,
+                          bool aCountLines,
                           const nsCString* aCharsetPtr) = 0;
 
     /**
@@ -129,9 +93,9 @@ public:
      * @update  gess 3/25/98
      * @param   aParent -- int tag of parent container
      * @param   aChild -- int tag of child container
-     * @return PR_TRUE if parent can contain child
+     * @return true if parent can contain child
      */
-    NS_IMETHOD_(PRBool) CanContain(PRInt32 aParent,PRInt32 aChild) const = 0;
+    NS_IMETHOD_(bool) CanContain(int32_t aParent,int32_t aChild) const = 0;
 
     /**
      * This method gets called to determine whether a given
@@ -139,9 +103,9 @@ public:
      *
      * @update  gess 3/25/98
      * @param   aTag -- tag to test for containership
-     * @return  PR_TRUE if given tag can contain other tags
+     * @return  true if given tag can contain other tags
      */
-    NS_IMETHOD_(PRBool) IsContainer(PRInt32 aTag) const = 0;
+    NS_IMETHOD_(bool) IsContainer(int32_t aTag) const = 0;
 
     /**
      * Use this id you want to stop the building content model
@@ -155,7 +119,7 @@ public:
      */
     NS_IMETHOD_(void) Terminate() = 0;
 
-    NS_IMETHOD_(PRInt32) GetType() = 0;
+    NS_IMETHOD_(int32_t) GetType() = 0;
 
     /**
      * Call this method after calling WillBuildModel to determine what mode the
@@ -169,10 +133,10 @@ NS_DEFINE_STATIC_IID_ACCESSOR(nsIDTD, NS_IDTD_IID)
 #define NS_DECL_NSIDTD \
     NS_IMETHOD WillBuildModel(  const CParserContext& aParserContext, nsITokenizer* aTokenizer, nsIContentSink* aSink);\
     NS_IMETHOD DidBuildModel(nsresult anErrorCode);\
-    NS_IMETHOD BuildModel(nsITokenizer* aTokenizer, PRBool aCanInterrupt, PRBool aCountLines, const nsCString* aCharsetPtr);\
-    NS_IMETHOD_(PRBool) CanContain(PRInt32 aParent,PRInt32 aChild) const;\
-    NS_IMETHOD_(PRBool) IsContainer(PRInt32 aTag) const;\
+    NS_IMETHOD BuildModel(nsITokenizer* aTokenizer, bool aCountLines, const nsCString* aCharsetPtr);\
+    NS_IMETHOD_(bool) CanContain(int32_t aParent,int32_t aChild) const;\
+    NS_IMETHOD_(bool) IsContainer(int32_t aTag) const;\
     NS_IMETHOD_(void)  Terminate();\
-    NS_IMETHOD_(PRInt32) GetType();\
+    NS_IMETHOD_(int32_t) GetType();\
     NS_IMETHOD_(nsDTDMode) GetMode() const;
 #endif /* nsIDTD_h___ */

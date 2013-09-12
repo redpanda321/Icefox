@@ -4,7 +4,6 @@
 -->
 <head>
   <title>Test for copy/paste</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -15,6 +14,33 @@
 </div>
 <pre id="test">
 <script class="testbody" type="text/javascript">
+function modifySelection(s) {
+  var g = window.getSelection();
+  var l = g.getRangeAt(0);
+  var d = document.createElement("p");
+  d.innerHTML = s;
+  d.appendChild(l.cloneContents());
+
+  var e = document.createElement("div");
+  document.body.appendChild(e);
+  e.appendChild(d);
+  var a = document.createRange();
+  a.selectNode(d);
+  g.removeAllRanges();
+  g.addRange(a);
+  window.setTimeout(function () {
+      e.parentNode.removeChild(e);
+      g.removeAllRanges();
+      g.addRange(l);
+  }, 0)
+}
+
+function getLoadContext() {
+  var Ci = SpecialPowers.wrap(Components).interfaces;
+  return SpecialPowers.wrap(window).QueryInterface(Ci.nsIInterfaceRequestor)
+                                   .getInterface(Ci.nsIWebNavigation)
+                                   .QueryInterface(Ci.nsILoadContext);
+}
 
 function testCopyPaste () {
   netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
@@ -34,8 +60,8 @@ function testCopyPaste () {
 
   function copySelectionToClipboard() {
     documentViewer.copySelection();
-    is(clipboard.hasDataMatchingFlavors(["text/unicode"], 1,1), true);
-    is(clipboard.hasDataMatchingFlavors(["text/html"], 1,1), true);
+    ok(clipboard.hasDataMatchingFlavors(["text/unicode"], 1,1), "check text/unicode");
+    ok(clipboard.hasDataMatchingFlavors(["text/html"], 1,1), "check text/html");
   }
   function copyToClipboard(node) {
     textarea.blur();
@@ -67,6 +93,7 @@ function testCopyPaste () {
   function getClipboardData(mime) {
     var transferable = Components.classes['@mozilla.org/widget/transferable;1']
                                  .createInstance(Components.interfaces.nsITransferable);
+    transferable.init(getLoadContext());
     transferable.addDataFlavor(mime);
     clipboard.getData(transferable, 1);
     var data = {};
@@ -112,32 +139,32 @@ function testCopyPaste () {
   testPasteText("This is a draggable bit of text.");
 
   copyChildrenToClipboard("alist");
-  testSelectionToString("bla\n\n    foo\n    bar\n\n");
+  testSelectionToString(" bla\n\n    foo\n    bar\n\n");
   testClipboardValue("text/unicode", " bla\n\n    foo\n    bar\n\n");
   testClipboardValue("text/html", "<div id=\"alist\">\n    bla\n    <ul>\n      <li>foo</li>\n      \n      <li>bar</li>\n    </ul>\n  </div>");
   testPasteText(" bla\n\n    foo\n    bar\n\n");
 
   copyChildrenToClipboard("blist");
-  testSelectionToString("mozilla\n\n    foo\n    bar\n\n");
+  testSelectionToString(" mozilla\n\n    foo\n    bar\n\n");
   testClipboardValue("text/unicode", " mozilla\n\n    foo\n    bar\n\n");
   testClipboardValue("text/html", "<div id=\"blist\">\n    mozilla\n    <ol>\n      <li>foo</li>\n      \n      <li>bar</li>\n    </ol>\n  </div>");
   testPasteText(" mozilla\n\n    foo\n    bar\n\n");
 
   copyChildrenToClipboard("clist");
-  testSelectionToString("mzla\n\n    foo\n        bazzinga!\n    bar\n\n");
+  testSelectionToString(" mzla\n\n    foo\n        bazzinga!\n    bar\n\n");
   testClipboardValue("text/unicode", " mzla\n\n    foo\n        bazzinga!\n    bar\n\n");
   testClipboardValue("text/html", "<div id=\"clist\">\n    mzla\n    <ul>\n      <li>foo<ul>\n        <li>bazzinga!</li>\n      </ul></li>\n      \n      <li>bar</li>\n    </ul>\n  </div>");
   testPasteText(" mzla\n\n    foo\n        bazzinga!\n    bar\n\n");
 
   copyChildrenToClipboard("div4");
-  testSelectionToString("Tt t t ");
+  testSelectionToString(" Tt t t ");
   testClipboardValue("text/unicode", " Tt t t ");
   testClipboardValue("text/html", "<div id=\"div4\">\n  T<textarea>t t t</textarea>\n</div>");
   testInnerHTML("div4", "\n  T<textarea>t t t</textarea>\n");
   testPasteText(" Tt t t ");
 
   copyChildrenToClipboard("div5");
-  testSelectionToString("T ");
+  testSelectionToString(" T ");
   testClipboardValue("text/unicode", " T ");
   testClipboardValue("text/html", "<div id=\"div5\">\n  T<textarea>     </textarea>\n</div>");
   testInnerHTML("div5", "\n  T<textarea>     </textarea>\n");
@@ -204,7 +231,36 @@ if (false) {
   is(textarea.value, val);
   textarea.value="";
 
-  SimpleTest.finish();
+  // ============ NOSCRIPT should not be copied
+
+  copyChildrenToClipboard("div13");
+  testSelectionToString("__");
+  testClipboardValue("text/unicode", "__");
+  testClipboardValue("text/html", "<div id=\"div13\">__</div>");
+  testPasteText("__");
+
+  // ============ converting cell boundaries to tabs in tables
+
+  copyToClipboard($("tr1"));
+  testClipboardValue("text/unicode", "foo\tbar");
+
+  // ============ manipulating Selection in oncopy
+
+  copyRangeToClipboard($("div11").childNodes[0],0, $("div11").childNodes[1],2);
+  testClipboardValue("text/unicode", "Xdiv11");
+  testClipboardValue("text/html", "<div><p>X<span>div</span>11</p></div>");
+  setTimeout(function(){testSelectionToString("div11")},0);
+
+  setTimeout(function(){
+    netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
+    copyRangeToClipboard($("div12").childNodes[0],0, $("div12").childNodes[1],2);
+    testClipboardValue("text/unicode", "Xdiv12");
+    testClipboardValue("text/html", "<div><p>X<span>div</span>12</p></div>");
+    setTimeout(function(){ 
+      testSelectionToString("div12"); 
+      setTimeout(SimpleTest.finish,0);
+    },0);
+  },0);
 }
 
 
@@ -273,6 +329,12 @@ x.appendChild(document.createTextNode('div'))
 x.appendChild(document.createTextNode('10'))
 </script>
 
+<div id="div11" oncopy="modifySelection('X')"><span>div</span>11</div>
+<div id="div12" oncopy="modifySelection('X<b style=\'display:none\'>Y</b>')"><span>div</span>12</div>
+
+<div id="div13">_<noscript>FAIL</noscript>_</div>
+
+<table><tr id=tr1><td>foo</td><td>bar</td></tr></table>
 
 </div>
 </body>

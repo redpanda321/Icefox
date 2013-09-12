@@ -1,102 +1,25 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-#include "nsIDOMHTMLIFrameElement.h"
-#include "nsGenericHTMLElement.h"
-#include "nsIDOMDocument.h"
-#ifdef MOZ_SVG
-#include "nsIDOMGetSVGDocument.h"
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "mozilla/Util.h"
+
+#include "nsHTMLIFrameElement.h"
 #include "nsIDOMSVGDocument.h"
-#endif
-#include "nsGkAtoms.h"
-#include "nsIDocument.h"
 #include "nsMappedAttributes.h"
-#include "nsDOMError.h"
+#include "nsAttrValueInlines.h"
+#include "nsError.h"
 #include "nsRuleData.h"
 #include "nsStyleConsts.h"
 
-class nsHTMLIFrameElement : public nsGenericHTMLFrameElement,
-                            public nsIDOMHTMLIFrameElement
-#ifdef MOZ_SVG
-                            , public nsIDOMGetSVGDocument
-#endif
-{
-public:
-  nsHTMLIFrameElement(already_AddRefed<nsINodeInfo> aNodeInfo,
-                      PRUint32 aFromParser = NS_NOT_FROM_PARSER);
-  virtual ~nsHTMLIFrameElement();
-
-  // nsISupports
-  NS_DECL_ISUPPORTS_INHERITED
-
-  // nsIDOMNode
-  NS_FORWARD_NSIDOMNODE(nsGenericHTMLFrameElement::)
-
-  // nsIDOMElement
-  NS_FORWARD_NSIDOMELEMENT(nsGenericHTMLFrameElement::)
-
-  // nsIDOMHTMLElement
-  NS_FORWARD_NSIDOMHTMLELEMENT(nsGenericHTMLFrameElement::)
-
-  // nsIDOMHTMLIFrameElement
-  NS_DECL_NSIDOMHTMLIFRAMEELEMENT
-
-#ifdef MOZ_SVG
-  // nsIDOMGetSVGDocument
-  NS_DECL_NSIDOMGETSVGDOCUMENT
-#endif
-
-  // nsIContent
-  virtual PRBool ParseAttribute(PRInt32 aNamespaceID,
-                                nsIAtom* aAttribute,
-                                const nsAString& aValue,
-                                nsAttrValue& aResult);
-  NS_IMETHOD_(PRBool) IsAttributeMapped(const nsIAtom* aAttribute) const;
-  virtual nsMapRuleToAttributesFunc GetAttributeMappingFunction() const;
-
-  virtual nsresult Clone(nsINodeInfo *aNodeInfo, nsINode **aResult) const;
-  virtual nsXPCClassInfo* GetClassInfo();
-};
-
+using namespace mozilla;
+using namespace mozilla::dom;
 
 NS_IMPL_NS_NEW_HTML_ELEMENT_CHECK_PARSER(IFrame)
 
-
 nsHTMLIFrameElement::nsHTMLIFrameElement(already_AddRefed<nsINodeInfo> aNodeInfo,
-                                         PRUint32 aFromParser)
+                                         FromParser aFromParser)
   : nsGenericHTMLFrameElement(aNodeInfo, aFromParser)
 {
 }
@@ -105,9 +28,8 @@ nsHTMLIFrameElement::~nsHTMLIFrameElement()
 {
 }
 
-
-NS_IMPL_ADDREF_INHERITED(nsHTMLIFrameElement,nsGenericElement)
-NS_IMPL_RELEASE_INHERITED(nsHTMLIFrameElement,nsGenericElement)
+NS_IMPL_ADDREF_INHERITED(nsHTMLIFrameElement, Element)
+NS_IMPL_RELEASE_INHERITED(nsHTMLIFrameElement, Element)
 
 DOMCI_NODE_DATA(HTMLIFrameElement, nsHTMLIFrameElement)
 
@@ -115,17 +37,13 @@ DOMCI_NODE_DATA(HTMLIFrameElement, nsHTMLIFrameElement)
 NS_INTERFACE_TABLE_HEAD(nsHTMLIFrameElement)
   NS_HTML_CONTENT_INTERFACE_TABLE_BEGIN(nsHTMLIFrameElement)
     NS_INTERFACE_TABLE_ENTRY(nsHTMLIFrameElement, nsIDOMHTMLIFrameElement)
-#ifdef MOZ_SVG
     NS_INTERFACE_TABLE_ENTRY(nsHTMLIFrameElement, nsIDOMGetSVGDocument)
-#endif
   NS_OFFSET_AND_INTERFACE_TABLE_END
   NS_HTML_CONTENT_INTERFACE_TABLE_TO_MAP_SEGUE(nsHTMLIFrameElement,
                                                nsGenericHTMLFrameElement)
 NS_HTML_CONTENT_INTERFACE_TABLE_TAIL_CLASSINFO(HTMLIFrameElement)
 
-
 NS_IMPL_ELEMENT_CLONE(nsHTMLIFrameElement)
-
 
 NS_IMPL_STRING_ATTR(nsHTMLIFrameElement, Align, align)
 NS_IMPL_STRING_ATTR(nsHTMLIFrameElement, FrameBorder, frameborder)
@@ -137,6 +55,20 @@ NS_IMPL_STRING_ATTR(nsHTMLIFrameElement, Name, name)
 NS_IMPL_STRING_ATTR(nsHTMLIFrameElement, Scrolling, scrolling)
 NS_IMPL_URI_ATTR(nsHTMLIFrameElement, Src, src)
 NS_IMPL_STRING_ATTR(nsHTMLIFrameElement, Width, width)
+NS_IMPL_BOOL_ATTR(nsHTMLIFrameElement, Allowfullscreen, allowfullscreen)
+NS_IMPL_STRING_ATTR(nsHTMLIFrameElement, Sandbox, sandbox)
+
+void
+nsHTMLIFrameElement::GetItemValueText(nsAString& aValue)
+{
+  GetSrc(aValue);
+}
+
+void
+nsHTMLIFrameElement::SetItemValueText(const nsAString& aValue)
+{
+  SetSrc(aValue);
+}
 
 NS_IMETHODIMP
 nsHTMLIFrameElement::GetContentDocument(nsIDOMDocument** aContentDocument)
@@ -144,32 +76,36 @@ nsHTMLIFrameElement::GetContentDocument(nsIDOMDocument** aContentDocument)
   return nsGenericHTMLFrameElement::GetContentDocument(aContentDocument);
 }
 
-#ifdef MOZ_SVG
+NS_IMETHODIMP
+nsHTMLIFrameElement::GetContentWindow(nsIDOMWindow** aContentWindow)
+{
+  return nsGenericHTMLFrameElement::GetContentWindow(aContentWindow);
+}
+
 NS_IMETHODIMP
 nsHTMLIFrameElement::GetSVGDocument(nsIDOMDocument **aResult)
 {
   return GetContentDocument(aResult);
 }
-#endif
 
-PRBool
-nsHTMLIFrameElement::ParseAttribute(PRInt32 aNamespaceID,
+bool
+nsHTMLIFrameElement::ParseAttribute(int32_t aNamespaceID,
                                     nsIAtom* aAttribute,
                                     const nsAString& aValue,
                                     nsAttrValue& aResult)
 {
   if (aNamespaceID == kNameSpaceID_None) {
     if (aAttribute == nsGkAtoms::marginwidth) {
-      return aResult.ParseSpecialIntValue(aValue, PR_TRUE);
+      return aResult.ParseSpecialIntValue(aValue);
     }
     if (aAttribute == nsGkAtoms::marginheight) {
-      return aResult.ParseSpecialIntValue(aValue, PR_TRUE);
+      return aResult.ParseSpecialIntValue(aValue);
     }
     if (aAttribute == nsGkAtoms::width) {
-      return aResult.ParseSpecialIntValue(aValue, PR_TRUE);
+      return aResult.ParseSpecialIntValue(aValue);
     }
     if (aAttribute == nsGkAtoms::height) {
-      return aResult.ParseSpecialIntValue(aValue, PR_TRUE);
+      return aResult.ParseSpecialIntValue(aValue);
     }
     if (aAttribute == nsGkAtoms::frameborder) {
       return ParseFrameborderValue(aValue, aResult);
@@ -196,38 +132,44 @@ MapAttributesIntoRule(const nsMappedAttributes* aAttributes,
     // else leave it as the value set in html.css
     const nsAttrValue* value = aAttributes->GetAttr(nsGkAtoms::frameborder);
     if (value && value->Type() == nsAttrValue::eEnum) {
-      PRInt32 frameborder = value->GetEnumValue();
+      int32_t frameborder = value->GetEnumValue();
       if (NS_STYLE_FRAME_0 == frameborder ||
           NS_STYLE_FRAME_NO == frameborder ||
           NS_STYLE_FRAME_OFF == frameborder) {
-        if (aData->mMarginData->mBorderWidth.mLeft.GetUnit() == eCSSUnit_Null)
-          aData->mMarginData->mBorderWidth.mLeft.SetFloatValue(0.0f, eCSSUnit_Pixel);
-        if (aData->mMarginData->mBorderWidth.mRight.GetUnit() == eCSSUnit_Null)
-          aData->mMarginData->mBorderWidth.mRight.SetFloatValue(0.0f, eCSSUnit_Pixel);
-        if (aData->mMarginData->mBorderWidth.mTop.GetUnit() == eCSSUnit_Null)
-          aData->mMarginData->mBorderWidth.mTop.SetFloatValue(0.0f, eCSSUnit_Pixel);
-        if (aData->mMarginData->mBorderWidth.mBottom.GetUnit() == eCSSUnit_Null)
-          aData->mMarginData->mBorderWidth.mBottom.SetFloatValue(0.0f, eCSSUnit_Pixel);
+        nsCSSValue* borderLeftWidth = aData->ValueForBorderLeftWidthValue();
+        if (borderLeftWidth->GetUnit() == eCSSUnit_Null)
+          borderLeftWidth->SetFloatValue(0.0f, eCSSUnit_Pixel);
+        nsCSSValue* borderRightWidth = aData->ValueForBorderRightWidthValue();
+        if (borderRightWidth->GetUnit() == eCSSUnit_Null)
+          borderRightWidth->SetFloatValue(0.0f, eCSSUnit_Pixel);
+        nsCSSValue* borderTopWidth = aData->ValueForBorderTopWidth();
+        if (borderTopWidth->GetUnit() == eCSSUnit_Null)
+          borderTopWidth->SetFloatValue(0.0f, eCSSUnit_Pixel);
+        nsCSSValue* borderBottomWidth = aData->ValueForBorderBottomWidth();
+        if (borderBottomWidth->GetUnit() == eCSSUnit_Null)
+          borderBottomWidth->SetFloatValue(0.0f, eCSSUnit_Pixel);
       }
     }
   }
   if (aData->mSIDs & NS_STYLE_INHERIT_BIT(Position)) {
     // width: value
-    if (aData->mPositionData->mWidth.GetUnit() == eCSSUnit_Null) {
+    nsCSSValue* width = aData->ValueForWidth();
+    if (width->GetUnit() == eCSSUnit_Null) {
       const nsAttrValue* value = aAttributes->GetAttr(nsGkAtoms::width);
       if (value && value->Type() == nsAttrValue::eInteger)
-        aData->mPositionData->mWidth.SetFloatValue((float)value->GetIntegerValue(), eCSSUnit_Pixel);
+        width->SetFloatValue((float)value->GetIntegerValue(), eCSSUnit_Pixel);
       else if (value && value->Type() == nsAttrValue::ePercent)
-        aData->mPositionData->mWidth.SetPercentValue(value->GetPercentValue());
+        width->SetPercentValue(value->GetPercentValue());
     }
 
     // height: value
-    if (aData->mPositionData->mHeight.GetUnit() == eCSSUnit_Null) {
+    nsCSSValue* height = aData->ValueForHeight();
+    if (height->GetUnit() == eCSSUnit_Null) {
       const nsAttrValue* value = aAttributes->GetAttr(nsGkAtoms::height);
       if (value && value->Type() == nsAttrValue::eInteger)
-        aData->mPositionData->mHeight.SetFloatValue((float)value->GetIntegerValue(), eCSSUnit_Pixel);
+        height->SetFloatValue((float)value->GetIntegerValue(), eCSSUnit_Pixel);
       else if (value && value->Type() == nsAttrValue::ePercent)
-        aData->mPositionData->mHeight.SetPercentValue(value->GetPercentValue());
+        height->SetPercentValue(value->GetPercentValue());
     }
   }
 
@@ -236,14 +178,14 @@ MapAttributesIntoRule(const nsMappedAttributes* aAttributes,
   nsGenericHTMLElement::MapCommonAttributesInto(aAttributes, aData);
 }
 
-NS_IMETHODIMP_(PRBool)
+NS_IMETHODIMP_(bool)
 nsHTMLIFrameElement::IsAttributeMapped(const nsIAtom* aAttribute) const
 {
   static const MappedAttributeEntry attributes[] = {
     { &nsGkAtoms::width },
     { &nsGkAtoms::height },
     { &nsGkAtoms::frameborder },
-    { nsnull },
+    { nullptr },
   };
 
   static const MappedAttributeEntry* const map[] = {
@@ -253,7 +195,7 @@ nsHTMLIFrameElement::IsAttributeMapped(const nsIAtom* aAttribute) const
     sCommonAttributeMap,
   };
   
-  return FindAttributeDependence(aAttribute, map, NS_ARRAY_LENGTH(map));
+  return FindAttributeDependence(aAttribute, map);
 }
 
 
@@ -264,3 +206,32 @@ nsHTMLIFrameElement::GetAttributeMappingFunction() const
   return &MapAttributesIntoRule;
 }
 
+nsresult
+nsHTMLIFrameElement::AfterSetAttr(int32_t aNameSpaceID, nsIAtom* aName,
+                                  const nsAttrValue* aValue,
+                                  bool aNotify)
+{
+  if (aName == nsGkAtoms::sandbox && aNameSpaceID == kNameSpaceID_None) {
+    // Parse the new value of the sandbox attribute, and if we have a docshell
+    // set its sandbox flags appropriately.
+    if (mFrameLoader) {
+      nsCOMPtr<nsIDocShell> docshell = mFrameLoader->GetExistingDocShell();
+
+      if (docshell) {
+        uint32_t newFlags = 0;
+        // If a NULL aValue is passed in, we want to clear the sandbox flags
+        // which we will do by setting them to 0.
+        if (aValue) {
+          nsAutoString strValue;
+          aValue->ToString(strValue);
+          newFlags = nsContentUtils::ParseSandboxAttributeToFlags(
+            strValue);
+        }   
+        docshell->SetSandboxFlags(newFlags);
+      }
+    }
+  }
+  return nsGenericHTMLElement::AfterSetAttr(aNameSpaceID, aName, aValue,
+                                            aNotify);
+
+}

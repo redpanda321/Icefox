@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #ifndef nsEditorUtils_h__
@@ -41,15 +9,18 @@
 
 
 #include "nsCOMPtr.h"
-#include "nsIDOMNode.h"
-#include "nsISelection.h"
-#include "nsIEditor.h"
-#include "nsIAtom.h"
+#include "nsDebug.h"
 #include "nsEditor.h"
-#include "nsIContentIterator.h"
-#include "nsCOMArray.h"
+#include "nsIDOMNode.h"
+#include "nsIEditor.h"
+#include "nscore.h"
 
-class nsPlaintextEditor;
+class nsIAtom;
+class nsIContentIterator;
+class nsIDOMDocument;
+class nsIDOMRange;
+class nsISelection;
+template <class E> class nsCOMArray;
 
 /***************************************************************************
  * stack based helper class for batching a collection of txns inside a 
@@ -73,7 +44,7 @@ class NS_STACK_CLASS nsAutoPlaceHolderBatch
 class nsAutoEditBatch : public nsAutoPlaceHolderBatch
 {
   public:
-    nsAutoEditBatch( nsIEditor *aEd) : nsAutoPlaceHolderBatch(aEd,nsnull)  {}
+    nsAutoEditBatch( nsIEditor *aEd) : nsAutoPlaceHolderBatch(aEd,nullptr)  {}
     ~nsAutoEditBatch() {}
 };
 
@@ -85,12 +56,12 @@ class NS_STACK_CLASS nsAutoSelectionReset
 {
   private:
     /** ref-counted reference to the selection that we are supposed to restore */
-    nsCOMPtr<nsISelection> mSel;
+    nsRefPtr<mozilla::Selection> mSel;
     nsEditor *mEd;  // non-owning ref to nsEditor
 
   public:
     /** constructor responsible for remembering all state needed to restore aSel */
-    nsAutoSelectionReset(nsISelection *aSel, nsEditor *aEd);
+    nsAutoSelectionReset(mozilla::Selection* aSel, nsEditor* aEd);
     
     /** destructor restores mSel to its former state */
     ~nsAutoSelectionReset();
@@ -106,14 +77,15 @@ class NS_STACK_CLASS nsAutoRules
 {
   public:
   
-  nsAutoRules(nsEditor *ed, PRInt32 action, nsIEditor::EDirection aDirection) : 
-         mEd(ed), mDoNothing(PR_FALSE)
+  nsAutoRules(nsEditor *ed, EditAction action,
+              nsIEditor::EDirection aDirection) :
+         mEd(ed), mDoNothing(false)
   { 
     if (mEd && !mEd->mAction) // mAction will already be set if this is nested call
     {
       mEd->StartOperation(action, aDirection);
     }
-    else mDoNothing = PR_TRUE; // nested calls will end up here
+    else mDoNothing = true; // nested calls will end up here
   }
   ~nsAutoRules() 
   {
@@ -125,7 +97,7 @@ class NS_STACK_CLASS nsAutoRules
   
   protected:
   nsEditor *mEd;
-  PRBool mDoNothing;
+  bool mDoNothing;
 };
 
 
@@ -137,12 +109,12 @@ class NS_STACK_CLASS nsAutoTxnsConserveSelection
 {
   public:
   
-  nsAutoTxnsConserveSelection(nsEditor *ed) : mEd(ed), mOldState(PR_TRUE)
+  nsAutoTxnsConserveSelection(nsEditor *ed) : mEd(ed), mOldState(true)
   {
     if (mEd) 
     {
       mOldState = mEd->GetShouldTxnSetSelection();
-      mEd->SetShouldTxnSetSelection(PR_FALSE);
+      mEd->SetShouldTxnSetSelection(false);
     }
   }
   
@@ -156,7 +128,7 @@ class NS_STACK_CLASS nsAutoTxnsConserveSelection
   
   protected:
   nsEditor *mEd;
-  PRBool mOldState;
+  bool mOldState;
 };
 
 /***************************************************************************
@@ -188,16 +160,10 @@ class NS_STACK_CLASS nsAutoUpdateViewBatch
  * some helper classes for iterating the dom tree
  *****************************************************************************/
 
-class nsDomIterFunctor 
-{
-  public:
-    virtual void* operator()(nsIDOMNode* aNode)=0;
-};
-
 class nsBoolDomIterFunctor 
 {
   public:
-    virtual PRBool operator()(nsIDOMNode* aNode)=0;
+    virtual bool operator()(nsIDOMNode* aNode)=0;
 };
 
 class NS_STACK_CLASS nsDOMIterator
@@ -208,7 +174,6 @@ class NS_STACK_CLASS nsDOMIterator
     
     nsresult Init(nsIDOMRange* aRange);
     nsresult Init(nsIDOMNode* aNode);
-    void ForEach(nsDomIterFunctor& functor) const;
     nsresult AppendList(nsBoolDomIterFunctor& functor,
                         nsCOMArray<nsIDOMNode>& arrayOfNodes) const;
   protected:
@@ -222,15 +187,14 @@ class nsDOMSubtreeIterator : public nsDOMIterator
     virtual ~nsDOMSubtreeIterator();
 
     nsresult Init(nsIDOMRange* aRange);
-    nsresult Init(nsIDOMNode* aNode);
 };
 
 class nsTrivialFunctor : public nsBoolDomIterFunctor
 {
   public:
-    virtual PRBool operator()(nsIDOMNode* aNode)  // used to build list of all nodes iterator covers
+    virtual bool operator()(nsIDOMNode* aNode)  // used to build list of all nodes iterator covers
     {
-      return PR_TRUE;
+      return true;
     }
 };
 
@@ -241,16 +205,16 @@ class nsTrivialFunctor : public nsBoolDomIterFunctor
 struct NS_STACK_CLASS DOMPoint
 {
   nsCOMPtr<nsIDOMNode> node;
-  PRInt32 offset;
+  int32_t offset;
   
   DOMPoint() : node(0),offset(0) {}
-  DOMPoint(nsIDOMNode *aNode, PRInt32 aOffset) : 
+  DOMPoint(nsIDOMNode *aNode, int32_t aOffset) : 
                  node(aNode),offset(aOffset) {}
-  void SetPoint(nsIDOMNode *aNode, PRInt32 aOffset)
+  void SetPoint(nsIDOMNode *aNode, int32_t aOffset)
   {
     node = aNode; offset = aOffset;
   }
-  void GetPoint(nsCOMPtr<nsIDOMNode> &aNode, PRInt32 &aOffset)
+  void GetPoint(nsCOMPtr<nsIDOMNode> &aNode, int32_t &aOffset)
   {
     aNode = node; aOffset = offset;
   }
@@ -260,20 +224,19 @@ struct NS_STACK_CLASS DOMPoint
 class nsEditorUtils
 {
   public:
-    static PRBool IsDescendantOf(nsIDOMNode *aNode, nsIDOMNode *aParent, PRInt32 *aOffset = 0);
-    static PRBool IsLeafNode(nsIDOMNode *aNode);
+    static bool IsDescendantOf(nsIDOMNode *aNode, nsIDOMNode *aParent, int32_t *aOffset = 0);
+    static bool IsLeafNode(nsIDOMNode *aNode);
 };
 
 
-class nsIDragSession;
-class nsITransferable;
 class nsIDOMEvent;
 class nsISimpleEnumerator;
+class nsITransferable;
 
 class nsEditorHookUtils
 {
   public:
-    static PRBool   DoInsertionHook(nsIDOMDocument *aDoc, nsIDOMEvent *aEvent,
+    static bool     DoInsertionHook(nsIDOMDocument *aDoc, nsIDOMEvent *aEvent,
                                     nsITransferable *aTrans);
   private:
     static nsresult GetHookEnumeratorFromDocument(nsIDOMDocument *aDoc,

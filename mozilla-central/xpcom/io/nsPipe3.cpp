@@ -1,59 +1,37 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include "mozilla/Attributes.h"
+#include "mozilla/ReentrantMonitor.h"
 #include "nsIPipe.h"
 #include "nsIEventTarget.h"
 #include "nsISeekableStream.h"
 #include "nsIProgrammingLanguage.h"
 #include "nsSegmentedBuffer.h"
 #include "nsStreamUtils.h"
-#include "nsAutoLock.h"
 #include "nsCOMPtr.h"
 #include "nsCRT.h"
 #include "prlog.h"
-#include "nsInt64.h"
 #include "nsIClassInfoImpl.h"
+#include "nsAtomicRefcnt.h"
+#include "nsAlgorithm.h"
+
+using namespace mozilla;
 
 #if defined(PR_LOGGING)
 //
 // set NSPR_LOG_MODULES=nsPipe:5
 //
-static PRLogModuleInfo *gPipeLog = PR_NewLogModule("nsPipe");
-#define LOG(args) PR_LOG(gPipeLog, PR_LOG_DEBUG, args)
+static PRLogModuleInfo *
+GetPipeLog()
+{
+  static PRLogModuleInfo *sLog;
+  if (!sLog)
+    sLog = PR_NewLogModule("nsPipe");
+  return sLog;
+}
+#define LOG(args) PR_LOG(GetPipeLog(), PR_LOG_DEBUG, args)
 #else
 #define LOG(args)
 #endif
@@ -126,39 +104,39 @@ public:
         : mPipe(pipe)
         , mReaderRefCnt(0)
         , mLogicalOffset(0)
-        , mBlocking(PR_TRUE)
-        , mBlocked(PR_FALSE)
+        , mBlocking(true)
+        , mBlocked(false)
         , mAvailable(0)
         , mCallbackFlags(0)
         { }
 
     nsresult Fill();
-    void SetNonBlocking(PRBool aNonBlocking) { mBlocking = !aNonBlocking; }
+    void SetNonBlocking(bool aNonBlocking) { mBlocking = !aNonBlocking; }
 
-    PRUint32 Available() { return mAvailable; }
-    void     ReduceAvailable(PRUint32 avail) { mAvailable -= avail; }
+    uint32_t Available() { return mAvailable; }
+    void     ReduceAvailable(uint32_t avail) { mAvailable -= avail; }
 
     // synchronously wait for the pipe to become readable.
     nsresult Wait();
 
     // these functions return true to indicate that the pipe's monitor should
     // be notified, to wake up a blocked reader if any.
-    PRBool   OnInputReadable(PRUint32 bytesWritten, nsPipeEvents &);
-    PRBool   OnInputException(nsresult, nsPipeEvents &);
+    bool     OnInputReadable(uint32_t bytesWritten, nsPipeEvents &);
+    bool     OnInputException(nsresult, nsPipeEvents &);
 
 private:
     nsPipe                        *mPipe;
 
     // separate refcnt so that we know when to close the consumer
     nsrefcnt                       mReaderRefCnt;
-    nsInt64                        mLogicalOffset;
-    PRPackedBool                   mBlocking;
+    int64_t                        mLogicalOffset;
+    bool                           mBlocking;
 
     // these variables can only be accessed while inside the pipe's monitor
-    PRPackedBool                   mBlocked;
-    PRUint32                       mAvailable;
+    bool                           mBlocked;
+    uint32_t                       mAvailable;
     nsCOMPtr<nsIInputStreamCallback> mCallback;
-    PRUint32                       mCallbackFlags;
+    uint32_t                       mCallbackFlags;
 };
 
 //-----------------------------------------------------------------------------
@@ -183,41 +161,41 @@ public:
         : mPipe(pipe)
         , mWriterRefCnt(0)
         , mLogicalOffset(0)
-        , mBlocking(PR_TRUE)
-        , mBlocked(PR_FALSE)
-        , mWritable(PR_TRUE)
+        , mBlocking(true)
+        , mBlocked(false)
+        , mWritable(true)
         , mCallbackFlags(0)
         { }
 
-    void SetNonBlocking(PRBool aNonBlocking) { mBlocking = !aNonBlocking; }
-    void SetWritable(PRBool writable) { mWritable = writable; }
+    void SetNonBlocking(bool aNonBlocking) { mBlocking = !aNonBlocking; }
+    void SetWritable(bool writable) { mWritable = writable; }
 
     // synchronously wait for the pipe to become writable.
     nsresult Wait();
 
     // these functions return true to indicate that the pipe's monitor should
     // be notified, to wake up a blocked writer if any.
-    PRBool   OnOutputWritable(nsPipeEvents &);
-    PRBool   OnOutputException(nsresult, nsPipeEvents &);
+    bool     OnOutputWritable(nsPipeEvents &);
+    bool     OnOutputException(nsresult, nsPipeEvents &);
 
 private:
     nsPipe                         *mPipe;
 
     // separate refcnt so that we know when to close the producer
     nsrefcnt                        mWriterRefCnt;
-    nsInt64                         mLogicalOffset;
-    PRPackedBool                    mBlocking;
+    int64_t                         mLogicalOffset;
+    bool                            mBlocking;
 
     // these variables can only be accessed while inside the pipe's monitor
-    PRPackedBool                    mBlocked;
-    PRPackedBool                    mWritable;
+    bool                            mBlocked;
+    bool                            mWritable;
     nsCOMPtr<nsIOutputStreamCallback> mCallback;
-    PRUint32                        mCallbackFlags;
+    uint32_t                        mCallbackFlags;
 };
 
 //-----------------------------------------------------------------------------
 
-class nsPipe : public nsIPipe
+class nsPipe MOZ_FINAL : public nsIPipe
 {
 public:
     friend class nsPipeInputStream;
@@ -237,19 +215,19 @@ public:
     // methods below may only be called while inside the pipe's monitor
     //
 
-    void PeekSegment(PRUint32 n, char *&cursor, char *&limit);
+    void PeekSegment(uint32_t n, char *&cursor, char *&limit);
 
     //
     // methods below may be called while outside the pipe's monitor
     //
  
-    nsresult GetReadSegment(const char *&segment, PRUint32 &segmentLen);
-    void     AdvanceReadCursor(PRUint32 count);
+    nsresult GetReadSegment(const char *&segment, uint32_t &segmentLen);
+    void     AdvanceReadCursor(uint32_t count);
 
-    nsresult GetWriteSegment(char *&segment, PRUint32 &segmentLen);
-    void     AdvanceWriteCursor(PRUint32 count);
+    nsresult GetWriteSegment(char *&segment, uint32_t &segmentLen);
+    void     AdvanceWriteCursor(uint32_t count);
 
-    void     OnPipeException(nsresult reason, PRBool outputOnly = PR_FALSE);
+    void     OnPipeException(nsresult reason, bool outputOnly = false);
 
 protected:
     // We can't inherit from both nsIInputStream and nsIOutputStream
@@ -258,17 +236,18 @@ protected:
     nsPipeInputStream   mInput;
     nsPipeOutputStream  mOutput;
 
-    PRMonitor*          mMonitor;
+    ReentrantMonitor    mReentrantMonitor;
     nsSegmentedBuffer   mBuffer;
 
     char*               mReadCursor;
     char*               mReadLimit;
 
-    PRInt32             mWriteSegment;
+    int32_t             mWriteSegment;
     char*               mWriteCursor;
     char*               mWriteLimit;
 
     nsresult            mStatus;
+    bool                mInited;
 };
 
 //
@@ -317,34 +296,31 @@ protected:
 nsPipe::nsPipe()
     : mInput(this)
     , mOutput(this)
-    , mMonitor(nsnull)
-    , mReadCursor(nsnull)
-    , mReadLimit(nsnull)
+    , mReentrantMonitor("nsPipe.mReentrantMonitor")
+    , mReadCursor(nullptr)
+    , mReadLimit(nullptr)
     , mWriteSegment(-1)
-    , mWriteCursor(nsnull)
-    , mWriteLimit(nsnull)
+    , mWriteCursor(nullptr)
+    , mWriteLimit(nullptr)
     , mStatus(NS_OK)
+    , mInited(false)
 {
 }
 
 nsPipe::~nsPipe()
 {
-    if (mMonitor)
-        nsAutoMonitor::DestroyMonitor(mMonitor);
 }
 
 NS_IMPL_THREADSAFE_ISUPPORTS1(nsPipe, nsIPipe)
 
 NS_IMETHODIMP
-nsPipe::Init(PRBool nonBlockingIn,
-             PRBool nonBlockingOut,
-             PRUint32 segmentSize,
-             PRUint32 segmentCount,
+nsPipe::Init(bool nonBlockingIn,
+             bool nonBlockingOut,
+             uint32_t segmentSize,
+             uint32_t segmentCount,
              nsIMemory *segmentAlloc)
 {
-    mMonitor = nsAutoMonitor::NewMonitor("pipeMonitor");
-    if (!mMonitor)
-        return NS_ERROR_OUT_OF_MEMORY;
+    mInited = true;
 
     if (segmentSize == 0)
         segmentSize = DEFAULT_SEGMENT_SIZE;
@@ -352,7 +328,7 @@ nsPipe::Init(PRBool nonBlockingIn,
         segmentCount = DEFAULT_SEGMENT_COUNT;
 
     // protect against overflow
-    PRUint32 maxCount = PRUint32(-1) / segmentSize;
+    uint32_t maxCount = uint32_t(-1) / segmentSize;
     if (segmentCount > maxCount)
         segmentCount = maxCount;
 
@@ -368,7 +344,6 @@ nsPipe::Init(PRBool nonBlockingIn,
 NS_IMETHODIMP
 nsPipe::GetInputStream(nsIAsyncInputStream **aInputStream)
 {
-    NS_ENSURE_TRUE(mMonitor, NS_ERROR_NOT_INITIALIZED);
     NS_ADDREF(*aInputStream = &mInput);
     return NS_OK;
 }
@@ -376,13 +351,13 @@ nsPipe::GetInputStream(nsIAsyncInputStream **aInputStream)
 NS_IMETHODIMP
 nsPipe::GetOutputStream(nsIAsyncOutputStream **aOutputStream)
 {
-    NS_ENSURE_TRUE(mMonitor, NS_ERROR_NOT_INITIALIZED);
+    NS_ENSURE_TRUE(mInited, NS_ERROR_NOT_INITIALIZED);
     NS_ADDREF(*aOutputStream = &mOutput);
     return NS_OK;
 }
 
 void
-nsPipe::PeekSegment(PRUint32 index, char *&cursor, char *&limit)
+nsPipe::PeekSegment(uint32_t index, char *&cursor, char *&limit)
 {
     if (index == 0) {
         NS_ASSERTION(!mReadCursor || mBuffer.GetSegmentCount(), "unexpected state");
@@ -390,12 +365,12 @@ nsPipe::PeekSegment(PRUint32 index, char *&cursor, char *&limit)
         limit = mReadLimit;
     }
     else {
-        PRUint32 numSegments = mBuffer.GetSegmentCount();
+        uint32_t numSegments = mBuffer.GetSegmentCount();
         if (index >= numSegments)
-            cursor = limit = nsnull;
+            cursor = limit = nullptr;
         else {
             cursor = mBuffer.GetSegment(index);
-            if (mWriteSegment == (PRInt32) index)
+            if (mWriteSegment == (int32_t) index)
                 limit = mWriteCursor;
             else
                 limit = cursor + mBuffer.GetSegmentSize();
@@ -404,9 +379,9 @@ nsPipe::PeekSegment(PRUint32 index, char *&cursor, char *&limit)
 }
 
 nsresult
-nsPipe::GetReadSegment(const char *&segment, PRUint32 &segmentLen)
+nsPipe::GetReadSegment(const char *&segment, uint32_t &segmentLen)
 {
-    nsAutoMonitor mon(mMonitor);
+    ReentrantMonitorAutoEnter mon(mReentrantMonitor);
 
     if (mReadCursor == mReadLimit)
         return NS_FAILED(mStatus) ? mStatus : NS_BASE_STREAM_WOULD_BLOCK;
@@ -417,13 +392,13 @@ nsPipe::GetReadSegment(const char *&segment, PRUint32 &segmentLen)
 }
 
 void
-nsPipe::AdvanceReadCursor(PRUint32 bytesRead)
+nsPipe::AdvanceReadCursor(uint32_t bytesRead)
 {
     NS_ASSERTION(bytesRead, "don't call if no bytes read");
 
     nsPipeEvents events;
     {
-        nsAutoMonitor mon(mMonitor);
+        ReentrantMonitorAutoEnter mon(mReentrantMonitor);
 
         LOG(("III advancing read cursor by %u\n", bytesRead));
         NS_ASSERTION(bytesRead <= mBuffer.GetSegmentSize(), "read too much");
@@ -453,10 +428,10 @@ nsPipe::AdvanceReadCursor(PRUint32 bytesRead)
 
             if (mWriteSegment == -1) {
                 // buffer is completely empty
-                mReadCursor = nsnull;
-                mReadLimit = nsnull;
-                mWriteCursor = nsnull;
-                mWriteLimit = nsnull;
+                mReadCursor = nullptr;
+                mReadLimit = nullptr;
+                mWriteCursor = nullptr;
+                mWriteLimit = nullptr;
             }
             else {
                 // advance read cursor and limit to next buffer segment
@@ -476,9 +451,9 @@ nsPipe::AdvanceReadCursor(PRUint32 bytesRead)
 }
 
 nsresult
-nsPipe::GetWriteSegment(char *&segment, PRUint32 &segmentLen)
+nsPipe::GetWriteSegment(char *&segment, uint32_t &segmentLen)
 {
-    nsAutoMonitor mon(mMonitor);
+    ReentrantMonitorAutoEnter mon(mReentrantMonitor);
 
     if (NS_FAILED(mStatus))
         return mStatus;
@@ -487,7 +462,7 @@ nsPipe::GetWriteSegment(char *&segment, PRUint32 &segmentLen)
     if (mWriteCursor == mWriteLimit) {
         char *seg = mBuffer.AppendNewSegment();
         // pipe is full
-        if (seg == nsnull)
+        if (seg == nullptr)
             return NS_BASE_STREAM_WOULD_BLOCK;
         LOG(("OOO appended new segment\n"));
         mWriteCursor = seg;
@@ -496,7 +471,7 @@ nsPipe::GetWriteSegment(char *&segment, PRUint32 &segmentLen)
     }
 
     // make sure read cursor is initialized
-    if (mReadCursor == nsnull) {
+    if (mReadCursor == nullptr) {
         NS_ASSERTION(mWriteSegment == 0, "unexpected null read cursor");
         mReadCursor = mReadLimit = mWriteCursor;
     }
@@ -515,13 +490,13 @@ nsPipe::GetWriteSegment(char *&segment, PRUint32 &segmentLen)
 }
 
 void
-nsPipe::AdvanceWriteCursor(PRUint32 bytesWritten)
+nsPipe::AdvanceWriteCursor(uint32_t bytesWritten)
 {
     NS_ASSERTION(bytesWritten, "don't call if no bytes written");
 
     nsPipeEvents events;
     {
-        nsAutoMonitor mon(mMonitor);
+        ReentrantMonitorAutoEnter mon(mReentrantMonitor);
 
         LOG(("OOO advancing write cursor by %u\n", bytesWritten));
 
@@ -561,7 +536,7 @@ nsPipe::AdvanceWriteCursor(PRUint32 bytesWritten)
         // update the writable flag on the output stream
         if (mWriteCursor == mWriteLimit) {
             if (mBuffer.GetSize() >= mBuffer.GetMaxSize())
-                mOutput.SetWritable(PR_FALSE);
+                mOutput.SetWritable(false);
         }
 
         // notify input stream that pipe now contains additional data
@@ -571,14 +546,14 @@ nsPipe::AdvanceWriteCursor(PRUint32 bytesWritten)
 }
 
 void
-nsPipe::OnPipeException(nsresult reason, PRBool outputOnly)
+nsPipe::OnPipeException(nsresult reason, bool outputOnly)
 {
     LOG(("PPP nsPipe::OnPipeException [reason=%x output-only=%d]\n",
         reason, outputOnly));
 
     nsPipeEvents events;
     {
-        nsAutoMonitor mon(mMonitor);
+        ReentrantMonitorAutoEnter mon(mReentrantMonitor);
 
         // if we've already hit an exception, then ignore this one.
         if (NS_FAILED(mStatus))
@@ -589,7 +564,7 @@ nsPipe::OnPipeException(nsresult reason, PRBool outputOnly)
         // an output-only exception applies to the input end if the pipe has
         // zero bytes available.
         if (outputOnly && !mInput.Available())
-            outputOnly = PR_FALSE;
+            outputOnly = false;
 
         if (!outputOnly)
             if (mInput.OnInputException(reason, events))
@@ -644,14 +619,14 @@ nsPipeInputStream::Wait()
 {
     NS_ASSERTION(mBlocking, "wait on non-blocking pipe input stream");
 
-    nsAutoMonitor mon(mPipe->mMonitor);
+    ReentrantMonitorAutoEnter mon(mPipe->mReentrantMonitor);
 
     while (NS_SUCCEEDED(mPipe->mStatus) && (mAvailable == 0)) {
         LOG(("III pipe input: waiting for data\n"));
 
-        mBlocked = PR_TRUE;
+        mBlocked = true;
         mon.Wait();
-        mBlocked = PR_FALSE;
+        mBlocked = false;
 
         LOG(("III pipe input: woke up [pipe-status=%x available=%u]\n",
             mPipe->mStatus, mAvailable));
@@ -660,10 +635,10 @@ nsPipeInputStream::Wait()
     return mPipe->mStatus == NS_BASE_STREAM_CLOSED ? NS_OK : mPipe->mStatus;
 }
 
-PRBool
-nsPipeInputStream::OnInputReadable(PRUint32 bytesWritten, nsPipeEvents &events)
+bool
+nsPipeInputStream::OnInputReadable(uint32_t bytesWritten, nsPipeEvents &events)
 {
-    PRBool result = PR_FALSE;
+    bool result = false;
 
     mAvailable += bytesWritten;
 
@@ -673,18 +648,18 @@ nsPipeInputStream::OnInputReadable(PRUint32 bytesWritten, nsPipeEvents &events)
         mCallbackFlags = 0;
     }
     else if (mBlocked)
-        result = PR_TRUE;
+        result = true;
 
     return result;
 }
 
-PRBool
+bool
 nsPipeInputStream::OnInputException(nsresult reason, nsPipeEvents &events)
 {
     LOG(("nsPipeInputStream::OnInputException [this=%x reason=%x]\n",
         this, reason));
 
-    PRBool result = PR_FALSE;
+    bool result = false;
 
     NS_ASSERTION(NS_FAILED(reason), "huh? successful exception");
 
@@ -697,7 +672,7 @@ nsPipeInputStream::OnInputException(nsresult reason, nsPipeEvents &events)
         mCallbackFlags = 0;
     }
     else if (mBlocked)
-        result = PR_TRUE;
+        result = true;
 
     return result;
 }
@@ -705,14 +680,14 @@ nsPipeInputStream::OnInputException(nsresult reason, nsPipeEvents &events)
 NS_IMETHODIMP_(nsrefcnt)
 nsPipeInputStream::AddRef(void)
 {
-    PR_AtomicIncrement((PRInt32*)&mReaderRefCnt);
+    NS_AtomicIncrementRefcnt(mReaderRefCnt);
     return mPipe->AddRef();
 }
 
 NS_IMETHODIMP_(nsrefcnt)
 nsPipeInputStream::Release(void)
 {
-    if (PR_AtomicDecrement((PRInt32 *)&mReaderRefCnt) == 0)
+    if (NS_AtomicDecrementRefcnt(mReaderRefCnt) == 0)
         Close();
     return mPipe->Release();
 }
@@ -736,30 +711,31 @@ nsPipeInputStream::Close()
 }
 
 NS_IMETHODIMP
-nsPipeInputStream::Available(PRUint32 *result)
+nsPipeInputStream::Available(uint64_t *result)
 {
-    nsAutoMonitor mon(mPipe->mMonitor);
+    // nsPipeInputStream supports under 4GB stream only
+    ReentrantMonitorAutoEnter mon(mPipe->mReentrantMonitor);
 
     // return error if pipe closed
     if (!mAvailable && NS_FAILED(mPipe->mStatus))
         return mPipe->mStatus;
 
-    *result = mAvailable;
+    *result = (uint64_t)mAvailable;
     return NS_OK;
 }
 
 NS_IMETHODIMP
 nsPipeInputStream::ReadSegments(nsWriteSegmentFun writer, 
                                 void *closure,  
-                                PRUint32 count,
-                                PRUint32 *readCount)
+                                uint32_t count,
+                                uint32_t *readCount)
 {
     LOG(("III ReadSegments [this=%x count=%u]\n", this, count));
 
     nsresult rv = NS_OK;
 
     const char *segment;
-    PRUint32 segmentLen;
+    uint32_t segmentLen;
 
     *readCount = 0;
     while (count) {
@@ -792,7 +768,7 @@ nsPipeInputStream::ReadSegments(nsWriteSegmentFun writer,
         if (segmentLen > count)
             segmentLen = count;
 
-        PRUint32 writeCount, originalLen = segmentLen;
+        uint32_t writeCount, originalLen = segmentLen;
         while (segmentLen) {
             writeCount = 0;
 
@@ -822,13 +798,13 @@ nsPipeInputStream::ReadSegments(nsWriteSegmentFun writer,
 }
 
 NS_IMETHODIMP
-nsPipeInputStream::Read(char* toBuf, PRUint32 bufLen, PRUint32 *readCount)
+nsPipeInputStream::Read(char* toBuf, uint32_t bufLen, uint32_t *readCount)
 {
     return ReadSegments(NS_CopySegmentToBuffer, toBuf, bufLen, readCount);
 }
 
 NS_IMETHODIMP
-nsPipeInputStream::IsNonBlocking(PRBool *aNonBlocking)
+nsPipeInputStream::IsNonBlocking(bool *aNonBlocking)
 {
     *aNonBlocking = !mBlocking;
     return NS_OK;
@@ -836,15 +812,15 @@ nsPipeInputStream::IsNonBlocking(PRBool *aNonBlocking)
 
 NS_IMETHODIMP
 nsPipeInputStream::AsyncWait(nsIInputStreamCallback *callback,
-                             PRUint32 flags,
-                             PRUint32 requestedCount,
+                             uint32_t flags,
+                             uint32_t requestedCount,
                              nsIEventTarget *target)
 {
     LOG(("III AsyncWait [this=%x]\n", this));
 
     nsPipeEvents pipeEvents;
     {
-        nsAutoMonitor mon(mPipe->mMonitor);
+        ReentrantMonitorAutoEnter mon(mPipe->mReentrantMonitor);
 
         // replace a pending callback
         mCallback = 0;
@@ -876,16 +852,16 @@ nsPipeInputStream::AsyncWait(nsIInputStreamCallback *callback,
 }
 
 NS_IMETHODIMP
-nsPipeInputStream::Seek(PRInt32 whence, PRInt64 offset)
+nsPipeInputStream::Seek(int32_t whence, int64_t offset)
 {
     NS_NOTREACHED("nsPipeInputStream::Seek");
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 NS_IMETHODIMP
-nsPipeInputStream::Tell(PRInt64 *offset)
+nsPipeInputStream::Tell(int64_t *offset)
 {
-    nsAutoMonitor mon(mPipe->mMonitor);
+    ReentrantMonitorAutoEnter mon(mPipe->mReentrantMonitor);
 
     // return error if pipe closed
     if (!mAvailable && NS_FAILED(mPipe->mStatus))
@@ -904,38 +880,38 @@ nsPipeInputStream::SetEOF()
 
 #define COMPARE(s1, s2, i)                                                 \
     (ignoreCase                                                            \
-     ? nsCRT::strncasecmp((const char *)s1, (const char *)s2, (PRUint32)i) \
-     : nsCRT::strncmp((const char *)s1, (const char *)s2, (PRUint32)i))
+     ? nsCRT::strncasecmp((const char *)s1, (const char *)s2, (uint32_t)i) \
+     : nsCRT::strncmp((const char *)s1, (const char *)s2, (uint32_t)i))
 
 NS_IMETHODIMP
 nsPipeInputStream::Search(const char *forString, 
-                          PRBool ignoreCase,
-                          PRBool *found,
-                          PRUint32 *offsetSearchedTo)
+                          bool ignoreCase,
+                          bool *found,
+                          uint32_t *offsetSearchedTo)
 {
     LOG(("III Search [for=%s ic=%u]\n", forString, ignoreCase));
 
-    nsAutoMonitor mon(mPipe->mMonitor);
+    ReentrantMonitorAutoEnter mon(mPipe->mReentrantMonitor);
 
     char *cursor1, *limit1;
-    PRUint32 index = 0, offset = 0;
-    PRUint32 strLen = strlen(forString);
+    uint32_t index = 0, offset = 0;
+    uint32_t strLen = strlen(forString);
 
     mPipe->PeekSegment(0, cursor1, limit1);
     if (cursor1 == limit1) {
-        *found = PR_FALSE;
+        *found = false;
         *offsetSearchedTo = 0;
         LOG(("  result [found=%u offset=%u]\n", *found, *offsetSearchedTo));
         return NS_OK;
     }
 
-    while (PR_TRUE) {
-        PRUint32 i, len1 = limit1 - cursor1;
+    while (true) {
+        uint32_t i, len1 = limit1 - cursor1;
 
         // check if the string is in the buffer segment
         for (i = 0; i < len1 - strLen + 1; i++) {
             if (COMPARE(&cursor1[i], forString, strLen) == 0) {
-                *found = PR_TRUE;
+                *found = true;
                 *offsetSearchedTo = offset + i;
                 LOG(("  result [found=%u offset=%u]\n", *found, *offsetSearchedTo));
                 return NS_OK;
@@ -944,14 +920,14 @@ nsPipeInputStream::Search(const char *forString,
 
         // get the next segment
         char *cursor2, *limit2;
-        PRUint32 len2;
+        uint32_t len2;
 
         index++;
         offset += len1;
 
         mPipe->PeekSegment(index, cursor2, limit2);
         if (cursor2 == limit2) {
-            *found = PR_FALSE;
+            *found = false;
             *offsetSearchedTo = offset - strLen + 1;
             LOG(("  result [found=%u offset=%u]\n", *found, *offsetSearchedTo));
             return NS_OK;
@@ -959,15 +935,15 @@ nsPipeInputStream::Search(const char *forString,
         len2 = limit2 - cursor2;
 
         // check if the string is straddling the next buffer segment
-        PRUint32 lim = PR_MIN(strLen, len2 + 1);
+        uint32_t lim = NS_MIN(strLen, len2 + 1);
         for (i = 0; i < lim; ++i) {
-            PRUint32 strPart1Len = strLen - i - 1;
-            PRUint32 strPart2Len = strLen - strPart1Len;
+            uint32_t strPart1Len = strLen - i - 1;
+            uint32_t strPart2Len = strLen - strPart1Len;
             const char* strPart2 = &forString[strLen - strPart2Len];
-            PRUint32 bufSeg1Offset = len1 - strPart1Len;
+            uint32_t bufSeg1Offset = len1 - strPart1Len;
             if (COMPARE(&cursor1[bufSeg1Offset], forString, strPart1Len) == 0 &&
                 COMPARE(cursor2, strPart2, strPart2Len) == 0) {
-                *found = PR_TRUE;
+                *found = true;
                 *offsetSearchedTo = offset - strPart1Len;
                 LOG(("  result [found=%u offset=%u]\n", *found, *offsetSearchedTo));
                 return NS_OK;
@@ -1003,13 +979,13 @@ nsPipeOutputStream::Wait()
 {
     NS_ASSERTION(mBlocking, "wait on non-blocking pipe output stream");
 
-    nsAutoMonitor mon(mPipe->mMonitor);
+    ReentrantMonitorAutoEnter mon(mPipe->mReentrantMonitor);
 
     if (NS_SUCCEEDED(mPipe->mStatus) && !mWritable) {
         LOG(("OOO pipe output: waiting for space\n"));
-        mBlocked = PR_TRUE;
+        mBlocked = true;
         mon.Wait();
-        mBlocked = PR_FALSE;
+        mBlocked = false;
         LOG(("OOO pipe output: woke up [pipe-status=%x writable=%u]\n",
             mPipe->mStatus, mWritable));
     }
@@ -1017,12 +993,12 @@ nsPipeOutputStream::Wait()
     return mPipe->mStatus == NS_BASE_STREAM_CLOSED ? NS_OK : mPipe->mStatus;
 }
 
-PRBool
+bool
 nsPipeOutputStream::OnOutputWritable(nsPipeEvents &events)
 {
-    PRBool result = PR_FALSE;
+    bool result = false;
 
-    mWritable = PR_TRUE;
+    mWritable = true;
 
     if (mCallback && !(mCallbackFlags & WAIT_CLOSURE_ONLY)) {
         events.NotifyOutputReady(this, mCallback);
@@ -1030,21 +1006,21 @@ nsPipeOutputStream::OnOutputWritable(nsPipeEvents &events)
         mCallbackFlags = 0;
     }
     else if (mBlocked)
-        result = PR_TRUE;
+        result = true;
 
     return result;
 }
 
-PRBool
+bool
 nsPipeOutputStream::OnOutputException(nsresult reason, nsPipeEvents &events)
 {
     LOG(("nsPipeOutputStream::OnOutputException [this=%x reason=%x]\n",
         this, reason));
 
-    PRBool result = PR_FALSE;
+    bool result = false;
 
     NS_ASSERTION(NS_FAILED(reason), "huh? successful exception");
-    mWritable = PR_FALSE;
+    mWritable = false;
 
     if (mCallback) {
         events.NotifyOutputReady(this, mCallback);
@@ -1052,7 +1028,7 @@ nsPipeOutputStream::OnOutputException(nsresult reason, nsPipeEvents &events)
         mCallbackFlags = 0;
     }
     else if (mBlocked)
-        result = PR_TRUE;
+        result = true;
 
     return result;
 }
@@ -1061,14 +1037,14 @@ nsPipeOutputStream::OnOutputException(nsresult reason, nsPipeEvents &events)
 NS_IMETHODIMP_(nsrefcnt)
 nsPipeOutputStream::AddRef()
 {
-    PR_AtomicIncrement((PRInt32*)&mWriterRefCnt);
+    NS_AtomicIncrementRefcnt(mWriterRefCnt);
     return mPipe->AddRef();
 }
 
 NS_IMETHODIMP_(nsrefcnt)
 nsPipeOutputStream::Release()
 {
-    if (PR_AtomicDecrement((PRInt32 *)&mWriterRefCnt) == 0)
+    if (NS_AtomicDecrementRefcnt(mWriterRefCnt) == 0)
         Close();
     return mPipe->Release();
 }
@@ -1082,7 +1058,7 @@ nsPipeOutputStream::CloseWithStatus(nsresult reason)
         reason = NS_BASE_STREAM_CLOSED;
 
     // input stream may remain open
-    mPipe->OnPipeException(reason, PR_TRUE);
+    mPipe->OnPipeException(reason, true);
     return NS_OK;
 }
 
@@ -1095,15 +1071,15 @@ nsPipeOutputStream::Close()
 NS_IMETHODIMP
 nsPipeOutputStream::WriteSegments(nsReadSegmentFun reader,
                                   void* closure,
-                                  PRUint32 count,
-                                  PRUint32 *writeCount)
+                                  uint32_t count,
+                                  uint32_t *writeCount)
 {
     LOG(("OOO WriteSegments [this=%x count=%u]\n", this, count));
 
     nsresult rv = NS_OK;
 
     char *segment;
-    PRUint32 segmentLen;
+    uint32_t segmentLen;
 
     *writeCount = 0;
     while (count) {
@@ -1130,7 +1106,7 @@ nsPipeOutputStream::WriteSegments(nsReadSegmentFun reader,
         if (segmentLen > count)
             segmentLen = count;
 
-        PRUint32 readCount, originalLen = segmentLen;
+        uint32_t readCount, originalLen = segmentLen;
         while (segmentLen) {
             readCount = 0;
 
@@ -1163,9 +1139,9 @@ static NS_METHOD
 nsReadFromRawBuffer(nsIOutputStream* outStr,
                     void* closure,
                     char* toRawSegment,
-                    PRUint32 offset,
-                    PRUint32 count,
-                    PRUint32 *readCount)
+                    uint32_t offset,
+                    uint32_t count,
+                    uint32_t *readCount)
 {
     const char* fromBuf = (const char*)closure;
     memcpy(toRawSegment, &fromBuf[offset], count);
@@ -1175,8 +1151,8 @@ nsReadFromRawBuffer(nsIOutputStream* outStr,
 
 NS_IMETHODIMP
 nsPipeOutputStream::Write(const char* fromBuf,
-                          PRUint32 bufLen, 
-                          PRUint32 *writeCount)
+                          uint32_t bufLen, 
+                          uint32_t *writeCount)
 {
     return WriteSegments(nsReadFromRawBuffer, (void*)fromBuf, bufLen, writeCount);
 }
@@ -1192,9 +1168,9 @@ static NS_METHOD
 nsReadFromInputStream(nsIOutputStream* outStr,
                       void* closure,
                       char* toRawSegment, 
-                      PRUint32 offset,
-                      PRUint32 count,
-                      PRUint32 *readCount)
+                      uint32_t offset,
+                      uint32_t count,
+                      uint32_t *readCount)
 {
     nsIInputStream* fromStream = (nsIInputStream*)closure;
     return fromStream->Read(toRawSegment, count, readCount);
@@ -1202,14 +1178,14 @@ nsReadFromInputStream(nsIOutputStream* outStr,
 
 NS_IMETHODIMP
 nsPipeOutputStream::WriteFrom(nsIInputStream* fromStream,
-                              PRUint32 count,
-                              PRUint32 *writeCount)
+                              uint32_t count,
+                              uint32_t *writeCount)
 {
     return WriteSegments(nsReadFromInputStream, fromStream, count, writeCount);
 }
 
 NS_IMETHODIMP
-nsPipeOutputStream::IsNonBlocking(PRBool *aNonBlocking)
+nsPipeOutputStream::IsNonBlocking(bool *aNonBlocking)
 {
     *aNonBlocking = !mBlocking;
     return NS_OK;
@@ -1217,15 +1193,15 @@ nsPipeOutputStream::IsNonBlocking(PRBool *aNonBlocking)
 
 NS_IMETHODIMP
 nsPipeOutputStream::AsyncWait(nsIOutputStreamCallback *callback,
-                              PRUint32 flags,
-                              PRUint32 requestedCount,
+                              uint32_t flags,
+                              uint32_t requestedCount,
                               nsIEventTarget *target)
 {
     LOG(("OOO AsyncWait [this=%x]\n", this));
 
     nsPipeEvents pipeEvents;
     {
-        nsAutoMonitor mon(mPipe->mMonitor);
+        ReentrantMonitorAutoEnter mon(mPipe->mReentrantMonitor);
 
         // replace a pending callback
         mCallback = 0;
@@ -1258,22 +1234,22 @@ nsPipeOutputStream::AsyncWait(nsIOutputStreamCallback *callback,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NS_COM nsresult
+nsresult
 NS_NewPipe(nsIInputStream **pipeIn,
            nsIOutputStream **pipeOut,
-           PRUint32 segmentSize,
-           PRUint32 maxSize,
-           PRBool nonBlockingInput,
-           PRBool nonBlockingOutput,
+           uint32_t segmentSize,
+           uint32_t maxSize,
+           bool nonBlockingInput,
+           bool nonBlockingOutput,
            nsIMemory *segmentAlloc)
 {
     if (segmentSize == 0)
         segmentSize = DEFAULT_SEGMENT_SIZE;
 
-    // Handle maxSize of PR_UINT32_MAX as a special case
-    PRUint32 segmentCount;
-    if (maxSize == PR_UINT32_MAX)
-        segmentCount = PR_UINT32_MAX;
+    // Handle maxSize of UINT32_MAX as a special case
+    uint32_t segmentCount;
+    if (maxSize == UINT32_MAX)
+        segmentCount = UINT32_MAX;
     else
         segmentCount = maxSize / segmentSize;
 
@@ -1288,13 +1264,13 @@ NS_NewPipe(nsIInputStream **pipeIn,
     return NS_OK;
 }
 
-NS_COM nsresult
+nsresult
 NS_NewPipe2(nsIAsyncInputStream **pipeIn,
             nsIAsyncOutputStream **pipeOut,
-            PRBool nonBlockingInput,
-            PRBool nonBlockingOutput,
-            PRUint32 segmentSize,
-            PRUint32 segmentCount,
+            bool nonBlockingInput,
+            bool nonBlockingOutput,
+            uint32_t segmentSize,
+            uint32_t segmentCount,
             nsIMemory *segmentAlloc)
 {
     nsresult rv;

@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 
@@ -162,8 +129,8 @@ protected:
     };
 
     nsCOMPtr<nsIRDFDataSource> mInner;
-    PRPackedBool        mIsWritable;    // true if the document can be written back
-    PRPackedBool        mIsDirty;       // true if the document should be written back
+    bool                mIsWritable;    // true if the document can be written back
+    bool                mIsDirty;       // true if the document should be written back
     LoadState           mLoadState;     // what we're doing now
     nsCOMArray<nsIRDFXMLSinkObserver> mObservers;
     nsCOMPtr<nsIURI>    mURL;
@@ -171,7 +138,7 @@ protected:
     nsNameSpaceMap      mNameSpaces;
 
     // pseudo-constants
-    static PRInt32 gRefCnt;
+    static int32_t gRefCnt;
     static nsIRDFService* gRDFService;
 
     nsresult Init();
@@ -182,7 +149,7 @@ protected:
     friend nsresult
     NS_NewRDFXMLDataSource(nsIRDFDataSource** aResult);
 
-    inline PRBool IsLoading() {
+    inline bool IsLoading() {
         return (mLoadState == eLoadState_Pending) || 
                (mLoadState == eLoadState_Loading);
     }
@@ -198,28 +165,28 @@ public:
 
     NS_IMETHOD GetSource(nsIRDFResource* property,
                          nsIRDFNode* target,
-                         PRBool tv,
+                         bool tv,
                          nsIRDFResource** source) {
         return mInner->GetSource(property, target, tv, source);
     }
 
     NS_IMETHOD GetSources(nsIRDFResource* property,
                           nsIRDFNode* target,
-                          PRBool tv,
+                          bool tv,
                           nsISimpleEnumerator** sources) {
         return mInner->GetSources(property, target, tv, sources);
     }
 
     NS_IMETHOD GetTarget(nsIRDFResource* source,
                          nsIRDFResource* property,
-                         PRBool tv,
+                         bool tv,
                          nsIRDFNode** target) {
         return mInner->GetTarget(source, property, tv, target);
     }
 
     NS_IMETHOD GetTargets(nsIRDFResource* source,
                           nsIRDFResource* property,
-                          PRBool tv,
+                          bool tv,
                           nsISimpleEnumerator** targets) {
         return mInner->GetTargets(source, property, tv, targets);
     }
@@ -227,7 +194,7 @@ public:
     NS_IMETHOD Assert(nsIRDFResource* aSource,
                       nsIRDFResource* aProperty,
                       nsIRDFNode* aTarget,
-                      PRBool tv);
+                      bool tv);
 
     NS_IMETHOD Unassert(nsIRDFResource* source,
                         nsIRDFResource* property,
@@ -246,8 +213,8 @@ public:
     NS_IMETHOD HasAssertion(nsIRDFResource* source,
                             nsIRDFResource* property,
                             nsIRDFNode* target,
-                            PRBool tv,
-                            PRBool* hasAssertion) {
+                            bool tv,
+                            bool* hasAssertion) {
         return mInner->HasAssertion(source, property, target, tv, hasAssertion);
     }
 
@@ -259,11 +226,11 @@ public:
         return mInner->RemoveObserver(aObserver);
     }
 
-    NS_IMETHOD HasArcIn(nsIRDFNode *aNode, nsIRDFResource *aArc, PRBool *_retval) {
+    NS_IMETHOD HasArcIn(nsIRDFNode *aNode, nsIRDFResource *aArc, bool *_retval) {
         return mInner->HasArcIn(aNode, aArc, _retval);
     }
 
-    NS_IMETHOD HasArcOut(nsIRDFResource *aSource, nsIRDFResource *aArc, PRBool *_retval) {
+    NS_IMETHOD HasArcOut(nsIRDFResource *aSource, nsIRDFResource *aArc, bool *_retval) {
         return mInner->HasArcOut(aSource, aArc, _retval);
     }
 
@@ -289,7 +256,7 @@ public:
     NS_IMETHOD IsCommandEnabled(nsISupportsArray/*<nsIRDFResource>*/* aSources,
                                 nsIRDFResource*   aCommand,
                                 nsISupportsArray/*<nsIRDFResource>*/* aArguments,
-                                PRBool* aResult) {
+                                bool* aResult) {
         return mInner->IsCommandEnabled(aSources, aCommand, aArguments, aResult);
     }
 
@@ -346,7 +313,7 @@ public:
     } 
 
     // Implementation methods
-    PRBool
+    bool
     MakeQName(nsIRDFResource* aResource,
               nsString& property,
               nsString& nameSpacePrefix,
@@ -363,7 +330,7 @@ public:
                       nsIRDFResource* aResource,
                       nsIRDFResource* aProperty);
 
-    PRBool
+    bool
     IsContainerProperty(nsIRDFResource* aProperty);
 
     nsresult
@@ -385,7 +352,7 @@ public:
     nsresult
     SerializeEpilogue(nsIOutputStream* aStream);
 
-    PRBool
+    bool
     IsA(nsIRDFDataSource* aDataSource, nsIRDFResource* aResource, nsIRDFResource* aType);
 
 protected:
@@ -393,7 +360,7 @@ protected:
     BlockingParse(nsIURI* aURL, nsIStreamListener* aConsumer);
 };
 
-PRInt32         RDFXMLDataSourceImpl::gRefCnt = 0;
+int32_t         RDFXMLDataSourceImpl::gRefCnt = 0;
 nsIRDFService*  RDFXMLDataSourceImpl::gRDFService;
 
 static const char kFileURIPrefix[] = "file:";
@@ -405,7 +372,7 @@ static const char kResourceURIPrefix[] = "resource:";
 nsresult
 NS_NewRDFXMLDataSource(nsIRDFDataSource** aResult)
 {
-    NS_PRECONDITION(aResult != nsnull, "null ptr");
+    NS_PRECONDITION(aResult != nullptr, "null ptr");
     if (! aResult)
         return NS_ERROR_NULL_POINTER;
 
@@ -428,8 +395,8 @@ NS_NewRDFXMLDataSource(nsIRDFDataSource** aResult)
 
 
 RDFXMLDataSourceImpl::RDFXMLDataSourceImpl(void)
-    : mIsWritable(PR_TRUE),
-      mIsDirty(PR_FALSE),
+    : mIsWritable(true),
+      mIsDirty(false),
       mLoadState(eLoadState_Unloaded)
 {
 #ifdef PR_LOGGING
@@ -477,13 +444,11 @@ RDFXMLDataSourceImpl::~RDFXMLDataSourceImpl(void)
 NS_IMPL_CYCLE_COLLECTION_CLASS(RDFXMLDataSourceImpl)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_0(RDFXMLDataSourceImpl)
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN(RDFXMLDataSourceImpl)
-    NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mInner)
+    NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mInner)
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
-NS_IMPL_CYCLE_COLLECTING_ADDREF_AMBIGUOUS(RDFXMLDataSourceImpl,
-                                          nsIRDFDataSource)
-NS_IMPL_CYCLE_COLLECTING_RELEASE_AMBIGUOUS(RDFXMLDataSourceImpl,
-                                           nsIRDFDataSource)
+NS_IMPL_CYCLE_COLLECTING_ADDREF(RDFXMLDataSourceImpl)
+NS_IMPL_CYCLE_COLLECTING_RELEASE(RDFXMLDataSourceImpl)
 
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(RDFXMLDataSourceImpl)
     NS_INTERFACE_MAP_ENTRY(nsIRDFDataSource)
@@ -518,7 +483,7 @@ RDFXMLDataSourceImpl::BlockingParse(nsIURI* aURL, nsIStreamListener* aConsumer)
     nsCOMPtr<nsIRequest> request;
 
     // Null LoadGroup ?
-    rv = NS_NewChannel(getter_AddRefs(channel), aURL, nsnull);
+    rv = NS_NewChannel(getter_AddRefs(channel), aURL, nullptr);
     if (NS_FAILED(rv)) return rv;
     nsCOMPtr<nsIInputStream> in;
     rv = channel->Open(getter_AddRefs(in));
@@ -540,7 +505,7 @@ RDFXMLDataSourceImpl::BlockingParse(nsIURI* aURL, nsIStreamListener* aConsumer)
     if (NS_FAILED(rv)) return rv;
 
     // Notify load observers
-    PRInt32 i;
+    int32_t i;
     for (i = mObservers.Count() - 1; i >= 0; --i) {
         // Make sure to hold a strong reference to the observer so
         // that it doesn't go away in this call if it removes itself
@@ -552,23 +517,26 @@ RDFXMLDataSourceImpl::BlockingParse(nsIURI* aURL, nsIStreamListener* aConsumer)
         }
     }
 
-    rv = aConsumer->OnStartRequest(channel, nsnull);
+    rv = aConsumer->OnStartRequest(channel, nullptr);
 
-    PRUint32 offset = 0;
+    uint64_t offset = 0;
     while (NS_SUCCEEDED(rv)) {
         // Skip ODA if the channel is canceled
         channel->GetStatus(&rv);
         if (NS_FAILED(rv))
             break;
 
-        PRUint32 avail;
+        uint64_t avail;
         if (NS_FAILED(rv = bufStream->Available(&avail)))
             break; // error
 
         if (avail == 0)
             break; // eof
 
-        rv = aConsumer->OnDataAvailable(channel, nsnull, bufStream, offset, avail);
+        if (avail > UINT32_MAX)
+            avail = UINT32_MAX;
+
+        rv = aConsumer->OnDataAvailable(channel, nullptr, bufStream, offset, (uint32_t)avail);
         if (NS_SUCCEEDED(rv))
             offset += avail;
     }
@@ -577,7 +545,7 @@ RDFXMLDataSourceImpl::BlockingParse(nsIURI* aURL, nsIStreamListener* aConsumer)
         channel->Cancel(rv);
 
     channel->GetStatus(&rv);
-    aConsumer->OnStopRequest(channel, nsnull, rv);
+    aConsumer->OnStopRequest(channel, nullptr, rv);
 
     // Notify load observers
     for (i = mObservers.Count() - 1; i >= 0; --i) {
@@ -588,7 +556,7 @@ RDFXMLDataSourceImpl::BlockingParse(nsIURI* aURL, nsIStreamListener* aConsumer)
 
         if (obs) {
             if (NS_FAILED(rv))
-                obs->OnError(this, rv, nsnull);
+                obs->OnError(this, rv, nullptr);
 
             obs->OnEndLoad(this);
         }
@@ -598,7 +566,7 @@ RDFXMLDataSourceImpl::BlockingParse(nsIURI* aURL, nsIStreamListener* aConsumer)
 }
 
 NS_IMETHODIMP
-RDFXMLDataSourceImpl::GetLoaded(PRBool* _result)
+RDFXMLDataSourceImpl::GetLoaded(bool* _result)
 {
     *_result = (mLoadState == eLoadState_Loaded);
     return NS_OK;
@@ -607,7 +575,7 @@ RDFXMLDataSourceImpl::GetLoaded(PRBool* _result)
 NS_IMETHODIMP
 RDFXMLDataSourceImpl::Init(const char* uri)
 {
-    NS_PRECONDITION(mInner != nsnull, "not initialized");
+    NS_PRECONDITION(mInner != nullptr, "not initialized");
     if (! mInner)
         return NS_ERROR_OUT_OF_MEMORY;
 
@@ -620,10 +588,10 @@ RDFXMLDataSourceImpl::Init(const char* uri)
     // others are considered read-only.
     if ((PL_strncmp(uri, kFileURIPrefix, sizeof(kFileURIPrefix) - 1) != 0) &&
         (PL_strncmp(uri, kResourceURIPrefix, sizeof(kResourceURIPrefix) - 1) != 0)) {
-        mIsWritable = PR_FALSE;
+        mIsWritable = false;
     }
 
-    rv = gRDFService->RegisterDataSource(this, PR_FALSE);
+    rv = gRDFService->RegisterDataSource(this, false);
     if (NS_FAILED(rv)) return rv;
 
     return NS_OK;
@@ -633,12 +601,12 @@ RDFXMLDataSourceImpl::Init(const char* uri)
 NS_IMETHODIMP
 RDFXMLDataSourceImpl::GetURI(char* *aURI)
 {
-    *aURI = nsnull;
+    *aURI = nullptr;
     if (!mURL) {
         return NS_OK;
     }
     
-    nsCAutoString spec;
+    nsAutoCString spec;
     mURL->GetSpec(spec);
     *aURI = ToNewCString(spec);
     if (!*aURI) {
@@ -652,14 +620,14 @@ NS_IMETHODIMP
 RDFXMLDataSourceImpl::Assert(nsIRDFResource* aSource,
                              nsIRDFResource* aProperty,
                              nsIRDFNode* aTarget,
-                             PRBool aTruthValue)
+                             bool aTruthValue)
 {
     // We don't accept assertions unless we're writable (except in the
     // case that we're actually _reading_ the datasource in).
     nsresult rv;
 
     if (IsLoading()) {
-        PRBool hasAssertion = PR_FALSE;
+        bool hasAssertion = false;
 
         nsCOMPtr<nsIRDFPurgeableDataSource> gcable = do_QueryInterface(mInner);
         if (gcable) {
@@ -676,7 +644,7 @@ RDFXMLDataSourceImpl::Assert(nsIRDFResource* aSource,
                 // Now mark the new assertion, so it doesn't get
                 // removed when we sweep. Ignore rv, because we want
                 // to return what mInner->Assert() gave us.
-                PRBool didMark;
+                bool didMark;
                 (void) gcable->Mark(aSource, aProperty, aTarget, aTruthValue, &didMark);
             }
 
@@ -689,7 +657,7 @@ RDFXMLDataSourceImpl::Assert(nsIRDFResource* aSource,
         rv = mInner->Assert(aSource, aProperty, aTarget, aTruthValue);
 
         if (rv == NS_RDF_ASSERTION_ACCEPTED)
-            mIsDirty = PR_TRUE;
+            mIsDirty = true;
 
         return rv;
     }
@@ -711,7 +679,7 @@ RDFXMLDataSourceImpl::Unassert(nsIRDFResource* source,
     if (IsLoading() || mIsWritable) {
         rv = mInner->Unassert(source, property, target);
         if (!IsLoading() && rv == NS_RDF_ASSERTION_ACCEPTED)
-            mIsDirty = PR_TRUE;
+            mIsDirty = true;
     }
     else {
         rv = NS_RDF_ASSERTION_REJECTED;
@@ -732,7 +700,7 @@ RDFXMLDataSourceImpl::Change(nsIRDFResource* aSource,
         rv = mInner->Change(aSource, aProperty, aOldTarget, aNewTarget);
 
         if (!IsLoading() && rv == NS_RDF_ASSERTION_ACCEPTED)
-            mIsDirty = PR_TRUE;
+            mIsDirty = true;
     }
     else {
         rv = NS_RDF_ASSERTION_REJECTED;
@@ -752,7 +720,7 @@ RDFXMLDataSourceImpl::Move(nsIRDFResource* aOldSource,
     if (IsLoading() || mIsWritable) {
         rv = mInner->Move(aOldSource, aNewSource, aProperty, aTarget);
         if (!IsLoading() && rv == NS_RDF_ASSERTION_ACCEPTED)
-            mIsDirty = PR_TRUE;
+            mIsDirty = true;
     }
     else {
         rv = NS_RDF_ASSERTION_REJECTED;
@@ -825,7 +793,7 @@ RDFXMLDataSourceImpl::rdfXMLFlush(nsIURI *aURI)
 NS_IMETHODIMP
 RDFXMLDataSourceImpl::FlushTo(const char *aURI)
 {
-    NS_PRECONDITION(aURI != nsnull, "not initialized");
+    NS_PRECONDITION(aURI != nullptr, "not initialized");
     if (!aURI)
         return NS_ERROR_NULL_POINTER;
 
@@ -858,7 +826,7 @@ RDFXMLDataSourceImpl::Flush(void)
         return NS_ERROR_NOT_INITIALIZED;
 
 #ifdef PR_LOGGING
-    nsCAutoString spec;
+    nsAutoCString spec;
     mURL->GetSpec(spec);
     PR_LOG(gLog, PR_LOG_NOTICE,
            ("rdfxml[%p] flush(%s)", this, spec.get()));
@@ -867,7 +835,7 @@ RDFXMLDataSourceImpl::Flush(void)
     nsresult rv;
     if (NS_SUCCEEDED(rv = rdfXMLFlush(mURL)))
     {
-      mIsDirty = PR_FALSE;
+      mIsDirty = false;
     }
     return rv;
 }
@@ -879,7 +847,7 @@ RDFXMLDataSourceImpl::Flush(void)
 //
 
 NS_IMETHODIMP
-RDFXMLDataSourceImpl::GetReadOnly(PRBool* aIsReadOnly)
+RDFXMLDataSourceImpl::GetReadOnly(bool* aIsReadOnly)
 {
     *aIsReadOnly = !mIsWritable;
     return NS_OK;
@@ -887,15 +855,13 @@ RDFXMLDataSourceImpl::GetReadOnly(PRBool* aIsReadOnly)
 
 
 NS_IMETHODIMP
-RDFXMLDataSourceImpl::SetReadOnly(PRBool aIsReadOnly)
+RDFXMLDataSourceImpl::SetReadOnly(bool aIsReadOnly)
 {
     if (mIsWritable && aIsReadOnly)
-        mIsWritable = PR_FALSE;
+        mIsWritable = false;
 
     return NS_OK;
 }
-
-#include "nsITimelineService.h"
 
 // nsIChannelEventSink
 
@@ -904,7 +870,7 @@ RDFXMLDataSourceImpl::SetReadOnly(PRBool aIsReadOnly)
 NS_IMETHODIMP
 RDFXMLDataSourceImpl::AsyncOnChannelRedirect(nsIChannel *aOldChannel,
                                              nsIChannel *aNewChannel,
-                                             PRUint32 aFlags,
+                                             uint32_t aFlags,
                                              nsIAsyncVerifyRedirectCallback *cb)
 {
     NS_PRECONDITION(aNewChannel, "Redirecting to null channel?");
@@ -924,9 +890,9 @@ RDFXMLDataSourceImpl::AsyncOnChannelRedirect(nsIChannel *aOldChannel,
 
     NS_ENSURE_STATE(oldPrincipal && newURI && newOriginalURI);
 
-    rv = oldPrincipal->CheckMayLoad(newURI, PR_FALSE);
+    rv = oldPrincipal->CheckMayLoad(newURI, false, false);
     if (NS_SUCCEEDED(rv) && newOriginalURI != newURI) {
-        rv = oldPrincipal->CheckMayLoad(newOriginalURI, PR_FALSE);
+        rv = oldPrincipal->CheckMayLoad(newOriginalURI, false, false);
     }
 
     if (NS_FAILED(rv))
@@ -937,10 +903,10 @@ RDFXMLDataSourceImpl::AsyncOnChannelRedirect(nsIChannel *aOldChannel,
 }
 
 NS_IMETHODIMP
-RDFXMLDataSourceImpl::Refresh(PRBool aBlocking)
+RDFXMLDataSourceImpl::Refresh(bool aBlocking)
 {
 #ifdef PR_LOGGING
-    nsCAutoString spec;
+    nsAutoCString spec;
     if (mURL) {
         mURL->GetSpec(spec);
     }
@@ -973,18 +939,15 @@ RDFXMLDataSourceImpl::Refresh(PRBool aBlocking)
     if (NS_FAILED(rv)) return rv;
 
     if (aBlocking) {
-        NS_TIMELINE_START_TIMER("rdf blocking parse");
         rv = BlockingParse(mURL, this);
-        NS_TIMELINE_STOP_TIMER("rdf blocking parse");
-        NS_TIMELINE_MARK_TIMER("rdf blocking parse");
 
-        mListener = nsnull; // release the parser
+        mListener = nullptr; // release the parser
 
         if (NS_FAILED(rv)) return rv;
     }
     else {
         // Null LoadGroup ?
-        rv = NS_OpenURI(this, nsnull, mURL, nsnull, nsnull, this);
+        rv = NS_OpenURI(this, nullptr, mURL, nullptr, nullptr, this);
         if (NS_FAILED(rv)) return rv;
 
         // So we don't try to issue two asynchronous loads at once.
@@ -998,7 +961,7 @@ NS_IMETHODIMP
 RDFXMLDataSourceImpl::BeginLoad(void)
 {
 #ifdef PR_LOGGING
-    nsCAutoString spec;
+    nsAutoCString spec;
     if (mURL) {
         mURL->GetSpec(spec);
     }
@@ -1007,7 +970,7 @@ RDFXMLDataSourceImpl::BeginLoad(void)
 #endif
     
     mLoadState = eLoadState_Loading;
-    for (PRInt32 i = mObservers.Count() - 1; i >= 0; --i) {
+    for (int32_t i = mObservers.Count() - 1; i >= 0; --i) {
         // Make sure to hold a strong reference to the observer so
         // that it doesn't go away in this call if it removes itself
         // as an observer
@@ -1024,7 +987,7 @@ NS_IMETHODIMP
 RDFXMLDataSourceImpl::Interrupt(void)
 {
 #ifdef PR_LOGGING
-    nsCAutoString spec;
+    nsAutoCString spec;
     if (mURL) {
         mURL->GetSpec(spec);
     }
@@ -1032,7 +995,7 @@ RDFXMLDataSourceImpl::Interrupt(void)
            ("rdfxml[%p] interrupt(%s)", this, spec.get()));
 #endif
     
-    for (PRInt32 i = mObservers.Count() - 1; i >= 0; --i) {
+    for (int32_t i = mObservers.Count() - 1; i >= 0; --i) {
         // Make sure to hold a strong reference to the observer so
         // that it doesn't go away in this call if it removes itself
         // as an observer
@@ -1049,7 +1012,7 @@ NS_IMETHODIMP
 RDFXMLDataSourceImpl::Resume(void)
 {
 #ifdef PR_LOGGING
-    nsCAutoString spec;
+    nsAutoCString spec;
     if (mURL) {
         mURL->GetSpec(spec);
     }
@@ -1057,7 +1020,7 @@ RDFXMLDataSourceImpl::Resume(void)
            ("rdfxml[%p] resume(%s)", this, spec.get()));
 #endif
     
-    for (PRInt32 i = mObservers.Count() - 1; i >= 0; --i) {
+    for (int32_t i = mObservers.Count() - 1; i >= 0; --i) {
         // Make sure to hold a strong reference to the observer so
         // that it doesn't go away in this call if it removes itself
         // as an observer
@@ -1074,7 +1037,7 @@ NS_IMETHODIMP
 RDFXMLDataSourceImpl::EndLoad(void)
 {
 #ifdef PR_LOGGING
-    nsCAutoString spec;
+    nsAutoCString spec;
     if (mURL) {
         mURL->GetSpec(spec);
     }
@@ -1091,7 +1054,7 @@ RDFXMLDataSourceImpl::EndLoad(void)
     }
 
     // Notify load observers
-    for (PRInt32 i = mObservers.Count() - 1; i >= 0; --i) {
+    for (int32_t i = mObservers.Count() - 1; i >= 0; --i) {
         // Make sure to hold a strong reference to the observer so
         // that it doesn't go away in this call if it removes itself
         // as an observer
@@ -1151,14 +1114,14 @@ RDFXMLDataSourceImpl::OnStopRequest(nsIRequest *request,
                                     nsresult status)
 {
     if (NS_FAILED(status)) {
-        for (PRInt32 i = mObservers.Count() - 1; i >= 0; --i) {
+        for (int32_t i = mObservers.Count() - 1; i >= 0; --i) {
             // Make sure to hold a strong reference to the observer so
             // that it doesn't go away in this call if it removes
             // itself as an observer
             nsCOMPtr<nsIRDFXMLSinkObserver> obs = mObservers[i];
 
             if (obs) {
-                obs->OnError(this, status, nsnull);
+                obs->OnError(this, status, nullptr);
             }
         }
     }
@@ -1166,7 +1129,7 @@ RDFXMLDataSourceImpl::OnStopRequest(nsIRequest *request,
     nsresult rv;
     rv = mListener->OnStopRequest(request, ctxt, status);
 
-    mListener = nsnull; // release the parser
+    mListener = nullptr; // release the parser
 
     return rv;
 }
@@ -1180,8 +1143,8 @@ NS_IMETHODIMP
 RDFXMLDataSourceImpl::OnDataAvailable(nsIRequest *request,
                                       nsISupports *ctxt,
                                       nsIInputStream *inStr,
-                                      PRUint32 sourceOffset,
-                                      PRUint32 count)
+                                      uint64_t sourceOffset,
+                                      uint32_t count)
 {
     return mListener->OnDataAvailable(request, ctxt, inStr, sourceOffset, count);
 }

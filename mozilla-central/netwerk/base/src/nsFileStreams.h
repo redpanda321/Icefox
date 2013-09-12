@@ -1,43 +1,13 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsFileStreams_h__
 #define nsFileStreams_h__
 
+#include "nsAlgorithm.h"
+#include "nsAutoPtr.h"
 #include "nsIFileStreams.h"
 #include "nsIFile.h"
 #include "nsIInputStream.h"
@@ -48,51 +18,124 @@
 #include "nsCOMPtr.h"
 #include "prlog.h"
 #include "prio.h"
+#include "nsIIPCSerializableInputStream.h"
+#include "nsReadLine.h"
 
-template<class CharType> class nsLineBuffer;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class nsFileStream : public nsISeekableStream
+class nsFileStreamBase : public nsISeekableStream,
+                         public nsIFileMetadata
 {
 public:
     NS_DECL_ISUPPORTS
     NS_DECL_NSISEEKABLESTREAM
+    NS_DECL_NSIFILEMETADATA
 
-    nsFileStream();
-    virtual ~nsFileStream();
-
-    nsresult Close();
-    nsresult InitWithFileDescriptor(PRFileDesc* fd, nsISupports* parent);
+    nsFileStreamBase();
+    virtual ~nsFileStreamBase();
 
 protected:
-    PRFileDesc*           mFD;
-    nsCOMPtr<nsISupports> mParent; // strong reference to parent nsFileIO,
-                                   // which ensures mFD remains valid.
-    PRBool                mCloseFD;
+    nsresult Close();
+    nsresult Available(uint64_t* _retval);
+    nsresult Read(char* aBuf, uint32_t aCount, uint32_t* _retval);
+    nsresult ReadSegments(nsWriteSegmentFun aWriter, void* aClosure,
+                          uint32_t aCount, uint32_t* _retval);
+    nsresult IsNonBlocking(bool* _retval);
+    nsresult Flush();
+    nsresult Write(const char* aBuf, uint32_t aCount, uint32_t* _retval);
+    nsresult WriteFrom(nsIInputStream* aFromStream, uint32_t aCount,
+                       uint32_t* _retval);
+    nsresult WriteSegments(nsReadSegmentFun aReader, void* aClosure,
+                           uint32_t aCount, uint32_t* _retval);
+
+    PRFileDesc* mFD;
+
+    /**
+     * Flags describing our behavior.  See the IDL file for possible values.
+     */
+    int32_t mBehaviorFlags;
+
+    /**
+     * Whether we have a pending open (see DEFER_OPEN in the IDL file).
+     */
+    bool mDeferredOpen;
+
+    struct OpenParams {
+        nsCOMPtr<nsIFile> localFile;
+        int32_t ioFlags;
+        int32_t perm;
+    };
+
+    /**
+     * Data we need to do an open.
+     */
+    OpenParams mOpenParams;
+
+    /**
+     * Prepares the data we need to open the file, and either does the open now
+     * by calling DoOpen(), or leaves it to be opened later by a call to
+     * DoPendingOpen().
+     */
+    nsresult MaybeOpen(nsIFile* aFile, int32_t aIoFlags, int32_t aPerm,
+                       bool aDeferred);
+
+    /**
+     * Cleans up data prepared in MaybeOpen.
+     */
+    void CleanUpOpen();
+
+    /**
+     * Open the file. This is called either from MaybeOpen (during Init)
+     * or from DoPendingOpen (if DEFER_OPEN is used when initializing this
+     * stream). The default behavior of DoOpen is to open the file and save the
+     * file descriptor.
+     */
+    virtual nsresult DoOpen();
+
+    /**
+     * If there is a pending open, do it now. It's important for this to be
+     * inline since we do it in almost every stream API call.
+     */
+    inline nsresult DoPendingOpen();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class nsFileInputStream : public nsFileStream,
+class nsFileInputStream : public nsFileStreamBase,
                           public nsIFileInputStream,
-                          public nsILineInputStream
+                          public nsILineInputStream,
+                          public nsIIPCSerializableInputStream
 {
 public:
     NS_DECL_ISUPPORTS_INHERITED
-    NS_DECL_NSIINPUTSTREAM
     NS_DECL_NSIFILEINPUTSTREAM
     NS_DECL_NSILINEINPUTSTREAM
-    
-    // Overrided from nsFileStream
-    NS_IMETHOD Seek(PRInt32 aWhence, PRInt64 aOffset);
+    NS_DECL_NSIIPCSERIALIZABLEINPUTSTREAM
 
-    nsFileInputStream() : nsFileStream() 
+    NS_IMETHOD Close();
+    NS_IMETHOD Tell(int64_t *aResult);
+    NS_IMETHOD Available(uint64_t* _retval);
+    NS_IMETHOD Read(char* aBuf, uint32_t aCount, uint32_t* _retval);
+    NS_IMETHOD ReadSegments(nsWriteSegmentFun aWriter, void *aClosure,
+                            uint32_t aCount, uint32_t* _retval)
     {
-        mLineBuffer = nsnull;
-        mBehaviorFlags = 0;
+        return nsFileStreamBase::ReadSegments(aWriter, aClosure, aCount,
+                                              _retval);
     }
-    virtual ~nsFileInputStream() 
+    NS_IMETHOD IsNonBlocking(bool* _retval)
+    {
+        return nsFileStreamBase::IsNonBlocking(_retval);
+    }
+
+    // Overrided from nsFileStreamBase
+    NS_IMETHOD Seek(int32_t aWhence, int64_t aOffset);
+
+    nsFileInputStream()
+      : mLineBuffer(nullptr), mIOFlags(0), mPerm(0), mCachedPosition(0)
+    {}
+
+    virtual ~nsFileInputStream()
     {
         Close();
     }
@@ -101,53 +144,83 @@ public:
     Create(nsISupports *aOuter, REFNSIID aIID, void **aResult);
 
 protected:
-    nsLineBuffer<char> *mLineBuffer;
+    nsAutoPtr<nsLineBuffer<char> > mLineBuffer;
 
     /**
-     * The file being opened.  Only stored when DELETE_ON_CLOSE or
-     * REOPEN_ON_REWIND are true.
+     * The file being opened.
      */
     nsCOMPtr<nsIFile> mFile;
     /**
      * The IO flags passed to Init() for the file open.
-     * Only set for REOPEN_ON_REWIND.
      */
-    PRInt32 mIOFlags;
+    int32_t mIOFlags;
     /**
      * The permissions passed to Init() for the file open.
-     * Only set for REOPEN_ON_REWIND.
      */
-    PRInt32 mPerm;
+    int32_t mPerm;
+
     /**
-     * Flags describing our behavior.  See the IDL file for possible values.
+     * Cached position for Tell for automatically reopening streams.
      */
-    PRInt32 mBehaviorFlags;
+    int64_t mCachedPosition;
 
 protected:
     /**
      * Internal, called to open a file.  Parameters are the same as their
      * Init() analogues.
      */
-    nsresult Open(nsIFile* file, PRInt32 ioFlags, PRInt32 perm);
-    /**
-     * Reopen the file (for OPEN_ON_READ only!)
-     */
-    nsresult Reopen() { return Open(mFile, mIOFlags, mPerm); }
+    nsresult Open(nsIFile* file, int32_t ioFlags, int32_t perm);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class nsFileOutputStream : public nsFileStream,
+class nsPartialFileInputStream : public nsFileInputStream,
+                                 public nsIPartialFileInputStream
+{
+public:
+    using nsFileInputStream::Init;
+    using nsFileInputStream::Read;
+    NS_DECL_ISUPPORTS_INHERITED
+    NS_DECL_NSIPARTIALFILEINPUTSTREAM
+    NS_DECL_NSIIPCSERIALIZABLEINPUTSTREAM
+
+    nsPartialFileInputStream()
+      : mStart(0), mLength(0), mPosition(0)
+    { }
+
+    NS_IMETHOD Tell(int64_t *aResult);
+    NS_IMETHOD Available(uint64_t *aResult);
+    NS_IMETHOD Read(char* aBuf, uint32_t aCount, uint32_t* aResult);
+    NS_IMETHOD Seek(int32_t aWhence, int64_t aOffset);
+
+    static nsresult
+    Create(nsISupports *aOuter, REFNSIID aIID, void **aResult);
+
+private:
+    uint64_t TruncateSize(uint64_t aSize) {
+          return NS_MIN<uint64_t>(mLength - mPosition, aSize);
+    }
+
+    uint64_t mStart;
+    uint64_t mLength;
+    uint64_t mPosition;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class nsFileOutputStream : public nsFileStreamBase,
                            public nsIFileOutputStream
 {
 public:
     NS_DECL_ISUPPORTS_INHERITED
-    NS_DECL_NSIOUTPUTSTREAM
     NS_DECL_NSIFILEOUTPUTSTREAM
+    NS_FORWARD_NSIOUTPUTSTREAM(nsFileStreamBase::)
 
-    nsFileOutputStream() : nsFileStream() {}
-    virtual ~nsFileOutputStream() { nsFileOutputStream::Close(); }
-    
+    virtual ~nsFileOutputStream()
+    {
+        Close();
+    }
+
     static nsresult
     Create(nsISupports *aOuter, REFNSIID aIID, void **aResult);
 };
@@ -162,21 +235,66 @@ public:
     NS_DECL_NSISAFEOUTPUTSTREAM
 
     nsSafeFileOutputStream() :
-        mTargetFileExists(PR_TRUE),
+        mTargetFileExists(true),
         mWriteResult(NS_OK) {}
 
-    virtual ~nsSafeFileOutputStream() { nsSafeFileOutputStream::Close(); }
+    virtual ~nsSafeFileOutputStream()
+    {
+        Close();
+    }
+
+    virtual nsresult DoOpen();
 
     NS_IMETHODIMP Close();
-    NS_IMETHODIMP Write(const char *buf, PRUint32 count, PRUint32 *result);
-    NS_IMETHODIMP Init(nsIFile* file, PRInt32 ioFlags, PRInt32 perm, PRInt32 behaviorFlags);
+    NS_IMETHODIMP Write(const char *buf, uint32_t count, uint32_t *result);
+    NS_IMETHODIMP Init(nsIFile* file, int32_t ioFlags, int32_t perm, int32_t behaviorFlags);
 
 protected:
     nsCOMPtr<nsIFile>         mTargetFile;
     nsCOMPtr<nsIFile>         mTempFile;
 
-    PRBool   mTargetFileExists;
+    bool     mTargetFileExists;
     nsresult mWriteResult; // Internally set in Write()
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class nsFileStream : public nsFileStreamBase,
+                     public nsIInputStream,
+                     public nsIOutputStream,
+                     public nsIFileStream
+{
+public:
+    NS_DECL_ISUPPORTS_INHERITED
+    NS_DECL_NSIFILESTREAM
+    NS_FORWARD_NSIINPUTSTREAM(nsFileStreamBase::)
+
+    // Can't use NS_FORWARD_NSIOUTPUTSTREAM due to overlapping methods
+    // Close() and IsNonBlocking() 
+    NS_IMETHOD Flush()
+    {
+        return nsFileStreamBase::Flush();
+    }
+    NS_IMETHOD Write(const char* aBuf, uint32_t aCount, uint32_t* _retval)
+    {
+        return nsFileStreamBase::Write(aBuf, aCount, _retval);
+    }
+    NS_IMETHOD WriteFrom(nsIInputStream* aFromStream, uint32_t aCount,
+                         uint32_t* _retval)
+    {
+        return nsFileStreamBase::WriteFrom(aFromStream, aCount, _retval);
+    }
+    NS_IMETHOD WriteSegments(nsReadSegmentFun aReader, void* aClosure,
+                             uint32_t aCount, uint32_t* _retval)
+    {
+        return nsFileStreamBase::WriteSegments(aReader, aClosure, aCount,
+                                               _retval);
+    }
+
+    virtual ~nsFileStream()
+    {
+        Close();
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////

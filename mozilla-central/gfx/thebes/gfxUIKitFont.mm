@@ -47,17 +47,15 @@
 #include "cairo-quartz.h"
 
 gfxUIKitFont::gfxUIKitFont(UIKitFontEntry *aFontEntry, const gfxFontStyle *aFontStyle,
-                       PRBool aNeedsBold)
+                       bool aNeedsBold)
     : gfxFont(aFontEntry, aFontStyle),
       mPostscriptName(aFontEntry->GetPostscriptName()),
-      mCGFont(nsnull),
-      mFontFace(nsnull),
-      mScaledFont(nsnull)
+      mCGFont(nullptr),
+      mFontFace(nullptr),
+      mScaledFont(nullptr)
 {
     ::CFRetain(mPostscriptName);
-    if (aNeedsBold) {
-        mSyntheticBoldOffset = 1;  // devunit offset when double-striking text to fake boldness
-    }
+    mApplySyntheticBold = aNeedsBold;
 
     // InitMetrics will handle the sizeAdjust factor and set mAdjustedSize
     gfxFloat size =
@@ -135,16 +133,16 @@ gfxUIKitFont::CreatePlatformShaper()
     mPlatformShaper = new gfxCoreTextShaper(this);
 }
 
-PRBool
+bool
 gfxUIKitFont::SetupCairoFont(gfxContext *aContext)
 {
     if (cairo_scaled_font_status(mScaledFont) != CAIRO_STATUS_SUCCESS) {
         // Don't cairo_set_scaled_font as that would propagate the error to
         // the cairo_t, precluding any further drawing.
-        return PR_FALSE;
+        return false;
     }
     cairo_set_scaled_font(aContext->GetCairo(), mScaledFont);
-    return PR_TRUE;
+    return true;
 }
 
 void
@@ -211,8 +209,10 @@ gfxUIKitFont::InitMetrics()
             mMetrics.aveCharWidth = mMetrics.maxAdvance;
         }
     }
-    mMetrics.aveCharWidth += mSyntheticBoldOffset;
-    mMetrics.maxAdvance += mSyntheticBoldOffset;
+    if (IsSyntheticBold()) {
+        mMetrics.aveCharWidth += GetSyntheticBoldOffset();
+        mMetrics.maxAdvance += GetSyntheticBoldOffset();
+    }
 
     mMetrics.spaceWidth = GetCharWidth(cmap, ' ', &glyphID);
     if (glyphID == 0) {
@@ -240,7 +240,7 @@ gfxUIKitFont::GetCharWidth(CFDataRef aCmap, PRUnichar aUniChar,
                          PRUint32 *aGlyphID)
 {
     CGGlyph glyph = 0;
-    
+
     if (aCmap) {
         glyph = gfxFontUtils::MapCharToGlyph(::CFDataGetBytePtr(aCmap),
                                              ::CFDataGetLength(aCmap),

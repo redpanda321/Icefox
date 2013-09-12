@@ -1,15 +1,15 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license 
+ *  Use of this source code is governed by a BSD-style license
  *  that can be found in the LICENSE file in the root of the source
  *  tree. An additional intellectual property rights grant can be found
- *  in the file PATENTS.  All contributing project authors may 
+ *  in the file PATENTS.  All contributing project authors may
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
 
-/*!\file decoder_impl.h
+/*!\file
  * \brief Describes the decoder algorithm interface for algorithm
  *        implementations.
  *
@@ -56,9 +56,10 @@
  * types, removing or reassigning enums, adding/removing/rearranging
  * fields to structures
  */
-#define VPX_CODEC_INTERNAL_ABI_VERSION (2) /**<\hideinitializer*/
+#define VPX_CODEC_INTERNAL_ABI_VERSION (4) /**<\hideinitializer*/
 
 typedef struct vpx_codec_alg_priv  vpx_codec_alg_priv_t;
+typedef struct vpx_codec_priv_enc_mr_cfg vpx_codec_priv_enc_mr_cfg_t;
 
 /*!\brief init function pointer prototype
  *
@@ -73,7 +74,8 @@ typedef struct vpx_codec_alg_priv  vpx_codec_alg_priv_t;
  * \retval #VPX_CODEC_MEM_ERROR
  *     Memory operation failed.
  */
-typedef vpx_codec_err_t (*vpx_codec_init_fn_t)(vpx_codec_ctx_t *ctx);
+typedef vpx_codec_err_t (*vpx_codec_init_fn_t)(vpx_codec_ctx_t *ctx,
+                                             vpx_codec_priv_enc_mr_cfg_t *data);
 
 /*!\brief destroy function pointer prototype
  *
@@ -138,7 +140,7 @@ typedef vpx_codec_err_t (*vpx_codec_get_si_fn_t)(vpx_codec_alg_priv_t    *ctx,
  * provide type safety for the exchanged data or assign meanings to the
  * control codes. Those details should be specified in the algorithm's
  * header file. In particular, the ctrl_id parameter is guaranteed to exist
- * in the algorithm's control mapping table, and the data paramter may be NULL.
+ * in the algorithm's control mapping table, and the data parameter may be NULL.
  *
  *
  * \param[in]     ctx              Pointer to this instance's context
@@ -214,7 +216,7 @@ typedef vpx_image_t*(*vpx_codec_get_frame_fn_t)(vpx_codec_alg_priv_t *ctx,
         vpx_codec_iter_t     *iter);
 
 
-/*\brief e_xternal Memory Allocation memory map get iterator
+/*\brief eXternal Memory Allocation memory map get iterator
  *
  * Iterates over a list of the memory maps requested by the decoder. The
  * iterator storage should be initialized to NULL to start the iteration.
@@ -230,7 +232,7 @@ typedef vpx_codec_err_t (*vpx_codec_get_mmap_fn_t)(const vpx_codec_ctx_t      *c
         vpx_codec_iter_t           *iter);
 
 
-/*\brief e_xternal Memory Allocation memory map set iterator
+/*\brief eXternal Memory Allocation memory map set iterator
  *
  * Sets a memory descriptor inside the decoder instance.
  *
@@ -263,6 +265,10 @@ typedef vpx_fixed_buf_t *
 
 typedef vpx_image_t *
 (*vpx_codec_get_preview_frame_fn_t)(vpx_codec_alg_priv_t   *ctx);
+
+typedef vpx_codec_err_t
+(*vpx_codec_enc_mr_get_mem_loc_fn_t)(const vpx_codec_enc_cfg_t     *cfg,
+                                   void **mem_loc);
 
 /*!\brief usage configuration mapping
  *
@@ -309,8 +315,9 @@ struct vpx_codec_iface
         vpx_codec_encode_fn_t              encode;        /**< \copydoc ::vpx_codec_encode_fn_t */
         vpx_codec_get_cx_data_fn_t         get_cx_data;   /**< \copydoc ::vpx_codec_get_cx_data_fn_t */
         vpx_codec_enc_config_set_fn_t      cfg_set;       /**< \copydoc ::vpx_codec_enc_config_set_fn_t */
-        vpx_codec_get_global_headers_fn_t  get_glob_hdrs; /**< \copydoc ::vpx_codec_enc_config_set_fn_t */
+        vpx_codec_get_global_headers_fn_t  get_glob_hdrs; /**< \copydoc ::vpx_codec_get_global_headers_fn_t */
         vpx_codec_get_preview_frame_fn_t   get_preview;   /**< \copydoc ::vpx_codec_get_preview_frame_fn_t */
+        vpx_codec_enc_mr_get_mem_loc_fn_t  mr_get_mem_loc;   /**< \copydoc ::vpx_codec_enc_mr_get_mem_loc_fn_t */
     } enc;
 };
 
@@ -321,7 +328,7 @@ typedef struct vpx_codec_priv_cb_pair
     {
         vpx_codec_put_frame_cb_fn_t    put_frame;
         vpx_codec_put_slice_cb_fn_t    put_slice;
-    } fn;
+    } u;
     void                            *user_priv;
 } vpx_codec_priv_cb_pair_t;
 
@@ -332,7 +339,7 @@ typedef struct vpx_codec_priv_cb_pair
  * extended in one of two ways. First, a second, algorithm specific structure
  * can be allocated and the priv member pointed to it. Alternatively, this
  * structure can be made the first member of the algorithm specific structure,
- * and the pointer casted to the proper type.
+ * and the pointer cast to the proper type.
  */
 struct vpx_codec_priv
 {
@@ -340,7 +347,6 @@ struct vpx_codec_priv
     vpx_codec_iface_t              *iface;
     struct vpx_codec_alg_priv      *alg_priv;
     const char                     *err_detail;
-    unsigned int                    eval_counter;
     vpx_codec_flags_t               init_flags;
     struct
     {
@@ -354,7 +360,19 @@ struct vpx_codec_priv
         unsigned int                cx_data_pad_before;
         unsigned int                cx_data_pad_after;
         vpx_codec_cx_pkt_t          cx_data_pkt;
+        unsigned int                total_encoders;
     } enc;
+};
+
+/*
+ * Multi-resolution encoding internal configuration
+ */
+struct vpx_codec_priv_enc_mr_cfg
+{
+    unsigned int           mr_total_resolutions;
+    unsigned int           mr_encoder_id;
+    struct vpx_rational    mr_down_sampling_factor;
+    void*                  mr_low_res_mode_info;
 };
 
 #undef VPX_CTRL_USE_TYPE
@@ -390,9 +408,23 @@ struct vpx_codec_priv
 #define RECAST(id, x) id##__convert(x)
 
 
+/* CODEC_INTERFACE convenience macro
+ *
+ * By convention, each codec interface is a struct with extern linkage, where
+ * the symbol is suffixed with _algo. A getter function is also defined to
+ * return a pointer to the struct, since in some cases it's easier to work
+ * with text symbols than data symbols (see issue #169). This function has
+ * the same name as the struct, less the _algo suffix. The CODEC_INTERFACE
+ * macro is provided to define this getter function automatically.
+ */
+#define CODEC_INTERFACE(id)\
+vpx_codec_iface_t* id(void) { return &id##_algo; }\
+vpx_codec_iface_t  id##_algo
+
+
 /* Internal Utility Functions
  *
- * The following functions are indended to be used inside algorithms as
+ * The following functions are intended to be used inside algorithms as
  * utilities for manipulating vpx_codec_* data structures.
  */
 struct vpx_codec_pkt_list

@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 /**
  * Detects static initializers i.e. functions called during static initialization.
  */
@@ -50,5 +54,5 @@ function pretty_func(fn) {
 }
 
 function pretty_var(v) {
-  return type_string(TREE_TYPE(v)) + " " + decl_name_string(v);
+  return type_string(TREE_TYPE(v)) + " " + expr_display(v);
 }

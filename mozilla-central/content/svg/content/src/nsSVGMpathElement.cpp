@@ -1,51 +1,23 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SVG project.
- *
- * The Initial Developer of the Original Code is the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Daniel Holbert <dholbert@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "mozilla/Util.h"
 
 #include "nsSVGMpathElement.h"
 #include "nsAutoPtr.h"
 #include "nsDebug.h"
 #include "nsSVGPathElement.h"
 #include "nsSVGAnimateMotionElement.h"
+#include "nsContentUtils.h"
 
+using namespace mozilla;
 using namespace mozilla::dom;
 
 nsSVGElement::StringInfo nsSVGMpathElement::sStringInfo[1] =
 {
-  { &nsGkAtoms::href, kNameSpaceID_XLink },
+  { &nsGkAtoms::href, kNameSpaceID_XLink, false }
 };
 
 NS_IMPL_NS_NEW_SVG_ELEMENT(Mpath)
@@ -54,7 +26,7 @@ NS_IMPL_NS_NEW_SVG_ELEMENT(Mpath)
 NS_IMPL_CYCLE_COLLECTION_CLASS(nsSVGMpathElement)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(nsSVGMpathElement,
                                                 nsSVGMpathElementBase)
-  tmp->UnlinkHrefTarget(PR_FALSE);
+  tmp->UnlinkHrefTarget(false);
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(nsSVGMpathElement,
@@ -96,7 +68,7 @@ nsSVGMpathElement::nsSVGMpathElement(already_AddRefed<nsINodeInfo> aNodeInfo)
 
 nsSVGMpathElement::~nsSVGMpathElement()
 {
-  UnlinkHrefTarget(PR_FALSE);
+  UnlinkHrefTarget(false);
 }
 
 //----------------------------------------------------------------------
@@ -121,7 +93,7 @@ nsresult
 nsSVGMpathElement::BindToTree(nsIDocument* aDocument,
                               nsIContent* aParent,
                               nsIContent* aBindingParent,
-                              PRBool aCompileEventHandlers)
+                              bool aCompileEventHandlers)
 {
   NS_ABORT_IF_FALSE(!mHrefTarget.get(),
                     "Shouldn't have href-target yet "
@@ -143,19 +115,19 @@ nsSVGMpathElement::BindToTree(nsIDocument* aDocument,
 }
 
 void
-nsSVGMpathElement::UnbindFromTree(PRBool aDeep, PRBool aNullParent)
+nsSVGMpathElement::UnbindFromTree(bool aDeep, bool aNullParent)
 {
-  UnlinkHrefTarget(PR_TRUE);
+  UnlinkHrefTarget(true);
   nsSVGMpathElementBase::UnbindFromTree(aDeep, aNullParent);
 }
 
-PRBool
-nsSVGMpathElement::ParseAttribute(PRInt32 aNamespaceID,
+bool
+nsSVGMpathElement::ParseAttribute(int32_t aNamespaceID,
                                   nsIAtom* aAttribute,
                                   const nsAString& aValue,
                                   nsAttrValue& aResult)
 {
-  PRBool returnVal =
+  bool returnVal =
     nsSVGMpathElementBase::ParseAttribute(aNamespaceID, aAttribute,
                                           aValue, aResult);
   if (aNamespaceID == kNameSpaceID_XLink &&
@@ -169,8 +141,8 @@ nsSVGMpathElement::ParseAttribute(PRInt32 aNamespaceID,
 }
 
 nsresult
-nsSVGMpathElement::UnsetAttr(PRInt32 aNamespaceID,
-                             nsIAtom* aAttribute, PRBool aNotify)
+nsSVGMpathElement::UnsetAttr(int32_t aNamespaceID,
+                             nsIAtom* aAttribute, bool aNotify)
 {
   nsresult rv = nsSVGMpathElementBase::UnsetAttr(aNamespaceID, aAttribute,
                                                  aNotify);
@@ -178,7 +150,7 @@ nsSVGMpathElement::UnsetAttr(PRInt32 aNamespaceID,
 
   if (aNamespaceID == kNameSpaceID_XLink &&
       aAttribute == nsGkAtoms::href) {
-    UnlinkHrefTarget(PR_TRUE);
+    UnlinkHrefTarget(true);
   }
 
   return NS_OK;
@@ -191,7 +163,7 @@ nsSVGElement::StringAttributesInfo
 nsSVGMpathElement::GetStringInfo()
 {
   return StringAttributesInfo(mStringAttributes, sStringInfo,
-                              NS_ARRAY_LENGTH(sStringInfo));
+                              ArrayLength(sStringInfo));
 }
 
 //----------------------------------------------------------------------
@@ -200,9 +172,9 @@ nsSVGMpathElement::GetStringInfo()
 void
 nsSVGMpathElement::AttributeChanged(nsIDocument* aDocument,
                                     Element* aElement,
-                                    PRInt32 aNameSpaceID,
+                                    int32_t aNameSpaceID,
                                     nsIAtom* aAttribute,
-                                    PRInt32 aModType)
+                                    int32_t aModType)
 {
   if (aNameSpaceID == kNameSpaceID_None) {
     if (aAttribute == nsGkAtoms::d) {
@@ -221,15 +193,14 @@ nsSVGMpathElement::GetReferencedPath()
     NS_ABORT_IF_FALSE(!mHrefTarget.get(),
                       "We shouldn't have an xlink:href target "
                       "if we don't have an xlink:href attribute");
-    return nsnull;
+    return nullptr;
   }
 
   nsIContent* genericTarget = mHrefTarget.get();
-  if (genericTarget &&
-      genericTarget->Tag() == nsGkAtoms::path) {
+  if (genericTarget && genericTarget->IsSVG(nsGkAtoms::path)) {
     return static_cast<nsSVGPathElement*>(genericTarget);
   }
-  return nsnull;
+  return nullptr;
 }
 
 //----------------------------------------------------------------------
@@ -242,7 +213,7 @@ nsSVGMpathElement::UpdateHrefTarget(nsIContent* aParent,
   nsCOMPtr<nsIURI> targetURI;
   nsCOMPtr<nsIURI> baseURI = GetBaseURI();
   nsContentUtils::NewURIWithDocumentCharset(getter_AddRefs(targetURI),
-                                            aHrefStr, GetOwnerDoc(), baseURI);
+                                            aHrefStr, OwnerDoc(), baseURI);
 
   // Stop observing old target (if any)
   if (mHrefTarget.get()) {
@@ -269,7 +240,7 @@ nsSVGMpathElement::UpdateHrefTarget(nsIContent* aParent,
 }
 
 void
-nsSVGMpathElement::UnlinkHrefTarget(PRBool aNotifyParent)
+nsSVGMpathElement::UnlinkHrefTarget(bool aNotifyParent)
 {
   // Stop observing old target (if any)
   if (mHrefTarget.get()) {
@@ -285,9 +256,7 @@ nsSVGMpathElement::UnlinkHrefTarget(PRBool aNotifyParent)
 void
 nsSVGMpathElement::NotifyParentOfMpathChange(nsIContent* aParent)
 {
-  if (aParent &&
-      aParent->GetNameSpaceID() == kNameSpaceID_SVG &&
-      aParent->Tag() == nsGkAtoms::animateMotion) {
+  if (aParent && aParent->IsSVG(nsGkAtoms::animateMotion)) {
 
     nsSVGAnimateMotionElement* animateMotionParent =
       static_cast<nsSVGAnimateMotionElement*>(aParent);

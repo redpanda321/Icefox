@@ -1,42 +1,10 @@
 /*
  * NSS utility functions
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-/* $Id: nss.h,v 1.81.2.1 2010/07/19 22:33:36 christophe.ravel.bugs%sun.com Exp $ */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+/* $Id: nss.h,v 1.101 2012/12/10 23:39:39 wtc%google.com Exp $ */
 
 #ifndef __nss_h_
 #define __nss_h_
@@ -66,10 +34,10 @@
  * The format of the version string should be
  *     "<major version>.<minor version>[.<patch level>[.<build number>]][ <ECC>][ <Beta>]"
  */
-#define NSS_VERSION  "3.12.8.0" _NSS_ECC_STRING _NSS_CUSTOMIZED " Beta"
+#define NSS_VERSION  "3.14.2.0" _NSS_ECC_STRING _NSS_CUSTOMIZED " Beta"
 #define NSS_VMAJOR   3
-#define NSS_VMINOR   12
-#define NSS_VPATCH   8
+#define NSS_VMINOR   14
+#define NSS_VPATCH   2
 #define NSS_VBUILD   0
 #define NSS_BETA     PR_TRUE
 
@@ -157,13 +125,17 @@ SEC_BEGIN_PROTOS
  * Return a boolean that indicates whether the underlying library
  * will perform as the caller expects.
  *
- * The only argument is a string, which should be the verson
+ * The only argument is a string, which should be the version
  * identifier of the NSS library. That string will be compared
  * against a string that represents the actual build version of
- * the NSS library.  It also invokes the version checking functions
- * of the dependent libraries such as NSPR.
+ * the NSS library.
  */
 extern PRBool NSS_VersionCheck(const char *importedVersion);
+
+/*
+ * Returns a const string of the NSS library version.
+ */
+extern const char *NSS_GetVersion(void);
 
 /*
  * Open the Cert, Key, and Security Module databases, read only.

@@ -160,7 +160,7 @@ inline int PfxEntry::test_condition(const char * st)
                 pos = NULL;
                 p = nextchar(p);
                 // skip the next character
-                if (!ingroup) for (st++; (opts & aeUTF8) && (*st & 0xc0) == 0x80; st++);
+                if (!ingroup && *st) for (st++; (opts & aeUTF8) && (*st & 0xc0) == 0x80; st++);
                 if (*st == '\0' && p) return 0; // word <= condition
                 break;
             }
@@ -467,7 +467,9 @@ SfxEntry::SfxEntry(AffixMgr * pmgr, affentry* dp)
     memcpy(c.l.conds1, dp->c.l.conds1, MAXCONDLEN_1);
     c.l.conds2 = dp->c.l.conds2;
   } else memcpy(c.conds, dp->c.conds, MAXCONDLEN);
-
+  next = NULL;
+  nextne = NULL;
+  nexteq = NULL;
   rappnd = myrevstrdup(appnd);
   morphcode = dp->morphcode;
   contclass = dp->contclass;
@@ -595,7 +597,8 @@ inline int SfxEntry::test_condition(const char * st, const char * beg)
                         if (neg) return 0;
                         else if (i == numconds) return 1;
                         ingroup = true;
-			while (p && *p != ']' && (p = nextchar(p)));
+			while (p && *p != ']' && (p = nextchar(p)))
+                          ;
 //			if (p && *p != ']') p = nextchar(p);
                         st--;
                     }

@@ -1,41 +1,7 @@
-# -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is the Firefox Preferences System.
-#
-# The Initial Developer of the Original Code is
-# Ben Goodger.
-# Portions created by the Initial Developer are Copyright (C) 2005
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Ben Goodger <ben@mozilla.org>
-#   Blake Ross <firefox@blakeross.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 const nsIPermissionManager = Components.interfaces.nsIPermissionManager;
 const nsICookiePermission = Components.interfaces.nsICookiePermission;
@@ -159,6 +125,12 @@ var gPermissionManager = {
     document.getElementById("btnAllow").disabled = !aSiteField.value;
   },
   
+  onWindowKeyPress: function (aEvent)
+  {
+    if (aEvent.keyCode == KeyEvent.DOM_VK_ESCAPE)
+      window.close();
+  },
+
   onHostKeyPress: function (aEvent)
   {
     if (aEvent.keyCode == KeyEvent.DOM_VK_RETURN)
@@ -233,7 +205,8 @@ var gPermissionManager = {
         ++this._view._rowCount;
         this._tree.treeBoxObject.rowCountChanged(this._view.rowCount - 1, 1);        
         // Re-do the sort, since we inserted this new item at the end. 
-        gTreeUtils.sort(this._tree, this._view, this._permissions, 
+        gTreeUtils.sort(this._tree, this._view, this._permissions,
+                        this._permissionsComparator,
                         this._lastPermissionSortColumn, 
                         this._lastPermissionSortAscending);        
       }
@@ -248,7 +221,8 @@ var gPermissionManager = {
         // or vice versa, since if we're sorted on status, we may no
         // longer be in order. 
         if (this._lastPermissionSortColumn.id == "statusCol") {
-          gTreeUtils.sort(this._tree, this._view, this._permissions, 
+          gTreeUtils.sort(this._tree, this._view, this._permissions,
+                          this._permissionsComparator,
                           this._lastPermissionSortColumn, 
                           this._lastPermissionSortAscending);
         }
@@ -305,13 +279,19 @@ var gPermissionManager = {
   
   _lastPermissionSortColumn: "",
   _lastPermissionSortAscending: false,
+  _permissionsComparator : function (a, b)
+  {
+    return a.toLowerCase().localeCompare(b.toLowerCase());
+  },
+
   
   onPermissionSort: function (aColumn)
   {
     this._lastPermissionSortAscending = gTreeUtils.sort(this._tree, 
                                                         this._view, 
                                                         this._permissions,
-                                                        aColumn, 
+                                                        aColumn,
+                                                        this._permissionsComparator,
                                                         this._lastPermissionSortColumn, 
                                                         this._lastPermissionSortAscending);
     this._lastPermissionSortColumn = aColumn;

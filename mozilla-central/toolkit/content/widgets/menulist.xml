@@ -1,4 +1,8 @@
 <?xml version="1.0"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 
 <bindings id="menulistBindings"
    xmlns="http://www.mozilla.org/xbl"
@@ -30,16 +34,19 @@
 
       <handler event="popupshowing">
         <![CDATA[
-          if (event.target.parentNode == this && this.selectedItem)
-            // Not ready for auto-setting the active child in hierarchies yet.
-            // For now, only do this when the outermost menupopup opens.
-            this.menuBoxObject.activeChild = this.mSelectedInternal;
+          if (event.target.parentNode == this) {
+            this.menuBoxObject.activeChild = null;
+            if (this.selectedItem)
+              // Not ready for auto-setting the active child in hierarchies yet.
+              // For now, only do this when the outermost menupopup opens.
+              this.menuBoxObject.activeChild = this.mSelectedInternal;
+          }
         ]]>
       </handler>
 
       <handler event="keypress" modifiers="shift any" group="system">
         <![CDATA[
-          if (!event.getPreventDefault() &&
+          if (!event.defaultPrevented &&
               (event.keyCode == KeyEvent.DOM_VK_UP ||
                event.keyCode == KeyEvent.DOM_VK_DOWN ||
                event.keyCode == KeyEvent.DOM_VK_PAGE_UP ||
@@ -383,7 +390,7 @@
       <property name="accessibleType" readonly="true">
         <getter>
           <![CDATA[
-            <!-- Droppable is currently used for the Firefox bookmarks dialog only -->
+            // Droppable is currently used for the Firefox bookmarks dialog only
             return (this.getAttribute("droppable") == "false") ?
                    Components.interfaces.nsIAccessibleProvider.XULTextBox :
                    Components.interfaces.nsIAccessibleProvider.XULCombobox;
@@ -411,8 +418,8 @@
   <binding id="menulist-editable" extends="chrome://global/content/bindings/menulist.xml#menulist">
     <content sizetopopup="pref">
       <xul:hbox class="menulist-editable-box textbox-input-box" xbl:inherits="context,disabled,readonly,focused" flex="1">
-        <html:input class="menulist-editable-input" flex="1" anonid="input" allowevents="true"
-                    xbl:inherits="value=label,value,disabled,tabindex,readonly"/>
+        <html:input class="menulist-editable-input" anonid="input" allowevents="true"
+                    xbl:inherits="value=label,value,disabled,tabindex,readonly,placeholder"/>
       </xul:hbox>
       <xul:dropmarker class="menulist-dropmarker" type="menu"
                       xbl:inherits="open,disabled,parentfocused=focused"/>
@@ -579,6 +586,7 @@
             if (document.commandDispatcher.focusedElement != this.inputField)
               this.inputField.focus();
 
+            this.menuBoxObject.activeChild = null;
             if (this.selectedItem)
               // Not ready for auto-setting the active child in hierarchies yet.
               // For now, only do this when the outermost menupopup opens.

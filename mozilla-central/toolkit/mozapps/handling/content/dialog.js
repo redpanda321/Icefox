@@ -1,41 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Protocol Handler Dialog.
- *
- * The Initial Developer of the Original Code is
- *   Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Shawn Wilsher <me@shawnwilsher.com> (original author)
- *   Dan Mosedale <dmose@mozilla.org>
- *   Florian Queze <florian@queze.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  * This dialog builds its content based on arguments passed into it.
@@ -147,17 +112,13 @@ var dialog = {
       else if (app instanceof Ci.nsIWebHandlerApp) {
         let uri = ios.newURI(app.uriTemplate, null, null);
         if (/^https?/.test(uri.scheme)) {
-          let iconURI;
-          try {
-            iconURI = Cc["@mozilla.org/browser/favicon-service;1"].
-                      getService(Ci.nsIFaviconService).
-                      getFaviconForPage(ios.newURI(uri.prePath, null, null)).
-                      spec;
-          }
-          catch (e) {
-            iconURI = uri.prePath + "/favicon.ico";
-          }
-          elm.setAttribute("image", iconURI);
+          // Unfortunately we can't use the favicon service to get the favicon,
+          // because the service looks for a record with the exact URL we give
+          // it, and users won't have such records for URLs they don't visit,
+          // and users won't visit the handler's URL template, they'll only
+          // visit URLs derived from that template (i.e. with %s in the template
+          // replaced by the URL of the content being handled).
+          elm.setAttribute("image", uri.prePath + "/favicon.ico");
         }
         elm.setAttribute("description", uri.prePath);
       }

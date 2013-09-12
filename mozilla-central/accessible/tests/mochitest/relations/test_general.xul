@@ -6,17 +6,15 @@
 <window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         title="nsIAccessible::getAccessibleRelated() tests">
 
-  <script type="application/javascript" 
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js" />
+          src="../common.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/relations.js" />
+          src="../relations.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/role.js" />
+          src="../role.js" />
 
   <script type="application/javascript">
   <![CDATA[
@@ -25,6 +23,12 @@
       // xul:label@control
       testRelation("label1", RELATION_LABEL_FOR, "checkbox1");
       testRelation("checkbox1", RELATION_LABELLED_BY, "label1");
+
+      // xul:label@control, multiple
+      testRelation("label1_1", RELATION_LABEL_FOR, "checkbox1_1");
+      testRelation("label1_2", RELATION_LABEL_FOR, "checkbox1_1");
+      testRelation("checkbox1_1", RELATION_LABELLED_BY,
+                   [ "label1_1", "label1_2" ]);
 
       // aria-labelledby
       testRelation("label2", RELATION_LABEL_FOR, "checkbox2");
@@ -48,6 +52,12 @@
       testRelation("descr4", RELATION_DESCRIPTION_FOR, "checkbox6");
       testRelation("checkbox6", RELATION_DESCRIBED_BY, "descr4");
 
+      // xul:description@control, multiple
+      testRelation("descr5", RELATION_DESCRIPTION_FOR, "checkbox7");
+      testRelation("descr6", RELATION_DESCRIPTION_FOR, "checkbox7");
+      testRelation("checkbox7", RELATION_DESCRIBED_BY,
+                   [ "descr5", "descr6" ]);
+
       // aria_owns, multiple relations
       testRelation("treeitem1", RELATION_NODE_CHILD_OF, "tree");
       testRelation("treeitem2", RELATION_NODE_CHILD_OF, "tree");
@@ -56,6 +66,10 @@
       testRelation("treeitem3", RELATION_NODE_CHILD_OF, "tree");
       testRelation("treeitem4", RELATION_NODE_CHILD_OF, "tree");
       testRelation("treeitem5", RELATION_NODE_CHILD_OF, "treeitem4");
+
+      // no relation node_child_of for accessible contained in an unexpected
+      // parent
+      testRelation("treeitem6", RELATION_NODE_CHILD_OF, null);
 
       // 'node child of' relation for the document having window, returns
       // direct accessible parent (fixed in bug 419770).
@@ -66,6 +80,9 @@
       testRelation(iframeDocAcc, RELATION_NODE_CHILD_OF, iframeAcc);
 
       // aria-controls
+      getAccessible("tab");
+      todo(false,
+           "Getting an accessible tab, otherwise relations for tabpanel aren't cached. Bug 606924 will fix that.");
       testRelation("tabpanel", RELATION_CONTROLLED_BY, "tab");
       testRelation("tab", RELATION_CONTROLLER_FOR, "tabpanel");
 
@@ -85,19 +102,6 @@
 
       // 'default button' relation
       testRelation("textbox", RELATION_DEFAULT_BUTTON, "submit");
-
-      // 'embeds' relation for root accessible
-      var docAcc = null;
-      var parentOfDocAcc = null;
-      var parentDocAcc = getAccessible(document);
-      do {
-        docAcc = parentDocAcc;
-        parentOfDocAcc = getAccessible(docAcc.parent, [nsIAccessNode]);
-        parentDocAcc = getAccessible(parentOfDocAcc.document,
-                                     [nsIAccessible]);
-      } while (getRole(parentDocAcc) != ROLE_CHROME_WINDOW)
-
-      testRelation(parentDocAcc, RELATION_EMBEDS, docAcc);
 
       // 'labelled by'/'label for' relation for xul:goupbox and xul:label of
       // xul:caption
@@ -131,6 +135,11 @@
          title="mochitests for accessible relations">
         Mozilla Bug 475298
       </a><br/>
+      <a target="_blank"
+         href="https://bugzilla.mozilla.org/show_bug.cgi?id=673389"
+         title="node_child_of on an item not in a proper container">
+        Mozilla Bug 67389
+      </a><br/>
 
       <p id="display"></p>
       <div id="content" style="display: none">
@@ -141,6 +150,10 @@
 
     <label id="label1" control="checkbox1">label</label>
     <checkbox id="checkbox1"/>
+
+    <label id="label1_1" control="checkbox1_1">label</label>
+    <label id="label1_2" control="checkbox1_1">label</label>
+    <checkbox id="checkbox1_1"/>
 
     <description id="label2">label</description>
     <description role="checkbox" id="checkbox2" aria-labelledby="label2"/>
@@ -161,6 +174,10 @@
     <description id="descr4" control="checkbox6">description</description>
     <checkbox id="checkbox6"/>
 
+    <description id="descr5" control="checkbox7">description</description>
+    <description id="descr6" control="checkbox7">description</description>
+    <checkbox id="checkbox7"/>
+
     <description role="treeitem" id="treeitem1">Yellow</description>
     <description role="treeitem" id="treeitem2">Orange</description>
     <vbox id="tree" role="tree" aria-owns="treeitem1 treeitem2">
@@ -168,6 +185,8 @@
       <description role="treeitem" id="treeitem4" aria-level="1">Green</description>
       <description role="treeitem" id="treeitem5" aria-level="2">Light green</description>
     </vbox>
+
+    <description role="treeitem" id="treeitem6">Dark green</description>
 
     <iframe id="iframe"/>
 

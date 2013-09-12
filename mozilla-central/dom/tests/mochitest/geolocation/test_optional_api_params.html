@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=452566
 -->
 <head>
   <title>Test for Bug 452566</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="text/javascript" src="geolocation_common.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
@@ -18,6 +17,10 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=452566
 </div>
 <pre id="test">
 <script class="testbody" type="text/javascript">
+
+// ensure we are using the right testing provider
+resume_geolocationProvider();
+force_prompt(true)
 
 /** Test for Bug 452566 **/
 
@@ -105,9 +108,8 @@ try {
 }
 ok(!exception, exception);
 
-// Successful calls trigger a geolocation notification,
 // so clean up ready for the next test.
-clickNotificationButton(kAcceptButton);
+reset_prompt();
 
 </script>
 </pre>

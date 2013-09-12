@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 /**
  * graph-frameclasses.js: a dehydra script to collect information about
  * the class hierarchy of frame types.
@@ -60,7 +64,7 @@ function process_tree_decl(d)
 {
   d = dehydra_convert(d);
   
-  if (d.name && frameIIDRE(d.name)) {
+  if (d.name && frameIIDRE.exec(d.name)) {
     haveIDs[d.memberOf.name] = 1;
   }
 }
@@ -68,7 +72,7 @@ function process_tree_decl(d)
 function process_cp_pre_genericize(d)
 {
   d = dehydra_convert(d);
-  if (queryFrameRE(d.name) && d.template === undefined) {
+  if (queryFrameRE.exec(d.name) && d.template === undefined) {
     let templtype = d.type.type.type;
     while (templtype.typedef !== undefined)
       templtype = templtype.typedef;

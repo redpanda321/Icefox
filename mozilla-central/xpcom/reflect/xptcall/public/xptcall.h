@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Benjamin Smedberg <benjamin@smedbergs.us>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* Public declarations for xptcall. */
 
@@ -47,11 +14,11 @@
 # define NS_InvokeByIndex      NS_InvokeByIndex_P
 #endif
 
-#include "prtypes.h"
 #include "nscore.h"
 #include "nsISupports.h"
 #include "xpt_struct.h"
 #include "xptinfo.h"
+#include "jsapi.h"
 
 struct nsXPTCMiniVariant
 {
@@ -59,20 +26,25 @@ struct nsXPTCMiniVariant
 // with no penalty.
     union
     {
-        PRInt8    i8;
-        PRInt16   i16;
-        PRInt32   i32;
-        PRInt64   i64;
-        PRUint8   u8;
-        PRUint16  u16;
-        PRUint32  u32;
-        PRUint64  u64;
+        int8_t    i8;
+        int16_t   i16;
+        int32_t   i32;
+        int64_t   i64;
+        uint8_t   u8;
+        uint16_t  u16;
+        uint32_t  u32;
+        uint64_t  u64;
         float     f;
         double    d;
-        PRBool    b;
+        bool      b;
         char      c;
         PRUnichar wc;
         void*     p;
+
+        // Types below here are unknown to the assembly implementations, and
+        // therefore _must_ be passed with indirect semantics. We put them in
+        // the union here for type safety, so that we can avoid void* tricks.
+        jsval j;
     } val;
 };
 
@@ -84,41 +56,50 @@ struct nsXPTCVariant : public nsXPTCMiniVariant
     // inherits 'val' here
     void*     ptr;
     nsXPTType type;
-    PRUint8   flags;
+    uint8_t   flags;
 
     enum
     {
-        // these are bitflags!
-        PTR_IS_DATA    = 0x1,  // ptr points to 'real' data in val
-        VAL_IS_ALLOCD  = 0x2,  // val.p holds alloc'd ptr that must be freed
-        VAL_IS_IFACE   = 0x4,  // val.p holds interface ptr that must be released
-        VAL_IS_ARRAY   = 0x8,  // val.p holds a pointer to an array needing cleanup
-        VAL_IS_DOMSTR  = 0x10, // val.p holds a pointer to domstring needing cleanup
-        VAL_IS_UTF8STR = 0x20, // val.p holds a pointer to utf8string needing cleanup
-        VAL_IS_CSTR    = 0x40, // val.p holds a pointer to cstring needing cleanup
-        VAL_IS_JSROOT  = 0x80  // val.p holds a pointer to a jsval that must be unrooted
+        //
+        // Bitflag definitions
+        //
+
+        // Indicates that ptr (above, and distinct from val.p) is the value that
+        // should be passed on the stack.
+        //
+        // In theory, ptr could point anywhere. But in practice it always points
+        // to &val. So this flag is used to pass 'val' by reference, letting us
+        // avoid the extra allocation we would incur if we were to use val.p.
+        //
+        // Various parts of XPConnect assume that ptr==&val, so we enforce it
+        // explicitly with SetIndirect() and IsIndirect().
+        //
+        // Since ptr always points to &val, the semantics of this flag are kind of
+        // dumb, since the ptr field is unnecessary. But changing them would
+        // require changing dozens of assembly files, so they're likely to stay
+        // the way they are.
+        PTR_IS_DATA    = 0x1,
+
+        // Indicates that the value we hold requires some sort of cleanup (memory
+        // deallocation, interface release, jsval unrooting, etc). The precise
+        // cleanup that is performed depends on the 'type' field above.
+        // If the value is an array, this flag specifies whether the elements
+        // within the array require cleanup (we always clean up the array itself,
+        // so this flag would be redundant for that purpose).
+        VAL_NEEDS_CLEANUP = 0x2
     };
 
     void ClearFlags()         {flags = 0;}
-    void SetPtrIsData()       {flags |= PTR_IS_DATA;}
-    void SetValIsAllocated()  {flags |= VAL_IS_ALLOCD;}
-    void SetValIsInterface()  {flags |= VAL_IS_IFACE;}
-    void SetValIsArray()      {flags |= VAL_IS_ARRAY;}
-    void SetValIsDOMString()  {flags |= VAL_IS_DOMSTR;}
-    void SetValIsUTF8String() {flags |= VAL_IS_UTF8STR;}
-    void SetValIsCString()    {flags |= VAL_IS_CSTR;}
-    void SetValIsJSRoot()     {flags |= VAL_IS_JSROOT;}
+    void SetIndirect()        {ptr = &val; flags |= PTR_IS_DATA;}
+    void SetValNeedsCleanup() {flags |= VAL_NEEDS_CLEANUP;}
 
-    PRBool IsPtrData()       const  {return 0 != (flags & PTR_IS_DATA);}
-    PRBool IsValAllocated()  const  {return 0 != (flags & VAL_IS_ALLOCD);}
-    PRBool IsValInterface()  const  {return 0 != (flags & VAL_IS_IFACE);}
-    PRBool IsValArray()      const  {return 0 != (flags & VAL_IS_ARRAY);}
-    PRBool IsValDOMString()  const  {return 0 != (flags & VAL_IS_DOMSTR);}
-    PRBool IsValUTF8String() const  {return 0 != (flags & VAL_IS_UTF8STR);}
-    PRBool IsValCString()    const  {return 0 != (flags & VAL_IS_CSTR);}    
-    PRBool IsValJSRoot()     const  {return 0 != (flags & VAL_IS_JSROOT);}
+    bool IsIndirect()         const  {return 0 != (flags & PTR_IS_DATA);}
+    bool DoesValNeedCleanup() const  {return 0 != (flags & VAL_NEEDS_CLEANUP);}
 
-    void Init(const nsXPTCMiniVariant& mv, const nsXPTType& t, PRUint8 f)
+    // Internal use only. Use IsIndirect() instead.
+    bool IsPtrData()       const  {return 0 != (flags & PTR_IS_DATA);}
+
+    void Init(const nsXPTCMiniVariant& mv, const nsXPTType& t, uint8_t f)
     {
         type = t;
         flags = f;
@@ -126,12 +107,12 @@ struct nsXPTCVariant : public nsXPTCMiniVariant
         if(f & PTR_IS_DATA)
         {
             ptr = mv.val.p;
-            val.p = nsnull;
+            val.p = nullptr;
         }
         else
         {
-            ptr = nsnull;
-            val.p = nsnull; // make sure 'val.p' is always initialized
+            ptr = nullptr;
+            val.p = nullptr; // make sure 'val.p' is always initialized
             switch(t.TagPart()) {
               case nsXPTType::T_I8:                val.i8  = mv.val.i8;  break;
               case nsXPTType::T_I16:               val.i16 = mv.val.i16; break;
@@ -167,7 +148,7 @@ struct nsXPTCVariant : public nsXPTCMiniVariant
 class nsIXPTCProxy : public nsISupports
 {
 public:
-    NS_IMETHOD CallMethod(PRUint16 aMethodIndex,
+    NS_IMETHOD CallMethod(uint16_t aMethodIndex,
                           const XPTMethodDescriptor *aInfo,
                           nsXPTCMiniVariant *aParams) = 0;
 };
@@ -205,7 +186,7 @@ XPCOM_API(void)
 NS_DestroyXPTCallStub(nsISomeInterface* aStub);
 
 XPCOM_API(nsresult)
-NS_InvokeByIndex(nsISupports* that, PRUint32 methodIndex,
-                 PRUint32 paramCount, nsXPTCVariant* params);
+NS_InvokeByIndex(nsISupports* that, uint32_t methodIndex,
+                 uint32_t paramCount, nsXPTCVariant* params);
 
 #endif /* xptcall_h___ */

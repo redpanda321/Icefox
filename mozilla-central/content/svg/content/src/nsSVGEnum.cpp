@@ -1,46 +1,15 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SVG project.
- *
- * The Initial Developer of the Original Code is IBM Corporation
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include "nsError.h"
+#include "nsSVGAttrTearoffTable.h"
 #include "nsSVGEnum.h"
 #include "nsIAtom.h"
 #include "nsSVGElement.h"
-#ifdef MOZ_SMIL
 #include "nsSMILValue.h"
 #include "SMILEnumType.h"
-#endif // MOZ_SMIL
 
 using namespace mozilla;
 
@@ -57,6 +26,9 @@ NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(nsSVGEnum::DOMAnimatedEnum)
   NS_DOM_INTERFACE_MAP_ENTRY_CLASSINFO(SVGAnimatedEnumeration)
 NS_INTERFACE_MAP_END
 
+static nsSVGAttrTearoffTable<nsSVGEnum, nsSVGEnum::DOMAnimatedEnum>
+  sSVGAnimatedEnumTearoffTable;
+
 nsSVGEnumMapping *
 nsSVGEnum::GetMapping(nsSVGElement *aSVGElement)
 {
@@ -69,28 +41,23 @@ nsSVGEnum::GetMapping(nsSVGElement *aSVGElement)
 }
 
 nsresult
-nsSVGEnum::SetBaseValueString(const nsAString& aValue,
-                              nsSVGElement *aSVGElement,
-                              PRBool aDoSetAttr)
+nsSVGEnum::SetBaseValueAtom(const nsIAtom* aValue, nsSVGElement *aSVGElement)
 {
-  nsCOMPtr<nsIAtom> valAtom = do_GetAtom(aValue);
-
   nsSVGEnumMapping *mapping = GetMapping(aSVGElement);
 
   while (mapping && mapping->mKey) {
-    if (valAtom == *(mapping->mKey)) {
+    if (aValue == *(mapping->mKey)) {
+      mIsBaseSet = true;
       if (mBaseVal != mapping->mVal) {
         mBaseVal = mapping->mVal;
         if (!mIsAnimated) {
           mAnimVal = mBaseVal;
         }
-#ifdef MOZ_SMIL
         else {
           aSVGElement->AnimationNeedsResample();
         }
-#endif
         // We don't need to call DidChange* here - we're only called by
-        // nsSVGElement::ParseAttribute under nsGenericElement::SetAttr,
+        // nsSVGElement::ParseAttribute under Element::SetAttr,
         // which takes care of notifying.
       }
       return NS_OK;
@@ -103,41 +70,39 @@ nsSVGEnum::SetBaseValueString(const nsAString& aValue,
   return NS_ERROR_DOM_SYNTAX_ERR;
 }
 
-void
-nsSVGEnum::GetBaseValueString(nsAString& aValue, nsSVGElement *aSVGElement)
+nsIAtom*
+nsSVGEnum::GetBaseValueAtom(nsSVGElement *aSVGElement)
 {
   nsSVGEnumMapping *mapping = GetMapping(aSVGElement);
 
   while (mapping && mapping->mKey) {
     if (mBaseVal == mapping->mVal) {
-      (*mapping->mKey)->ToString(aValue);
-      return;
+      return *mapping->mKey;
     }
     mapping++;
   }
   NS_ERROR("unknown enumeration value");
+  return nsGkAtoms::_empty;
 }
 
 nsresult
-nsSVGEnum::SetBaseValue(PRUint16 aValue,
-                        nsSVGElement *aSVGElement,
-                        PRBool aDoSetAttr)
+nsSVGEnum::SetBaseValue(uint16_t aValue,
+                        nsSVGElement *aSVGElement)
 {
   nsSVGEnumMapping *mapping = GetMapping(aSVGElement);
 
   while (mapping && mapping->mKey) {
     if (mapping->mVal == aValue) {
-      if (mBaseVal != PRUint8(aValue)) {
-        mBaseVal = PRUint8(aValue);
+      mIsBaseSet = true;
+      if (mBaseVal != uint8_t(aValue)) {
+        mBaseVal = uint8_t(aValue);
         if (!mIsAnimated) {
           mAnimVal = mBaseVal;
         }
-#ifdef MOZ_SMIL
         else {
           aSVGElement->AnimationNeedsResample();
         }
-#endif
-        aSVGElement->DidChangeEnum(mAttrEnum, aDoSetAttr);
+        aSVGElement->DidChangeEnum(mAttrEnum);
       }
       return NS_OK;
     }
@@ -147,10 +112,13 @@ nsSVGEnum::SetBaseValue(PRUint16 aValue,
 }
 
 void
-nsSVGEnum::SetAnimValue(PRUint16 aValue, nsSVGElement *aSVGElement)
+nsSVGEnum::SetAnimValue(uint16_t aValue, nsSVGElement *aSVGElement)
 {
+  if (mIsAnimated && aValue == mAnimVal) {
+    return;
+  }
   mAnimVal = aValue;
-  mIsAnimated = PR_TRUE;
+  mIsAnimated = true;
   aSVGElement->DidAnimateEnum(mAttrEnum);
 }
 
@@ -158,15 +126,22 @@ nsresult
 nsSVGEnum::ToDOMAnimatedEnum(nsIDOMSVGAnimatedEnumeration **aResult,
                              nsSVGElement *aSVGElement)
 {
-  *aResult = new DOMAnimatedEnum(this, aSVGElement);
-  if (!*aResult)
-    return NS_ERROR_OUT_OF_MEMORY;
+  nsRefPtr<DOMAnimatedEnum> domAnimatedEnum =
+    sSVGAnimatedEnumTearoffTable.GetTearoff(this);
+  if (!domAnimatedEnum) {
+    domAnimatedEnum = new DOMAnimatedEnum(this, aSVGElement);
+    sSVGAnimatedEnumTearoffTable.AddTearoff(this, domAnimatedEnum);
+  }
 
-  NS_ADDREF(*aResult);
+  domAnimatedEnum.forget(aResult);
   return NS_OK;
 }
 
-#ifdef MOZ_SMIL
+nsSVGEnum::DOMAnimatedEnum::~DOMAnimatedEnum()
+{
+  sSVGAnimatedEnumTearoffTable.RemoveTearoff(mVal);
+}
+
 nsISMILAttr*
 nsSVGEnum::ToSMILAttr(nsSVGElement *aSVGElement)
 {
@@ -177,20 +152,22 @@ nsresult
 nsSVGEnum::SMILEnum::ValueFromString(const nsAString& aStr,
                                      const nsISMILAnimationElement* /*aSrcElement*/,
                                      nsSMILValue& aValue,
-                                     PRBool& aPreventCachingOfSandwich) const
+                                     bool& aPreventCachingOfSandwich) const
 {
-  nsCOMPtr<nsIAtom> valAtom = do_GetAtom(aStr);
-  nsSVGEnumMapping *mapping = mVal->GetMapping(mSVGElement);
+  nsIAtom *valAtom = NS_GetStaticAtom(aStr);
+  if (valAtom) {
+    nsSVGEnumMapping *mapping = mVal->GetMapping(mSVGElement);
 
-  while (mapping && mapping->mKey) {
-    if (valAtom == *(mapping->mKey)) {
-      nsSMILValue val(&SMILEnumType::sSingleton);
-      val.mU.mUint = mapping->mVal;
-      aValue = val;
-      aPreventCachingOfSandwich = PR_FALSE;
-      return NS_OK;
+    while (mapping && mapping->mKey) {
+      if (valAtom == *(mapping->mKey)) {
+        nsSMILValue val(&SMILEnumType::sSingleton);
+        val.mU.mUint = mapping->mVal;
+        aValue = val;
+        aPreventCachingOfSandwich = false;
+        return NS_OK;
+      }
+      mapping++;
     }
-    mapping++;
   }
   
   // only a warning since authors may mistype attribute values
@@ -210,8 +187,9 @@ void
 nsSVGEnum::SMILEnum::ClearAnimValue()
 {
   if (mVal->mIsAnimated) {
-    mVal->SetAnimValue(mVal->mBaseVal, mSVGElement);
-    mVal->mIsAnimated = PR_FALSE;
+    mVal->mIsAnimated = false;
+    mVal->mAnimVal = mVal->mBaseVal;
+    mSVGElement->DidAnimateEnum(mVal->mAttrEnum);
   }
 }
 
@@ -222,9 +200,8 @@ nsSVGEnum::SMILEnum::SetAnimValue(const nsSMILValue& aValue)
                "Unexpected type to assign animated value");
   if (aValue.mType == &SMILEnumType::sSingleton) {
     NS_ABORT_IF_FALSE(aValue.mU.mUint <= USHRT_MAX,
-                      "Very large enumerated value - too big for PRUint16");
-    mVal->SetAnimValue(PRUint16(aValue.mU.mUint), mSVGElement);
+                      "Very large enumerated value - too big for uint16_t");
+    mVal->SetAnimValue(uint16_t(aValue.mU.mUint), mSVGElement);
   }
   return NS_OK;
 }
-#endif // MOZ_SMIL

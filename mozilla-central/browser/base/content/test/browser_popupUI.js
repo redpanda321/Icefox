@@ -21,7 +21,7 @@ function findPopup() {
 
   while (enumerator.hasMoreElements()) {
     let win = enumerator.getNext();
-    if (win.content == content.wrappedJSObject.popup) {
+    if (win.content.wrappedJSObject == content.wrappedJSObject.popup) {
       testPopupUI(win);
       return;
     }
@@ -36,8 +36,8 @@ function testPopupUI(win) {
   ok(win.gURLBar, "location bar exists in the popup");
   isnot(win.gURLBar.clientWidth, 0, "location bar is visible in the popup");
   ok(win.gURLBar.readOnly, "location bar is read-only in the popup");
-  is(doc.getElementById("Browser:OpenLocation").getAttribute("disabled"), "true",
-     "'open location' command is disabled in the popup");
+  isnot(doc.getElementById("Browser:OpenLocation").getAttribute("disabled"), "true",
+     "'open location' command is not disabled in the popup");
 
   let historyButton = doc.getAnonymousElementByAttribute(win.gURLBar, "anonid",
                                                          "historydropmarker");

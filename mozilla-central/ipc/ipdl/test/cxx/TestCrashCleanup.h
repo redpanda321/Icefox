@@ -17,11 +17,13 @@ public:
     TestCrashCleanupParent();
     virtual ~TestCrashCleanupParent();
 
+    static bool RunTestInProcesses() { return true; }
+    static bool RunTestInThreads() { return false; }
+
     void Main();
 
 protected:    
-    NS_OVERRIDE
-    virtual void ActorDestroy(ActorDestroyReason why)
+    virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE
     {
         if (AbnormalShutdown != why)
             fail("unexpected destruction!");
@@ -40,11 +42,9 @@ public:
     virtual ~TestCrashCleanupChild();
 
 protected:
-    NS_OVERRIDE
-    virtual bool AnswerDIEDIEDIE();
+    virtual bool AnswerDIEDIEDIE() MOZ_OVERRIDE;
 
-    NS_OVERRIDE
-    virtual void ActorDestroy(ActorDestroyReason why)
+    virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE
     {
         fail("should have 'crashed'!");
     }

@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Red Hat, Inc
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "seccomon.h"
 #include "prio.h"
 #include "prprf.h"
@@ -221,16 +189,16 @@ getFIPSMode(void)
  * 2 for the key slot, and
  * 3 for the crypto operations slot fips
  */
-#define ORDER_FLAGS "trustOrder=75 cipherOrder=100"
+#define CIPHER_ORDER_FLAGS "cipherOrder=100"
 #define SLOT_FLAGS \
 	"[slotFlags=RSA,RC4,RC2,DES,DH,SHA1,MD5,MD2,SSL,TLS,AES,RANDOM" \
 	" askpw=any timeout=30 ]"
  
 static const char *nssDefaultFlags =
-	ORDER_FLAGS " slotParams={0x00000001=" SLOT_FLAGS " }  ";
+	CIPHER_ORDER_FLAGS " slotParams={0x00000001=" SLOT_FLAGS " }  ";
 
 static const char *nssDefaultFIPSFlags =
-	ORDER_FLAGS " slotParams={0x00000003=" SLOT_FLAGS " }  ";
+	CIPHER_ORDER_FLAGS " slotParams={0x00000003=" SLOT_FLAGS " }  ";
 
 /*
  * This function builds the list of databases and modules to load, and sets
@@ -270,7 +238,7 @@ get_list(char *filename, char *stripped_parameters)
 	    "library= "
 	    "module=\"NSS User database\" "
 	    "parameters=\"configdir='sql:%s' %s tokenDescription='NSS user database'\" "
-        "NSS=\"%sflags=internal%s\"",
+        "NSS=\"trustOrder=75 %sflags=internal%s\"",
         userdb, stripped_parameters, nssflags,
         isFIPS ? ",FIPS" : "");
 
@@ -284,30 +252,6 @@ get_list(char *filename, char *stripped_parameters)
 		userdb, stripped_parameters);
 	}
 
-#if 0
-	/* This doesn't actually work. If we register
-		both this and the sysdb (in either order)
-		then only one of them actually shows up */
-
-    /* Using a NULL filename as a Boolean flag to
-     * prevent registering both an application-defined
-     * db and the system db. rhbz #546211.
-     */
-    PORT_Assert(filename);
-    if (sysdb && PL_CompareStrings(filename, sysdb))
-	    filename = NULL;
-    else if (userdb && PL_CompareStrings(filename, userdb))
-	    filename = NULL;
-
-    if (filename && !userIsRoot()) {
-	    module_list[next++] = PR_smprintf(
-	      "library= "
-	      "module=\"NSS database\" "
-	      "parameters=\"configdir='sql:%s' tokenDescription='NSS database sql:%s'\" "
-	      "NSS=\"%sflags=internal\"",filename, filename, nssflags);
-    }
-#endif
-
     /* now the system database (always read only unless it's root) */
     if (sysdb) {
 	    const char *readonly = userCanModifySystemDB() ? "" : "flags=readonly";
@@ -315,7 +259,7 @@ get_list(char *filename, char *stripped_parameters)
 	      "library= "
 	      "module=\"NSS system database\" "
 	      "parameters=\"configdir='sql:%s' tokenDescription='NSS system database' %s\" "
-	      "NSS=\"%sflags=internal,critical\"",sysdb, readonly, nssflags);
+	      "NSS=\"trustOrder=80 %sflags=internal,critical\"",sysdb, readonly, nssflags);
     }
 
     /* that was the last module */
@@ -341,7 +285,7 @@ release_list(char **arg)
 }
 
 
-#include "pk11pars.h"
+#include "utilpars.h"
 
 #define TARGET_SPEC_COPY(new, start, end)    \
   if (end > start) {                         \
@@ -372,9 +316,9 @@ overlapstrcpy(char *target, char *src)
 
 /* determine what options the user was trying to open this database with */
 /* filename is the directory pointed to by configdir= */
-/* stripped is the rest of the paramters with configdir= stripped out */
+/* stripped is the rest of the parameters with configdir= stripped out */
 static SECStatus
-parse_paramters(char *parameters, char **filename, char **stripped)
+parse_parameters(char *parameters, char **filename, char **stripped)
 {
     char *sourcePrev;
     char *sourceCurr;
@@ -386,15 +330,15 @@ parse_paramters(char *parameters, char **filename, char **stripped)
     newStripped = PORT_Alloc(PORT_Strlen(parameters)+2);
     targetCurr = newStripped;
     sourcePrev = parameters;
-    sourceCurr = secmod_argStrip(parameters);
+    sourceCurr = NSSUTIL_ArgStrip(parameters);
     TARGET_SPEC_COPY(targetCurr, sourcePrev, sourceCurr);
 
     while (*sourceCurr) {
 	int next;
 	sourcePrev = sourceCurr;
-	SECMOD_HANDLE_STRING_ARG(sourceCurr, *filename, "configdir=",
+	NSSUTIL_HANDLE_STRING_ARG(sourceCurr, *filename, "configdir=",
 		sourcePrev = sourceCurr; )
-	SECMOD_HANDLE_FINAL_ARG(sourceCurr);
+	NSSUTIL_HANDLE_FINAL_ARG(sourceCurr);
 	TARGET_SPEC_COPY(targetCurr, sourcePrev, sourceCurr);
     }
     *targetCurr = 0;
@@ -423,7 +367,7 @@ NSS_ReturnModuleSpecData(unsigned long function, char *parameters, void *args)
     char **retString = NULL;
     SECStatus rv;
 
-    rv = parse_paramters(parameters, &filename, &stripped);
+    rv = parse_parameters(parameters, &filename, &stripped);
     if (rv != SECSuccess) {
 	/* use defaults */
 	filename = getSystemDB();

@@ -1,40 +1,7 @@
 /* vim:set ts=4 sw=4 sts=4 ci et: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsSocketTransportService2_h__
 #define nsSocketTransportService2_h__
@@ -47,9 +14,12 @@
 #include "pldhash.h"
 #include "prinrval.h"
 #include "prlog.h"
+#include "prinit.h"
 #include "prio.h"
 #include "nsASocketHandler.h"
 #include "nsIObserver.h"
+#include "mozilla/Mutex.h"
+#include "mozilla/net/DashboardTypes.h"
 
 //-----------------------------------------------------------------------------
 
@@ -59,12 +29,11 @@
 //
 extern PRLogModuleInfo *gSocketTransportLog;
 #endif
-#define LOG(args)     PR_LOG(gSocketTransportLog, PR_LOG_DEBUG, args)
-#define LOG_ENABLED() PR_LOG_TEST(gSocketTransportLog, PR_LOG_DEBUG)
+#define SOCKET_LOG(args)     PR_LOG(gSocketTransportLog, PR_LOG_DEBUG, args)
+#define SOCKET_LOG_ENABLED() PR_LOG_TEST(gSocketTransportLog, PR_LOG_DEBUG)
 
 //-----------------------------------------------------------------------------
 
-#define NS_SOCKET_MAX_COUNT    50
 #define NS_SOCKET_POLL_TIMEOUT PR_INTERVAL_NO_TIMEOUT
 
 //-----------------------------------------------------------------------------
@@ -75,6 +44,8 @@ class nsSocketTransportService : public nsPISocketTransportService
                                , public nsIRunnable
                                , public nsIObserver
 {
+    typedef mozilla::Mutex Mutex;
+
 public:
     NS_DECL_ISUPPORTS
     NS_DECL_NSPISOCKETTRANSPORTSERVICE
@@ -86,6 +57,12 @@ public:
 
     nsSocketTransportService();
 
+    // Max Socket count may need to get initialized/used by nsHttpHandler
+    // before this class is initialized.
+    static uint32_t gMaxCount;
+    static PRCallOnceType gMaxCountInitOnce;
+    static PRStatus DiscoverMaxCount();
+
     //
     // the number of sockets that can be attached at any given time is
     // limited.  this is done because some operating systems (e.g., Win9x)
@@ -93,10 +70,13 @@ public:
     // AttachSocket will fail if the limit is exceeded.  consumers should
     // call CanAttachSocket and check the result before creating a socket.
     //
-    PRBool CanAttachSocket() {
-        return mActiveCount + mIdleCount < NS_SOCKET_MAX_COUNT;
+    bool CanAttachSocket() {
+        return mActiveCount + mIdleCount < gMaxCount;
     }
 
+    // Called by the networking dashboard
+    // Fills the passed array with socket information
+    void GetSocketConnections(nsTArray<mozilla::net::SocketInfo> *);
 protected:
 
     virtual ~nsSocketTransportService();
@@ -116,7 +96,7 @@ private:
                             // mThreadEvent.  other threads don't change
                             // mThreadEvent; they need to lock mLock
                             // whenever they access mThreadEvent.
-    PRBool      mAutodialEnabled;
+    bool        mAutodialEnabled;
                             // pref to control autodial code
 
     // Returns mThread, protecting the get-and-addref with mLock
@@ -126,11 +106,16 @@ private:
     // initialization and shutdown (any thread)
     //-------------------------------------------------------------------------
 
-    PRLock       *mLock;
-    PRPackedBool  mInitialized;
-    PRPackedBool  mShuttingDown;
+    Mutex         mLock;
+    bool          mInitialized;
+    bool          mShuttingDown;
                             // indicates whether we are currently in the
                             // process of shutting down
+    bool          mOffline;
+    bool          mGoingOffline;
+
+    // Detaches all sockets.
+    void Reset(bool aGuardLocals);
 
     //-------------------------------------------------------------------------
     // socket lists (socket thread only)
@@ -147,22 +132,28 @@ private:
     {
         PRFileDesc       *mFD;
         nsASocketHandler *mHandler;
-        PRUint16          mElapsedTime;  // time elapsed w/o activity
+        uint16_t          mElapsedTime;  // time elapsed w/o activity
     };
 
-    SocketContext mActiveList [ NS_SOCKET_MAX_COUNT ];
-    SocketContext mIdleList   [ NS_SOCKET_MAX_COUNT ];
+    SocketContext *mActiveList;                   /* mListSize entries */
+    SocketContext *mIdleList;                     /* mListSize entries */
 
-    PRUint32 mActiveCount;
-    PRUint32 mIdleCount;
+    uint32_t mActiveListSize;
+    uint32_t mIdleListSize;
+    uint32_t mActiveCount;
+    uint32_t mIdleCount;
 
-    nsresult DetachSocket(SocketContext *);
+    nsresult DetachSocket(SocketContext *, SocketContext *);
     nsresult AddToIdleList(SocketContext *);
     nsresult AddToPollList(SocketContext *);
     void RemoveFromIdleList(SocketContext *);
     void RemoveFromPollList(SocketContext *);
     void MoveToIdleList(SocketContext *sock);
     void MoveToPollList(SocketContext *sock);
+
+    bool GrowActiveList();
+    bool GrowIdleList();
+    void   InitMaxCount();
     
     //-------------------------------------------------------------------------
     // poll list (socket thread only)
@@ -171,12 +162,12 @@ private:
     // event cannot be created).
     //-------------------------------------------------------------------------
 
-    PRPollDesc mPollList[ NS_SOCKET_MAX_COUNT + 1 ];
+    PRPollDesc *mPollList;                        /* mListSize + 1 entries */
 
     PRIntervalTime PollTimeout();            // computes ideal poll timeout
-    nsresult       DoPollIteration(PRBool wait);
+    nsresult       DoPollIteration(bool wait);
                                              // perfoms a single poll iteration
-    PRInt32        Poll(PRBool wait, PRUint32 *interval);
+    int32_t        Poll(bool wait, uint32_t *interval);
                                              // calls PR_Poll.  the out param
                                              // interval indicates the poll
                                              // duration in seconds.
@@ -189,7 +180,18 @@ private:
 
     // Preference Monitor for SendBufferSize
     nsresult    UpdatePrefs();
-    PRInt32     mSendBufferSize;
+    int32_t     mSendBufferSize;
+
+    // Socket thread only for dynamically adjusting max socket size
+#if defined(XP_WIN)
+    void ProbeMaxCount();
+#endif
+    bool mProbedMaxCount;
+
+    void AnalyzeConnection(nsTArray<mozilla::net::SocketInfo> *data,
+                           SocketContext *context, bool aActive);
+
+    void ClosePrivateConnections();
 };
 
 extern nsSocketTransportService *gSocketTransportService;

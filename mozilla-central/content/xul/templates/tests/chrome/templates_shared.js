@@ -28,12 +28,12 @@
  * function will be called in order and a comparison of the output will be
  * performed. This allows changes to be made to the datasource to ensure that
  * the generated template output has been updated. Within the expected output
- * e4x data, the step attribute may be set to a number on an element to
- * indicate that an element only applies before or after a particular change.
- * If step is set to a positive number, that element will only exist after
- * that step in the list of changes made. If step is set to a negative number,
- * that element will only exist until that step. Steps are numbered starting
- * at 1. For example:
+ * XML, the step attribute may be set to a number on an element to indicate
+ * that an element only applies before or after a particular change. If step
+ * is set to a positive number, that element will only exist after that step in
+ * the list of changes made. If step is set to a negative number, that element
+ * will only exist until that step. Steps are numbered starting at 1. For
+ * example:
  *   <label value="Cat"/>
  *   <label step="2" value="Dog"/>
  *   <label step="-5" value="Mouse"/>
@@ -75,8 +75,13 @@ function test_template()
     var src = window.location.href.replace(/test_tmpl.*xul/, "animals.rdf");
     ds = RDF.GetDataSourceBlocking(src);
 
-    if (root.datasources == "rdf:null")
-      root.datasources = "animals.rdf";
+    if (expectLoggedMessages) {
+      Components.classes["@mozilla.org/consoleservice;1"].
+                 getService(Components.interfaces.nsIConsoleService).reset();
+    }
+
+    if (root.getAttribute("datasources") == "rdf:null")
+      root.setAttribute("datasources", "animals.rdf");
   }
   else if (queryType == "xml") {
     var src = window.location.href.replace(/test_tmpl.*xul/, "animals.xml");
@@ -126,13 +131,14 @@ function iterateChanged(root, ds)
 
   if (needsOpen)
     root.open = false;
-  compareConsoleMessages();
+  if (expectedConsoleMessages.length)
+    compareConsoleMessages();
   SimpleTest.finish();
 }
 
 function checkResults(root, step)
 {
-  var output = expectedOutput.copy();
+  var output = expectedOutput.cloneNode(true);
   setForCurrentStep(output, step);
 
   var error;
@@ -141,7 +147,8 @@ function checkResults(root, step)
     // convert the tree's view data into the equivalent DOM structure
     // for easier comparison
     actualoutput = treeViewToDOM(root);
-    error = compareOutput(actualoutput, output.treechildren, false);
+    var treechildrenElements = [e for (e of output.children) if (e.localName === "treechildren")];
+    error = compareOutput(actualoutput, treechildrenElements[0], false);
   }
   else {
     error = compareOutput(actualoutput, output, true);
@@ -172,7 +179,8 @@ function checkResults(root, step)
     serializedXML = serializedXML.replace(nsrepl, "");
     if (debug)
       dump("-------- " + adjtestid + "  " + error + ":\n" + serializedXML + "\n");
-    is(serializedXML, "Same", "Error is: " + error);
+    if (!stilltodo && error)
+      is(serializedXML, "Same", "Error is: " + error);
   }
 }
 
@@ -182,24 +190,29 @@ function checkResults(root, step)
 function setForCurrentStep(content, currentStep)
 {
   var todelete = [];
-  for each (var child in content) {
-    var stepstr = child.@step.toString();
-    var stepsarr = stepstr.split(",");
-    for (var s = 0; s < stepsarr.length; s++) {
-      var step = parseInt(stepsarr[s]);
-      if ((step > 0 && step > currentStep) ||
-          (step < 0 && -step <= currentStep)) {
-        todelete.push(child);
+  for (var child of content.childNodes) {
+    if (child.nodeType === Node.ELEMENT_NODE) {
+      var stepstr = child.getAttribute("step") || "";
+      var stepsarr = stepstr.split(",");
+      for (var s = 0; s < stepsarr.length; s++) {
+        var step = parseInt(stepsarr[s]);
+        if ((step > 0 && step > currentStep) ||
+            (step < 0 && -step <= currentStep)) {
+          todelete.push(child);
+        }
       }
+    } else if (child.nodeType === Node.TEXT_NODE) {
+      // Drop empty text nodes.
+      if (child.nodeValue.trim() === "")
+        todelete.push(child);
     }
   }
 
-  // delete node using this bizarre syntax, because e4x has a non-sensical api
-  for (var d = 0; d < todelete.length; d++)
-    delete content.*[todelete[d].childIndex()];
-  
-  for each (var child in content) {
-    delete child.@step;
+  for (var e of todelete)
+    content.removeChild(e);
+
+  for (var child of content.children) {
+    child.removeAttribute("step");
     setForCurrentStep(child, currentStep);
   }
 }
@@ -213,52 +226,41 @@ function setForCurrentStep(content, currentStep)
  */
 function compareOutput(actual, expected, isroot)
 {
-  // The expected output may be enclosed in an <output> element if it contains
-  // several nodes. However, the <output> element may be omitted if there is
-  // only one node.
-  if (expected.localName() != "output" && isroot) {
-    // If there is no <output> element then only one node should have been
-    // generated by the template. The number of children should be one
-    // <template> node and one generated node.
-    if (actual.childNodes.length != 2)
-      return "incorrect child node count of root " +
-             (actual.childNodes.length - 1) + " expected 1";
-    return compareOutput(actual.lastChild, expected, false);
-  }
+  if (isroot && expected.localName != "data")
+    return "expected must be a <data> element";
 
   var t;
 
   // compare text nodes
-  if (expected.nodeKind() == "text") {
-    if (actual.nodeValue != expected.toString())
-      return "Text " + actual.nodeValue + " doesn't match " + expected.toString();
+  if (expected.nodeType == Node.TEXT_NODE) {
+    if (actual.nodeValue !== expected.nodeValue.trim())
+      return "Text " + actual.nodeValue + " doesn't match " + expected.nodeValue;
     return "";
   }
 
   if (!isroot) {
     var anyid = false;
     // make sure that the tags match
-    if (actual.localName != expected.localName())
-      return "Tag name " + expected.localName() + " not found";
+    if (actual.localName != expected.localName)
+      return "Tag name " + expected.localName + " not found";
 
     // loop through the attributes in the expected node and compare their
     // values with the corresponding attribute on the actual node
 
-    var expectedAttrs = expected.attributes();
-    for (var a = 0; a < expectedAttrs.length(); a++) {
+    var expectedAttrs = expected.attributes;
+    for (var a = 0; a < expectedAttrs.length; a++) {
       var attr = expectedAttrs[a];
-      expectedAttrs.length(); // not having this causes a script error
-      var expectval = "" + attr;
+      var expectval = attr.value;
       // skip checking the id when anyid="true", however make sure to
       // ensure that the id is actually present.
-      if (attr.name() == "anyid" && expectval == "true") {
+      if (attr.name == "anyid" && expectval == "true") {
         anyid = true;
         if (!actual.hasAttribute("id"))
           return "expected id attribute";
       }
-      else if (actual.getAttribute(attr.name()) != expectval) {
-        return "attribute " + attr.name() + " is '" +
-               actual.getAttribute(attr.name()) + "' instead of  '" + expectval + "'";
+      else if (actual.getAttribute(attr.name) != expectval) {
+        return "attribute " + attr.name + " is '" +
+               actual.getAttribute(attr.name) + "' instead of '" + expectval + "'";
       }
     }
 
@@ -267,7 +269,7 @@ function compareOutput(actual, expected, isroot)
     var length = actual.attributes.length;
     for (t = 0; t < length; t++) {
       var aattr = actual.attributes[t];
-      var expectval = "" + expected.@[aattr.name];
+      var expectval = expected.getAttribute(aattr.name);
       // ignore some attributes that don't matter
       if (expectval != actual.getAttribute(aattr.name) &&
           aattr.name != "staticHint" && aattr.name != "xmlns" &&
@@ -279,12 +281,12 @@ function compareOutput(actual, expected, isroot)
   // ensure that the node has the right number of children. Subtract one for
   // the root node to account for the <template> node.
   length = actual.childNodes.length - (isroot ? 1 : 0);
-  if (length != expected.children().length())
+  if (length != expected.childNodes.length)
     return "incorrect child node count of " + actual.localName + " " + length +
-           " expected " + expected.children().length();
+           " expected " + expected.childNodes.length;
 
-  // if <output unordered="true"> is used, then the child nodes may be in any order
-  var unordered = (expected.localName() == "output" && expected.@unordered == "true");
+  // if <data unordered="true"> is used, then the child nodes may be in any order
+  var unordered = (expected.localName == "data" && expected.getAttribute("unordered") == "true");
 
   // next, loop over the children and call compareOutput recursively on each one
   var adj = 0;
@@ -298,15 +300,15 @@ function compareOutput(actual, expected, isroot)
     else {
       var output = "unexpected";
       if (unordered) {
-        var expectedChildren = expected.children();
-        for (var e = 0; e < expectedChildren.length(); e++) {
+        var expectedChildren = expected.childNodes;
+        for (var e = 0; e < expectedChildren.length; e++) {
           output = compareOutput(actualnode, expectedChildren[e], false);
           if (!output)
             break;
         }
       }
       else {
-        output = compareOutput(actualnode, expected.children()[t - adj], false);
+        output = compareOutput(actualnode, expected.childNodes[t - adj], false);
       }
 
       // an error was returned, so return early
@@ -323,7 +325,6 @@ function compareOutput(actual, expected, isroot)
  */
 function copyRDFDataSource(root, sourceds)
 {
-  var sourceds;
   var dsourcesArr = [];
   var composite = root.database;
   var dsources = composite.GetDataSources();
@@ -425,15 +426,20 @@ function expectConsoleMessage(ref, id, isNew, isActive, extra)
 
 function compareConsoleMessages()
 {
-   var consoleService = Components.classes["@mozilla.org/consoleservice;1"].
-                          getService(Components.interfaces.nsIConsoleService);
-   var out = {};
-   consoleService.getMessageArray(out, {});
-   var messages = out.value || [];
-   is(messages.length, expectedConsoleMessages.length, "correct number of logged messages");
-   for (var m = 0; m < messages.length; m++) {
-     is(messages[m].message, expectedConsoleMessages.shift(), "logged message " + (m + 1));
-   }
+  var consoleService = Components.classes["@mozilla.org/consoleservice;1"].
+                         getService(Components.interfaces.nsIConsoleService);
+  var messages = consoleService.getMessageArray() || [];
+  messages = messages.map(function (m) m.message);
+  // Copy to avoid modifying expectedConsoleMessages
+  var expect = expectedConsoleMessages.concat();
+  for (var m = 0; m < messages.length; m++) {
+    if (messages[m] == expect[0]) {
+      ok(true, "found message " + expect.shift());
+    }
+  }
+  if (expect.length != 0) {
+    ok(false, "failed to find expected console messages: " + expect);
+  }
 }
 
 function copyToProfile(filename)

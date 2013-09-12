@@ -1,3 +1,7 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"><html><head>
   <meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
   <meta name="author" content="Marc Attinasi"><title>Adding a new style property - layout cookbook</title></head>
@@ -12,7 +16,7 @@
 58646</a></li>
     <li>
       6/18/2002: David Baron (dbaron@dbaron.org): corrected support
-      for 'inherit' and '-moz-initial' (didn't test with code, though),
+      for 'inherit' and 'initial' (didn't test with code, though),
       and explained what the final boolean in CheckPropertyData is for.
     </li>
     <li>
@@ -186,20 +190,20 @@ The GetValue method must be similarly <a href="#GetValueCase">modified</a>
     case eCSSProperty_cursor:
     case eCSSProperty_force_broken_image_icons: {
       CSS_VARONSTACK_GET(UserInterface);
-      if (nsnull != theUserInterface) {
+      if (nullptr != theUserInterface) {
         switch (aProperty) {
           case eCSSProperty_user_input:       aValue = theUserInterface-&gt;mUserInput;       break;
           case eCSSProperty_user_modify:      aValue = theUserInterface-&gt;mUserModify;      break;
           case eCSSProperty_user_select:      aValue = theUserInterface-&gt;mUserSelect;      break;
           case eCSSProperty_key_equivalent:
-            if (nsnull != theUserInterface-&gt;mKeyEquivalent) {
+            if (nullptr != theUserInterface-&gt;mKeyEquivalent) {
               aValue = theUserInterface-&gt;mKeyEquivalent-&gt;mValue;
             }
             break;
           case eCSSProperty_user_focus:       aValue = theUserInterface-&gt;mUserFocus;       break;
           case eCSSProperty_resizer:          aValue = theUserInterface-&gt;mResizer;         break;
           case eCSSProperty_cursor:
-            if (nsnull != theUserInterface-&gt;mCursor) {
+            if (nullptr != theUserInterface-&gt;mCursor) {
               aValue = theUserInterface-&gt;mCursor-&gt;mValue;
             }
             break;
@@ -217,9 +221,9 @@ The GetValue method must be similarly <a href="#GetValueCase">modified</a>
 </pre>
 Finally <a href="#ListCase">modify </a>
 the 'List' method to output the property value.<br>
-  <pre>void nsCSSUserInterface::List(FILE* out, PRInt32 aIndent) const
+  <pre>void nsCSSUserInterface::List(FILE* out, int32_t aIndent) const
 {
-  for (PRInt32 index = aIndent; --index &gt;= 0; ) fputs("  ", out);
+  for (int32_t index = aIndent; --index &gt;= 0; ) fputs("  ", out);
 
   nsAutoString buffer;
 
@@ -227,7 +231,7 @@ the 'List' method to output the property value.<br>
   mUserModify.AppendToString(buffer, eCSSProperty_user_modify);
   mUserSelect.AppendToString(buffer, eCSSProperty_user_select);
   nsCSSValueList*  keyEquiv = mKeyEquivalent;
-  while (nsnull != keyEquiv) {
+  while (nullptr != keyEquiv) {
     keyEquiv-&gt;mValue.AppendToString(buffer, eCSSProperty_key_equivalent);
     keyEquiv= keyEquiv-&gt;mNext;
   }
@@ -235,7 +239,7 @@ the 'List' method to output the property value.<br>
   mResizer.AppendToString(buffer, eCSSProperty_resizer);
   
   nsCSSValueList*  cursor = mCursor;
-  while (nsnull != cursor) {
+  while (nullptr != cursor) {
     cursor-&gt;mValue.AppendToString(buffer, eCSSProperty_cursor);
     cursor = cursor-&gt;mNext;
   }
@@ -270,7 +274,7 @@ variant flag</a>
  that makes sense for your property. In our case<br>
   <br>
   <pre>  case eCSSProperty_force_broken_image_icons:</pre>
-  <pre>    return ParsePositiveVariant(aErrorCode, aValue, VARIANT_INTEGER, nsnull);</pre>
+  <pre>    return ParsePositiveVariant(aErrorCode, aValue, VARIANT_INTEGER, nullptr);</pre>
 This will parse the value as a positive integer value, which is what we want.<br>
   <br>
   <h3><a name="StyleContext">Style Context</a></h3>
@@ -303,12 +307,12 @@ Add a <a href="#StyleContextMember">data member</a>
     aContext-&gt;FreeToShell(sizeof(nsStyleUIReset), this);
   };
 
-  PRInt32 CalcDifference(const nsStyleUIReset&amp; aOther) const;
+  int32_t CalcDifference(const nsStyleUIReset&amp; aOther) const;
 
-  PRUint8   mUserSelect;      // [reset] (selection-style)
+  uint8_t   mUserSelect;      // [reset] (selection-style)
   PRUnichar mKeyEquivalent;   // [reset] XXX what type should this be?
-  PRUint8   mResizer;         // [reset]
-  <b><a name="StyleContextMember"></a>PRUint8   mForceBrokenImageIcon; // [reset]  (0 if not forcing, otherwise forcing)</b>
+  uint8_t   mResizer;         // [reset]
+  <b><a name="StyleContextMember"></a>uint8_t   mForceBrokenImageIcon; // [reset]  (0 if not forcing, otherwise forcing)</b>
 };
 </pre>
 In the implementation file <a href="http://lxr.mozilla.org/seamonkey/source/content/shared/src/nsStyleStruct.cpp">
@@ -317,7 +321,7 @@ add the new data member to the constructors of the style struct and the CalcDiff
 method, which must return the correct style-change hint when a change to
 your new property is detected. The constructor changes are obvious, but here
 is the CalcDifference change for our example:<br>
-  <pre>PRInt32 nsStyleUIReset::CalcDifference(const nsStyleUIReset&amp; aOther) const
+  <pre>int32_t nsStyleUIReset::CalcDifference(const nsStyleUIReset&amp; aOther) const
 {
  <b> if (mForceBrokenImageIcon == aOther.mForceBrokenImageIcon) {</b>
     if (mResizer == aOther.mResizer) {
@@ -421,7 +425,7 @@ to the style struct:<br>
     ui-&gt;mResizer = parentUI-&gt;mResizer;
   }
 
-  <b>// force-broken-image-icons: integer, inherit, -moz-initial
+  <b>// force-broken-image-icons: integer, inherit, initial
   if (eCSSUnit_Integer == uiData.mForceBrokenImageIcons.GetUnit()) {
     ui-&gt;mForceBrokenImageIcons = uiData.mForceBrokenImageIcons.GetIntValue();
   } else if (eCSSUnit_Inherit == uiData.mForceBrokenImageIcons.GetUnit()) {
@@ -448,20 +452,11 @@ to the style struct:<br>
   <h3><a name="DOM">DOM</a></h3>
 Users in scripts, or anywhere outside of layout/ or content/ may need to access
 the new property.  This is done using the CSS OM, specifically
-<code>nsIDOMCSSStyleDeclaration</code> and <code>nsIDOMCSS2Properties</code>.
+<code>nsIDOMCSSStyleDeclaration</code> and <code>CSS2Properties</code>.
 By the magic of C++ pre-processing, the
-CSS2Properties interfaces will be implemented automatically when you
+CSS2Properties bits will be implemented automatically when you
 <a href="#CSSPropList">add your property</a> to <a href="http://lxr.mozilla.org/seamonkey/source/content/shared/public/nsCSSPropList.h">
-nsCSSPropList.h</a>. Because of this, if you fail to add your property to the
-DOM interface, you will be rewarded with compiler errors.  All you have to do
-is modify <a href="http://lxr.mozilla.org/mozilla/source/dom/public/idl/css/nsIDOMCSS2Properties.idl">
-nsIDOMCSS2Properties.idl</a> and add the appropriate attribute to the
-<code>nsIDOMNSCSS2Properties</code> interface (lower in the file).
-For example:<br>
-  <pre>           attribute DOMString        MozForceBrokenImageIcon;
-                                        // raises(DOMException) on setting
-
-</pre>
+nsCSSPropList.h</a>.
   <h3><a name="Layout">Layout</a></h3>
 OK, finally the style system is supporting the new property. It is time to
 actually make use of it now.<br>

@@ -6,7 +6,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=490705
 
 <head>
   <title>Media test: simple audio write checks</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -21,7 +20,13 @@ var rate = 44100;
 
 function runTests() {
   var a1 = new Audio();
-  a1.mozSetup(channels, rate);
+  try {
+    a1.mozSetup(channels, rate);
+  } catch (ex) {
+    todo(false, "Audio hardware is disabled, can't test audio write API");
+    SimpleTest.finish();
+    return;
+  }
 
   is(a1.mozChannels, channels, "mozChannels should be " + channels + ".");
   is(a1.mozSampleRate, rate, "mozSampleRate should be " + rate + ".");
@@ -54,7 +59,6 @@ function runTests() {
     writeArgsOK = true;
   }
   ok(writeArgsOK, "mozWriteAudio args test failed.");
-
   SimpleTest.finish();
 }
 

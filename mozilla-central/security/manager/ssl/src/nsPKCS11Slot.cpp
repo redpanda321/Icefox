@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Ian McGreer <mcgreer@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsPKCS11Slot.h"
 #include "nsPK11TokenDB.h"
@@ -75,14 +42,14 @@ nsPKCS11Slot::refreshSlotInfo()
       ccDesc, 
       ccDesc+PL_strnlen(ccDesc, sizeof(slot_info.slotDescription)));
     mSlotDesc = NS_ConvertUTF8toUTF16(cDesc);
-    mSlotDesc.Trim(" ", PR_FALSE, PR_TRUE);
+    mSlotDesc.Trim(" ", false, true);
     // Set the Manufacturer field
     const char *ccManID = (const char*)slot_info.manufacturerID;
     const nsACString &cManID = Substring(
       ccManID, 
       ccManID+PL_strnlen(ccManID, sizeof(slot_info.manufacturerID)));
     mSlotManID = NS_ConvertUTF8toUTF16(cManID);
-    mSlotManID.Trim(" ", PR_FALSE, PR_TRUE);
+    mSlotManID.Trim(" ", false, true);
     // Set the Hardware Version field
     mSlotHWVersion = EmptyString();
     mSlotHWVersion.AppendInt(slot_info.hardwareVersion.major);
@@ -119,7 +86,7 @@ void nsPKCS11Slot::destructorSafeDestroyNSSReference()
 
   if (mSlot) {
     PK11_FreeSlot(mSlot);
-    mSlot = nsnull;
+    mSlot = nullptr;
   }
 }
 
@@ -209,8 +176,6 @@ nsPKCS11Slot::GetToken(nsIPK11Token **_retval)
     return NS_ERROR_NOT_AVAILABLE;
 
   nsCOMPtr<nsIPK11Token> token = new nsPK11Token(mSlot);
-  if (!token)
-    return NS_ERROR_OUT_OF_MEMORY;
   *_retval = token;
   NS_ADDREF(*_retval);
   return NS_OK;
@@ -225,7 +190,7 @@ nsPKCS11Slot::GetTokenName(PRUnichar **aName)
     return NS_ERROR_NOT_AVAILABLE;
 
   if (!PK11_IsPresent(mSlot)) {
-    *aName = nsnull;
+    *aName = nullptr;
     return NS_OK;
   }
 
@@ -240,7 +205,7 @@ nsPKCS11Slot::GetTokenName(PRUnichar **aName)
 }
 
 NS_IMETHODIMP
-nsPKCS11Slot::GetStatus(PRUint32 *_retval)
+nsPKCS11Slot::GetStatus(uint32_t *_retval)
 {
   nsNSSShutDownPreventionLock locker;
   if (isAlreadyShutDown())
@@ -252,7 +217,7 @@ nsPKCS11Slot::GetStatus(PRUint32 *_retval)
     *_retval = SLOT_NOT_PRESENT;
   else if (PK11_NeedLogin(mSlot) && PK11_NeedUserInit(mSlot))
     *_retval = SLOT_UNINITIALIZED;
-  else if (PK11_NeedLogin(mSlot) && !PK11_IsLoggedIn(mSlot, NULL))
+  else if (PK11_NeedLogin(mSlot) && !PK11_IsLoggedIn(mSlot, nullptr))
     *_retval = SLOT_NOT_LOGGED_IN;
   else if (PK11_NeedLogin(mSlot))
     *_retval = SLOT_LOGGED_IN;
@@ -295,7 +260,7 @@ void nsPKCS11Module::destructorSafeDestroyNSSReference()
 
   if (mModule) {
     SECMOD_DestroyModule(mModule);
-    mModule = nsnull;
+    mModule = nullptr;
   }
 }
 
@@ -322,7 +287,7 @@ nsPKCS11Module::GetLibName(PRUnichar **aName)
   if ( mModule->dllName ) {
     *aName = ToNewUnicode(NS_ConvertUTF8toUTF16(mModule->dllName));
   } else {
-    *aName = NULL;
+    *aName = nullptr;
   }
   return NS_OK;
 }
@@ -338,13 +303,13 @@ nsPKCS11Module::FindSlotByName(const PRUnichar *aName,
 
   char *asciiname = ToNewUTF8String(nsDependentString(aName));
   PR_LOG(gPIPNSSLog, PR_LOG_DEBUG, ("Getting \"%s\"\n", asciiname));
-  PK11SlotInfo *slotinfo = NULL;
+  PK11SlotInfo *slotinfo = nullptr;
   PK11SlotList *slotList = PK11_FindSlotsByNames(mModule->dllName, 
-        asciiname /* slotName */, NULL /* token Name */, PR_FALSE);
+        asciiname /* slotName */, nullptr /* token Name */, false);
   if (!slotList) {
     /* name must be the token name */
     slotList = PK11_FindSlotsByNames(mModule->dllName, 
-        NULL /*slot Name */, asciiname /* token Name */, PR_FALSE);
+        nullptr /*slot Name */, asciiname /* token Name */, false);
   }
   if (slotList) {
     /* should only be one */
@@ -355,7 +320,7 @@ nsPKCS11Module::FindSlotByName(const PRUnichar *aName,
   }
   if (!slotinfo) {
     // workaround - the builtin module has no name
-    if (asciiname == nsnull) {
+    if (!asciiname) {
       return NS_ERROR_FAILURE;
     } else if (nsCRT::strcmp(asciiname, "Root Certificates") == 0) {
       slotinfo = PK11_ReferenceSlot(mModule->slots[0]);
@@ -368,8 +333,6 @@ nsPKCS11Module::FindSlotByName(const PRUnichar *aName,
   nsMemory::Free(asciiname);
   nsCOMPtr<nsIPKCS11Slot> slot = new nsPKCS11Slot(slotinfo);
   PK11_FreeSlot(slotinfo);
-  if (!slot)
-    return NS_ERROR_OUT_OF_MEMORY;
   *_retval = slot;
   NS_ADDREF(*_retval);
   return NS_OK;
@@ -422,11 +385,9 @@ nsPKCS11ModuleDB::GetInternal(nsIPKCS11Module **_retval)
 {
   nsNSSShutDownPreventionLock locker;
   SECMODModule *nssMod = 
-    SECMOD_CreateModule(NULL,SECMOD_INT_NAME, NULL,SECMOD_INT_FLAGS);
+    SECMOD_CreateModule(nullptr, SECMOD_INT_NAME, nullptr, SECMOD_INT_FLAGS);
   nsCOMPtr<nsIPKCS11Module> module = new nsPKCS11Module(nssMod);
   SECMOD_DestroyModule(nssMod);
-  if (!module)
-    return NS_ERROR_OUT_OF_MEMORY;
   *_retval = module;
   NS_ADDREF(*_retval);
   return NS_OK;
@@ -438,11 +399,9 @@ nsPKCS11ModuleDB::GetInternalFIPS(nsIPKCS11Module **_retval)
 {
   nsNSSShutDownPreventionLock locker;
   SECMODModule *nssMod = 
-    SECMOD_CreateModule(NULL, SECMOD_FIPS_NAME, NULL, SECMOD_FIPS_FLAGS);
+    SECMOD_CreateModule(nullptr, SECMOD_FIPS_NAME, nullptr, SECMOD_FIPS_FLAGS);
   nsCOMPtr<nsIPKCS11Module> module = new nsPKCS11Module(nssMod);
   SECMOD_DestroyModule(nssMod);
-  if (!module)
-    return NS_ERROR_OUT_OF_MEMORY;
   *_retval = module;
   NS_ADDREF(*_retval);
   return NS_OK;
@@ -461,8 +420,6 @@ nsPKCS11ModuleDB::FindModuleByName(const PRUnichar *aName,
     return NS_ERROR_FAILURE;
   nsCOMPtr<nsIPKCS11Module> module = new nsPKCS11Module(mod);
   SECMOD_DestroyModule(mod);
-  if (!module)
-    return NS_ERROR_OUT_OF_MEMORY;
   *_retval = module;
   NS_ADDREF(*_retval);
   return NS_OK;
@@ -484,8 +441,6 @@ nsPKCS11ModuleDB::FindSlotByName(const PRUnichar *aName,
     return NS_ERROR_FAILURE;
   nsCOMPtr<nsIPKCS11Slot> slot = new nsPKCS11Slot(slotinfo);
   PK11_FreeSlot(slotinfo);
-  if (!slot)
-    return NS_ERROR_OUT_OF_MEMORY;
   *_retval = slot;
   NS_ADDREF(*_retval);
   return NS_OK;
@@ -523,7 +478,7 @@ nsPKCS11ModuleDB::ListModules(nsIEnumerator **_retval)
   return rv;
 }
 
-NS_IMETHODIMP nsPKCS11ModuleDB::GetCanToggleFIPS(PRBool *aCanToggleFIPS)
+NS_IMETHODIMP nsPKCS11ModuleDB::GetCanToggleFIPS(bool *aCanToggleFIPS)
 {
   nsNSSShutDownPreventionLock locker;
   *aCanToggleFIPS = SECMOD_CanDeleteInternalModule();
@@ -556,14 +511,14 @@ NS_IMETHODIMP nsPKCS11ModuleDB::ToggleFIPSMode()
 }
 
 /* readonly attribute boolean isFIPSEnabled; */
-NS_IMETHODIMP nsPKCS11ModuleDB::GetIsFIPSEnabled(PRBool *aIsFIPSEnabled)
+NS_IMETHODIMP nsPKCS11ModuleDB::GetIsFIPSEnabled(bool *aIsFIPSEnabled)
 {
   nsNSSShutDownPreventionLock locker;
   *aIsFIPSEnabled = PK11_IsFIPS();
   return NS_OK;
 }
 
-NS_IMETHODIMP nsPKCS11ModuleDB::GetIsFIPSModeActive(PRBool *aIsFIPSModeActive)
+NS_IMETHODIMP nsPKCS11ModuleDB::GetIsFIPSModeActive(bool *aIsFIPSModeActive)
 {
   return GetIsFIPSEnabled(aIsFIPSModeActive);
 }

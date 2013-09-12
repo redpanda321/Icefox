@@ -1,41 +1,10 @@
 /* -*- Mode: IDL; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsITransport.idl"
+#include "nsINetAddr.idl"
 
 interface nsIInterfaceRequestor;
 
@@ -51,7 +20,7 @@ native PRNetAddr(union PRNetAddr);
  * NOTE: This is a free-threaded interface, meaning that the methods on
  * this interface may be called from any thread.
  */
-[scriptable, uuid(19c37caa-fb41-4c32-bbf1-c6b31b75d789)]
+[scriptable, uuid(91ca3523-fc52-4dea-b167-ef8f56473dde)]
 interface nsISocketTransport : nsITransport 
 {
     /**
@@ -76,6 +45,18 @@ interface nsISocketTransport : nsITransport
      */
     [noscript] PRNetAddr getSelfAddr();
 
+    /** 
+     * Returns a scriptable version of getPeerAddr. This attribute is defined
+     * only once a connection has been established.
+     */
+    nsINetAddr getScriptablePeerAddr();
+
+    /** 
+     * Returns a scriptable version of getSelfAddr. This attribute is defined
+     * only once a connection has been established.
+     */
+    nsINetAddr getScriptableSelfAddr();
+
     /**
      * Security info object returned from the secure socket provider.  This
      * object supports nsISSLSocketControl, nsITransportSecurityInfo, and
@@ -99,7 +80,7 @@ interface nsISocketTransport : nsITransport
     boolean isAlive();
 
     /**
-     * Socket timeouts in seconds.  To specify no timeout, pass PR_UINT32_MAX
+     * Socket timeouts in seconds.  To specify no timeout, pass UINT32_MAX
      * as aValue to setTimeout.  The implementation may truncate timeout values
      * to a smaller range of values (e.g., 0 to 0xFFFF).
      */
@@ -127,8 +108,13 @@ interface nsISocketTransport : nsITransport
      * order).  STATUS_RESOLVING may be skipped if the host does not need to be
      * resolved.  STATUS_WAITING_FOR is an optional status code, which the impl
      * of this interface may choose not to generate.
+     *
+     * In C++, these constants have a type of uint32_t, so C++ callers must use
+     * the NS_NET_STATUS_* constants defined below, which have a type of
+     * nsresult.
      */
     const unsigned long STATUS_RESOLVING      = 0x804b0003;
+    const unsigned long STATUS_RESOLVED       = 0x804b000b;
     const unsigned long STATUS_CONNECTING_TO  = 0x804b0007;
     const unsigned long STATUS_CONNECTED_TO   = 0x804b0004;
     const unsigned long STATUS_SENDING_TO     = 0x804b0005;
@@ -137,7 +123,7 @@ interface nsISocketTransport : nsITransport
 
     /**
      * connectionFlags is a bitmask that can be used to modify underlying 
-     * behavior of the socket connection.
+     * behavior of the socket connection. See the flags below.
      */
     attribute unsigned long connectionFlags;
 
@@ -159,6 +145,28 @@ interface nsISocketTransport : nsITransport
     const unsigned long ANONYMOUS_CONNECT = (1 << 1);
 
     /**
+     * If set, we will skip all IPv6 addresses the host may have and only
+     * connect to IPv4 ones.
+     */
+    const unsigned long DISABLE_IPV6 = (1 << 2);
+
+    /**
+     * If set, indicates that the connection was initiated from a source
+     * defined as being private in the sense of Private Browsing. Generally,
+     * there should be no state shared between connections that are private
+     * and those that are not; it is OK for multiple private connections
+     * to share state with each other, and it is OK for multiple non-private
+     * connections to share state with each other.
+     */
+    const unsigned long NO_PERMANENT_STORAGE = (1 << 3);
+
+    /**
+     * If set, we will skip all IPv4 addresses the host may have and only
+     * connect to IPv6 ones.
+     */
+    const unsigned long DISABLE_IPV4 = (1 << 4);
+
+    /**
      * Socket QoS/ToS markings. Valid values are IPTOS_DSCP_AFxx or
      * IPTOS_CLASS_CSx (or IPTOS_DSCP_EF, but currently no supported
      * services require expedited-forwarding).
@@ -168,16 +176,10 @@ interface nsISocketTransport : nsITransport
      */
     attribute octet QoSBits;
 
+    /**
+     * TCP send and receive buffer sizes. A value of 0 means OS level
+     * auto-tuning is in effect.
+     */
+    attribute unsigned long recvBufferSize;
+    attribute unsigned long sendBufferSize;
 };
-
-%{C++
-/**
- * #define's for compatibility
- */
-#define NS_NET_STATUS_RESOLVING_HOST nsISocketTransport::STATUS_RESOLVING
-#define NS_NET_STATUS_CONNECTED_TO   nsISocketTransport::STATUS_CONNECTED_TO
-#define NS_NET_STATUS_SENDING_TO     nsISocketTransport::STATUS_SENDING_TO
-#define NS_NET_STATUS_RECEIVING_FROM nsISocketTransport::STATUS_RECEIVING_FROM
-#define NS_NET_STATUS_CONNECTING_TO  nsISocketTransport::STATUS_CONNECTING_TO
-#define NS_NET_STATUS_WAITING_FOR    nsISocketTransport::STATUS_WAITING_FOR
-%}

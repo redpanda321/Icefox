@@ -1,44 +1,10 @@
 <?xml version="1.0"?>
 
-# -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is The Update Wizard/Manager.
-#
-# The Initial Developer of the Original Code is Google Inc.
-# Portions created by the Initial Developer are Copyright (C) 2005
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Ben Goodger <ben@mozilla.org>
-#   Robert Strong <robert.bugzilla@gmail.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
 
-<?xml-stylesheet href="chrome://global/skin/" type="text/css"?> 
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
 <?xml-stylesheet href="chrome://mozapps/content/update/updates.css"?>
 <?xml-stylesheet href="chrome://mozapps/skin/update/updates.css"?>
 
@@ -51,7 +17,7 @@
 
 <wizard id="updates"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
-        title="&updateWizard.title;" 
+        title="&updateWizard.title;"
         windowtype="Update:Wizard"
         style="width: auto; height: auto"
         onwizardfinish="gUpdates.onWizardFinish();"
@@ -62,12 +28,12 @@
 
   <script type="application/javascript" src="chrome://global/content/contentAreaUtils.js"/>
   <script type="application/javascript" src="chrome://mozapps/content/update/updates.js"/>
-  
+
   <stringbundleset id="updateSet">
     <stringbundle id="brandStrings" src="chrome://branding/locale/brand.properties"/>
     <stringbundle id="updateStrings" src="chrome://mozapps/locale/update/updates.properties"/>
   </stringbundleset>
-  
+
   <wizardpage id="dummy" pageid="dummy" firstpage="true"/>
 
   <wizardpage id="checking" pageid="checking" next="pluginupdatesfound"
@@ -104,7 +70,9 @@
               onpageshow="gManualUpdatePage.onPageShow();">
     <updateheader label="&manualUpdate.title;"/>
     <vbox class="update-content" flex="1">
-      <label>&manualUpdate.desc;</label>
+      <label id="manualUpdateDesc">&manualUpdate.desc;</label>
+      <label id="manualUpdateSpaceDesc"
+             hidden="true">&manualUpdate.space.desc;</label>
       <separator class="thin"/>
       <label>&manualUpdateGetMsg.label;</label>
       <hbox>
@@ -140,8 +108,8 @@
       <separator id="upgradeEvangelismSep" flex="1"/>
       <vbox flex="1">
         <hbox id="moreInfoURL">
-          <label class="text-link" id="updateMoreInfoURL" 
-                 value="&clickHere.label;" onclick="openUpdateURL(event);"/> 
+          <label class="text-link" id="updateMoreInfoURL"
+                 value="&clickHere.label;" onclick="openUpdateURL(event);"/>
         </hbox>
       </vbox>
     </vbox>
@@ -157,7 +125,7 @@
                updateMoreInfoContentDownloading, etc.) -->
     <remotecontent id="updateMoreInfoContent" flex="1" remotetype="billboard"/>
   </wizardpage>
-  
+
   <wizardpage id="license" pageid="license" next="downloading"
               object="gLicensePage" onpageshow="gLicensePage.onPageShow();"
               onextra1="gLicensePage.onExtra1();">
@@ -171,9 +139,9 @@
       <separator class="thin"/>
       <radiogroup id="acceptDeclineLicense" align="start"
                   onselect="gLicensePage.onAcceptDeclineRadio();">
-        <radio id="accept" label="&license.accept;" 
+        <radio id="accept" label="&license.accept;"
                accesskey="&license.accept.accesskey;"/>
-        <radio id="decline" label="&license.decline;" 
+        <radio id="decline" label="&license.decline;"
                accesskey="&license.decline.accesskey;"
                selected="true"/>
       </radiogroup>
@@ -212,7 +180,7 @@
       </hbox>
     </vbox>
   </wizardpage>
-  
+
   <wizardpage id="errors" pageid="errors" object="gErrorsPage"
               onpageshow="gErrorsPage.onPageShow();">
     <updateheader label="&error.title;"/>
@@ -229,7 +197,25 @@
       </hbox>
     </vbox>
   </wizardpage>
-  
+
+  <wizardpage id="errorextra" pageid="errorextra"
+              object="gErrorExtraPage"
+              onpageshow="gErrorExtraPage.onPageShow();">
+    <updateheader label="&error.title;"/>
+    <vbox class="update-content" flex="1">
+      <label id="errorCertAttrHasUpdateLabel"
+             hidden="true">&errorCertAttrHasUpdate.label;</label>
+      <label id="errorCertCheckNoUpdateLabel"
+             hidden="true">&errorCertAttrNoUpdate2.label;</label>
+      <label id="genericBackgroundErrorLabel"
+             hidden="true">&genericBackgroundError.label;</label>
+      <hbox>
+        <label id="errorExtraLinkLabel" class="text-link" hidden="true"
+               value="" onclick="openUpdateURL(event);"/>
+      </hbox>
+    </vbox>
+  </wizardpage>
+
   <wizardpage id="errorpatching" pageid="errorpatching" next="downloading"
               object="gErrorPatchingPage"
               onpageshow="gErrorPatchingPage.onPageShow();">
@@ -238,7 +224,7 @@
       <label>&errorpatching.intro;</label>
     </vbox>
   </wizardpage>
-  
+
   <wizardpage id="finished" pageid="finished" object="gFinishedPage"
               onpageshow="gFinishedPage.onPageShow();"
               onextra1="gFinishedPage.onExtra1()">
@@ -247,7 +233,7 @@
       <label>&finishedPage.text;</label>
     </vbox>
   </wizardpage>
-  
+
   <wizardpage id="finishedBackground" pageid="finishedBackground"
               object="gFinishedPage" onextra1="gFinishedPage.onExtra1()"
               onpageshow="gFinishedPage.onPageShowBackground();">
@@ -265,7 +251,7 @@
       <label id="finishedBackgroundMore">&finishedBackground.more;</label>
     </vbox>
   </wizardpage>
-  
+
   <wizardpage id="installed" pageid="installed" object="gInstalledPage"
               onpageshow="gInstalledPage.onPageShow();">
     <updateheader label="&installed.title;"/>
@@ -278,5 +264,5 @@
       </hbox>
     </vbox>
   </wizardpage>
-  
+
 </wizard>

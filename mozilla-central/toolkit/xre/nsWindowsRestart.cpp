@@ -1,40 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla XULRunner bootstrap.
- *
- * The Initial Developer of the Original Code is
- * Benjamin Smedberg <benjamin@smedbergs.us>.
- *
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Mozilla Foundation. All Rights Reserved.
- *
- * Contributor(s):
- *   Robert Strong <robert.bugzilla@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // This file is not build directly. Instead, it is included in multiple
 // shared objects.
@@ -49,21 +15,9 @@
 
 #include <shellapi.h>
 
-#ifndef ERROR_ELEVATION_REQUIRED
-#define ERROR_ELEVATION_REQUIRED 740L
-#endif
-
-BOOL (WINAPI *pCreateProcessWithTokenW)(HANDLE,
-                                        DWORD,
-                                        LPCWSTR,
-                                        LPWSTR,
-                                        DWORD,
-                                        LPVOID,
-                                        LPCWSTR,
-                                        LPSTARTUPINFOW,
-                                        LPPROCESS_INFORMATION);
-
-BOOL (WINAPI *pIsUserAnAdmin)(VOID);
+// Needed for CreateEnvironmentBlock
+#include <userenv.h>
+#pragma comment(lib, "userenv.lib")
 
 /**
  * Get the length that the string will take and takes into account the
@@ -105,9 +59,9 @@ static int ArgStrLen(const PRUnichar *s)
 /**
  * Copy string "s" to string "d", quoting the argument as appropriate and
  * escaping doublequotes along with any backslashes that immediately precede
- * duoblequotes.
+ * doublequotes.
  * The CRT parses this to retrieve the original argc/argv that we meant,
- * see STDARGV.C in the MSVC6 CRT sources.
+ * see STDARGV.C in the MSVC CRT sources.
  *
  * @return the end of the string
  */
@@ -162,7 +116,7 @@ static PRUnichar* ArgToString(PRUnichar *d, const PRUnichar *s)
  *
  * argv is UTF8
  */
-static PRUnichar*
+PRUnichar*
 MakeCommandLine(int argc, PRUnichar **argv)
 {
   int i;
@@ -171,20 +125,6 @@ MakeCommandLine(int argc, PRUnichar **argv)
   // The + 1 of the last argument handles the allocation for null termination
   for (i = 0; i < argc; ++i)
     len += ArgStrLen(argv[i]) + 1;
-
-#ifdef WINCE
-  wchar_t *env = mozce_GetEnvironmentCL();
-  // XXX There's a buffer overrun here somewhere that causes a heap
-  // check to fail in the final free of the results of this function
-  // in WinLaunchChild.  I can't honestly figure out where it is,
-  // because I'm pretty sure with the + 1 above and the wcslen here,
-  // we have enough room for a trailing NULL.  But, adding a little
-  // bit more slop (the +10) seems to fix the problem.
-  //
-  // Supposedly CreateProcessW can modify its arguments, so maybe it's
-  // doing some scribbling?
-  len += (wcslen(env)) + 10;
-#endif
 
   // Protect against callers that pass 0 arguments
   if (len == 0)
@@ -205,11 +145,6 @@ MakeCommandLine(int argc, PRUnichar **argv)
 
   *c = '\0';
 
-#ifdef WINCE
-  wcscat(s, env);
-  if (env)
-    free(env);
-#endif
   return s;
 }
 
@@ -243,6 +178,8 @@ FreeAllocStrings(int argc, PRUnichar **argv)
   delete [] argv;
 }
 
+
+
 /**
  * Launch a child process with the specified arguments.
  * @note argv[0] is ignored
@@ -250,10 +187,16 @@ FreeAllocStrings(int argc, PRUnichar **argv)
  */
 
 BOOL
-WinLaunchChild(const PRUnichar *exePath, int argc, PRUnichar **argv);
+WinLaunchChild(const PRUnichar *exePath, 
+               int argc, PRUnichar **argv, 
+               HANDLE userToken = NULL,
+               HANDLE *hProcess = NULL);
 
 BOOL
-WinLaunchChild(const PRUnichar *exePath, int argc, char **argv)
+WinLaunchChild(const PRUnichar *exePath, 
+               int argc, char **argv, 
+               HANDLE userToken,
+               HANDLE *hProcess)
 {
   PRUnichar** argvConverted = new PRUnichar*[argc];
   if (!argvConverted)
@@ -262,66 +205,90 @@ WinLaunchChild(const PRUnichar *exePath, int argc, char **argv)
   for (int i = 0; i < argc; ++i) {
     argvConverted[i] = AllocConvertUTF8toUTF16(argv[i]);
     if (!argvConverted[i]) {
+      FreeAllocStrings(i, argvConverted);
       return FALSE;
     }
   }
 
-  BOOL ok = WinLaunchChild(exePath, argc, argvConverted);
+  BOOL ok = WinLaunchChild(exePath, argc, argvConverted, userToken, hProcess);
   FreeAllocStrings(argc, argvConverted);
   return ok;
 }
 
 BOOL
-WinLaunchChild(const PRUnichar *exePath, int argc, PRUnichar **argv)
+WinLaunchChild(const PRUnichar *exePath, 
+               int argc, 
+               PRUnichar **argv, 
+               HANDLE userToken,
+               HANDLE *hProcess)
 {
   PRUnichar *cl;
   BOOL ok;
 
-#ifdef WINCE
-  // Windows Mobile Issue: 
-  // When passing both an image name and a command line to
-  // CreateProcessW, you need to make sure that the image name
-  // identially matches the first argument of the command line.  If
-  // they do not match, Windows Mobile will send two "argv[0]" values.
-  // To avoid this problem, we will strip off the argv here, and
-  // depend only on the exePath.
-  argv = argv + 1;
-  argc--;
-#endif
-
   cl = MakeCommandLine(argc, argv);
-  if (!cl)
+  if (!cl) {
     return FALSE;
+  }
 
-  STARTUPINFOW si = {sizeof(si), 0};
+  STARTUPINFOW si = {0};
+  si.cb = sizeof(STARTUPINFOW);
+  si.lpDesktop = L"winsta0\\Default";
   PROCESS_INFORMATION pi = {0};
 
-  ok = CreateProcessW(exePath,
-                      cl,
-                      NULL,  // no special security attributes
-                      NULL,  // no special thread attributes
-                      FALSE, // don't inherit filehandles
-                      0,     // No special process creation flags
-                      NULL,  // inherit my environment
-                      NULL,  // use my current directory
-                      &si,
-                      &pi);
+  if (userToken == NULL) {
+    ok = CreateProcessW(exePath,
+                        cl,
+                        NULL,  // no special security attributes
+                        NULL,  // no special thread attributes
+                        FALSE, // don't inherit filehandles
+                        0,     // creation flags
+                        NULL,  // inherit my environment
+                        NULL,  // use my current directory
+                        &si,
+                        &pi);
+  } else {
+    // Create an environment block for the process we're about to start using
+    // the user's token.
+    LPVOID environmentBlock = NULL;
+    if (!CreateEnvironmentBlock(&environmentBlock, userToken, TRUE)) {
+      environmentBlock = NULL;
+    }
+
+    ok = CreateProcessAsUserW(userToken, 
+                              exePath,
+                              cl,
+                              NULL,  // no special security attributes
+                              NULL,  // no special thread attributes
+                              FALSE, // don't inherit filehandles
+                              0,     // creation flags
+                              environmentBlock,
+                              NULL,  // use my current directory
+                              &si,
+                              &pi);
+
+    if (environmentBlock) {
+      DestroyEnvironmentBlock(environmentBlock);
+    }
+  }
 
   if (ok) {
-    CloseHandle(pi.hProcess);
+    if (hProcess) {
+      *hProcess = pi.hProcess; // the caller now owns the HANDLE
+    } else {
+      CloseHandle(pi.hProcess);
+    }
     CloseHandle(pi.hThread);
   } else {
     LPVOID lpMsgBuf = NULL;
     FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
-		  FORMAT_MESSAGE_FROM_SYSTEM |
-		  FORMAT_MESSAGE_IGNORE_INSERTS,
-		  NULL,
-		  GetLastError(),
-		  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-		  (LPTSTR) &lpMsgBuf,
-		  0,
-		  NULL
-		  );
+                  FORMAT_MESSAGE_FROM_SYSTEM |
+                  FORMAT_MESSAGE_IGNORE_INSERTS,
+                  NULL,
+                  GetLastError(),
+                  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                  (LPTSTR) &lpMsgBuf,
+                  0,
+                  NULL);
     wprintf(L"Error restarting: %s\n", lpMsgBuf ? lpMsgBuf : L"(null)");
     if (lpMsgBuf)
       LocalFree(lpMsgBuf);

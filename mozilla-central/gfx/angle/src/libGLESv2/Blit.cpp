@@ -8,119 +8,39 @@
 
 #include "libGLESv2/Blit.h"
 
-#include <d3dx9.h>
-
 #include "common/debug.h"
 
 #include "libGLESv2/main.h"
 
 namespace
 {
-// Standard Vertex Shader
-// Input 0 is the homogenous position.
-// Outputs the homogenous position as-is.
-// Outputs a tex coord with (0,0) in the upper-left corner of the screen and (1,1) in the bottom right.
-// C0.X must be negative half-pixel width, C0.Y must be half-pixel height. C0.ZW must be 0.
-const char standardvs[] =
-"struct VS_OUTPUT\n"
-"{\n"
-"    float4 position : POSITION;\n"
-"    float4 texcoord : TEXCOORD0;\n"
-"};\n"
-"\n"
-"uniform float4 halfPixelSize : c0;\n"
-"\n"
-"VS_OUTPUT main(in float4 position : POSITION)\n"
-"{\n"
-"    VS_OUTPUT Out;\n"
-"\n"
-"    Out.position = position + halfPixelSize;\n"
-"    Out.texcoord = position * float4(0.5, -0.5, 1.0, 1.0) + float4(0.5, 0.5, 0, 0);\n"
-"\n"
-"    return Out;\n"
-"}\n";
+#include "libGLESv2/shaders/standardvs.h"
+#include "libGLESv2/shaders/flipyvs.h"
+#include "libGLESv2/shaders/passthroughps.h"
+#include "libGLESv2/shaders/luminanceps.h"
+#include "libGLESv2/shaders/componentmaskps.h"
 
-// Flip Y Vertex Shader
-// Input 0 is the homogenous position.
-// Outputs the homogenous position as-is.
-// Outputs a tex coord with (0,1) in the upper-left corner of the screen and (1,0) in the bottom right.
-// C0.XY must be the half-pixel width and height. C0.ZW must be 0.
-const char flipyvs[] =
-"struct VS_OUTPUT\n"
-"{\n"
-"    float4 position : POSITION;\n"
-"    float4 texcoord : TEXCOORD0;\n"
-"};\n"
-"\n"
-"uniform float4 halfPixelSize : c0;\n"
-"\n"
-"VS_OUTPUT main(in float4 position : POSITION)\n"
-"{\n"
-"    VS_OUTPUT Out;\n"
-"\n"
-"    Out.position = position + halfPixelSize;\n"
-"    Out.texcoord = position * float4(0.5, 0.5, 1.0, 1.0) + float4(0.5, 0.5, 0, 0);\n"
-"\n"
-"    return Out;\n"
-"}\n";
+const BYTE* const g_shaderCode[] =
+{
+    g_vs20_standardvs,
+    g_vs20_flipyvs,
+    g_ps20_passthroughps,
+    g_ps20_luminanceps,
+    g_ps20_componentmaskps
+};
 
-// Passthrough Pixel Shader
-// Outputs texture 0 sampled at texcoord 0.
-const char passthroughps[] =
-"sampler2D tex : s0;\n"
-"\n"
-"float4 main(float4 texcoord : TEXCOORD0) : COLOR\n"
-"{\n"
-"	return tex2D(tex, texcoord.xy);\n"
-"}\n";
-
-// Luminance Conversion Pixel Shader
-// Outputs sample(tex0, tc0).rrra.
-// For LA output (pass A) set C0.X = 1, C0.Y = 0.
-// For L output (A = 1) set C0.X = 0, C0.Y = 1.
-const char luminanceps[] =
-"sampler2D tex : s0;\n"
-"\n"
-"uniform float4 mode : c0;\n"
-"\n"
-"float4 main(float4 texcoord : TEXCOORD0) : COLOR\n"
-"{\n"
-"	float4 tmp = tex2D(tex, texcoord.xy);\n"
-"	tmp.w = tmp.w * mode.x + mode.y;\n"
-"	return tmp.xxxw;\n"
-"}\n";
-
-// RGB/A Component Mask Pixel Shader
-// Outputs sample(tex0, tc0) with options to force RGB = 0 and/or A = 1.
-// To force RGB = 0, set C0.X = 0, otherwise C0.X = 1.
-// To force A = 1, set C0.Z = 0, C0.W = 1, otherwise C0.Z = 1, C0.W = 0.
-const char componentmaskps[] =
-"sampler2D tex : s0;\n"
-"\n"
-"uniform float4 mode : c0;\n"
-"\n"
-"float4 main(float4 texcoord : TEXCOORD0) : COLOR\n"
-"{\n"
-"	float4 tmp = tex2D(tex, texcoord.xy);\n"
-"	tmp.xyz = tmp.xyz * mode.x;\n"
-"	tmp.w = tmp.w * mode.z + mode.w;\n"
-"	return tmp;\n"
-"}\n";
-
+const size_t g_shaderSize[] =
+{
+    sizeof(g_vs20_standardvs),
+    sizeof(g_vs20_flipyvs),
+    sizeof(g_ps20_passthroughps),
+    sizeof(g_ps20_luminanceps),
+    sizeof(g_ps20_componentmaskps)
+};
 }
 
 namespace gl
 {
-
-const char * const Blit::mShaderSource[] =
-{
-    standardvs,
-    flipyvs,
-    passthroughps,
-    luminanceps,
-    componentmaskps
-};
-
 Blit::Blit(Context *context)
   : mContext(context), mQuadVertexBuffer(NULL), mQuadVertexDeclaration(NULL), mSavedRenderTarget(NULL), mSavedDepthStencil(NULL), mSavedStateBlock(NULL)
 {
@@ -155,16 +75,23 @@ void Blit::initGeometry()
 
     IDirect3DDevice9 *device = getDevice();
 
-    HRESULT hr = device->CreateVertexBuffer(sizeof(quad), D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT, &mQuadVertexBuffer, NULL);
+    HRESULT result = device->CreateVertexBuffer(sizeof(quad), D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT, &mQuadVertexBuffer, NULL);
 
-    if (FAILED(hr))
+    if (FAILED(result))
     {
-        ASSERT(hr == D3DERR_OUTOFVIDEOMEMORY || hr == E_OUTOFMEMORY);
+        ASSERT(result == D3DERR_OUTOFVIDEOMEMORY || result == E_OUTOFMEMORY);
         return error(GL_OUT_OF_MEMORY);
     }
 
-    void *lockPtr;
-    mQuadVertexBuffer->Lock(0, 0, &lockPtr, 0);
+    void *lockPtr = NULL;
+    result = mQuadVertexBuffer->Lock(0, 0, &lockPtr, 0);
+
+    if (FAILED(result) || lockPtr == NULL)
+    {
+        ASSERT(result == D3DERR_OUTOFVIDEOMEMORY || result == E_OUTOFMEMORY);
+        return error(GL_OUT_OF_MEMORY);
+    }
+
     memcpy(lockPtr, quad, sizeof(quad));
     mQuadVertexBuffer->Unlock();
 
@@ -174,20 +101,22 @@ void Blit::initGeometry()
         D3DDECL_END()
     };
 
-    hr = device->CreateVertexDeclaration(elements, &mQuadVertexDeclaration);
-    if (FAILED(hr))
+    result = device->CreateVertexDeclaration(elements, &mQuadVertexDeclaration);
+
+    if (FAILED(result))
     {
-        ASSERT(hr == D3DERR_OUTOFVIDEOMEMORY || hr == E_OUTOFMEMORY);
+        ASSERT(result == D3DERR_OUTOFVIDEOMEMORY || result == E_OUTOFMEMORY);
         return error(GL_OUT_OF_MEMORY);
     }
 }
 
 template <class D3DShaderType>
 bool Blit::setShader(ShaderId source, const char *profile,
-                     HRESULT (WINAPI IDirect3DDevice9::*createShader)(const DWORD *, D3DShaderType**),
+                     D3DShaderType *(egl::Display::*createShader)(const DWORD *, size_t length),
                      HRESULT (WINAPI IDirect3DDevice9::*setShader)(D3DShaderType*))
 {
-    IDirect3DDevice9 *device = getDevice();
+    egl::Display *display = getDisplay();
+    IDirect3DDevice9 *device = display->getDevice();
 
     D3DShaderType *shader;
 
@@ -197,24 +126,15 @@ bool Blit::setShader(ShaderId source, const char *profile,
     }
     else
     {
-        ID3DXBuffer *shaderCode;
-        HRESULT hr = D3DXCompileShader(mShaderSource[source], strlen(mShaderSource[source]), NULL, NULL, "main", profile, 0, &shaderCode, NULL, NULL);
+        const BYTE* shaderCode = g_shaderCode[source];
+        size_t shaderSize = g_shaderSize[source];
 
-        if (FAILED(hr))
+        shader = (display->*createShader)(reinterpret_cast<const DWORD*>(shaderCode), shaderSize);
+        if (!shader)
         {
-            ERR("Failed to compile %s shader for blit operation %d, error 0x%08X.", profile, (int)source, hr);
+            ERR("Failed to create shader for blit operation");
             return false;
         }
-
-        hr = (device->*createShader)(static_cast<const DWORD*>(shaderCode->GetBufferPointer()), &shader);
-        if (FAILED(hr))
-        {
-            shaderCode->Release();
-            ERR("Failed to create %s shader for blit operation %d, error 0x%08X.", profile, (int)source, hr);
-            return false;
-        }
-
-        shaderCode->Release();
 
         mCompiledShaders[source] = shader;
     }
@@ -223,7 +143,7 @@ bool Blit::setShader(ShaderId source, const char *profile,
 
     if (FAILED(hr))
     {
-        ERR("Failed to set %s shader for blit operation %d, error 0x%08X.", profile, (int)source, hr);
+        ERR("Failed to set shader for blit operation");
         return false;
     }
 
@@ -232,12 +152,12 @@ bool Blit::setShader(ShaderId source, const char *profile,
 
 bool Blit::setVertexShader(ShaderId shader)
 {
-    return setShader<IDirect3DVertexShader9>(shader, mContext->supportsShaderModel3() ? "vs_3_0" : "vs_2_0", &IDirect3DDevice9::CreateVertexShader, &IDirect3DDevice9::SetVertexShader);
+    return setShader<IDirect3DVertexShader9>(shader, "vs_2_0", &egl::Display::createVertexShader, &IDirect3DDevice9::SetVertexShader);
 }
 
 bool Blit::setPixelShader(ShaderId shader)
 {
-    return setShader<IDirect3DPixelShader9>(shader, mContext->supportsShaderModel3() ? "ps_3_0" : "ps_2_0", &IDirect3DDevice9::CreatePixelShader, &IDirect3DDevice9::SetPixelShader);
+    return setShader<IDirect3DPixelShader9>(shader, "ps_2_0", &egl::Display::createPixelShader, &IDirect3DDevice9::SetPixelShader);
 }
 
 RECT Blit::getSurfaceRect(IDirect3DSurface9 *surface) const
@@ -287,6 +207,34 @@ bool Blit::boxFilter(IDirect3DSurface9 *source, IDirect3DSurface9 *dest)
     return true;
 }
 
+bool Blit::copy(IDirect3DSurface9 *source, const RECT &sourceRect, GLenum destFormat, GLint xoffset, GLint yoffset, IDirect3DSurface9 *dest)
+{
+    IDirect3DDevice9 *device = getDevice();
+
+    D3DSURFACE_DESC sourceDesc;
+    D3DSURFACE_DESC destDesc;
+    source->GetDesc(&sourceDesc);
+    dest->GetDesc(&destDesc);
+
+    if (sourceDesc.Format == destDesc.Format && destDesc.Usage & D3DUSAGE_RENDERTARGET)   // Can use StretchRect
+    {
+        RECT destRect = {xoffset, yoffset, xoffset + (sourceRect.right - sourceRect.left), yoffset + (sourceRect.bottom - sourceRect.top)};
+        HRESULT result = device->StretchRect(source, &sourceRect, dest, &destRect, D3DTEXF_POINT);
+
+        if (FAILED(result))
+        {
+            ASSERT(result == D3DERR_OUTOFVIDEOMEMORY || result == E_OUTOFMEMORY);
+            return error(GL_OUT_OF_MEMORY, false);
+        }
+    }
+    else
+    {
+        return formatConvert(source, sourceRect, destFormat, xoffset, yoffset, dest);
+    }
+
+    return true;
+}
+
 bool Blit::formatConvert(IDirect3DSurface9 *source, const RECT &sourceRect, GLenum destFormat, GLint xoffset, GLint yoffset, IDirect3DSurface9 *dest)
 {
     IDirect3DTexture9 *texture = copySurfaceToTexture(source, sourceRect);
@@ -325,6 +273,7 @@ bool Blit::setFormatConvertShaders(GLenum destFormat)
     {
       default: UNREACHABLE();
       case GL_RGBA:
+      case GL_BGRA_EXT:
       case GL_RGB:
       case GL_ALPHA:
         okay = okay && setPixelShader(SHADER_PS_COMPONENTMASK);
@@ -351,6 +300,7 @@ bool Blit::setFormatConvertShaders(GLenum destFormat)
     {
       default: UNREACHABLE();
       case GL_RGBA:
+      case GL_BGRA_EXT:
         psConst0[X] = 1;
         psConst0[Z] = 1;
         break;
@@ -380,6 +330,11 @@ bool Blit::setFormatConvertShaders(GLenum destFormat)
 
 IDirect3DTexture9 *Blit::copySurfaceToTexture(IDirect3DSurface9 *surface, const RECT &sourceRect)
 {
+    if (!surface)
+    {
+        return NULL;
+    }
+
     egl::Display *display = getDisplay();
     IDirect3DDevice9 *device = getDevice();
 
@@ -406,14 +361,8 @@ IDirect3DTexture9 *Blit::copySurfaceToTexture(IDirect3DSurface9 *surface, const 
         return error(GL_OUT_OF_MEMORY, (IDirect3DTexture9*)NULL);
     }
 
-    RECT d3dSourceRect;
-    d3dSourceRect.left = sourceRect.left;
-    d3dSourceRect.right = sourceRect.right;
-    d3dSourceRect.top = sourceRect.top;
-    d3dSourceRect.bottom = sourceRect.bottom;
-
     display->endScene();
-    result = device->StretchRect(surface, &d3dSourceRect, textureSurface, NULL, D3DTEXF_NONE);
+    result = device->StretchRect(surface, &sourceRect, textureSurface, NULL, D3DTEXF_NONE);
 
     textureSurface->Release();
 
@@ -465,7 +414,10 @@ void Blit::setCommonBlitState()
     device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
     device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 
-    for (int i = 0; i < MAX_VERTEX_ATTRIBS+1; i++)
+    RECT scissorRect = {0};   // Scissoring is disabled for flipping, but we need this to capture and restore the old rectangle
+    device->SetScissorRect(&scissorRect);
+
+    for(int i = 0; i < MAX_VERTEX_ATTRIBS; i++)
     {
         device->SetStreamSourceFreq(i, 1);
     }

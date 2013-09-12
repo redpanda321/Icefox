@@ -1,54 +1,24 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998-1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "PlaceholderTxn.h"
 #include "nsEditor.h"
 #include "IMETextTxn.h"
 #include "nsGkAtoms.h"
+#include "mozilla/Selection.h"
+
+using namespace mozilla;
 
 PlaceholderTxn::PlaceholderTxn() :  EditAggregateTxn(), 
-                                    mAbsorb(PR_TRUE), 
-                                    mForwarding(nsnull),
-                                    mIMETextTxn(nsnull),
-                                    mCommitted(PR_FALSE),
-                                    mStartSel(nsnull),
+                                    mAbsorb(true), 
+                                    mForwarding(nullptr),
+                                    mIMETextTxn(nullptr),
+                                    mCommitted(false),
+                                    mStartSel(nullptr),
                                     mEndSel(),
-                                    mEditor(nsnull)
+                                    mEditor(nullptr)
 {
 }
 
@@ -74,7 +44,9 @@ NS_INTERFACE_MAP_END_INHERITING(EditAggregateTxn)
 NS_IMPL_ADDREF_INHERITED(PlaceholderTxn, EditAggregateTxn)
 NS_IMPL_RELEASE_INHERITED(PlaceholderTxn, EditAggregateTxn)
 
-NS_IMETHODIMP PlaceholderTxn::Init(nsIAtom *aName, nsSelectionState *aSelState, nsIEditor *aEditor)
+NS_IMETHODIMP
+PlaceholderTxn::Init(nsIAtom* aName, nsSelectionState* aSelState,
+                     nsEditor* aEditor)
 {
   NS_ENSURE_TRUE(aEditor && aSelState, NS_ERROR_NULL_POINTER);
 
@@ -121,12 +93,12 @@ NS_IMETHODIMP PlaceholderTxn::RedoTransaction(void)
 }
 
 
-NS_IMETHODIMP PlaceholderTxn::Merge(nsITransaction *aTransaction, PRBool *aDidMerge)
+NS_IMETHODIMP PlaceholderTxn::Merge(nsITransaction *aTransaction, bool *aDidMerge)
 {
   NS_ENSURE_TRUE(aDidMerge && aTransaction, NS_ERROR_NULL_POINTER);
 
   // set out param default value
-  *aDidMerge=PR_FALSE;
+  *aDidMerge=false;
     
   if (mForwarding) 
   {
@@ -165,7 +137,7 @@ NS_IMETHODIMP PlaceholderTxn::Merge(nsITransaction *aTransaction, PRBool *aDidMe
       }
       else  
       {
-        PRBool didMerge;
+        bool didMerge;
         mIMETextTxn->Merge(otherTxn, &didMerge);
         if (!didMerge)
         {
@@ -181,7 +153,7 @@ NS_IMETHODIMP PlaceholderTxn::Merge(nsITransaction *aTransaction, PRBool *aDidMe
     {                  // their children will be swallowed by this preexisting one.
       AppendChild(editTxn);
     }
-    *aDidMerge = PR_TRUE;
+    *aDidMerge = true;
 //  RememberEndingSelection();
 //  efficiency hack: no need to remember selection here, as we haven't yet 
 //  finished the initial batch and we know we will be told when the batch ends.
@@ -206,11 +178,11 @@ NS_IMETHODIMP PlaceholderTxn::Merge(nsITransaction *aTransaction, PRBool *aDidMe
         {
           // check if start selection of next placeholder matches
           // end selection of this placeholder
-          PRBool isSame;
+          bool isSame;
           plcTxn->StartSelectionEquals(&mEndSel, &isSame);
           if (isSame)
           {
-            mAbsorb = PR_TRUE;  // we need to start absorbing again
+            mAbsorb = true;  // we need to start absorbing again
             plcTxn->ForwardEndBatchTo(this);
             // AppendChild(editTxn);
             // see bug 171243: we don't need to merge placeholders
@@ -218,7 +190,7 @@ NS_IMETHODIMP PlaceholderTxn::Merge(nsITransaction *aTransaction, PRBool *aDidMe
             // placeholder and drop the new one on the floor.  The EndPlaceHolderBatch()
             // call on the new placeholder will be forwarded to this older one.
             RememberEndingSelection();
-            *aDidMerge = PR_TRUE;
+            *aDidMerge = true;
           }
         }
       }
@@ -246,14 +218,14 @@ NS_IMETHODIMP PlaceholderTxn::GetTxnName(nsIAtom **aName)
   return GetName(aName);
 }
 
-NS_IMETHODIMP PlaceholderTxn::StartSelectionEquals(nsSelectionState *aSelState, PRBool *aResult)
+NS_IMETHODIMP PlaceholderTxn::StartSelectionEquals(nsSelectionState *aSelState, bool *aResult)
 {
   // determine if starting selection matches the given selection state.
   // note that we only care about collapsed selections.
   NS_ENSURE_TRUE(aResult && aSelState, NS_ERROR_NULL_POINTER);
   if (!mStartSel->IsCollapsed() || !aSelState->IsCollapsed())
   {
-    *aResult = PR_FALSE;
+    *aResult = false;
     return NS_OK;
   }
   *aResult = mStartSel->IsEqual(aSelState);
@@ -262,7 +234,7 @@ NS_IMETHODIMP PlaceholderTxn::StartSelectionEquals(nsSelectionState *aSelState, 
 
 NS_IMETHODIMP PlaceholderTxn::EndPlaceHolderBatch()
 {
-  mAbsorb = PR_FALSE;
+  mAbsorb = false;
   
   if (mForwarding) 
   {
@@ -282,16 +254,15 @@ NS_IMETHODIMP PlaceholderTxn::ForwardEndBatchTo(nsIAbsorbingTransaction *aForwar
 
 NS_IMETHODIMP PlaceholderTxn::Commit()
 {
-  mCommitted = PR_TRUE;
+  mCommitted = true;
   return NS_OK;
 }
 
 NS_IMETHODIMP PlaceholderTxn::RememberEndingSelection()
 {
-  nsCOMPtr<nsISelection> selection;
-  nsresult res = mEditor->GetSelection(getter_AddRefs(selection));
-  NS_ENSURE_SUCCESS(res, res);
+  nsRefPtr<Selection> selection = mEditor->GetSelection();
   NS_ENSURE_TRUE(selection, NS_ERROR_NULL_POINTER);
-  return mEndSel.SaveSelection(selection);
+  mEndSel.SaveSelection(selection);
+  return NS_OK;
 }
 

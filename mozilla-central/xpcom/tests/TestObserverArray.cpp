@@ -1,45 +1,13 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 // vim:cindent:ts=4:et:sw=4:
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * the Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Boris Zbarsky <bzbarsky@mit.edu> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "TestHarness.h"
 #include "nsTObserverArray.h"
-#include "nsMemory.h" // for NS_ARRAY_LENGTH
+
+using namespace mozilla;
 
 typedef nsTObserverArray<int> Array;
 
@@ -48,7 +16,7 @@ typedef nsTObserverArray<int> Array;
     ++testNum;                                                        \
     count = 0;                                                        \
     Array::_type iter(arr);                                           \
-    while (iter.HasMore() && count != NS_ARRAY_LENGTH(_exp)) {        \
+    while (iter.HasMore() && count != ArrayLength(_exp)) {            \
       _code                                                           \
       int next = iter.GetNext();                                      \
       int expected = _exp[count++];                                   \
@@ -62,7 +30,7 @@ typedef nsTObserverArray<int> Array;
       fail("During test %d, iterator ran over", testNum);             \
       rv = 1;                                                         \
     }                                                                 \
-    if (count != NS_ARRAY_LENGTH(_exp)) {                             \
+    if (count != ArrayLength(_exp)) {                             \
       fail("During test %d, iterator finished too early", testNum);   \
       rv = 1;                                                         \
     }                                                                 \
@@ -81,26 +49,26 @@ int main(int argc, char **argv)
   arr.AppendElement(3);
   arr.AppendElement(4);
 
-  int count;
+  size_t count;
   int testNum = 0;
 
   // Basic sanity
   static int test1Expected[] = { 3, 4 };
-  DO_TEST(ForwardIterator, test1Expected, );
+  DO_TEST(ForwardIterator, test1Expected, { /* nothing */ });
 
   // Appends
   static int test2Expected[] = { 3, 4, 2 };
   DO_TEST(ForwardIterator, test2Expected,
           if (count == 1) arr.AppendElement(2);
           );
-  DO_TEST(ForwardIterator, test2Expected, );
+  DO_TEST(ForwardIterator, test2Expected, { /* nothing */ });
 
   DO_TEST(EndLimitedIterator, test2Expected,
           if (count == 1) arr.AppendElement(5);
           );
 
   static int test5Expected[] = { 3, 4, 2, 5 };
-  DO_TEST(ForwardIterator, test5Expected, );
+  DO_TEST(ForwardIterator, test5Expected, { /* nothing */ });
 
   // Removals
   DO_TEST(ForwardIterator, test5Expected,
@@ -108,27 +76,27 @@ int main(int argc, char **argv)
           );
 
   static int test7Expected[] = { 4, 2, 5 };
-  DO_TEST(ForwardIterator, test7Expected, );
+  DO_TEST(ForwardIterator, test7Expected, { /* nothing */ });
 
   static int test8Expected[] = { 4, 5 };
   DO_TEST(ForwardIterator, test8Expected,
           if (count == 1) arr.RemoveElementAt(1);
           );
-  DO_TEST(ForwardIterator, test8Expected, );
+  DO_TEST(ForwardIterator, test8Expected, { /* nothing */ });
 
   arr.AppendElement(2);
   arr.AppendElementUnlessExists(6);
   static int test10Expected[] = { 4, 5, 2, 6 };
-  DO_TEST(ForwardIterator, test10Expected, );
+  DO_TEST(ForwardIterator, test10Expected, { /* nothing */ });
 
   arr.AppendElementUnlessExists(5);
-  DO_TEST(ForwardIterator, test10Expected, );
+  DO_TEST(ForwardIterator, test10Expected, { /* nothing */ });
 
   static int test12Expected[] = { 4, 5, 6 };
   DO_TEST(ForwardIterator, test12Expected,
           if (count == 1) arr.RemoveElementAt(2);
           );
-  DO_TEST(ForwardIterator, test12Expected, );
+  DO_TEST(ForwardIterator, test12Expected, { /* nothing */ });
 
   // Removals + Appends
   static int test14Expected[] = { 4, 6, 7 };
@@ -138,11 +106,11 @@ int main(int argc, char **argv)
             arr.AppendElement(7);
           }
           );
-  DO_TEST(ForwardIterator, test14Expected, );
+  DO_TEST(ForwardIterator, test14Expected, { /* nothing */ });
 
   arr.AppendElement(2);
   static int test16Expected[] = { 4, 6, 7, 2 };
-  DO_TEST(ForwardIterator, test16Expected, );
+  DO_TEST(ForwardIterator, test16Expected, { /* nothing */ });
 
   static int test17Expected[] = { 4, 7, 2 };
   DO_TEST(EndLimitedIterator, test17Expected,
@@ -153,15 +121,15 @@ int main(int argc, char **argv)
           );
 
   static int test18Expected[] = { 4, 7, 2, 8 };
-  DO_TEST(ForwardIterator, test18Expected, );
+  DO_TEST(ForwardIterator, test18Expected, { /* nothing */ });
 
   // Prepends
   arr.PrependElementUnlessExists(3);
   static int test19Expected[] = { 3, 4, 7, 2, 8 };
-  DO_TEST(ForwardIterator, test19Expected, );
+  DO_TEST(ForwardIterator, test19Expected, { /* nothing */ });
 
   arr.PrependElementUnlessExists(7);
-  DO_TEST(ForwardIterator, test19Expected, );
+  DO_TEST(ForwardIterator, test19Expected, { /* nothing */ });
 
   // Commented out because it fails; bug 474369 will fix
   /*  DO_TEST(ForwardIterator, test19Expected,
@@ -171,7 +139,7 @@ int main(int argc, char **argv)
           );
 
   static int test22Expected[] = { 9, 3, 4, 7, 2, 8 };
-  DO_TEST(ForwardIterator, test22Expected, );
+  DO_TEST(ForwardIterator, test22Expected, { });
   */
   
   return rv;

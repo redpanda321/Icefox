@@ -1,105 +1,116 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifndef nsDOMParser_h__
-#define nsDOMParser_h__
+#ifndef nsDOMParser_h_
+#define nsDOMParser_h_
 
 #include "nsIDOMParser.h"
 #include "nsCOMPtr.h"
-#include "nsIURI.h"
-#include "nsIDOMLoadListener.h"
 #include "nsWeakReference.h"
-#include "nsIJSNativeInitializer.h"
+#include "nsIDocument.h"
+#include "nsWrapperCache.h"
+#include "mozilla/ErrorResult.h"
+#include "mozilla/dom/DOMParserBinding.h"
+#include "mozilla/dom/TypedArray.h"
 
-class nsDOMParser : public nsIDOMParser,
-                    public nsIDOMParserJS,
-                    public nsIDOMLoadListener,
-                    public nsIJSNativeInitializer,
-                    public nsSupportsWeakReference
+class nsDOMParser MOZ_FINAL : public nsIDOMParser,
+                              public nsSupportsWeakReference,
+                              public nsWrapperCache
 {
 public: 
   nsDOMParser();
   virtual ~nsDOMParser();
 
-  NS_DECL_ISUPPORTS
+  NS_DECL_CYCLE_COLLECTING_ISUPPORTS
+  NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_CLASS_AMBIGUOUS(nsDOMParser,
+                                                         nsIDOMParser)
 
   // nsIDOMParser
   NS_DECL_NSIDOMPARSER
 
-  // nsIDOMParserJS
-  NS_DECL_NSIDOMPARSERJS
+  // WebIDL API
+  static already_AddRefed<nsDOMParser>
+  Constructor(nsISupports* aOwner, mozilla::ErrorResult& rv);
 
-  // nsIDOMEventListener
-  NS_IMETHOD HandleEvent(nsIDOMEvent* aEvent);
+  static already_AddRefed<nsDOMParser>
+  Constructor(nsISupports* aOwner, nsIPrincipal* aPrincipal,
+              nsIURI* aDocumentURI, nsIURI* aBaseURI,
+              mozilla::ErrorResult& rv);
 
-  // nsIDOMLoadListener
-  NS_IMETHOD Load(nsIDOMEvent* aEvent);
-  NS_IMETHOD BeforeUnload(nsIDOMEvent* aEvent);
-  NS_IMETHOD Unload(nsIDOMEvent* aEvent);
-  NS_IMETHOD Abort(nsIDOMEvent* aEvent);
-  NS_IMETHOD Error(nsIDOMEvent* aEvent);
+  already_AddRefed<nsIDocument>
+  ParseFromString(const nsAString& aStr, mozilla::dom::SupportedType aType,
+                  mozilla::ErrorResult& rv);
 
-  // nsIJSNativeInitializer
-  NS_IMETHOD Initialize(nsISupports* aOwner, JSContext* cx, JSObject* obj,
-                        PRUint32 argc, jsval *argv);
+  already_AddRefed<nsIDocument>
+  ParseFromBuffer(const mozilla::dom::Sequence<uint8_t>& aBuf,
+                  uint32_t aBufLen, mozilla::dom::SupportedType aType,
+                  mozilla::ErrorResult& rv);
+
+  already_AddRefed<nsIDocument>
+  ParseFromBuffer(const mozilla::dom::Uint8Array& aBuf, uint32_t aBufLen,
+                  mozilla::dom::SupportedType aType,
+                  mozilla::ErrorResult& rv);
+
+  already_AddRefed<nsIDocument>
+  ParseFromStream(nsIInputStream* aStream, const nsAString& aCharset,
+                  int32_t aContentLength, mozilla::dom::SupportedType aType,
+                  mozilla::ErrorResult& rv);
+
+  void Init(nsIPrincipal* aPrincipal, nsIURI* aDocumentURI,
+            nsIURI* aBaseURI, mozilla::ErrorResult& rv);
+
+  nsISupports* GetParentObject() const
+  {
+    return mOwner;
+  }
+
+  virtual JSObject* WrapObject(JSContext* aCx, JSObject* aScope,
+                               bool* aTriedToWrap) MOZ_OVERRIDE
+  {
+    return mozilla::dom::DOMParserBinding::Wrap(aCx, aScope, this,
+                                                aTriedToWrap);
+  }
 
 private:
+  nsDOMParser(nsISupports* aOwner) : mOwner(aOwner), mAttemptedInit(false)
+  {
+    MOZ_ASSERT(aOwner);
+    SetIsDOMBinding();
+  }
+
+  nsresult InitInternal(nsISupports* aOwner, nsIPrincipal* prin,
+                        nsIURI* documentURI, nsIURI* baseURI);
+
+  nsresult SetUpDocument(DocumentFlavor aFlavor, nsIDOMDocument** aResult);
+
+  // Helper for ParseFromString
+  nsresult ParseFromString(const nsAString& str, const char *contentType,
+                           nsIDOMDocument **aResult);
+
   class AttemptedInitMarker {
   public:
-    AttemptedInitMarker(PRPackedBool* aAttemptedInit) :
+    AttemptedInitMarker(bool* aAttemptedInit) :
       mAttemptedInit(aAttemptedInit)
     {}
 
     ~AttemptedInitMarker() {
-      *mAttemptedInit = PR_TRUE;
+      *mAttemptedInit = true;
     }
 
   private:
-    PRPackedBool* mAttemptedInit;
+    bool* mAttemptedInit;
   };
-  
+
+  nsCOMPtr<nsISupports> mOwner;
   nsCOMPtr<nsIPrincipal> mPrincipal;
   nsCOMPtr<nsIPrincipal> mOriginalPrincipal;
   nsCOMPtr<nsIURI> mDocumentURI;
   nsCOMPtr<nsIURI> mBaseURI;
   nsWeakPtr mScriptHandlingObject;
   
-  PRPackedBool mLoopingForSyncLoad;
-  PRPackedBool mAttemptedInit;
+  bool mAttemptedInit;
 };
 
 #endif

@@ -1,40 +1,10 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org Code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "base/basictypes.h"
 
 #include "nsJARURI.h"
 #include "nsNetUtil.h"
@@ -50,6 +20,9 @@
 #include "nsIObjectInputStream.h"
 #include "nsIObjectOutputStream.h"
 #include "nsIProgrammingLanguage.h"
+#include "mozilla/ipc/URIUtils.h"
+
+using namespace mozilla::ipc;
 
 static NS_DEFINE_CID(kJARURICID, NS_JARURI_CID);
 
@@ -74,6 +47,7 @@ NS_INTERFACE_MAP_BEGIN(nsJARURI)
   NS_INTERFACE_MAP_ENTRY(nsISerializable)
   NS_INTERFACE_MAP_ENTRY(nsIClassInfo)
   NS_INTERFACE_MAP_ENTRY(nsINestedURI)
+  NS_INTERFACE_MAP_ENTRY(nsIIPCSerializableURI)
   // see nsJARURI::Equals
   if (aIID.Equals(NS_GET_IID(nsJARURI)))
       foundInterface = reinterpret_cast<nsISupports*>(this);
@@ -95,13 +69,13 @@ nsJARURI::Init(const char *charsetHint)
 // beginning) and gives us a full JAR spec.
 nsresult
 nsJARURI::FormatSpec(const nsACString &entrySpec, nsACString &result,
-                     PRBool aIncludeScheme)
+                     bool aIncludeScheme)
 {
     // The entrySpec MUST start with "x:///"
     NS_ASSERTION(StringBeginsWith(entrySpec, NS_BOGUS_ENTRY_SCHEME),
                  "bogus entry spec");
 
-    nsCAutoString fileSpec;
+    nsAutoCString fileSpec;
     nsresult rv = mJARFile->GetSpec(fileSpec);
     if (NS_FAILED(rv)) return rv;
 
@@ -120,7 +94,7 @@ nsJARURI::CreateEntryURL(const nsACString& entryFilename,
                          const char* charset,
                          nsIURL** url)
 {
-    *url = nsnull;
+    *url = nullptr;
 
     nsCOMPtr<nsIStandardURL> stdURL(do_CreateInstance(NS_STANDARDURL_CONTRACTID));
     if (!stdURL) {
@@ -128,9 +102,9 @@ nsJARURI::CreateEntryURL(const nsACString& entryFilename,
     }
 
     // Flatten the concatenation, just in case.  See bug 128288
-    nsCAutoString spec(NS_BOGUS_ENTRY_SCHEME + entryFilename);
+    nsAutoCString spec(NS_BOGUS_ENTRY_SCHEME + entryFilename);
     nsresult rv = stdURL->Init(nsIStandardURL::URLTYPE_NO_AUTHORITY, -1,
-                               spec, charset, nsnull);
+                               spec, charset, nullptr);
     if (NS_FAILED(rv)) {
         return rv;
     }
@@ -146,10 +120,10 @@ nsJARURI::Read(nsIObjectInputStream* aInputStream)
 {
     nsresult rv;
 
-    rv = aInputStream->ReadObject(PR_TRUE, getter_AddRefs(mJARFile));
+    rv = aInputStream->ReadObject(true, getter_AddRefs(mJARFile));
     NS_ENSURE_SUCCESS(rv, rv);
 
-    rv = aInputStream->ReadObject(PR_TRUE, getter_AddRefs(mJAREntry));
+    rv = aInputStream->ReadObject(true, getter_AddRefs(mJAREntry));
     NS_ENSURE_SUCCESS(rv, rv);
 
     rv = aInputStream->ReadCString(mCharsetHint);
@@ -162,11 +136,11 @@ nsJARURI::Write(nsIObjectOutputStream* aOutputStream)
     nsresult rv;
     
     rv = aOutputStream->WriteCompoundObject(mJARFile, NS_GET_IID(nsIURI),
-                                            PR_TRUE);
+                                            true);
     NS_ENSURE_SUCCESS(rv, rv);
 
     rv = aOutputStream->WriteCompoundObject(mJAREntry, NS_GET_IID(nsIURL),
-                                            PR_TRUE);
+                                            true);
     NS_ENSURE_SUCCESS(rv, rv);
 
     rv = aOutputStream->WriteStringZ(mCharsetHint.get());
@@ -177,31 +151,31 @@ nsJARURI::Write(nsIObjectOutputStream* aOutputStream)
 // nsIClassInfo methods:
 
 NS_IMETHODIMP 
-nsJARURI::GetInterfaces(PRUint32 *count, nsIID * **array)
+nsJARURI::GetInterfaces(uint32_t *count, nsIID * **array)
 {
     *count = 0;
-    *array = nsnull;
+    *array = nullptr;
     return NS_OK;
 }
 
 NS_IMETHODIMP 
-nsJARURI::GetHelperForLanguage(PRUint32 language, nsISupports **_retval)
+nsJARURI::GetHelperForLanguage(uint32_t language, nsISupports **_retval)
 {
-    *_retval = nsnull;
+    *_retval = nullptr;
     return NS_OK;
 }
 
 NS_IMETHODIMP 
 nsJARURI::GetContractID(char * *aContractID)
 {
-    *aContractID = nsnull;
+    *aContractID = nullptr;
     return NS_OK;
 }
 
 NS_IMETHODIMP 
 nsJARURI::GetClassDescription(char * *aClassDescription)
 {
-    *aClassDescription = nsnull;
+    *aClassDescription = nullptr;
     return NS_OK;
 }
 
@@ -215,14 +189,14 @@ nsJARURI::GetClassID(nsCID * *aClassID)
 }
 
 NS_IMETHODIMP 
-nsJARURI::GetImplementationLanguage(PRUint32 *aImplementationLanguage)
+nsJARURI::GetImplementationLanguage(uint32_t *aImplementationLanguage)
 {
     *aImplementationLanguage = nsIProgrammingLanguage::CPLUSPLUS;
     return NS_OK;
 }
 
 NS_IMETHODIMP 
-nsJARURI::GetFlags(PRUint32 *aFlags)
+nsJARURI::GetFlags(uint32_t *aFlags)
 {
     // XXX We implement THREADSAFE addref/release, but probably shouldn't.
     *aFlags = nsIClassInfo::MAIN_THREAD_ONLY;
@@ -242,15 +216,29 @@ nsJARURI::GetClassIDNoAlloc(nsCID *aClassIDNoAlloc)
 NS_IMETHODIMP
 nsJARURI::GetSpec(nsACString &aSpec)
 {
-    nsCAutoString entrySpec;
+    nsAutoCString entrySpec;
     mJAREntry->GetSpec(entrySpec);
     return FormatSpec(entrySpec, aSpec);
 }
 
 NS_IMETHODIMP
+nsJARURI::GetSpecIgnoringRef(nsACString &aSpec)
+{
+    nsAutoCString entrySpec;
+    mJAREntry->GetSpecIgnoringRef(entrySpec);
+    return FormatSpec(entrySpec, aSpec);
+}
+
+NS_IMETHODIMP
+nsJARURI::GetHasRef(bool *result)
+{
+    return mJAREntry->GetHasRef(result);
+}
+
+NS_IMETHODIMP
 nsJARURI::SetSpec(const nsACString& aSpec)
 {
-    return SetSpecWithBase(aSpec, nsnull);
+    return SetSpecWithBase(aSpec, nullptr);
 }
 
 nsresult
@@ -261,7 +249,7 @@ nsJARURI::SetSpecWithBase(const nsACString &aSpec, nsIURI* aBaseURL)
     nsCOMPtr<nsIIOService> ioServ(do_GetIOService(&rv));
     NS_ENSURE_SUCCESS(rv, rv);
 
-    nsCAutoString scheme;
+    nsAutoCString scheme;
     rv = ioServ->ExtractScheme(aSpec, scheme);
     if (NS_FAILED(rv)) {
         // not an absolute URI
@@ -410,13 +398,13 @@ nsJARURI::SetHost(const nsACString &aHost)
 }
 
 NS_IMETHODIMP
-nsJARURI::GetPort(PRInt32 *aPort)
+nsJARURI::GetPort(int32_t *aPort)
 {
     return NS_ERROR_FAILURE;
 }
  
 NS_IMETHODIMP
-nsJARURI::SetPort(PRInt32 aPort)
+nsJARURI::SetPort(int32_t aPort)
 {
     return NS_ERROR_FAILURE;
 }
@@ -424,9 +412,9 @@ nsJARURI::SetPort(PRInt32 aPort)
 NS_IMETHODIMP
 nsJARURI::GetPath(nsACString &aPath)
 {
-    nsCAutoString entrySpec;
+    nsAutoCString entrySpec;
     mJAREntry->GetSpec(entrySpec);
-    return FormatSpec(entrySpec, aPath, PR_FALSE);
+    return FormatSpec(entrySpec, aPath, false);
 }
 
 NS_IMETHODIMP
@@ -456,13 +444,26 @@ nsJARURI::GetOriginCharset(nsACString &aOriginCharset)
 }
 
 NS_IMETHODIMP
-nsJARURI::Equals(nsIURI *other, PRBool *result)
+nsJARURI::Equals(nsIURI *other, bool *result)
 {
-    nsresult rv;
+    return EqualsInternal(other, eHonorRef, result);
+}
 
-    *result = PR_FALSE;
+NS_IMETHODIMP
+nsJARURI::EqualsExceptRef(nsIURI *other, bool *result)
+{
+    return EqualsInternal(other, eIgnoreRef, result);
+}
 
-    if (other == nsnull)
+// Helper method:
+/* virtual */ nsresult
+nsJARURI::EqualsInternal(nsIURI *other,
+                         nsJARURI::RefHandlingEnum refHandlingMode,
+                         bool *result)
+{
+    *result = false;
+
+    if (!other)
         return NS_OK;	// not equal
 
     nsRefPtr<nsJARURI> otherJAR;
@@ -470,26 +471,27 @@ nsJARURI::Equals(nsIURI *other, PRBool *result)
     if (!otherJAR)
         return NS_OK;   // not equal
 
-    PRBool equal;
-    rv = mJARFile->Equals(otherJAR->mJARFile, &equal);
+    bool equal;
+    nsresult rv = mJARFile->Equals(otherJAR->mJARFile, &equal);
     if (NS_FAILED(rv) || !equal) {
         return rv;   // not equal
     }
 
-    rv = mJAREntry->Equals(otherJAR->mJAREntry, result);
-    return rv;
+    return refHandlingMode == eHonorRef ?
+        mJAREntry->Equals(otherJAR->mJAREntry, result) :
+        mJAREntry->EqualsExceptRef(otherJAR->mJAREntry, result);
 }
 
 NS_IMETHODIMP
-nsJARURI::SchemeIs(const char *i_Scheme, PRBool *o_Equals)
+nsJARURI::SchemeIs(const char *i_Scheme, bool *o_Equals)
 {
     NS_ENSURE_ARG_POINTER(o_Equals);
     if (!i_Scheme) return NS_ERROR_INVALID_ARG;
 
     if (*i_Scheme == 'j' || *i_Scheme == 'J') {
-        *o_Equals = PL_strcasecmp("jar", i_Scheme) ? PR_FALSE : PR_TRUE;
+        *o_Equals = PL_strcasecmp("jar", i_Scheme) ? false : true;
     } else {
-        *o_Equals = PR_FALSE;
+        *o_Equals = false;
     }
     return NS_OK;
 }
@@ -500,7 +502,19 @@ nsJARURI::Clone(nsIURI **result)
     nsresult rv;
 
     nsCOMPtr<nsIJARURI> uri;
-    rv = CloneWithJARFile(mJARFile, getter_AddRefs(uri));
+    rv = CloneWithJARFileInternal(mJARFile, eHonorRef, getter_AddRefs(uri));
+    if (NS_FAILED(rv)) return rv;
+
+    return CallQueryInterface(uri, result);
+}
+
+NS_IMETHODIMP
+nsJARURI::CloneIgnoringRef(nsIURI **result)
+{
+    nsresult rv;
+
+    nsCOMPtr<nsIJARURI> uri;
+    rv = CloneWithJARFileInternal(mJARFile, eIgnoreRef, getter_AddRefs(uri));
     if (NS_FAILED(rv)) return rv;
 
     return CallQueryInterface(uri, result);
@@ -515,7 +529,7 @@ nsJARURI::Resolve(const nsACString &relativePath, nsACString &result)
     if (NS_FAILED(rv))
       return rv;
 
-    nsCAutoString scheme;
+    nsAutoCString scheme;
     rv = ioServ->ExtractScheme(relativePath, scheme);
     if (NS_SUCCEEDED(rv)) {
         // then aSpec is absolute
@@ -523,7 +537,7 @@ nsJARURI::Resolve(const nsACString &relativePath, nsACString &result)
         return NS_OK;
     }
 
-    nsCAutoString resolvedPath;
+    nsAutoCString resolvedPath;
     mJAREntry->Resolve(relativePath, resolvedPath);
     
     return FormatSpec(resolvedPath, result);
@@ -542,19 +556,6 @@ NS_IMETHODIMP
 nsJARURI::SetFilePath(const nsACString& filePath)
 {
     return mJAREntry->SetFilePath(filePath);
-}
-
-NS_IMETHODIMP
-nsJARURI::GetParam(nsACString& param)
-{
-    param.Truncate();
-    return NS_OK;
-}
-
-NS_IMETHODIMP
-nsJARURI::SetParam(const nsACString& param)
-{
-    return NS_ERROR_NOT_AVAILABLE;
 }
 
 NS_IMETHODIMP
@@ -647,7 +648,7 @@ nsJARURI::GetCommonBaseSpec(nsIURI* uriToCompare, nsACString& commonSpec)
     nsresult rv = otherJARURI->GetJARFile(getter_AddRefs(otherJARFile));
     if (NS_FAILED(rv)) return rv;
 
-    PRBool equal;
+    bool equal;
     rv = mJARFile->Equals(otherJARFile, &equal);
     if (NS_FAILED(rv)) return rv;
 
@@ -658,7 +659,7 @@ nsJARURI::GetCommonBaseSpec(nsIURI* uriToCompare, nsACString& commonSpec)
             // Not a URL, so nothing in common
             return NS_OK;
         }
-        nsCAutoString common;
+        nsAutoCString common;
         rv = ourJARFileURL->GetCommonBaseSpec(otherJARFile, common);
         if (NS_FAILED(rv)) return rv;
 
@@ -668,11 +669,11 @@ nsJARURI::GetCommonBaseSpec(nsIURI* uriToCompare, nsACString& commonSpec)
     }
     
     // At this point we have the same JAR file.  Compare the JAREntrys
-    nsCAutoString otherEntry;
+    nsAutoCString otherEntry;
     rv = otherJARURI->GetJAREntry(otherEntry);
     if (NS_FAILED(rv)) return rv;
 
-    nsCAutoString otherCharset;
+    nsAutoCString otherCharset;
     rv = uriToCompare->GetOriginCharset(otherCharset);
     if (NS_FAILED(rv)) return rv;
 
@@ -680,7 +681,7 @@ nsJARURI::GetCommonBaseSpec(nsIURI* uriToCompare, nsACString& commonSpec)
     rv = CreateEntryURL(otherEntry, otherCharset.get(), getter_AddRefs(url));
     if (NS_FAILED(rv)) return rv;
 
-    nsCAutoString common;
+    nsAutoCString common;
     rv = mJAREntry->GetCommonBaseSpec(url, common);
     if (NS_FAILED(rv)) return rv;
 
@@ -705,7 +706,7 @@ nsJARURI::GetRelativeSpec(nsIURI* uriToCompare, nsACString& relativeSpec)
     nsresult rv = otherJARURI->GetJARFile(getter_AddRefs(otherJARFile));
     if (NS_FAILED(rv)) return rv;
 
-    PRBool equal;
+    bool equal;
     rv = mJARFile->Equals(otherJARFile, &equal);
     if (NS_FAILED(rv)) return rv;
 
@@ -715,11 +716,11 @@ nsJARURI::GetRelativeSpec(nsIURI* uriToCompare, nsACString& relativeSpec)
     }
 
     // Same JAR file.  Compare the JAREntrys
-    nsCAutoString otherEntry;
+    nsAutoCString otherEntry;
     rv = otherJARURI->GetJAREntry(otherEntry);
     if (NS_FAILED(rv)) return rv;
 
-    nsCAutoString otherCharset;
+    nsAutoCString otherCharset;
     rv = uriToCompare->GetOriginCharset(otherCharset);
     if (NS_FAILED(rv)) return rv;
 
@@ -727,7 +728,7 @@ nsJARURI::GetRelativeSpec(nsIURI* uriToCompare, nsACString& relativeSpec)
     rv = CreateEntryURL(otherEntry, otherCharset.get(), getter_AddRefs(url));
     if (NS_FAILED(rv)) return rv;
 
-    nsCAutoString relativeEntrySpec;
+    nsAutoCString relativeEntrySpec;
     rv = mJAREntry->GetRelativeSpec(url, relativeEntrySpec);
     if (NS_FAILED(rv)) return rv;
 
@@ -750,7 +751,7 @@ nsJARURI::GetJARFile(nsIURI* *jarFile)
 NS_IMETHODIMP
 nsJARURI::GetJAREntry(nsACString &entryPath)
 {
-    nsCAutoString filePath;
+    nsAutoCString filePath;
     mJAREntry->GetFilePath(filePath);
     NS_ASSERTION(filePath.Length() > 0, "path should never be empty!");
     // Trim off the leading '/'
@@ -768,6 +769,14 @@ nsJARURI::SetJAREntry(const nsACString &entryPath)
 NS_IMETHODIMP
 nsJARURI::CloneWithJARFile(nsIURI *jarFile, nsIJARURI **result)
 {
+    return CloneWithJARFileInternal(jarFile, eHonorRef, result);
+}
+
+nsresult
+nsJARURI::CloneWithJARFileInternal(nsIURI *jarFile,
+                                   nsJARURI::RefHandlingEnum refHandlingMode,
+                                   nsIJARURI **result)
+{
     if (!jarFile) {
         return NS_ERROR_INVALID_ARG;
     }
@@ -781,24 +790,22 @@ nsJARURI::CloneWithJARFile(nsIURI *jarFile, nsIJARURI **result)
     NS_TryToSetImmutable(newJARFile);
 
     nsCOMPtr<nsIURI> newJAREntryURI;
-    rv = mJAREntry->Clone(getter_AddRefs(newJAREntryURI));
+    rv = refHandlingMode == eHonorRef ?
+        mJAREntry->Clone(getter_AddRefs(newJAREntryURI)) :
+        mJAREntry->CloneIgnoringRef(getter_AddRefs(newJAREntryURI));
+
     if (NS_FAILED(rv)) return rv;
 
     nsCOMPtr<nsIURL> newJAREntry(do_QueryInterface(newJAREntryURI));
     NS_ASSERTION(newJAREntry, "This had better QI to nsIURL!");
     
     nsJARURI* uri = new nsJARURI();
-    if (uri) {
-        NS_ADDREF(uri);
-        uri->mJARFile = newJARFile;
-        uri->mJAREntry = newJAREntry;
-        *result = uri;
-        rv = NS_OK;
-    } else {
-        rv = NS_ERROR_OUT_OF_MEMORY;
-    }
+    NS_ADDREF(uri);
+    uri->mJARFile = newJARFile;
+    uri->mJAREntry = newJAREntry;
+    *result = uri;
 
-    return rv;
+    return NS_OK;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -815,3 +822,52 @@ nsJARURI::GetInnermostURI(nsIURI** uri)
     return NS_ImplGetInnermostURI(this, uri);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// nsIIPCSerializableURI methods:
+
+void
+nsJARURI::Serialize(URIParams& aParams)
+{
+    JARURIParams params;
+
+    SerializeURI(mJARFile, params.jarFile());
+    SerializeURI(mJAREntry, params.jarEntry());
+    params.charset() = mCharsetHint;
+
+    aParams = params;
+}
+
+bool
+nsJARURI::Deserialize(const URIParams& aParams)
+{
+    if (aParams.type() != URIParams::TJARURIParams) {
+        NS_ERROR("Received unknown parameters from the other process!");
+        return false;
+    }
+
+    const JARURIParams& params = aParams.get_JARURIParams();
+
+    nsCOMPtr<nsIURI> file = DeserializeURI(params.jarFile());
+    if (!file) {
+        NS_ERROR("Couldn't deserialize jar file URI!");
+        return false;
+    }
+
+    nsCOMPtr<nsIURI> entry = DeserializeURI(params.jarEntry());
+    if (!entry) {
+        NS_ERROR("Couldn't deserialize jar entry URI!");
+        return false;
+    }
+
+    nsCOMPtr<nsIURL> entryURL = do_QueryInterface(entry);
+    if (!entryURL) {
+        NS_ERROR("Couldn't QI jar entry URI to nsIURL!");
+        return false;
+    }
+
+    mJARFile.swap(file);
+    mJAREntry.swap(entryURL);
+    mCharsetHint = params.charset();
+
+    return true;
+}

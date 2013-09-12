@@ -1,42 +1,8 @@
 /* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set sw=2 ts=8 et tw=80 : */
-
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- *  The Mozilla Foundation
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Jae-Seong Lee-Russo <lusian@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef mozilla_net_PHttpChannelParams_h
 #define mozilla_net_PHttpChannelParams_h
@@ -44,13 +10,13 @@
 #define ALLOW_LATE_NSHTTP_H_INCLUDE 1
 #include "base/basictypes.h"
 
-#include "IPC/IPCMessageUtils.h"
+#include "ipc/IPCMessageUtils.h"
 #include "nsHttp.h"
 #include "nsHttpHeaderArray.h"
 #include "nsHttpResponseHead.h"
 
-#include "nsIStringStream.h"
-#include "nsISupportsPrimitives.h"
+#include "nsIClassInfo.h"
+#include "nsNetUtil.h"
 
 namespace mozilla {
 namespace net {
@@ -58,7 +24,7 @@ namespace net {
 struct RequestHeaderTuple {
   nsCString mHeader;
   nsCString mValue;
-  PRBool    mMerge;
+  bool      mMerge;
 };
 
 typedef nsTArray<RequestHeaderTuple> RequestHeaderTuples;
@@ -82,9 +48,9 @@ struct ParamTraits<mozilla::net::RequestHeaderTuple>
 
   static bool Read(const Message* aMsg, void** aIter, paramType* aResult)
   {
-    if (!ReadParam(aMsg, aIter, &(aResult->mHeader)) ||
-        !ReadParam(aMsg, aIter, &(aResult->mValue))  ||
-        !ReadParam(aMsg, aIter, &(aResult->mMerge)))
+    if (!ReadParam(aMsg, aIter, &aResult->mHeader) ||
+        !ReadParam(aMsg, aIter, &aResult->mValue)  ||
+        !ReadParam(aMsg, aIter, &aResult->mMerge))
       return false;
 
     return true;
@@ -100,13 +66,13 @@ struct ParamTraits<nsHttpAtom>
   {
     // aParam.get() cannot be null.
     NS_ASSERTION(aParam.get(), "null nsHTTPAtom value");
-    nsCAutoString value(aParam.get());
+    nsAutoCString value(aParam.get());
     WriteParam(aMsg, value);
   }
 
   static bool Read(const Message* aMsg, void** aIter, paramType* aResult)
   {
-    nsCAutoString value;
+    nsAutoCString value;
     if (!ReadParam(aMsg, aIter, &value))
       return false;
 
@@ -129,13 +95,21 @@ struct ParamTraits<nsHttpHeaderArray::nsEntry>
 
   static bool Read(const Message* aMsg, void** aIter, paramType* aResult)
   {
-    if (!ReadParam(aMsg, aIter, &(aResult->header)) ||
-        !ReadParam(aMsg, aIter, &(aResult->value)))
+    if (!ReadParam(aMsg, aIter, &aResult->header) ||
+        !ReadParam(aMsg, aIter, &aResult->value))
       return false;
 
     return true;
   }
 };
+
+
+template<>
+struct ParamTraits<mozilla::net::InfallableCopyCString>
+  : public ParamTraits<nsCString>
+{
+};
+
 
 template<>
 struct ParamTraits<nsHttpHeaderArray>
@@ -146,12 +120,12 @@ struct ParamTraits<nsHttpHeaderArray>
   {
     paramType& p = const_cast<paramType&>(aParam);
 
-    WriteParam(aMsg, p.Headers());
+    WriteParam(aMsg, p.mHeaders);
   }
 
   static bool Read(const Message* aMsg, void** aIter, paramType* aResult)
   {
-    if (!ReadParam(aMsg, aIter, &(aResult->Headers())))
+    if (!ReadParam(aMsg, aIter, &aResult->mHeaders))
       return false;
 
     return true;
@@ -179,69 +153,22 @@ struct ParamTraits<nsHttpResponseHead>
 
   static bool Read(const Message* aMsg, void** aIter, paramType* aResult)
   {
-    if (!ReadParam(aMsg, aIter, &(aResult->mHeaders))             ||
-        !ReadParam(aMsg, aIter, &(aResult->mVersion))             ||
-        !ReadParam(aMsg, aIter, &(aResult->mStatus))              ||
-        !ReadParam(aMsg, aIter, &(aResult->mStatusText))          ||
-        !ReadParam(aMsg, aIter, &(aResult->mContentLength))       ||
-        !ReadParam(aMsg, aIter, &(aResult->mContentType))         ||
-        !ReadParam(aMsg, aIter, &(aResult->mContentCharset))      ||
-        !ReadParam(aMsg, aIter, &(aResult->mCacheControlNoStore)) ||
-        !ReadParam(aMsg, aIter, &(aResult->mCacheControlNoCache)) ||
-        !ReadParam(aMsg, aIter, &(aResult->mPragmaNoCache)))
+    if (!ReadParam(aMsg, aIter, &aResult->mHeaders)             ||
+        !ReadParam(aMsg, aIter, &aResult->mVersion)             ||
+        !ReadParam(aMsg, aIter, &aResult->mStatus)              ||
+        !ReadParam(aMsg, aIter, &aResult->mStatusText)          ||
+        !ReadParam(aMsg, aIter, &aResult->mContentLength)       ||
+        !ReadParam(aMsg, aIter, &aResult->mContentType)         ||
+        !ReadParam(aMsg, aIter, &aResult->mContentCharset)      ||
+        !ReadParam(aMsg, aIter, &aResult->mCacheControlNoStore) ||
+        !ReadParam(aMsg, aIter, &aResult->mCacheControlNoCache) ||
+        !ReadParam(aMsg, aIter, &aResult->mPragmaNoCache))
       return false;
 
     return true;
   }
 };
 
-template<>
-struct ParamTraits<nsIStringInputStream*>
-{
-  typedef nsIStringInputStream* paramType;
-
-  static void Write(Message* aMsg, const paramType& aParam)
-  {
-    nsCAutoString value;
-    nsCOMPtr<nsISupportsCString> cstr(do_QueryInterface(aParam));
-
-    if (cstr) {
-      cstr->GetData(value);
-    } else {
-      PRUint32 length;
-      aParam->Available(&length);
-      value.SetLength(length);
-      NS_ASSERTION(value.Length() == length, "SetLength failed");
-      char *c = value.BeginWriting();
-      PRUint32 bytesRead;
-      nsresult rv = aParam->Read(c, length, &bytesRead);
-      NS_ASSERTION(NS_SUCCEEDED(rv) && bytesRead == length, "Read failed");
-    }
-
-    WriteParam(aMsg, value);
-  }
-
-  static bool Read(const Message* aMsg, void** aIter, paramType* aResult)
-  {
-    nsCAutoString value;
-    if (!ReadParam(aMsg, aIter, &value))
-      return false;
-
-    nsresult rv;
-
-    nsCOMPtr<nsIStringInputStream> stream
-      (do_CreateInstance("@mozilla.org/io/string-input-stream;1", &rv));
-    if (NS_FAILED(rv))
-      return false;
-
-    rv = stream->SetData(value.get(), value.Length());
-    if (NS_FAILED(rv))
-      return false;
-
-    stream.forget(aResult);
-    return true;
-  }
-};
 } // namespace IPC
 
 #endif // mozilla_net_PHttpChannelParams_h

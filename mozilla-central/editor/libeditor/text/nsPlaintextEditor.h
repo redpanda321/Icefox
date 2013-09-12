@@ -1,58 +1,35 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Daniel Glazman <glazman@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsPlaintextEditor_h__
 #define nsPlaintextEditor_h__
 
 #include "nsCOMPtr.h"
-
-#include "nsIPlaintextEditor.h"
-#include "nsIEditorMailSupport.h"
-
-#include "nsEditor.h"
-#include "nsIDOMElement.h"
-#include "nsIDOMEventListener.h"
-
-#include "nsEditRules.h"
 #include "nsCycleCollectionParticipant.h"
- 
-class nsITransferable;
+#include "nsEditor.h"
+#include "nsIEditor.h"
+#include "nsIEditorMailSupport.h"
+#include "nsIPlaintextEditor.h"
+#include "nsISupportsImpl.h"
+#include "nscore.h"
+
+class nsIContent;
+class nsIDOMDataTransfer;
+class nsIDOMDocument;
+class nsIDOMElement;
+class nsIDOMEvent;
+class nsIDOMEventTarget;
+class nsIDOMKeyEvent;
+class nsIDOMNode;
 class nsIDocumentEncoder;
+class nsIEditRules;
+class nsIOutputStream;
+class nsIPrivateTextRangeList;
+class nsISelection;
+class nsISelectionController;
+class nsITransferable;
 
 /**
  * The text editor implementation.
@@ -72,7 +49,7 @@ public:
   NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED(nsPlaintextEditor, nsEditor)
 
   /* below used by TypedText() */
-  enum {
+  enum ETypingAction {
     eTypedText,  /* user typed text */
     eTypedBR,    /* user typed shift-enter to get a br */
     eTypedBreak  /* user typed enter */
@@ -91,50 +68,48 @@ public:
   NS_IMETHOD SetAttributeOrEquivalent(nsIDOMElement * aElement,
                                       const nsAString & aAttribute,
                                       const nsAString & aValue,
-                                      PRBool aSuppressTransaction);
+                                      bool aSuppressTransaction);
   NS_IMETHOD RemoveAttributeOrEquivalent(nsIDOMElement * aElement,
                                          const nsAString & aAttribute,
-                                         PRBool aSuppressTransaction);
+                                         bool aSuppressTransaction);
 
   /** prepare the editor for use */
-  NS_IMETHOD Init(nsIDOMDocument *aDoc, nsIPresShell *aPresShell,  nsIContent *aRoot, nsISelectionController *aSelCon, PRUint32 aFlags);
+  NS_IMETHOD Init(nsIDOMDocument *aDoc, nsIContent *aRoot, nsISelectionController *aSelCon, uint32_t aFlags);
   
-  NS_IMETHOD GetDocumentIsEmpty(PRBool *aDocumentIsEmpty);
-  NS_IMETHOD GetIsDocumentEditable(PRBool *aIsDocumentEditable);
+  NS_IMETHOD GetDocumentIsEmpty(bool *aDocumentIsEmpty);
+  NS_IMETHOD GetIsDocumentEditable(bool *aIsDocumentEditable);
 
-  NS_IMETHOD DeleteSelection(EDirection aAction);
+  NS_IMETHOD DeleteSelection(EDirection aAction,
+                             EStripWrappers aStripWrappers);
 
   NS_IMETHOD SetDocumentCharacterSet(const nsACString & characterSet);
 
-  NS_IMETHOD Undo(PRUint32 aCount);
-  NS_IMETHOD Redo(PRUint32 aCount);
+  NS_IMETHOD Undo(uint32_t aCount);
+  NS_IMETHOD Redo(uint32_t aCount);
 
   NS_IMETHOD Cut();
-  NS_IMETHOD CanCut(PRBool *aCanCut);
+  NS_IMETHOD CanCut(bool *aCanCut);
   NS_IMETHOD Copy();
-  NS_IMETHOD CanCopy(PRBool *aCanCopy);
-  NS_IMETHOD Paste(PRInt32 aSelectionType);
-  NS_IMETHOD CanPaste(PRInt32 aSelectionType, PRBool *aCanPaste);
+  NS_IMETHOD CanCopy(bool *aCanCopy);
+  NS_IMETHOD Paste(int32_t aSelectionType);
+  NS_IMETHOD CanPaste(int32_t aSelectionType, bool *aCanPaste);
   NS_IMETHOD PasteTransferable(nsITransferable *aTransferable);
-  NS_IMETHOD CanPasteTransferable(nsITransferable *aTransferable, PRBool *aCanPaste);
-
-  NS_IMETHOD CanDrag(nsIDOMEvent *aDragEvent, PRBool *aCanDrag);
-  NS_IMETHOD DoDrag(nsIDOMEvent *aDragEvent);
-  NS_IMETHOD InsertFromDrop(nsIDOMEvent* aDropEvent);
+  NS_IMETHOD CanPasteTransferable(nsITransferable *aTransferable, bool *aCanPaste);
 
   NS_IMETHOD OutputToString(const nsAString& aFormatType,
-                            PRUint32 aFlags,
+                            uint32_t aFlags,
                             nsAString& aOutputString);
                             
   NS_IMETHOD OutputToStream(nsIOutputStream* aOutputStream,
                             const nsAString& aFormatType,
                             const nsACString& aCharsetOverride,
-                            PRUint32 aFlags);
+                            uint32_t aFlags);
 
 
   /** All editor operations which alter the doc should be prefaced
    *  with a call to StartOperation, naming the action and direction */
-  NS_IMETHOD StartOperation(PRInt32 opID, nsIEditor::EDirection aDirection);
+  NS_IMETHOD StartOperation(EditAction opID,
+                            nsIEditor::EDirection aDirection);
 
   /** All editor operations which alter the doc should be followed
    *  with a call to EndOperation */
@@ -145,27 +120,30 @@ public:
 
   virtual nsresult HandleKeyPressEvent(nsIDOMKeyEvent* aKeyEvent);
 
-  virtual already_AddRefed<nsPIDOMEventTarget> GetPIDOMEventTarget();
+  virtual already_AddRefed<nsIDOMEventTarget> GetDOMEventTarget();
 
   virtual nsresult BeginIMEComposition();
   virtual nsresult UpdateIMEComposition(const nsAString &aCompositionString,
                                         nsIPrivateTextRangeList *aTextRange);
 
-  /* ------------ Utility Routines, not part of public API -------------- */
-  NS_IMETHOD TypedText(const nsAString& aString, PRInt32 aAction);
+  virtual already_AddRefed<nsIContent> GetInputEventTargetContent();
 
-  /** Returns the absolute position of the end points of aSelection
-   * in the document as a text stream.
-   * Invariant: aStartOffset <= aEndOffset.
-   */
-  nsresult GetTextSelectionOffsets(nsISelection *aSelection,
-                                   PRUint32 &aStartOffset, 
-                                   PRUint32 &aEndOffset);
+  /* ------------ Utility Routines, not part of public API -------------- */
+  NS_IMETHOD TypedText(const nsAString& aString, ETypingAction aAction);
 
   nsresult InsertTextAt(const nsAString &aStringToInsert,
                         nsIDOMNode *aDestinationNode,
-                        PRInt32 aDestOffset,
-                        PRBool aDoDeleteSelection);
+                        int32_t aDestOffset,
+                        bool aDoDeleteSelection);
+
+  virtual nsresult InsertFromDataTransfer(nsIDOMDataTransfer *aDataTransfer,
+                                          int32_t aIndex,
+                                          nsIDOMDocument *aSourceDoc,
+                                          nsIDOMNode *aDestinationNode,
+                                          int32_t aDestOffset,
+                                          bool aDoDeleteSelection);
+
+  virtual nsresult InsertFromDrop(nsIDOMEvent* aDropEvent);
 
   /**
    * Extends the selection for given deletion operation
@@ -175,8 +153,13 @@ public:
   nsresult ExtendSelectionForDelete(nsISelection* aSelection,
                                     nsIEditor::EDirection *aAction);
 
-  static void GetDefaultEditorPrefs(PRInt32 &aNewLineHandling,
-                                    PRInt32 &aCaretStyle);
+  // Return true if the data is safe to insert as the source and destination
+  // principals match, or we are in a editor context where this doesn't matter.
+  // Otherwise, the data must be sanitized first.
+  bool IsSafeToInsertData(nsIDOMDocument* aSourceDoc);
+
+  static void GetDefaultEditorPrefs(int32_t &aNewLineHandling,
+                                    int32_t &aCaretStyle);
 
 protected:
 
@@ -186,51 +169,48 @@ protected:
 
   // Helpers for output routines
   NS_IMETHOD GetAndInitDocEncoder(const nsAString& aFormatType,
-                                  PRUint32 aFlags,
+                                  uint32_t aFlags,
                                   const nsACString& aCharset,
                                   nsIDocumentEncoder** encoder);
 
   // key event helpers
-  NS_IMETHOD CreateBR(nsIDOMNode *aNode, PRInt32 aOffset, 
+  NS_IMETHOD CreateBR(nsIDOMNode *aNode, int32_t aOffset, 
                       nsCOMPtr<nsIDOMNode> *outBRNode, EDirection aSelect = eNone);
-  NS_IMETHOD CreateBRImpl(nsCOMPtr<nsIDOMNode> *aInOutParent, 
-                         PRInt32 *aInOutOffset, 
-                         nsCOMPtr<nsIDOMNode> *outBRNode, 
-                         EDirection aSelect);
-  NS_IMETHOD InsertBR(nsCOMPtr<nsIDOMNode> *outBRNode);
+  nsresult CreateBRImpl(nsCOMPtr<nsIDOMNode>* aInOutParent,
+                        int32_t* aInOutOffset,
+                        nsCOMPtr<nsIDOMNode>* outBRNode,
+                        EDirection aSelect);
+  nsresult InsertBR(nsCOMPtr<nsIDOMNode>* outBRNode);
 
   // factored methods for handling insertion of data from transferables (drag&drop or clipboard)
   NS_IMETHOD PrepareTransferable(nsITransferable **transferable);
   NS_IMETHOD InsertTextFromTransferable(nsITransferable *transferable,
                                         nsIDOMNode *aDestinationNode,
-                                        PRInt32 aDestOffset,
-                                        PRBool aDoDeleteSelection);
-  virtual nsresult SetupDocEncoder(nsIDocumentEncoder **aDocEncoder);
-  virtual nsresult PutDragDataInTransferable(nsITransferable **aTransferable);
+                                        int32_t aDestOffset,
+                                        bool aDoDeleteSelection);
 
   /** shared outputstring; returns whether selection is collapsed and resulting string */
-  nsresult SharedOutputString(PRUint32 aFlags, PRBool* aIsCollapsed, nsAString& aResult);
+  nsresult SharedOutputString(uint32_t aFlags, bool* aIsCollapsed, nsAString& aResult);
 
   /* small utility routine to test the eEditorReadonly bit */
-  PRBool IsModifiable();
+  bool IsModifiable();
 
-  //XXX Kludge: Used to suppress spurious drag/drop events (bug 50703)
-  PRBool   mIgnoreSpuriousDragEvent;
-  NS_IMETHOD IgnoreSpuriousDragEvent(PRBool aIgnoreSpuriousDragEvent) {mIgnoreSpuriousDragEvent = aIgnoreSpuriousDragEvent; return NS_OK;}
+  bool CanCutOrCopy();
+  bool FireClipboardEvent(int32_t aType);
 
-  PRBool CanCutOrCopy();
-  PRBool FireClipboardEvent(PRInt32 aType);
+  bool UpdateMetaCharset(nsIDOMDocument* aDocument,
+                         const nsACString& aCharacterSet);
 
 // Data members
 protected:
 
   nsCOMPtr<nsIEditRules>        mRules;
-  PRBool  mWrapToWindow;
-  PRInt32 mWrapColumn;
-  PRInt32 mMaxTextLength;
-  PRInt32 mInitTriggerCounter;
-  PRInt32 mNewlineHandling;
-  PRInt32 mCaretStyle;
+  bool    mWrapToWindow;
+  int32_t mWrapColumn;
+  int32_t mMaxTextLength;
+  int32_t mInitTriggerCounter;
+  int32_t mNewlineHandling;
+  int32_t mCaretStyle;
 
 // friends
 friend class nsHTMLEditRules;

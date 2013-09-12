@@ -1,48 +1,16 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla SVG Project code.
- *
- * The Initial Developer of the Original Code is the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef MOZILLA_DOMSVGANIMATEDLENGTHLIST_H__
 #define MOZILLA_DOMSVGANIMATEDLENGTHLIST_H__
 
-#include "nsIDOMSVGAnimatedLengthList.h"
-#include "nsCycleCollectionParticipant.h"
 #include "nsAutoPtr.h"
-#include "nsTArray.h"
-
-class nsSVGElement;
+#include "nsCOMPtr.h"
+#include "nsCycleCollectionParticipant.h"
+#include "nsSVGElement.h"
+#include "mozilla/Attributes.h"
 
 namespace mozilla {
 
@@ -75,10 +43,10 @@ class DOMSVGLengthList;
  *      |          |                |          |        |          |
  *   element ~> DOMSVGAnimatedLengthList ~> DOMSVGLengthList ~> DOMSVGLength
  *
- * Rational:
+ * Rationale:
  *
  * The following three paragraphs explain the main three requirements that must
- * be met by any design. These are followed by an explanation of the rational
+ * be met by any design. These are followed by an explanation of the rationale
  * behind our particular design.
  *
  * 1: DOMSVGAnimatedLengthList, DOMSVGLengthLists and DOMSVGLength get to their
@@ -135,14 +103,14 @@ class DOMSVGLengthList;
  * One drawback of this design is that objects must look up their parent
  * chain to find their element, but that overhead is relatively small.
  */
-class DOMSVGAnimatedLengthList : public nsIDOMSVGAnimatedLengthList
+class DOMSVGAnimatedLengthList MOZ_FINAL : public nsISupports,
+                                           public nsWrapperCache
 {
   friend class DOMSVGLengthList;
 
 public:
   NS_DECL_CYCLE_COLLECTING_ISUPPORTS
-  NS_DECL_CYCLE_COLLECTION_CLASS(DOMSVGAnimatedLengthList)
-  NS_DECL_NSIDOMSVGANIMATEDLENGTHLIST
+  NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_CLASS(DOMSVGAnimatedLengthList)
 
   /**
    * Factory method to create and return a DOMSVGAnimatedLengthList wrapper
@@ -158,13 +126,13 @@ public:
   static already_AddRefed<DOMSVGAnimatedLengthList>
     GetDOMWrapper(SVGAnimatedLengthList *aList,
                   nsSVGElement *aElement,
-                  PRUint8 aAttrEnum,
-                  PRUint8 aAxis);
+                  uint8_t aAttrEnum,
+                  uint8_t aAxis);
 
   /**
    * This method returns the DOMSVGAnimatedLengthList wrapper for an internal
    * SVGAnimatedLengthList object if it currently has a wrapper. If it does
-   * not, then nsnull is returned.
+   * not, then nullptr is returned.
    */
   static DOMSVGAnimatedLengthList*
     GetDOMWrapperIfExists(SVGAnimatedLengthList *aList);
@@ -188,7 +156,14 @@ public:
    * Returns true if our attribute is animating (in which case our animVal is
    * not simply a mirror of our baseVal).
    */
-  PRBool IsAnimating() const;
+  bool IsAnimating() const;
+
+  // WebIDL
+  nsSVGElement* GetParentObject() const { return mElement; }
+  virtual JSObject* WrapObject(JSContext* aCx, JSObject* aScope, bool* aTriedToWrap);
+  // These aren't weak refs because mBaseVal and mAnimVal are weak
+  already_AddRefed<DOMSVGLengthList> BaseVal();
+  already_AddRefed<DOMSVGLengthList> AnimVal();
 
 private:
 
@@ -196,13 +171,15 @@ private:
    * Only our static GetDOMWrapper() factory method may create objects of our
    * type.
    */
-  DOMSVGAnimatedLengthList(nsSVGElement *aElement, PRUint8 aAttrEnum, PRUint8 aAxis)
-    : mBaseVal(nsnull)
-    , mAnimVal(nsnull)
+  DOMSVGAnimatedLengthList(nsSVGElement *aElement, uint8_t aAttrEnum, uint8_t aAxis)
+    : mBaseVal(nullptr)
+    , mAnimVal(nullptr)
     , mElement(aElement)
     , mAttrEnum(aAttrEnum)
     , mAxis(aAxis)
-  {}
+  {
+    SetIsDOMBinding();
+  }
 
   ~DOMSVGAnimatedLengthList();
 
@@ -220,8 +197,8 @@ private:
   // ourself, but also for our base/animVal and all of their items.
   nsRefPtr<nsSVGElement> mElement;
 
-  PRUint8 mAttrEnum;
-  PRUint8 mAxis;
+  uint8_t mAttrEnum;
+  uint8_t mAxis;
 };
 
 } // namespace mozilla

@@ -1,55 +1,40 @@
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1998
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH		= ../..
+DEPTH		= @DEPTH@
 topsrcdir	= @top_srcdir@
 srcdir		= @srcdir@
 VPATH		= @srcdir@
-relativesrcdir  = testing/mochitest
+relativesrcdir  = @relativesrcdir@
 
 include $(DEPTH)/config/autoconf.mk
 
-DIRS =	MochiKit \
-	static \
-	dynamic \
-	tests \
-	chrome \
-	ssltunnel \
-	$(NULL)
+DIRS = \
+  MochiKit \
+  static \
+  dynamic \
+  tests \
+  chrome \
+  ssltunnel \
+  $(NULL)
+
+ifeq ($(MOZ_BUILD_APP),mobile/android)
+DIRS += roboextender
+endif
+
+NO_JS_MANIFEST = 1
+MOZ_CHROME_FILE_FORMAT = jar
+DIST_FILES = install.rdf
+
+# Used in install.rdf
+USE_EXTENSION_MANIFEST = 1
+
+XPI_NAME = mochijar
+
+# we turn this off for UNIVERSAL_BINARY
+CHROME_JAR = 1
 
 include $(topsrcdir)/config/rules.mk
 # We're installing to _tests/testing/mochitest, so this is the depth
@@ -61,30 +46,39 @@ include $(topsrcdir)/build/automation-build.mk
 _SERV_FILES = 	\
 		runtests.py \
 		automation.py \
+		runtestsb2g.py \
 		runtestsremote.py \
 		runtestsvmware.py \
-		$(topsrcdir)/build/mobile/devicemanager.py \
+		manifest.webapp \
+		$(topsrcdir)/testing/mozbase/mozdevice/mozdevice/devicemanager.py \
+		$(topsrcdir)/testing/mozbase/mozdevice/mozdevice/devicemanagerADB.py \
+		$(topsrcdir)/testing/mozbase/mozdevice/mozdevice/devicemanagerSUT.py \
+		$(topsrcdir)/testing/mozbase/mozdevice/mozdevice/Zeroconf.py \
 		$(topsrcdir)/build/automationutils.py \
-		$(topsrcdir)/build/poster.zip \
+		$(topsrcdir)/build/manifestparser.py \
 		$(topsrcdir)/build/mobile/remoteautomation.py \
+		$(topsrcdir)/build/mobile/b2gautomation.py \
 		gen_template.pl \
 		server.js \
-		harness-a11y.xul \
 		harness-overlay.xul \
 		harness.xul \
 		browser-test-overlay.xul \
 		browser-test.js \
+		cc-analyzer.js \
 		chrome-harness.js \
-		ipc-overlay.xul \
-		ipc.js \
 		browser-harness.xul \
-		redirect-a11y.html \
 		redirect.html \
-		redirect.js \
 		$(topsrcdir)/build/pgo/server-locations.txt \
 		$(topsrcdir)/netwerk/test/httpserver/httpd.js \
-		mozprefs.js \
+		pywebsocket_wrapper.py \
+ 	 	plain-loop.html \
+		android.json \
+		b2g.json \
 		$(NULL)	
+
+ifeq ($(MOZ_BUILD_APP),mobile/android)
+_SERV_FILES += $(topsrcdir)/mobile/android/base/tests/robocop.ini
+endif
 
 _PYWEBSOCKET_FILES = \
 		pywebsocket/standalone.py \
@@ -92,21 +86,32 @@ _PYWEBSOCKET_FILES = \
 
 _MOD_PYWEBSOCKET_FILES = \
 		pywebsocket/mod_pywebsocket/__init__.py \
+		pywebsocket/mod_pywebsocket/common.py \
 		pywebsocket/mod_pywebsocket/dispatch.py \
-		pywebsocket/mod_pywebsocket/util.py \
-		pywebsocket/mod_pywebsocket/msgutil.py \
-		pywebsocket/mod_pywebsocket/memorizingfile.py \
+		pywebsocket/mod_pywebsocket/extensions.py \
 		pywebsocket/mod_pywebsocket/headerparserhandler.py \
+		pywebsocket/mod_pywebsocket/http_header_util.py \
+		pywebsocket/mod_pywebsocket/memorizingfile.py \
+		pywebsocket/mod_pywebsocket/util.py \
+		pywebsocket/mod_pywebsocket/stream.py \
+		pywebsocket/mod_pywebsocket/_stream_hixie75.py \
+		pywebsocket/mod_pywebsocket/msgutil.py \
+		pywebsocket/mod_pywebsocket/_stream_hybi.py \
+		pywebsocket/mod_pywebsocket/_stream_base.py \
 		$(NULL)
 
 _HANDSHAKE_FILES = \
 		pywebsocket/mod_pywebsocket/handshake/__init__.py \
+		pywebsocket/mod_pywebsocket/handshake/hybi00.py \
 		pywebsocket/mod_pywebsocket/handshake/_base.py \
 		pywebsocket/mod_pywebsocket/handshake/draft75.py \
-		pywebsocket/mod_pywebsocket/handshake/handshake.py \
+		pywebsocket/mod_pywebsocket/handshake/hybi.py \
 		$(NULL)
 
 _DEST_DIR = $(DEPTH)/_tests/$(relativesrcdir)
+
+libs:: 
+	(cd $(DIST)/xpi-stage && tar $(TAR_CREATE_FLAGS) - mochijar) | (cd $(_DEST_DIR) && tar -xf -)
 
 libs:: $(_PYWEBSOCKET_FILES)
 	$(INSTALL) $(foreach f,$^,"$f") $(_DEST_DIR)/pywebsocket
@@ -116,12 +121,6 @@ libs:: $(_MOD_PYWEBSOCKET_FILES)
 
 libs:: $(_HANDSHAKE_FILES)
 	$(INSTALL) $(foreach f,$^,"$f") $(_DEST_DIR)/pywebsocket/mod_pywebsocket/handshake
-
-runtests.py: runtests.py.in
-	$(PYTHON) $(topsrcdir)/config/Preprocessor.py \
-	$(DEFINES) $(ACDEFINES) $^ > $@
-
-GARBAGE += runtests.py
 
 libs:: $(_SERV_FILES)
 	$(INSTALL) $^ $(_DEST_DIR)
@@ -156,6 +155,10 @@ ifeq (gtk2_1,$(MOZ_WIDGET_TOOLKIT)_$(MOZ_X11))
 TEST_HARNESS_BINS += screentopng
 endif
 
+ifeq (windows,$(MOZ_WIDGET_TOOLKIT))
+TEST_HARNESS_BINS += screenshot$(BIN_SUFFIX)
+endif
+
 # Components / typelibs that don't get packaged with
 # the build, but that we need for the test harness.
 TEST_HARNESS_COMPONENTS := \
@@ -165,22 +168,41 @@ TEST_HARNESS_COMPONENTS := \
 # We need the test plugin as some tests rely on it
 ifeq (Darwin,$(OS_TARGET))
 TEST_HARNESS_PLUGINS := \
-  Test.plugin/
+  Test.plugin/ \
+  SecondTest.plugin/
 else
 TEST_HARNESS_PLUGINS := \
-  $(DLL_PREFIX)nptest$(DLL_SUFFIX)
+  $(DLL_PREFIX)nptest$(DLL_SUFFIX) \
+  $(DLL_PREFIX)npsecondtest$(DLL_SUFFIX)
 endif
 
 # Rules for staging the necessary harness bits for a test package
 PKG_STAGE = $(DIST)/test-package-stage
 DIST_BIN = $(DIST)/bin
 
+PKG_CHROMEJAR = $(PKG_STAGE)/mochitest/content/
+
+ifdef CHROME_JAR
+stage-chromejar:
+	$(NSINSTALL) -D $(PKG_CHROMEJAR)
+	cp -RL $(DEPTH)/_tests/testing/mochitest/browser $(PKG_CHROMEJAR)
+	cp -RL $(DEPTH)/_tests/testing/mochitest/chrome $(PKG_CHROMEJAR)
+ifdef ACCESSIBILITY
+	cp -RL $(DEPTH)/_tests/testing/mochitest/a11y $(PKG_CHROMEJAR)
+endif
+	(cd $(PKG_STAGE)/mochitest && zip -rq tests.jar content/)
+	@(rm -rf $(PKG_CHROMEJAR))
+
+stage-package: stage-chromejar
+endif
+
+$(_DEST_DIR):
+	$(NSINSTALL) -D $@
+
 stage-package:
-	$(NSINSTALL) -D $(PKG_STAGE)/mochitest && $(NSINSTALL) -D $(PKG_STAGE)/bin/plugins
-	@(cd $(DEPTH)/_tests/testing/mochitest/ && tar $(TAR_CREATE_FLAGS) - *) | (cd $(PKG_STAGE)/mochitest && tar -xf -)
+	$(NSINSTALL) -D $(PKG_STAGE)/mochitest && $(NSINSTALL) -D $(PKG_STAGE)/bin/plugins && $(NSINSTALL) -D $(DIST)/plugins
+	(cd $(DEPTH)/_tests/testing/mochitest/ && tar $(TAR_CREATE_FLAGS_QUIET) - *) | (cd $(PKG_STAGE)/mochitest && tar -xf -)
 	@(cd $(DIST_BIN) && tar $(TAR_CREATE_FLAGS) - $(TEST_HARNESS_BINS)) | (cd $(PKG_STAGE)/bin && tar -xf -)
 	@(cd $(DIST_BIN)/components && tar $(TAR_CREATE_FLAGS) - $(TEST_HARNESS_COMPONENTS)) | (cd $(PKG_STAGE)/bin/components && tar -xf -)
-	@(cd $(topsrcdir)/build/pgo/certs && tar $(TAR_CREATE_FLAGS) - *) | (cd $(PKG_STAGE)/certs && tar -xf -)
-ifdef MOZ_PLUGINS
-	@(cd $(DIST_BIN)/plugins && tar $(TAR_CREATE_FLAGS) - $(TEST_HARNESS_PLUGINS)) | (cd $(PKG_STAGE)/bin/plugins && tar -xf -)
-endif
+	(cd $(topsrcdir)/build/pgo/certs && tar $(TAR_CREATE_FLAGS_QUIET) - *) | (cd $(PKG_STAGE)/certs && tar -xf -)
+	@(cd $(DIST)/plugins && tar $(TAR_CREATE_FLAGS) - $(TEST_HARNESS_PLUGINS)) | (cd $(PKG_STAGE)/bin/plugins && tar -xf -)

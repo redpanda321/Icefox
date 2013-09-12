@@ -1,42 +1,7 @@
 /* vim:set ts=2 sw=2 et cindent: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.
- *
- * The Initial Developer of the Original Code is IBM Corporation.
- * Portions created by IBM Corporation are Copyright (C) 2003
- * IBM Corporation.  All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@meer.net>
- *   Benjamin Smedberg <benjamin@smedbergs.us>
- *   Ben Turner <mozilla@songbirdnest.com>
- *   Prasad Sunkari <prasad@medhas.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nscore.h"
 #include "nsCRTGlue.h"
@@ -53,10 +18,10 @@
 
 // nsAString
 
-PRUint32
+uint32_t
 nsAString::BeginReading(const char_type **begin, const char_type **end) const
 {
-  PRUint32 len = NS_StringGetData(*this, begin);
+  uint32_t len = NS_StringGetData(*this, begin);
   if (end)
     *end = *begin + len;
 
@@ -75,14 +40,14 @@ const nsAString::char_type*
 nsAString::EndReading() const
 {
   const char_type *data;
-  PRUint32 len = NS_StringGetData(*this, &data);
+  uint32_t len = NS_StringGetData(*this, &data);
   return data + len;
 }
 
-PRUint32
-nsAString::BeginWriting(char_type **begin, char_type **end, PRUint32 newSize)
+uint32_t
+nsAString::BeginWriting(char_type **begin, char_type **end, uint32_t newSize)
 {
-  PRUint32 len = NS_StringGetMutableData(*this, newSize, begin);
+  uint32_t len = NS_StringGetMutableData(*this, newSize, begin);
   if (end)
     *end = *begin + len;
 
@@ -90,7 +55,7 @@ nsAString::BeginWriting(char_type **begin, char_type **end, PRUint32 newSize)
 }
 
 nsAString::char_type*
-nsAString::BeginWriting(PRUint32 aLen)
+nsAString::BeginWriting(uint32_t aLen)
 {
   char_type *data;
   NS_StringGetMutableData(*this, aLen, &data);
@@ -101,22 +66,22 @@ nsAString::char_type*
 nsAString::EndWriting()
 {
   char_type *data;
-  PRUint32 len = NS_StringGetMutableData(*this, PR_UINT32_MAX, &data);
+  uint32_t len = NS_StringGetMutableData(*this, UINT32_MAX, &data);
   return data + len;
 }
 
-PRBool
-nsAString::SetLength(PRUint32 aLen)
+bool
+nsAString::SetLength(uint32_t aLen)
 {
   char_type *data;
   NS_StringGetMutableData(*this, aLen, &data);
-  return data != nsnull;
+  return data != nullptr;
 }
 
 void
 nsAString::AssignLiteral(const char *aStr)
 {
-  PRUint32 len = strlen(aStr);
+  uint32_t len = strlen(aStr);
   PRUnichar *buf = BeginWriting(len);
   if (!buf)
     return;
@@ -128,9 +93,9 @@ nsAString::AssignLiteral(const char *aStr)
 void
 nsAString::AppendLiteral(const char *aASCIIStr)
 {
-  PRUint32 appendLen = strlen(aASCIIStr);
+  uint32_t appendLen = strlen(aASCIIStr);
 
-  PRUint32 thisLen = Length();
+  uint32_t thisLen = Length();
   PRUnichar *begin, *end;
   BeginWriting(&begin, &end, appendLen + thisLen);
   if (!begin)
@@ -173,12 +138,12 @@ nsAString::StripChars(const char *aSet)
 }
 
 void
-nsAString::Trim(const char *aSet, PRBool aLeading, PRBool aTrailing)
+nsAString::Trim(const char *aSet, bool aLeading, bool aTrailing)
 {
   NS_ASSERTION(aLeading || aTrailing, "Ineffective Trim");
 
   const PRUnichar *start, *end;
-  PRUint32 cutLen;
+  uint32_t cutLen;
 
   if (aLeading) {
     BeginReading(&start, &end);
@@ -196,7 +161,7 @@ nsAString::Trim(const char *aSet, PRBool aLeading, PRBool aTrailing)
     }
   }
   if (aTrailing) {
-    PRUint32 len = BeginReading(&start, &end);
+    uint32_t len = BeginReading(&start, &end);
     --end;
     for (cutLen = 0; end >= start; --end, ++cutLen) {
       const char *test;
@@ -213,9 +178,9 @@ nsAString::Trim(const char *aSet, PRBool aLeading, PRBool aTrailing)
   }
 }
 
-PRInt32
+int32_t
 nsAString::DefaultComparator(const char_type *a, const char_type *b,
-                             PRUint32 len)
+                             uint32_t len)
 {
   for (const char_type *end = a + len; a < end; ++a, ++b) {
     if (*a == *b)
@@ -227,15 +192,15 @@ nsAString::DefaultComparator(const char_type *a, const char_type *b,
   return 0;
 }
 
-PRInt32
+int32_t
 nsAString::Compare(const char_type *other, ComparatorFunc c) const
 {
   const char_type *cself;
-  PRUint32 selflen = NS_StringGetData(*this, &cself);
-  PRUint32 otherlen = NS_strlen(other);
-  PRUint32 comparelen = selflen <= otherlen ? selflen : otherlen;
+  uint32_t selflen = NS_StringGetData(*this, &cself);
+  uint32_t otherlen = NS_strlen(other);
+  uint32_t comparelen = selflen <= otherlen ? selflen : otherlen;
 
-  PRInt32 result = c(cself, other, comparelen);
+  int32_t result = c(cself, other, comparelen);
   if (result == 0) {
     if (selflen < otherlen)
       return -1;
@@ -245,15 +210,15 @@ nsAString::Compare(const char_type *other, ComparatorFunc c) const
   return result;
 }
 
-PRInt32
+int32_t
 nsAString::Compare(const self_type &other, ComparatorFunc c) const
 {
   const char_type *cself, *cother;
-  PRUint32 selflen = NS_StringGetData(*this, &cself);
-  PRUint32 otherlen = NS_StringGetData(other, &cother);
-  PRUint32 comparelen = selflen <= otherlen ? selflen : otherlen;
+  uint32_t selflen = NS_StringGetData(*this, &cself);
+  uint32_t otherlen = NS_StringGetData(other, &cother);
+  uint32_t comparelen = selflen <= otherlen ? selflen : otherlen;
 
-  PRInt32 result = c(cself, cother, comparelen);
+  int32_t result = c(cself, cother, comparelen);
   if (result == 0) {
     if (selflen < otherlen)
       return -1;
@@ -263,34 +228,34 @@ nsAString::Compare(const self_type &other, ComparatorFunc c) const
   return result;
 }
 
-PRBool
+bool
 nsAString::Equals(const char_type *other, ComparatorFunc c) const
 {
   const char_type *cself;
-  PRUint32 selflen = NS_StringGetData(*this, &cself);
-  PRUint32 otherlen = NS_strlen(other);
+  uint32_t selflen = NS_StringGetData(*this, &cself);
+  uint32_t otherlen = NS_strlen(other);
 
   if (selflen != otherlen)
-    return PR_FALSE;
+    return false;
 
   return c(cself, other, selflen) == 0;
 }
 
-PRBool
+bool
 nsAString::Equals(const self_type &other, ComparatorFunc c) const
 {
   const char_type *cself;
   const char_type *cother;
-  PRUint32 selflen = NS_StringGetData(*this, &cself);
-  PRUint32 otherlen = NS_StringGetData(other, &cother);
+  uint32_t selflen = NS_StringGetData(*this, &cself);
+  uint32_t otherlen = NS_StringGetData(other, &cother);
 
   if (selflen != otherlen)
-    return PR_FALSE;
+    return false;
 
   return c(cself, cother, selflen) == 0;
 }
 
-PRBool
+bool
 nsAString::EqualsLiteral(const char *aASCIIString) const
 {
   const PRUnichar *begin, *end;
@@ -299,14 +264,14 @@ nsAString::EqualsLiteral(const char *aASCIIString) const
   for (; begin < end; ++begin, ++aASCIIString) {
     if (!*aASCIIString || !NS_IsAscii(*begin) ||
         (char) *begin != *aASCIIString) {
-      return PR_FALSE;
+      return false;
     }
   }
 
-  return *aASCIIString == nsnull;
+  return *aASCIIString == '\0';
 }
 
-PRBool
+bool
 nsAString::LowerCaseEqualsLiteral(const char *aASCIIString) const
 {
   const PRUnichar *begin, *end;
@@ -315,25 +280,25 @@ nsAString::LowerCaseEqualsLiteral(const char *aASCIIString) const
   for (; begin < end; ++begin, ++aASCIIString) {
     if (!*aASCIIString || !NS_IsAscii(*begin) ||
         NS_ToLower((char) *begin) != *aASCIIString) {
-      return PR_FALSE;
+      return false;
     }
   }
 
-  return *aASCIIString == nsnull;
+  return *aASCIIString == '\0';
 }
 
-PRInt32
-nsAString::Find(const self_type& aStr, PRUint32 aOffset,
+int32_t
+nsAString::Find(const self_type& aStr, uint32_t aOffset,
                 ComparatorFunc c) const
 {
   const char_type *begin, *end;
-  PRUint32 selflen = BeginReading(&begin, &end);
+  uint32_t selflen = BeginReading(&begin, &end);
 
   if (aOffset > selflen)
     return -1;
 
   const char_type *other;
-  PRUint32 otherlen = aStr.BeginReading(&other);
+  uint32_t otherlen = aStr.BeginReading(&other);
 
   if (otherlen > selflen - aOffset)
     return -1;
@@ -348,47 +313,47 @@ nsAString::Find(const self_type& aStr, PRUint32 aOffset,
   return -1;
 }
 
-static PRBool ns_strnmatch(const PRUnichar *aStr, const char* aSubstring,
-                           PRUint32 aLen)
+static bool ns_strnmatch(const PRUnichar *aStr, const char* aSubstring,
+                           uint32_t aLen)
 {
   for (; aLen; ++aStr, ++aSubstring, --aLen) {
     if (!NS_IsAscii(*aStr))
-      return PR_FALSE;
+      return false;
 
     if ((char) *aStr != *aSubstring)
-      return PR_FALSE;
+      return false;
   }
 
-  return PR_TRUE;
+  return true;
 }
 
-static PRBool ns_strnimatch(const PRUnichar *aStr, const char* aSubstring,
-                            PRUint32 aLen)
+static bool ns_strnimatch(const PRUnichar *aStr, const char* aSubstring,
+                            uint32_t aLen)
 {
   for (; aLen; ++aStr, ++aSubstring, --aLen) {
     if (!NS_IsAscii(*aStr))
-      return PR_FALSE;
+      return false;
 
     if (NS_ToLower((char) *aStr) != NS_ToLower(*aSubstring))
-      return PR_FALSE;
+      return false;
   }
 
-  return PR_TRUE;
+  return true;
 }
 
-PRInt32
-nsAString::Find(const char *aStr, PRUint32 aOffset, PRBool aIgnoreCase) const
+int32_t
+nsAString::Find(const char *aStr, uint32_t aOffset, bool aIgnoreCase) const
 {
-  PRBool (*match)(const PRUnichar*, const char*, PRUint32) =
+  bool (*match)(const PRUnichar*, const char*, uint32_t) =
     aIgnoreCase ? ns_strnimatch : ns_strnmatch;
 
   const char_type *begin, *end;
-  PRUint32 selflen = BeginReading(&begin, &end);
+  uint32_t selflen = BeginReading(&begin, &end);
 
   if (aOffset > selflen)
     return -1;
 
-  PRUint32 otherlen = strlen(aStr);
+  uint32_t otherlen = strlen(aStr);
 
   if (otherlen > selflen - aOffset)
     return -1;
@@ -404,19 +369,19 @@ nsAString::Find(const char *aStr, PRUint32 aOffset, PRBool aIgnoreCase) const
   return -1;
 }
 
-PRInt32
-nsAString::RFind(const self_type& aStr, PRInt32 aOffset, ComparatorFunc c) const
+int32_t
+nsAString::RFind(const self_type& aStr, int32_t aOffset, ComparatorFunc c) const
 {
   const char_type *begin, *end;
-  PRUint32 selflen = BeginReading(&begin, &end);
+  uint32_t selflen = BeginReading(&begin, &end);
 
   const char_type *other;
-  PRUint32 otherlen = aStr.BeginReading(&other);
+  uint32_t otherlen = aStr.BeginReading(&other);
 
   if (selflen < otherlen)
     return -1;
 
-  if (aOffset < 0 || PRUint32(aOffset) > (selflen - otherlen))
+  if (aOffset < 0 || uint32_t(aOffset) > (selflen - otherlen))
     end -= otherlen;
   else
     end = begin + aOffset;
@@ -428,20 +393,20 @@ nsAString::RFind(const self_type& aStr, PRInt32 aOffset, ComparatorFunc c) const
   return -1;
 }
 
-PRInt32
-nsAString::RFind(const char *aStr, PRInt32 aOffset, PRBool aIgnoreCase) const
+int32_t
+nsAString::RFind(const char *aStr, int32_t aOffset, bool aIgnoreCase) const
 {
-  PRBool (*match)(const PRUnichar*, const char*, PRUint32) =
+  bool (*match)(const PRUnichar*, const char*, uint32_t) =
     aIgnoreCase ? ns_strnimatch : ns_strnmatch;
 
   const char_type *begin, *end;
-  PRUint32 selflen = BeginReading(&begin, &end);
-  PRUint32 otherlen = strlen(aStr);
+  uint32_t selflen = BeginReading(&begin, &end);
+  uint32_t otherlen = strlen(aStr);
   
   if (selflen < otherlen)
     return -1;
 
-  if (aOffset < 0 || PRUint32(aOffset) > (selflen - otherlen))
+  if (aOffset < 0 || uint32_t(aOffset) > (selflen - otherlen))
     end -= otherlen;
   else
     end = begin + aOffset;
@@ -454,11 +419,11 @@ nsAString::RFind(const char *aStr, PRInt32 aOffset, PRBool aIgnoreCase) const
   return -1;
 }
 
-PRInt32
-nsAString::FindChar(char_type aChar, PRUint32 aOffset) const
+int32_t
+nsAString::FindChar(char_type aChar, uint32_t aOffset) const
 {
   const char_type *start, *end;
-  PRUint32 len = BeginReading(&start, &end);
+  uint32_t len = BeginReading(&start, &end);
   if (aOffset > len)
     return -1;
 
@@ -472,7 +437,7 @@ nsAString::FindChar(char_type aChar, PRUint32 aOffset) const
   return -1;
 }
 
-PRInt32
+int32_t
 nsAString::RFindChar(char_type aChar) const
 {
   const PRUnichar *start, *end;
@@ -490,7 +455,7 @@ nsAString::RFindChar(char_type aChar) const
 }
 
 void
-nsAString::AppendInt(int aInt, PRInt32 aRadix)
+nsAString::AppendInt(int aInt, int32_t aRadix)
 {
   const char *fmt;
   switch (aRadix) {
@@ -521,8 +486,8 @@ nsAString::AppendInt(int aInt, PRInt32 aRadix)
 // Strings
 
 #ifndef XPCOM_GLUE_AVOID_NSPR
-PRInt32
-nsAString::ToInteger(nsresult *aErrorCode, PRUint32 aRadix) const
+int32_t
+nsAString::ToInteger(nsresult *aErrorCode, uint32_t aRadix) const
 {
   NS_ConvertUTF16toUTF8 narrow(*this);
 
@@ -542,7 +507,37 @@ nsAString::ToInteger(nsresult *aErrorCode, PRUint32 aRadix) const
     return 0;
   }
 
-  PRInt32 result = 0;
+  int32_t result = 0;
+  if (PR_sscanf(narrow.get(), fmt, &result) == 1)
+    *aErrorCode = NS_OK;
+  else
+    *aErrorCode = NS_ERROR_FAILURE;
+
+  return result;
+}
+
+int64_t
+nsAString::ToInteger64(nsresult *aErrorCode, uint32_t aRadix) const
+{
+  NS_ConvertUTF16toUTF8 narrow(*this);
+
+  const char *fmt;
+  switch (aRadix) {
+  case 10:
+    fmt = "%lli";
+    break;
+
+  case 16:
+    fmt = "%llx";
+    break;
+
+  default:
+    NS_ERROR("Unrecognized radix!");
+    *aErrorCode = NS_ERROR_INVALID_ARG;
+    return 0;
+  }
+
+  int64_t result = 0;
   if (PR_sscanf(narrow.get(), fmt, &result) == 1)
     *aErrorCode = NS_OK;
   else
@@ -554,10 +549,10 @@ nsAString::ToInteger(nsresult *aErrorCode, PRUint32 aRadix) const
 
 // nsACString
 
-PRUint32
+uint32_t
 nsACString::BeginReading(const char_type **begin, const char_type **end) const
 {
-  PRUint32 len = NS_CStringGetData(*this, begin);
+  uint32_t len = NS_CStringGetData(*this, begin);
   if (end)
     *end = *begin + len;
 
@@ -576,14 +571,14 @@ const nsACString::char_type*
 nsACString::EndReading() const
 {
   const char_type *data;
-  PRUint32 len = NS_CStringGetData(*this, &data);
+  uint32_t len = NS_CStringGetData(*this, &data);
   return data + len;
 }
 
-PRUint32
-nsACString::BeginWriting(char_type **begin, char_type **end, PRUint32 newSize)
+uint32_t
+nsACString::BeginWriting(char_type **begin, char_type **end, uint32_t newSize)
 {
-  PRUint32 len = NS_CStringGetMutableData(*this, newSize, begin);
+  uint32_t len = NS_CStringGetMutableData(*this, newSize, begin);
   if (end)
     *end = *begin + len;
 
@@ -591,7 +586,7 @@ nsACString::BeginWriting(char_type **begin, char_type **end, PRUint32 newSize)
 }
 
 nsACString::char_type*
-nsACString::BeginWriting(PRUint32 aLen)
+nsACString::BeginWriting(uint32_t aLen)
 {
   char_type *data;
   NS_CStringGetMutableData(*this, aLen, &data);
@@ -602,16 +597,16 @@ nsACString::char_type*
 nsACString::EndWriting()
 {
   char_type *data;
-  PRUint32 len = NS_CStringGetMutableData(*this, PR_UINT32_MAX, &data);
+  uint32_t len = NS_CStringGetMutableData(*this, UINT32_MAX, &data);
   return data + len;
 }
 
-PRBool
-nsACString::SetLength(PRUint32 aLen)
+bool
+nsACString::SetLength(uint32_t aLen)
 {
   char_type *data;
   NS_CStringGetMutableData(*this, aLen, &data);
-  return data != nsnull;
+  return data != nullptr;
 }
 
 void
@@ -647,12 +642,12 @@ nsACString::StripChars(const char *aSet)
 }
 
 void
-nsACString::Trim(const char *aSet, PRBool aLeading, PRBool aTrailing)
+nsACString::Trim(const char *aSet, bool aLeading, bool aTrailing)
 {
   NS_ASSERTION(aLeading || aTrailing, "Ineffective Trim");
 
   const char *start, *end;
-  PRUint32 cutLen;
+  uint32_t cutLen;
 
   if (aLeading) {
     BeginReading(&start, &end);
@@ -670,7 +665,7 @@ nsACString::Trim(const char *aSet, PRBool aLeading, PRBool aTrailing)
     }
   }
   if (aTrailing) {
-    PRUint32 len = BeginReading(&start, &end);
+    uint32_t len = BeginReading(&start, &end);
     --end;
     for (cutLen = 0; end >= start; --end, ++cutLen) {
       const char *test;
@@ -687,22 +682,22 @@ nsACString::Trim(const char *aSet, PRBool aLeading, PRBool aTrailing)
   }
 }
 
-PRInt32
+int32_t
 nsACString::DefaultComparator(const char_type *a, const char_type *b,
-                              PRUint32 len)
+                              uint32_t len)
 {
   return memcmp(a, b, len);
 }
 
-PRInt32
+int32_t
 nsACString::Compare(const char_type *other, ComparatorFunc c) const
 {
   const char_type *cself;
-  PRUint32 selflen = NS_CStringGetData(*this, &cself);
-  PRUint32 otherlen = strlen(other);
-  PRUint32 comparelen = selflen <= otherlen ? selflen : otherlen;
+  uint32_t selflen = NS_CStringGetData(*this, &cself);
+  uint32_t otherlen = strlen(other);
+  uint32_t comparelen = selflen <= otherlen ? selflen : otherlen;
 
-  PRInt32 result = c(cself, other, comparelen);
+  int32_t result = c(cself, other, comparelen);
   if (result == 0) {
     if (selflen < otherlen)
       return -1;
@@ -712,15 +707,15 @@ nsACString::Compare(const char_type *other, ComparatorFunc c) const
   return result;
 }
 
-PRInt32
+int32_t
 nsACString::Compare(const self_type &other, ComparatorFunc c) const
 {
   const char_type *cself, *cother;
-  PRUint32 selflen = NS_CStringGetData(*this, &cself);
-  PRUint32 otherlen = NS_CStringGetData(other, &cother);
-  PRUint32 comparelen = selflen <= otherlen ? selflen : otherlen;
+  uint32_t selflen = NS_CStringGetData(*this, &cself);
+  uint32_t otherlen = NS_CStringGetData(other, &cother);
+  uint32_t comparelen = selflen <= otherlen ? selflen : otherlen;
 
-  PRInt32 result = c(cself, cother, comparelen);
+  int32_t result = c(cself, cother, comparelen);
   if (result == 0) {
     if (selflen < otherlen)
       return -1;
@@ -730,45 +725,45 @@ nsACString::Compare(const self_type &other, ComparatorFunc c) const
   return result;
 }
 
-PRBool
+bool
 nsACString::Equals(const char_type *other, ComparatorFunc c) const
 {
   const char_type *cself;
-  PRUint32 selflen = NS_CStringGetData(*this, &cself);
-  PRUint32 otherlen = strlen(other);
+  uint32_t selflen = NS_CStringGetData(*this, &cself);
+  uint32_t otherlen = strlen(other);
 
   if (selflen != otherlen)
-    return PR_FALSE;
+    return false;
 
   return c(cself, other, selflen) == 0;
 }
 
-PRBool
+bool
 nsACString::Equals(const self_type &other, ComparatorFunc c) const
 {
   const char_type *cself;
   const char_type *cother;
-  PRUint32 selflen = NS_CStringGetData(*this, &cself);
-  PRUint32 otherlen = NS_CStringGetData(other, &cother);
+  uint32_t selflen = NS_CStringGetData(*this, &cself);
+  uint32_t otherlen = NS_CStringGetData(other, &cother);
 
   if (selflen != otherlen)
-    return PR_FALSE;
+    return false;
 
   return c(cself, cother, selflen) == 0;
 }
 
-PRInt32
-nsACString::Find(const self_type& aStr, PRUint32 aOffset,
+int32_t
+nsACString::Find(const self_type& aStr, uint32_t aOffset,
                  ComparatorFunc c) const
 {
   const char_type *begin, *end;
-  PRUint32 selflen = BeginReading(&begin, &end);
+  uint32_t selflen = BeginReading(&begin, &end);
 
   if (aOffset > selflen)
     return -1;
 
   const char_type *other;
-  PRUint32 otherlen = aStr.BeginReading(&other);
+  uint32_t otherlen = aStr.BeginReading(&other);
 
   if (otherlen > selflen - aOffset)
     return -1;
@@ -783,17 +778,17 @@ nsACString::Find(const self_type& aStr, PRUint32 aOffset,
   return -1;
 }
 
-PRInt32
+int32_t
 nsACString::Find(const char_type *aStr, ComparatorFunc c) const
 {
   return Find(aStr, strlen(aStr), c);
 }
 
-PRInt32
-nsACString::Find(const char_type *aStr, PRUint32 aLen, ComparatorFunc c) const
+int32_t
+nsACString::Find(const char_type *aStr, uint32_t aLen, ComparatorFunc c) const
 {
   const char_type *begin, *end;
-  PRUint32 selflen = BeginReading(&begin, &end);
+  uint32_t selflen = BeginReading(&begin, &end);
 
   if (aLen == 0) {
     NS_WARNING("Searching for zero-length string.");
@@ -813,19 +808,19 @@ nsACString::Find(const char_type *aStr, PRUint32 aLen, ComparatorFunc c) const
   return -1;
 }
 
-PRInt32 
-nsACString::RFind(const self_type& aStr, PRInt32 aOffset, ComparatorFunc c) const
+int32_t 
+nsACString::RFind(const self_type& aStr, int32_t aOffset, ComparatorFunc c) const
 {
   const char_type *begin, *end;
-  PRUint32 selflen = BeginReading(&begin, &end);
+  uint32_t selflen = BeginReading(&begin, &end);
 
   const char_type *other;
-  PRUint32 otherlen = aStr.BeginReading(&other);
+  uint32_t otherlen = aStr.BeginReading(&other);
 
   if (selflen < otherlen)
     return -1;
 
-  if (aOffset < 0 || PRUint32(aOffset) > (selflen - otherlen))
+  if (aOffset < 0 || uint32_t(aOffset) > (selflen - otherlen))
     end -= otherlen;
   else
     end = begin + aOffset;
@@ -837,24 +832,24 @@ nsACString::RFind(const self_type& aStr, PRInt32 aOffset, ComparatorFunc c) cons
   return -1;
 }
 
-PRInt32 
+int32_t 
 nsACString::RFind(const char_type *aStr, ComparatorFunc c) const
 {
   return RFind(aStr, strlen(aStr), c);
 }
 
-PRInt32 
-nsACString::RFind(const char_type *aStr, PRInt32 aLen, ComparatorFunc c) const
+int32_t 
+nsACString::RFind(const char_type *aStr, int32_t aLen, ComparatorFunc c) const
 {
   const char_type *begin, *end;
-  PRUint32 selflen = BeginReading(&begin, &end);
+  uint32_t selflen = BeginReading(&begin, &end);
 
   if (aLen <= 0) {
     NS_WARNING("Searching for zero-length string.");
     return -1;
   }
 
-  if (PRUint32(aLen) > selflen)
+  if (uint32_t(aLen) > selflen)
     return -1;
 
   // We want to start searching otherlen characters before the end of the string
@@ -867,11 +862,11 @@ nsACString::RFind(const char_type *aStr, PRInt32 aLen, ComparatorFunc c) const
   return -1;
 }
 
-PRInt32
-nsACString::FindChar(char_type aChar, PRUint32 aOffset) const
+int32_t
+nsACString::FindChar(char_type aChar, uint32_t aOffset) const
 {
   const char_type *start, *end;
-  PRUint32 len = BeginReading(&start, &end);
+  uint32_t len = BeginReading(&start, &end);
   if (aOffset > len)
     return -1;
 
@@ -885,7 +880,7 @@ nsACString::FindChar(char_type aChar, PRUint32 aOffset) const
   return -1;
 }
 
-PRInt32
+int32_t
 nsACString::RFindChar(char_type aChar) const
 {
   const char *start, *end;
@@ -900,7 +895,7 @@ nsACString::RFindChar(char_type aChar) const
 }
 
 void
-nsACString::AppendInt(int aInt, PRInt32 aRadix)
+nsACString::AppendInt(int aInt, int32_t aRadix)
 {
   const char *fmt;
   switch (aRadix) {
@@ -929,8 +924,8 @@ nsACString::AppendInt(int aInt, PRInt32 aRadix)
 }
 
 #ifndef XPCOM_GLUE_AVOID_NSPR
-PRInt32
-nsACString::ToInteger(nsresult *aErrorCode, PRUint32 aRadix) const
+int32_t
+nsACString::ToInteger(nsresult *aErrorCode, uint32_t aRadix) const
 {
   const char *fmt;
   switch (aRadix) {
@@ -948,7 +943,35 @@ nsACString::ToInteger(nsresult *aErrorCode, PRUint32 aRadix) const
     return 0;
   }
 
-  PRInt32 result = 0;
+  int32_t result = 0;
+  if (PR_sscanf(nsCString(*this).get(), fmt, &result) == 1)
+    *aErrorCode = NS_OK;
+  else
+    *aErrorCode = NS_ERROR_FAILURE;
+
+  return result;
+}
+
+int64_t
+nsACString::ToInteger64(nsresult *aErrorCode, uint32_t aRadix) const
+{
+  const char *fmt;
+  switch (aRadix) {
+  case 10:
+    fmt = "%lli";
+    break;
+
+  case 16:
+    fmt = "%llx";
+    break;
+
+  default:
+    NS_ERROR("Unrecognized radix!");
+    *aErrorCode = NS_ERROR_INVALID_ARG;
+    return 0;
+  }
+
+  int64_t result = 0;
   if (PR_sscanf(nsCString(*this).get(), fmt, &result) == 1)
     *aErrorCode = NS_OK;
   else
@@ -961,10 +984,10 @@ nsACString::ToInteger(nsresult *aErrorCode, PRUint32 aRadix) const
 // Substrings
 
 nsDependentSubstring::nsDependentSubstring(const abstract_string_type& aStr,
-                                           PRUint32 aStartPos)
+                                           uint32_t aStartPos)
 {
   const PRUnichar* data;
-  PRUint32 len = NS_StringGetData(aStr, &data);
+  uint32_t len = NS_StringGetData(aStr, &data);
 
   if (aStartPos > len)
     aStartPos = len;
@@ -975,11 +998,11 @@ nsDependentSubstring::nsDependentSubstring(const abstract_string_type& aStr,
 }
 
 nsDependentSubstring::nsDependentSubstring(const abstract_string_type& aStr,
-                                           PRUint32 aStartPos,
-                                           PRUint32 aLength)
+                                           uint32_t aStartPos,
+                                           uint32_t aLength)
 {
   const PRUnichar* data;
-  PRUint32 len = NS_StringGetData(aStr, &data);
+  uint32_t len = NS_StringGetData(aStr, &data);
 
   if (aStartPos > len)
     aStartPos = len;
@@ -993,10 +1016,10 @@ nsDependentSubstring::nsDependentSubstring(const abstract_string_type& aStr,
 }
 
 nsDependentCSubstring::nsDependentCSubstring(const abstract_string_type& aStr,
-                                             PRUint32 aStartPos)
+                                             uint32_t aStartPos)
 {
   const char* data;
-  PRUint32 len = NS_CStringGetData(aStr, &data);
+  uint32_t len = NS_CStringGetData(aStr, &data);
 
   if (aStartPos > len)
     aStartPos = len;
@@ -1007,11 +1030,11 @@ nsDependentCSubstring::nsDependentCSubstring(const abstract_string_type& aStr,
 }
 
 nsDependentCSubstring::nsDependentCSubstring(const abstract_string_type& aStr,
-                                             PRUint32 aStartPos,
-                                             PRUint32 aLength)
+                                             uint32_t aStartPos,
+                                             uint32_t aLength)
 {
   const char* data;
-  PRUint32 len = NS_CStringGetData(aStr, &data);
+  uint32_t len = NS_CStringGetData(aStr, &data);
 
   if (aStartPos > len)
     aStartPos = len;
@@ -1038,7 +1061,7 @@ void
 CompressWhitespace(nsAString& aString)
 {
   PRUnichar *start;
-  PRUint32 len = NS_StringGetMutableData(aString, PR_UINT32_MAX, &start);
+  uint32_t len = NS_StringGetMutableData(aString, UINT32_MAX, &start);
   PRUnichar *end = start + len;
   PRUnichar *from = start, *to = start;
 
@@ -1072,11 +1095,11 @@ CompressWhitespace(nsAString& aString)
   aString.SetLength(to - start);
 }
 
-PRUint32
+uint32_t
 ToLowerCase(nsACString& aStr)
 {
   char *begin, *end;
-  PRUint32 len = aStr.BeginWriting(&begin, &end);
+  uint32_t len = aStr.BeginWriting(&begin, &end);
 
   for (; begin < end; ++begin) {
     *begin = NS_ToLower(*begin);
@@ -1085,11 +1108,11 @@ ToLowerCase(nsACString& aStr)
   return len;
 }
 
-PRUint32
+uint32_t
 ToUpperCase(nsACString& aStr)
 {
   char *begin, *end;
-  PRUint32 len = aStr.BeginWriting(&begin, &end);
+  uint32_t len = aStr.BeginWriting(&begin, &end);
 
   for (; begin < end; ++begin) {
     *begin = NS_ToUpper(*begin);
@@ -1098,11 +1121,11 @@ ToUpperCase(nsACString& aStr)
   return len;
 }
 
-PRUint32
+uint32_t
 ToLowerCase(const nsACString& aSrc, nsACString& aDest)
 {
   const char *begin,  *end;
-  PRUint32 len = aSrc.BeginReading(&begin, &end);
+  uint32_t len = aSrc.BeginReading(&begin, &end);
 
   char *dest;
   NS_CStringGetMutableData(aDest, len, &dest);
@@ -1114,11 +1137,11 @@ ToLowerCase(const nsACString& aSrc, nsACString& aDest)
   return len;
 }
 
-PRUint32
+uint32_t
 ToUpperCase(const nsACString& aSrc, nsACString& aDest)
 {
   const char *begin,  *end;
-  PRUint32 len = aSrc.BeginReading(&begin, &end);
+  uint32_t len = aSrc.BeginReading(&begin, &end);
 
   char *dest;
   NS_CStringGetMutableData(aDest, len, &dest);
@@ -1130,9 +1153,9 @@ ToUpperCase(const nsACString& aSrc, nsACString& aDest)
   return len;
 }
 
-PRInt32
+int32_t
 CaseInsensitiveCompare(const char *a, const char *b,
-                       PRUint32 len)
+                       uint32_t len)
 {
   for (const char *aend = a + len; a < aend; ++a, ++b) {
     char la = NS_ToLower(*a);
@@ -1147,17 +1170,17 @@ CaseInsensitiveCompare(const char *a, const char *b,
   return 0;
 }
 
-PRBool
+bool
 ParseString(const nsACString& aSource, char aDelimiter, 
             nsTArray<nsCString>& aArray)
 {
-  PRInt32 start = 0;
-  PRInt32 end = aSource.Length();
+  int32_t start = 0;
+  int32_t end = aSource.Length();
 
-  PRUint32 oldLength = aArray.Length();
+  uint32_t oldLength = aArray.Length();
 
   for (;;) {
-    PRInt32 delimiter = aSource.FindChar(aDelimiter, start);
+    int32_t delimiter = aSource.FindChar(aDelimiter, start);
     if (delimiter < 0) {
       delimiter = end;
     }
@@ -1165,7 +1188,7 @@ ParseString(const nsACString& aSource, char aDelimiter,
     if (delimiter != start) {
       if (!aArray.AppendElement(Substring(aSource, start, delimiter - start))) {
         aArray.RemoveElementsAt(oldLength, aArray.Length() - oldLength);
-        return PR_FALSE;
+        return false;
       }
     }
 
@@ -1176,5 +1199,5 @@ ParseString(const nsACString& aSource, char aDelimiter,
       break;
   }
 
-  return PR_TRUE;
+  return true;
 }

@@ -18,8 +18,6 @@
 <window title="Application Update test cleanup"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         onload="runTest();">
-<script type="application/javascript" 
-        src="chrome://mochikit/content/MochiKit/packed.js"/>
 <script type="application/javascript"
         src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"/>
 <script type="application/javascript"
@@ -34,7 +32,7 @@
  * happening.
  */
 function runTest() {
-  ok(true, "Entering runTest - cleanup");
+  debugDump("entering");
 
   SimpleTest.waitForExplicitFinish();
 
@@ -44,17 +42,13 @@ function runTest() {
   removeUpdateDirsAndFiles();
   reloadUpdateManagerData();
 
-  let dir = getCurrentProcessDir();
-  let file = dir.clone();
-  file.append(FILE_UPDATE_ACTIVE);
+  let file = getUpdatesXMLFile(true);
   ok(!file.exists(), file.path + " should not exist");
 
-  file = dir.clone();
-  file.append(FILE_UPDATES_DB);
+  file = getUpdatesXMLFile(false);
   ok(!file.exists(), file.path + " should not exist");
 
-  dir.append("updates");
-  dir.append("0");
+  let dir = getUpdatesDir();
 
   file = dir.clone();
   file.append(FILE_UPDATE_STATUS);
@@ -74,8 +68,9 @@ function runTest() {
     removeDirRecursive(addonPrepDir);
   }
   catch (e) {
-    debugDump("removeDirRecursive failed to remove the " + ADDON_PREP_DIR +
-              " from the profile. " + e);
+    dump("Unable to remove directory\n" +
+         "path: " + addonPrepDir.path + "\n" +
+         "Exception: " + e + "\n");
   }
 
   resetAddons(SimpleTest.finish);

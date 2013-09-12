@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license 
+ *  Use of this source code is governed by a BSD-style license
  *  that can be found in the LICENSE file in the root of the source
  *  tree. An additional intellectual property rights grant can be found
- *  in the file PATENTS.  All contributing project authors may 
+ *  in the file PATENTS.  All contributing project authors may
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
@@ -20,16 +20,12 @@
  */
 
 #if HAVE_MMX
-extern prototype_recon_block(vp8_recon_b_mmx);
 extern prototype_copy_block(vp8_copy_mem8x8_mmx);
 extern prototype_copy_block(vp8_copy_mem8x4_mmx);
 extern prototype_copy_block(vp8_copy_mem16x16_mmx);
 
 
 #if !CONFIG_RUNTIME_CPU_DETECT
-#undef  vp8_recon_recon
-#define vp8_recon_recon vp8_recon_b_mmx
-
 #undef  vp8_recon_copy8x8
 #define vp8_recon_copy8x8 vp8_copy_mem8x8_mmx
 
@@ -43,19 +39,49 @@ extern prototype_copy_block(vp8_copy_mem16x16_mmx);
 #endif
 
 #if HAVE_SSE2
-extern prototype_recon_block(vp8_recon2b_sse2);
-extern prototype_recon_block(vp8_recon4b_sse2);
 extern prototype_copy_block(vp8_copy_mem16x16_sse2);
+extern prototype_build_intra_predictors(vp8_build_intra_predictors_mbuv_sse2);
+extern prototype_build_intra_predictors(vp8_build_intra_predictors_mbuv_s_sse2);
+extern prototype_build_intra_predictors(vp8_build_intra_predictors_mby_sse2);
+extern prototype_build_intra_predictors(vp8_build_intra_predictors_mby_s_sse2);
 
 #if !CONFIG_RUNTIME_CPU_DETECT
-#undef  vp8_recon_recon2
-#define vp8_recon_recon2 vp8_recon2b_sse2
-
-#undef  vp8_recon_recon4
-#define vp8_recon_recon4 vp8_recon4b_sse2
-
 #undef  vp8_recon_copy16x16
 #define vp8_recon_copy16x16 vp8_copy_mem16x16_sse2
+
+#undef  vp8_recon_build_intra_predictors_mbuv
+#define vp8_recon_build_intra_predictors_mbuv vp8_build_intra_predictors_mbuv_sse2
+
+#undef  vp8_recon_build_intra_predictors_mbuv_s
+#define vp8_recon_build_intra_predictors_mbuv_s vp8_build_intra_predictors_mbuv_s_sse2
+
+#undef  vp8_recon_build_intra_predictors_mby
+#define vp8_recon_build_intra_predictors_mby vp8_build_intra_predictors_mby_sse2
+
+#undef  vp8_recon_build_intra_predictors_mby_s
+#define vp8_recon_build_intra_predictors_mby_s vp8_build_intra_predictors_mby_s_sse2
+
+#endif
+#endif
+
+#if HAVE_SSSE3
+extern prototype_build_intra_predictors(vp8_build_intra_predictors_mbuv_ssse3);
+extern prototype_build_intra_predictors(vp8_build_intra_predictors_mbuv_s_ssse3);
+extern prototype_build_intra_predictors(vp8_build_intra_predictors_mby_ssse3);
+extern prototype_build_intra_predictors(vp8_build_intra_predictors_mby_s_ssse3);
+
+#if !CONFIG_RUNTIME_CPU_DETECT
+#undef  vp8_recon_build_intra_predictors_mbuv
+#define vp8_recon_build_intra_predictors_mbuv vp8_build_intra_predictors_mbuv_ssse3
+
+#undef  vp8_recon_build_intra_predictors_mbuv_s
+#define vp8_recon_build_intra_predictors_mbuv_s vp8_build_intra_predictors_mbuv_s_ssse3
+
+#undef  vp8_recon_build_intra_predictors_mby
+#define vp8_recon_build_intra_predictors_mby vp8_build_intra_predictors_mby_ssse3
+
+#undef  vp8_recon_build_intra_predictors_mby_s
+#define vp8_recon_build_intra_predictors_mby_s vp8_build_intra_predictors_mby_s_ssse3
 
 #endif
 #endif

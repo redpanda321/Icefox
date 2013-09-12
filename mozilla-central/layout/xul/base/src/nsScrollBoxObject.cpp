@@ -1,48 +1,13 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Original Author: David W. Hyatt (hyatt@netscape.com)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 #include "nsCOMPtr.h"
 #include "nsIScrollBoxObject.h"
 #include "nsBoxObject.h"
 #include "nsIPresShell.h"
 #include "nsIContent.h"
-#include "nsIDocument.h"
-#include "nsIDOMDocument.h"
-#include "nsIDOMNSDocument.h"
 #include "nsIDOMElement.h"
 #include "nsPresContext.h"
 #include "nsIFrame.h"
@@ -58,7 +23,7 @@ public:
   virtual ~nsScrollBoxObject();
 
   virtual nsIScrollableFrame* GetScrollFrame() {
-    return do_QueryFrame(GetFrame(PR_FALSE));
+    return do_QueryFrame(GetFrame(false));
   }
 
   /* additional members */
@@ -84,22 +49,19 @@ nsScrollBoxObject::~nsScrollBoxObject()
 }
 
 /* void scrollTo (in long x, in long y); */
-NS_IMETHODIMP nsScrollBoxObject::ScrollTo(PRInt32 x, PRInt32 y)
+NS_IMETHODIMP nsScrollBoxObject::ScrollTo(int32_t x, int32_t y)
 {
   nsIScrollableFrame* sf = GetScrollFrame();
   if (!sf)
     return NS_ERROR_FAILURE;
-
-  sf->ScrollTo(nsPoint(nsPresContext::CSSPixelsToAppUnits(x),
-                       nsPresContext::CSSPixelsToAppUnits(y)),
-               nsIScrollableFrame::INSTANT);
+  sf->ScrollToCSSPixels(nsIntPoint(x, y));
   return NS_OK;
 }
 
 /* void scrollBy (in long dx, in long dy); */
-NS_IMETHODIMP nsScrollBoxObject::ScrollBy(PRInt32 dx, PRInt32 dy)
+NS_IMETHODIMP nsScrollBoxObject::ScrollBy(int32_t dx, int32_t dy)
 {
-  PRInt32 x, y;
+  int32_t x, y;
   nsresult rv = GetPosition(&x, &y);
   if (NS_FAILED(rv))
     return rv;
@@ -108,7 +70,7 @@ NS_IMETHODIMP nsScrollBoxObject::ScrollBy(PRInt32 dx, PRInt32 dy)
 }
 
 /* void scrollByLine (in long dlines); */
-NS_IMETHODIMP nsScrollBoxObject::ScrollByLine(PRInt32 dlines)
+NS_IMETHODIMP nsScrollBoxObject::ScrollByLine(int32_t dlines)
 {
   nsIScrollableFrame* sf = GetScrollFrame();
   if (!sf)
@@ -126,22 +88,22 @@ NS_IMETHODIMP nsScrollBoxObject::ScrollByLine(PRInt32 dlines)
 // the <scrollbox>'s box frame is the scrollframe's "scrolled frame", and
 // the <scrollbox>'s child box is a child of that.
 static nsIFrame* GetScrolledBox(nsBoxObject* aScrollBox) {
-  nsIFrame* frame = aScrollBox->GetFrame(PR_FALSE);
+  nsIFrame* frame = aScrollBox->GetFrame(false);
   if (!frame) 
-    return nsnull;
+    return nullptr;
   nsIScrollableFrame* scrollFrame = do_QueryFrame(frame);
   if (!scrollFrame) {
     NS_WARNING("nsIScrollBoxObject attached to something that's not a scroll frame!");
-    return nsnull;
+    return nullptr;
   }
   nsIFrame* scrolledFrame = scrollFrame->GetScrolledFrame();
   if (!scrolledFrame)
-    return nsnull;
+    return nullptr;
   return scrolledFrame->GetChildBox();
 }
 
 /* void scrollByIndex (in long dindexes); */
-NS_IMETHODIMP nsScrollBoxObject::ScrollByIndex(PRInt32 dindexes)
+NS_IMETHODIMP nsScrollBoxObject::ScrollByIndex(int32_t dindexes)
 {
     nsIScrollableFrame* sf = GetScrollFrame();
     if (!sf)
@@ -155,16 +117,16 @@ NS_IMETHODIMP nsScrollBoxObject::ScrollByIndex(PRInt32 dindexes)
     // now get the scrolled boxes first child.
     nsIFrame* child = scrolledBox->GetChildBox();
 
-    PRBool horiz = scrolledBox->IsHorizontal();
+    bool horiz = scrolledBox->IsHorizontal();
     nsPoint cp = sf->GetScrollPosition();
     nscoord diff = 0;
-    PRInt32 curIndex = 0;
-    PRBool isLTR = scrolledBox->IsNormalDirection();
+    int32_t curIndex = 0;
+    bool isLTR = scrolledBox->IsNormalDirection();
 
-    PRInt32 frameWidth = 0;
+    int32_t frameWidth = 0;
     if (!isLTR && horiz) {
       GetWidth(&frameWidth);
-      nsCOMPtr<nsIPresShell> shell = GetPresShell(PR_FALSE);
+      nsCOMPtr<nsIPresShell> shell = GetPresShell(false);
       if (!shell) {
         return NS_ERROR_UNEXPECTED;
       }
@@ -196,7 +158,7 @@ NS_IMETHODIMP nsScrollBoxObject::ScrollByIndex(PRInt32 dindexes)
       curIndex++;
     }
 
-    PRInt32 count = 0;
+    int32_t count = 0;
 
     if (dindexes == 0)
        return NS_OK;
@@ -224,29 +186,44 @@ NS_IMETHODIMP nsScrollBoxObject::ScrollByIndex(PRInt32 dindexes)
       }
    }
 
-   if (horiz)
+   nscoord csspixel = nsPresContext::CSSPixelsToAppUnits(1);
+   if (horiz) {
        // In the left-to-right case we scroll so that the left edge of the
        // selected child is scrolled to the left edge of the scrollbox.
        // In the right-to-left case we scroll so that the right edge of the
        // selected child is scrolled to the right edge of the scrollbox.
-       sf->ScrollTo(nsPoint(isLTR ? rect.x : rect.x + rect.width - frameWidth,
-                            cp.y),
-                    nsIScrollableFrame::INSTANT);
-   else
-       sf->ScrollTo(nsPoint(cp.x, rect.y), nsIScrollableFrame::INSTANT);
+
+       nsPoint pt(isLTR ? rect.x : rect.x + rect.width - frameWidth,
+                  cp.y);
+
+       // Use a destination range that ensures the left edge (or right edge,
+       // for RTL) will indeed be visible. Also ensure that the top edge
+       // is visible.
+       nsRect range(pt.x, pt.y, csspixel, 0);
+       if (isLTR) {
+         range.x -= csspixel;
+       }
+       sf->ScrollTo(pt, nsIScrollableFrame::INSTANT, &range);
+   } else {
+       // Use a destination range that ensures the top edge will be visible.
+       nsRect range(cp.x, rect.y - csspixel, 0, csspixel);
+       sf->ScrollTo(nsPoint(cp.x, rect.y), nsIScrollableFrame::INSTANT, &range);
+   }
 
    return NS_OK;
 }
 
 /* void scrollToLine (in long line); */
-NS_IMETHODIMP nsScrollBoxObject::ScrollToLine(PRInt32 line)
+NS_IMETHODIMP nsScrollBoxObject::ScrollToLine(int32_t line)
 {
   nsIScrollableFrame* sf = GetScrollFrame();
   if (!sf)
      return NS_ERROR_FAILURE;
   
   nscoord y = sf->GetLineScrollAmount().height * line;
-  sf->ScrollTo(nsPoint(0, y), nsIScrollableFrame::INSTANT);
+  nsRect range(0, y - nsPresContext::CSSPixelsToAppUnits(1),
+               0, nsPresContext::CSSPixelsToAppUnits(1));
+  sf->ScrollTo(nsPoint(0, y), nsIScrollableFrame::INSTANT, &range);
   return NS_OK;
 }
 
@@ -254,81 +231,47 @@ NS_IMETHODIMP nsScrollBoxObject::ScrollToLine(PRInt32 line)
 NS_IMETHODIMP nsScrollBoxObject::ScrollToElement(nsIDOMElement *child)
 {
     NS_ENSURE_ARG_POINTER(child);
-    nsIScrollableFrame* sf = GetScrollFrame();
-    if (!sf)
-       return NS_ERROR_FAILURE;
 
-    nsCOMPtr<nsIPresShell> shell = GetPresShell(PR_FALSE);
+    nsCOMPtr<nsIPresShell> shell = GetPresShell(false);
     if (!shell) {
       return NS_ERROR_UNEXPECTED;
     }
 
-    nsIFrame* scrolledBox = GetScrolledBox(this);
-    if (!scrolledBox)
-       return NS_ERROR_FAILURE;
-
-    nsRect rect, crect;
-    nsCOMPtr<nsIDOMDocument> doc;
-    child->GetOwnerDocument(getter_AddRefs(doc));
-    nsCOMPtr<nsIDocument> nsDoc(do_QueryInterface(doc));
-    if(!nsDoc)
-      return NS_ERROR_UNEXPECTED;
-
-    nsCOMPtr<nsIBoxObject> childBoxObject;
-    nsDoc->GetBoxObjectFor(child, getter_AddRefs(childBoxObject));
-    if(!childBoxObject)
-      return NS_ERROR_UNEXPECTED;
-
-    PRInt32 x,y;
-    childBoxObject->GetX(&x);
-    childBoxObject->GetY(&y);
-    // get the twips rectangle from the boxobject (which has pixels)    
-    rect.x = nsPresContext::CSSPixelsToAppUnits(x);
-    rect.y = nsPresContext::CSSPixelsToAppUnits(y);
-
-    // TODO: make sure the child is inside the box
-
-    // get our current info
-    nsPoint cp = sf->GetScrollPosition();
-    nsIntRect prect;
-    GetOffsetRect(prect);
-    crect = prect.ToAppUnits(nsPresContext::AppUnitsPerCSSPixel());
-    nscoord newx=cp.x, newy=cp.y;
-
-    // we only scroll in the direction of the scrollbox orientation
-    // always scroll to left or top edge of child element
-    if (scrolledBox->IsHorizontal()) {
-        newx = rect.x - crect.x;
-    } else {
-        newy = rect.y - crect.y;
-    }
-    // scroll away
-    sf->ScrollTo(nsPoint(newx, newy), nsIScrollableFrame::INSTANT);
+    nsCOMPtr<nsIContent> content = do_QueryInterface(child);
+    shell->ScrollContentIntoView(content,
+                                 nsIPresShell::ScrollAxis(
+                                   nsIPresShell::SCROLL_TOP,
+                                   nsIPresShell::SCROLL_ALWAYS),
+                                 nsIPresShell::ScrollAxis(
+                                   nsIPresShell::SCROLL_LEFT,
+                                   nsIPresShell::SCROLL_ALWAYS),
+                                 nsIPresShell::SCROLL_FIRST_ANCESTOR_ONLY |
+                                 nsIPresShell::SCROLL_OVERFLOW_HIDDEN);
     return NS_OK;
 }
 
 /* void scrollToIndex (in long index); */
-NS_IMETHODIMP nsScrollBoxObject::ScrollToIndex(PRInt32 index)
+NS_IMETHODIMP nsScrollBoxObject::ScrollToIndex(int32_t index)
 {
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 /* void getPosition (out long x, out long y); */
-NS_IMETHODIMP nsScrollBoxObject::GetPosition(PRInt32 *x, PRInt32 *y)
+NS_IMETHODIMP nsScrollBoxObject::GetPosition(int32_t *x, int32_t *y)
 {
   nsIScrollableFrame* sf = GetScrollFrame();
   if (!sf)
      return NS_ERROR_FAILURE;
 
-  nsPoint pt = sf->GetScrollPosition();
-  *x = nsPresContext::AppUnitsToIntCSSPixels(pt.x);
-  *y = nsPresContext::AppUnitsToIntCSSPixels(pt.y);
+  nsIntPoint pt = sf->GetScrollPositionCSSPixels();
+  *x = pt.x;
+  *y = pt.y;
 
   return NS_OK;  
 }
 
 /* void getScrolledSize (out long width, out long height); */
-NS_IMETHODIMP nsScrollBoxObject::GetScrolledSize(PRInt32 *width, PRInt32 *height)
+NS_IMETHODIMP nsScrollBoxObject::GetScrolledSize(int32_t *width, int32_t *height)
 {
     nsIFrame* scrolledBox = GetScrolledBox(this);
     if (!scrolledBox)
@@ -347,79 +290,28 @@ NS_IMETHODIMP nsScrollBoxObject::EnsureElementIsVisible(nsIDOMElement *child)
 {
     NS_ENSURE_ARG_POINTER(child);
 
-    // Start with getting info about the child, since that will flush
-    // layout and possibly destroy scrollable views, presshells, etc.
-    nsCOMPtr<nsIDOMDocument> doc;
-    // XXXbz sXBL/XBL2 issue -- which document?
-    child->GetOwnerDocument(getter_AddRefs(doc));
-    nsCOMPtr<nsIDocument> nsDoc(do_QueryInterface(doc));
-    if(!nsDoc)
-        return NS_ERROR_UNEXPECTED;
-
-    nsCOMPtr<nsIBoxObject> childBoxObject;
-    nsDoc->GetBoxObjectFor(child, getter_AddRefs(childBoxObject));
-    if(!childBoxObject)
+    nsCOMPtr<nsIPresShell> shell = GetPresShell(false);
+    if (!shell) {
       return NS_ERROR_UNEXPECTED;
-
-    PRInt32 x, y, width, height;
-    childBoxObject->GetX(&x);
-    childBoxObject->GetY(&y);
-    childBoxObject->GetWidth(&width);
-    childBoxObject->GetHeight(&height);
-
-    nsIScrollableFrame* sf = GetScrollFrame();
-    if (!sf)
-       return NS_ERROR_FAILURE;
-
-    nsIFrame* scrolledBox = GetScrolledBox(this);
-    if (!scrolledBox)
-       return NS_ERROR_FAILURE;
-
-    nsRect rect, crect;
-    // get the twips rectangle from the boxobject (which has pixels)    
-    rect.x = nsPresContext::CSSPixelsToAppUnits(x);
-    rect.y = nsPresContext::CSSPixelsToAppUnits(y);
-    rect.width = nsPresContext::CSSPixelsToAppUnits(width);
-    rect.height = nsPresContext::CSSPixelsToAppUnits(height);
-
-    // TODO: make sure the child is inside the box
-
-    // get our current info
-    nsPoint cp = sf->GetScrollPosition();
-    nsIntRect prect;
-    GetOffsetRect(prect);
-    crect = prect.ToAppUnits(nsPresContext::AppUnitsPerCSSPixel());
-
-    nscoord newx=cp.x, newy=cp.y;
-
-    // we only scroll in the direction of the scrollbox orientation
-    if (scrolledBox->IsHorizontal()) {
-        if ((rect.x - crect.x) + rect.width > cp.x + crect.width) {
-            newx = cp.x + (((rect.x - crect.x) + rect.width)-(cp.x + crect.width));
-        } else if (rect.x - crect.x < cp.x) {
-            newx = rect.x - crect.x;
-        }
-    } else {
-        if ((rect.y - crect.y) + rect.height > cp.y + crect.height) {
-            newy = cp.y + (((rect.y - crect.y) + rect.height)-(cp.y + crect.height));
-        } else if (rect.y - crect.y < cp.y) {
-            newy = rect.y - crect.y;
-        }
     }
-    
-    // scroll away
-    sf->ScrollTo(nsPoint(newx, newy), nsIScrollableFrame::INSTANT);
+
+    nsCOMPtr<nsIContent> content = do_QueryInterface(child);
+    shell->ScrollContentIntoView(content,
+                                 nsIPresShell::ScrollAxis(),
+                                 nsIPresShell::ScrollAxis(),
+                                 nsIPresShell::SCROLL_FIRST_ANCESTOR_ONLY |
+                                 nsIPresShell::SCROLL_OVERFLOW_HIDDEN);
     return NS_OK;
 }
 
 /* void ensureIndexIsVisible (in long index); */
-NS_IMETHODIMP nsScrollBoxObject::EnsureIndexIsVisible(PRInt32 index)
+NS_IMETHODIMP nsScrollBoxObject::EnsureIndexIsVisible(int32_t index)
 {
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 /* void ensureLineIsVisible (in long line); */
-NS_IMETHODIMP nsScrollBoxObject::EnsureLineIsVisible(PRInt32 line)
+NS_IMETHODIMP nsScrollBoxObject::EnsureLineIsVisible(int32_t line)
 {
     return NS_ERROR_NOT_IMPLEMENTED;
 }

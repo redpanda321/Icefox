@@ -13,27 +13,24 @@ function poll() {
 
 function startTest() {
   if (completed)
-    return false;
+    return;
   interval = setInterval(poll, 10);
   v.currentTime = Math.random() * v.duration;
-  return false;
 }
 
 function seekEnded() {
   if (completed)
-    return false;
+    return;
 
   seekCount++;
   ok(true, "Seek " + seekCount);
   if (seekCount == 3) {
     clearInterval(interval);
     completed = true;
-    dump("Seek test 6 time sum:" + sum + "\n");
     finish();
   } else {
     v.currentTime = Math.random() * v.duration;
   }
-  return false;
 }
 
 v.addEventListener("loadedmetadata", startTest, false);

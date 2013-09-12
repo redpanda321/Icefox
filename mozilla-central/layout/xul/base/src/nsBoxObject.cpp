@@ -1,62 +1,26 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Original Author: David W. Hyatt (hyatt@netscape.com)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsBoxObject.h"
 #include "nsCOMPtr.h"
 #include "nsIDocument.h"
 #include "nsIPresShell.h"
 #include "nsPresContext.h"
-#include "nsIDocument.h"
 #include "nsIContent.h"
 #include "nsIFrame.h"
 #include "nsIDocShell.h"
 #include "nsReadableUtils.h"
-#include "nsIDOMClassInfo.h"
+#include "nsDOMClassInfoID.h"
 #include "nsIView.h"
 #ifdef MOZ_XUL
 #include "nsIDOMXULElement.h"
 #else
 #include "nsIDOMElement.h"
 #endif
-#include "nsIFrame.h"
 #include "nsLayoutUtils.h"
 #include "nsISupportsPrimitives.h"
-#include "prtypes.h"
 #include "nsSupportsPrimitives.h"
 #include "mozilla/dom/Element.h"
 
@@ -83,7 +47,7 @@ NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(nsBoxObject)
   NS_DOM_INTERFACE_MAP_ENTRY_CLASSINFO(BoxObject)
 NS_INTERFACE_MAP_END
 
-PR_STATIC_CALLBACK(PLDHashOperator)
+static PLDHashOperator
 PropertyTraverser(const nsAString& aKey, nsISupports* aProperty, void* userArg)
 {
   nsCycleCollectionTraversalCallback *cb = 
@@ -103,7 +67,7 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
 // Constructors/Destructors
 nsBoxObject::nsBoxObject(void)
-  :mContent(nsnull)
+  :mContent(nullptr)
 {
 }
 
@@ -118,7 +82,7 @@ nsBoxObject::GetElement(nsIDOMElement** aResult)
     return CallQueryInterface(mContent, aResult);
   }
 
-  *aResult = nsnull;
+  *aResult = nullptr;
   return NS_OK;
 }
 
@@ -134,8 +98,8 @@ nsBoxObject::Init(nsIContent* aContent)
 void
 nsBoxObject::Clear()
 {
-  mPropertyTable = nsnull;
-  mContent = nsnull;
+  mPropertyTable = nullptr;
+  mContent = nullptr;
 }
 
 void
@@ -144,11 +108,11 @@ nsBoxObject::ClearCachedValues()
 }
 
 nsIFrame*
-nsBoxObject::GetFrame(PRBool aFlushLayout)
+nsBoxObject::GetFrame(bool aFlushLayout)
 {
   nsIPresShell* shell = GetPresShell(aFlushLayout);
   if (!shell)
-    return nsnull;
+    return nullptr;
 
   if (!aFlushLayout) {
     // If we didn't flush layout when getting the presshell, we should at least
@@ -160,22 +124,22 @@ nsBoxObject::GetFrame(PRBool aFlushLayout)
 
   // The flush might have killed mContent.
   if (!mContent) {
-    return nsnull;
+    return nullptr;
   }
 
   return mContent->GetPrimaryFrame();
 }
 
 nsIPresShell*
-nsBoxObject::GetPresShell(PRBool aFlushLayout)
+nsBoxObject::GetPresShell(bool aFlushLayout)
 {
   if (!mContent) {
-    return nsnull;
+    return nullptr;
   }
 
   nsIDocument* doc = mContent->GetCurrentDoc();
   if (!doc) {
-    return nsnull;
+    return nullptr;
   }
 
   if (aFlushLayout) {
@@ -194,7 +158,7 @@ nsBoxObject::GetOffsetRect(nsIntRect& aRect)
     return NS_ERROR_NOT_INITIALIZED;
 
   // Get the Frame for our content
-  nsIFrame* frame = GetFrame(PR_TRUE);
+  nsIFrame* frame = GetFrame(true);
   if (frame) {
     // Get its origin
     nsPoint origin = frame->GetPositionIgnoringScrolling();
@@ -223,13 +187,13 @@ nsBoxObject::GetOffsetRect(nsIntRect& aRect)
   
     // For the origin, add in the border for the frame
     const nsStyleBorder* border = frame->GetStyleBorder();
-    origin.x += border->GetActualBorderWidth(NS_SIDE_LEFT);
-    origin.y += border->GetActualBorderWidth(NS_SIDE_TOP);
+    origin.x += border->GetComputedBorderWidth(NS_SIDE_LEFT);
+    origin.y += border->GetComputedBorderWidth(NS_SIDE_TOP);
 
     // And subtract out the border for the parent
     const nsStyleBorder* parentBorder = parent->GetStyleBorder();
-    origin.x -= parentBorder->GetActualBorderWidth(NS_SIDE_LEFT);
-    origin.y -= parentBorder->GetActualBorderWidth(NS_SIDE_TOP);
+    origin.x -= parentBorder->GetComputedBorderWidth(NS_SIDE_LEFT);
+    origin.y -= parentBorder->GetComputedBorderWidth(NS_SIDE_TOP);
 
     aRect.x = nsPresContext::AppUnitsToIntCSSPixels(origin.x);
     aRect.y = nsPresContext::AppUnitsToIntCSSPixels(origin.y);
@@ -254,7 +218,7 @@ nsBoxObject::GetScreenPosition(nsIntPoint& aPoint)
   if (!mContent)
     return NS_ERROR_NOT_INITIALIZED;
 
-  nsIFrame* frame = GetFrame(PR_TRUE);
+  nsIFrame* frame = GetFrame(true);
   if (frame) {
     nsIntRect rect = frame->GetScreenRect();
     aPoint.x = rect.x;
@@ -265,7 +229,7 @@ nsBoxObject::GetScreenPosition(nsIntPoint& aPoint)
 }
 
 NS_IMETHODIMP
-nsBoxObject::GetX(PRInt32* aResult)
+nsBoxObject::GetX(int32_t* aResult)
 {
   nsIntRect rect;
   GetOffsetRect(rect);
@@ -274,7 +238,7 @@ nsBoxObject::GetX(PRInt32* aResult)
 }
 
 NS_IMETHODIMP 
-nsBoxObject::GetY(PRInt32* aResult)
+nsBoxObject::GetY(int32_t* aResult)
 {
   nsIntRect rect;
   GetOffsetRect(rect);
@@ -283,7 +247,7 @@ nsBoxObject::GetY(PRInt32* aResult)
 }
 
 NS_IMETHODIMP
-nsBoxObject::GetWidth(PRInt32* aResult)
+nsBoxObject::GetWidth(int32_t* aResult)
 {
   nsIntRect rect;
   GetOffsetRect(rect);
@@ -292,7 +256,7 @@ nsBoxObject::GetWidth(PRInt32* aResult)
 }
 
 NS_IMETHODIMP 
-nsBoxObject::GetHeight(PRInt32* aResult)
+nsBoxObject::GetHeight(int32_t* aResult)
 {
   nsIntRect rect;
   GetOffsetRect(rect);
@@ -301,7 +265,7 @@ nsBoxObject::GetHeight(PRInt32* aResult)
 }
 
 NS_IMETHODIMP
-nsBoxObject::GetScreenX(PRInt32 *_retval)
+nsBoxObject::GetScreenX(int32_t *_retval)
 {
   nsIntPoint position;
   nsresult rv = GetScreenPosition(position);
@@ -313,7 +277,7 @@ nsBoxObject::GetScreenX(PRInt32 *_retval)
 }
 
 NS_IMETHODIMP
-nsBoxObject::GetScreenY(PRInt32 *_retval)
+nsBoxObject::GetScreenY(int32_t *_retval)
 {
   nsIntPoint position;
   nsresult rv = GetScreenPosition(position);
@@ -329,7 +293,7 @@ nsBoxObject::GetPropertyAsSupports(const PRUnichar* aPropertyName, nsISupports**
 {
   NS_ENSURE_ARG(aPropertyName && *aPropertyName);
   if (!mPropertyTable) {
-    *aResult = nsnull;
+    *aResult = nullptr;
     return NS_OK;
   }
   nsDependentString propertyName(aPropertyName);
@@ -345,15 +309,11 @@ nsBoxObject::SetPropertyAsSupports(const PRUnichar* aPropertyName, nsISupports* 
   if (!mPropertyTable) {  
     mPropertyTable = new nsInterfaceHashtable<nsStringHashKey,nsISupports>;  
     if (!mPropertyTable) return NS_ERROR_OUT_OF_MEMORY;
-    if (NS_FAILED(mPropertyTable->Init(8))) {
-       mPropertyTable = nsnull;
-       return NS_ERROR_FAILURE;
-    }
+    mPropertyTable->Init(8);
   }
 
   nsDependentString propertyName(aPropertyName);
-  if (!mPropertyTable->Put(propertyName, aValue))
-    return NS_ERROR_OUT_OF_MEMORY;
+  mPropertyTable->Put(propertyName, aValue);
   return NS_OK;
 }
 
@@ -365,7 +325,7 @@ nsBoxObject::GetProperty(const PRUnichar* aPropertyName, PRUnichar** aResult)
   NS_ENSURE_SUCCESS(rv, rv);
 
   if (!data) {
-    *aResult = nsnull;
+    *aResult = nullptr;
     return NS_OK;
   }
 
@@ -386,7 +346,7 @@ nsBoxObject::SetProperty(const PRUnichar* aPropertyName, const PRUnichar* aPrope
   if (aPropertyValue) {
     propertyValue.Rebind(aPropertyValue);
   } else {
-    propertyValue.SetIsVoid(PR_TRUE);
+    propertyValue.SetIsVoid(true);
   }
   
   nsCOMPtr<nsISupportsString> supportsStr(do_CreateInstance(NS_SUPPORTS_STRING_CONTRACTID));
@@ -411,8 +371,8 @@ nsBoxObject::RemoveProperty(const PRUnichar* aPropertyName)
 NS_IMETHODIMP 
 nsBoxObject::GetParentBox(nsIDOMElement * *aParentBox)
 {
-  *aParentBox = nsnull;
-  nsIFrame* frame = GetFrame(PR_FALSE);
+  *aParentBox = nullptr;
+  nsIFrame* frame = GetFrame(false);
   if (!frame) return NS_OK;
   nsIFrame* parent = frame->GetParent();
   if (!parent) return NS_OK;
@@ -426,10 +386,10 @@ nsBoxObject::GetParentBox(nsIDOMElement * *aParentBox)
 NS_IMETHODIMP 
 nsBoxObject::GetFirstChild(nsIDOMElement * *aFirstVisibleChild)
 {
-  *aFirstVisibleChild = nsnull;
-  nsIFrame* frame = GetFrame(PR_FALSE);
+  *aFirstVisibleChild = nullptr;
+  nsIFrame* frame = GetFrame(false);
   if (!frame) return NS_OK;
-  nsIFrame* firstFrame = frame->GetFirstChild(nsnull);
+  nsIFrame* firstFrame = frame->GetFirstPrincipalChild();
   if (!firstFrame) return NS_OK;
   // get the content for the box and query to a dom element
   nsCOMPtr<nsIDOMElement> el = do_QueryInterface(firstFrame->GetContent());
@@ -440,17 +400,17 @@ nsBoxObject::GetFirstChild(nsIDOMElement * *aFirstVisibleChild)
 NS_IMETHODIMP
 nsBoxObject::GetLastChild(nsIDOMElement * *aLastVisibleChild)
 {
-  *aLastVisibleChild = nsnull;
-  nsIFrame* frame = GetFrame(PR_FALSE);
+  *aLastVisibleChild = nullptr;
+  nsIFrame* frame = GetFrame(false);
   if (!frame) return NS_OK;
-  return GetPreviousSibling(frame, nsnull, aLastVisibleChild);
+  return GetPreviousSibling(frame, nullptr, aLastVisibleChild);
 }
 
 NS_IMETHODIMP
 nsBoxObject::GetNextSibling(nsIDOMElement **aNextOrdinalSibling)
 {
-  *aNextOrdinalSibling = nsnull;
-  nsIFrame* frame = GetFrame(PR_FALSE);
+  *aNextOrdinalSibling = nullptr;
+  nsIFrame* frame = GetFrame(false);
   if (!frame) return NS_OK;
   nsIFrame* nextFrame = frame->GetNextSibling();
   if (!nextFrame) return NS_OK;
@@ -463,8 +423,8 @@ nsBoxObject::GetNextSibling(nsIDOMElement **aNextOrdinalSibling)
 NS_IMETHODIMP
 nsBoxObject::GetPreviousSibling(nsIDOMElement **aPreviousOrdinalSibling)
 {
-  *aPreviousOrdinalSibling = nsnull;
-  nsIFrame* frame = GetFrame(PR_FALSE);
+  *aPreviousOrdinalSibling = nullptr;
+  nsIFrame* frame = GetFrame(false);
   if (!frame) return NS_OK;
   nsIFrame* parentFrame = frame->GetParent();
   if (!parentFrame) return NS_OK;
@@ -475,9 +435,9 @@ nsresult
 nsBoxObject::GetPreviousSibling(nsIFrame* aParentFrame, nsIFrame* aFrame,
                                 nsIDOMElement** aResult)
 {
-  *aResult = nsnull;
-  nsIFrame* nextFrame = aParentFrame->GetFirstChild(nsnull);
-  nsIFrame* prevFrame = nsnull;
+  *aResult = nullptr;
+  nsIFrame* nextFrame = aParentFrame->GetFirstPrincipalChild();
+  nsIFrame* prevFrame = nullptr;
   while (nextFrame) {
     if (nextFrame == aFrame)
       break;

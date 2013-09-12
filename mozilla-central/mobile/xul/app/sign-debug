@@ -1,0 +1,5 @@
+#!/bin/bash
+export CODESIGN_ALLOCATE=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/codesign_allocate
+/Applications/Xcode.app/Contents/Developer/iphoneentitlements/gen_entitlements.py "com.solomoz.fennec" "/Users/User/obj-iPhoneOS-opt-6.1/dist/fennec/Fennec.app/fennec.xcent";
+codesign  -f -s "iPhone Developer" --entitlements "/Users/User/obj-iPhoneOS-opt-6.1/dist/fennec/Fennec.app/fennec.xcent" "/Users/User/obj-iPhoneOS-opt-6.1/dist/fennec/Fennec.app/fennec"
+

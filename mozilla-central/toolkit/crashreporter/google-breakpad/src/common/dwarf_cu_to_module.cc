@@ -31,9 +31,17 @@
 
 // Implement the DwarfCUToModule class; see dwarf_cu_to_module.h.
 
+// For <inttypes.h> PRI* macros, before anything else might #include it.
+#ifndef __STDC_FORMAT_MACROS
+#define __STDC_FORMAT_MACROS
+#endif  /* __STDC_FORMAT_MACROS */
+
 #include "common/dwarf_cu_to_module.h"
 
 #include <assert.h>
+#include <cxxabi.h>
+#include <inttypes.h>
+#include <stdio.h>
 
 #include <algorithm>
 #include <set>
@@ -49,7 +57,7 @@ using std::set;
 using std::vector;
 
 // Data provided by a DWARF specification DIE.
-// 
+//
 // In DWARF, the DIE for a definition may contain a DW_AT_specification
 // attribute giving the offset of the corresponding declaration DIE, and
 // the definition DIE may omit information given in the declaration. For
@@ -66,6 +74,9 @@ using std::vector;
 // A Specification holds information gathered from a declaration DIE that
 // we may need if we find a DW_AT_specification link pointing to it.
 struct DwarfCUToModule::Specification {
+  // The qualified name that can be found by demangling DW_AT_MIPS_linkage_name.
+  string qualified_name;
+
   // The name of the enclosing scope, or the empty string if there is none.
   string enclosing_name;
 
@@ -90,12 +101,20 @@ struct DwarfCUToModule::FilePrivate {
   // A set of strings used in this CU. Before storing a string in one of
   // our data structures, insert it into this set, and then use the string
   // from the set.
-  // 
-  // Because std::string uses reference counting internally, simply using
-  // strings from this set, even if passed by value, assigned, or held
-  // directly in structures and containers (map<string, ...>, for example),
-  // causes those strings to share a single instance of each distinct piece
-  // of text.
+  //
+  // In some STL implementations, strings are reference-counted internally,
+  // meaning that simply using strings from this set, even if passed by
+  // value, assigned, or held directly in structures and containers
+  // (map<string, ...>, for example), causes those strings to share a
+  // single instance of each distinct piece of text. GNU's libstdc++ uses
+  // reference counts, and I believe MSVC did as well, at some point.
+  // However, C++ '11 implementations are moving away from reference
+  // counting.
+  //
+  // In other implementations, string assignments copy the string's text,
+  // so this set will actually hold yet another copy of the string (although
+  // everything will still work). To improve memory consumption portably,
+  // we will probably need to use pointers to strings held in this set.
   set<string> common_strings;
 
   // A map from offsets of DIEs within the .debug_info section to
@@ -211,6 +230,14 @@ class DwarfCUToModule::GenericDIEHandler: public dwarf2reader::DIEHandler {
   DIEContext *parent_context_;
   uint64 offset_;
 
+  // Place the name in the global set of strings. Even though this looks
+  // like a copy, all the major std::string implementations use reference
+  // counting internally, so the effect is to have all the data structures
+  // share copies of strings whenever possible.
+  // FIXME: Should this return something like a string_ref to avoid the
+  // assumption about how strings are implemented?
+  string AddStringToPool(const string &str);
+
   // If this DIE has a DW_AT_declaration attribute, this is its value.
   // It is false on DIEs with no DW_AT_declaration attribute.
   bool declaration_;
@@ -223,6 +250,11 @@ class DwarfCUToModule::GenericDIEHandler: public dwarf2reader::DIEHandler {
   // The value of the DW_AT_name attribute, or the empty string if the
   // DIE has no such attribute.
   string name_attribute_;
+
+  // The demangled value of the DW_AT_MIPS_linkage_name attribute, or the empty
+  // string if the DIE has no such attribute or its content could not be
+  // demangled.
+  string demangled_name_;
 };
 
 void DwarfCUToModule::GenericDIEHandler::ProcessAttributeUnsigned(
@@ -266,20 +298,26 @@ void DwarfCUToModule::GenericDIEHandler::ProcessAttributeReference(
   }
 }
 
+string DwarfCUToModule::GenericDIEHandler::AddStringToPool(const string &str) {
+  pair<set<string>::iterator, bool> result =
+    cu_context_->file_context->file_private->common_strings.insert(str);
+  return *result.first;
+}
+
 void DwarfCUToModule::GenericDIEHandler::ProcessAttributeString(
     enum DwarfAttribute attr,
     enum DwarfForm form,
     const string &data) {
   switch (attr) {
-    case dwarf2reader::DW_AT_name: {
-      // Place the name in our global set of strings, and then use the
-      // string from the set. Even though the assignment looks like a copy,
-      // all the major std::string implementations use reference counting
-      // internally, so the effect is to have all our data structures share
-      // copies of strings whenever possible.
-      pair<set<string>::iterator, bool> result =
-          cu_context_->file_context->file_private->common_strings.insert(data);
-      name_attribute_ = *result.first; 
+    case dwarf2reader::DW_AT_name:
+      name_attribute_ = AddStringToPool(data);
+      break;
+    case dwarf2reader::DW_AT_MIPS_linkage_name: {
+      char* demangled = abi::__cxa_demangle(data.c_str(), NULL, NULL, NULL);
+      if (demangled) {
+        demangled_name_ = AddStringToPool(demangled);
+        free(reinterpret_cast<void*>(demangled));
+      }
       break;
     }
     default: break;
@@ -287,32 +325,53 @@ void DwarfCUToModule::GenericDIEHandler::ProcessAttributeString(
 }
 
 string DwarfCUToModule::GenericDIEHandler::ComputeQualifiedName() {
-  // Find our unqualified name. If the DIE has its own DW_AT_name
-  // attribute, then use that; otherwise, check our specification.
-  const string *unqualified_name;
-  if (name_attribute_.empty() && specification_)
-    unqualified_name = &specification_->unqualified_name;
-  else
-    unqualified_name = &name_attribute_;
+  // Use the demangled name, if one is available. Demangled names are
+  // preferable to those inferred from the DWARF structure because they
+  // include argument types.
+  const string *qualified_name = NULL;
+  if (!demangled_name_.empty()) {
+    // Found it is this DIE.
+    qualified_name = &demangled_name_;
+  } else if (specification_ && !specification_->qualified_name.empty()) {
+    // Found it on the specification.
+    qualified_name = &specification_->qualified_name;
+  }
 
-  // Find the name of our enclosing context. If we have a
-  // specification, it's the specification's enclosing context that
-  // counts; otherwise, use this DIE's context.
+  const string *unqualified_name;
   const string *enclosing_name;
-  if (specification_)
-    enclosing_name = &specification_->enclosing_name;
-  else
-    enclosing_name = &parent_context_->name;
+  if (!qualified_name) {
+    // Find our unqualified name. If the DIE has its own DW_AT_name
+    // attribute, then use that; otherwise, check our specification.
+    if (name_attribute_.empty() && specification_)
+      unqualified_name = &specification_->unqualified_name;
+    else
+      unqualified_name = &name_attribute_;
+
+    // Find the name of our enclosing context. If we have a
+    // specification, it's the specification's enclosing context that
+    // counts; otherwise, use this DIE's context.
+    if (specification_)
+      enclosing_name = &specification_->enclosing_name;
+    else
+      enclosing_name = &parent_context_->name;
+  }
 
   // If this DIE was marked as a declaration, record its names in the
   // specification table.
   if (declaration_) {
     FileContext *file_context = cu_context_->file_context;
     Specification spec;
-    spec.enclosing_name = *enclosing_name;
-    spec.unqualified_name = *unqualified_name;
+    if (qualified_name)
+      spec.qualified_name = *qualified_name;
+    else {
+      spec.enclosing_name = *enclosing_name;
+      spec.unqualified_name = *unqualified_name;
+    }
     file_context->file_private->specifications[offset_] = spec;
   }
+
+  if (qualified_name)
+    return *qualified_name;
 
   // Combine the enclosing name and unqualified name to produce our
   // own fully-qualified name.
@@ -422,11 +481,22 @@ void DwarfCUToModule::FuncHandler::Finish() {
     // Create a Module::Function based on the data we've gathered, and
     // add it to the functions_ list.
     Module::Function *func = new Module::Function;
-    func->name = name_;
+    // Malformed DWARF may omit the name, but all Module::Functions must
+    // have names.
+    if (!name_.empty()) {
+      func->name = name_;
+    } else {
+      cu_context_->reporter->UnnamedFunction(offset_);
+      func->name = "<name omitted>";
+    }
     func->address = low_pc_;
     func->size = high_pc_ - low_pc_;
     func->parameter_size = 0;
-    cu_context_->functions.push_back(func);
+    if (func->address) {
+       // If the function address is zero this is a sign that this function
+       // description is just empty debug data and should just be discarded.
+       cu_context_->functions.push_back(func);
+     }
   } else if (inline_) {
     AbstractOrigin origin(name_);
     cu_context_->file_context->file_private->origins[offset_] = origin;
@@ -456,7 +526,7 @@ bool DwarfCUToModule::NamedScopeHandler::EndAttributes() {
 dwarf2reader::DIEHandler *DwarfCUToModule::NamedScopeHandler::FindChildHandler(
     uint64 offset,
     enum DwarfTag tag,
-    const AttributeList &attrs) {
+    const AttributeList &/*attrs*/) {
   switch (tag) {
     case dwarf2reader::DW_TAG_subprogram:
       return new FuncHandler(cu_context_, &child_context_, offset);
@@ -532,9 +602,15 @@ void DwarfCUToModule::WarningReporter::UncoveredLine(const Module::Line &line) {
   if (!uncovered_warnings_enabled_)
     return;
   UncoveredHeading();
-  fprintf(stderr, "    line%s: %s:%d at 0x%llx\n",
+  fprintf(stderr, "    line%s: %s:%d at 0x%" PRIx64 "\n",
           (line.size == 0 ? " (zero-length)" : ""),
           line.file->name.c_str(), line.number, line.address);
+}
+
+void DwarfCUToModule::WarningReporter::UnnamedFunction(uint64 offset) {
+  CUHeading();
+  fprintf(stderr, "%s: warning: function at offset 0x%llx has no name\n",
+          filename_.c_str(), offset);
 }
 
 DwarfCUToModule::DwarfCUToModule(FileContext *file_context,
@@ -592,7 +668,7 @@ bool DwarfCUToModule::EndAttributes() {
 dwarf2reader::DIEHandler *DwarfCUToModule::FindChildHandler(
     uint64 offset,
     enum DwarfTag tag,
-    const AttributeList &attrs) {
+    const AttributeList &/*attrs*/) {
   switch (tag) {
     case dwarf2reader::DW_TAG_subprogram:
       return new FuncHandler(cu_context_, child_context_, offset);
@@ -850,12 +926,12 @@ void DwarfCUToModule::AssignLinesToFunctions() {
     // about what result we produce in that case, just as long as we don't
     // hang or crash.
     while (func_it != functions->end()
-           && current >= (*func_it)->address
+           && next_transition >= (*func_it)->address
            && !within(**func_it, next_transition))
       func_it++;
     func = (func_it != functions->end()) ? *func_it : NULL;
     while (line_it != lines_.end()
-           && current >= line_it->address
+           && next_transition >= line_it->address
            && !within(*line_it, next_transition))
       line_it++;
     line = (line_it != lines_.end()) ? &*line_it : NULL;
@@ -903,7 +979,7 @@ bool DwarfCUToModule::StartCompilationUnit(uint64 offset,
 }
 
 bool DwarfCUToModule::StartRootDIE(uint64 offset, enum DwarfTag tag,
-                                   const AttributeList& attrs) {
+                                   const AttributeList& /*attrs*/) {
   // We don't deal with partial compilation units (the only other tag
   // likely to be used for root DIE).
   return tag == dwarf2reader::DW_TAG_compile_unit;

@@ -1,46 +1,8 @@
 <?xml version="1.0"?>
 # -*- Mode: HTML -*-
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org browser.
-#
-# The Initial Developer of the Original Code is
-# Joe Hewitt.
-# Portions created by the Initial Developer are Copyright (C) 2003
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Pierre Chanial (v2) <p_ch@verizon.net>
-#   Gavin Sharp (v3) <gavin@gavinsharp.com>
-#   Ben Goodger <beng@google.com>
-#   Pamela Greene <pamg.bugs@gmail.com>
-#   Michael Ventnor <m.ventnor@gmail.com>
-#   Ehsan Akhgari <ehsan.akhgari@gmail.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 <!DOCTYPE bindings [
 <!ENTITY % searchBarDTD SYSTEM "chrome://browser/locale/searchbar.dtd" >
@@ -50,9 +12,9 @@
 ]>
 
 <bindings id="SearchBindings"
-      xmlns="http://www.mozilla.org/xbl"
-      xmlns:xul="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
-      xmlns:xbl="http://www.mozilla.org/xbl">
+          xmlns="http://www.mozilla.org/xbl"
+          xmlns:xul="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+          xmlns:xbl="http://www.mozilla.org/xbl">
 
   <binding id="searchbar">
     <resources>
@@ -96,44 +58,44 @@
           <xul:image class="search-go-button"
                      anonid="search-go-button"
                      onclick="handleSearchCommand(event);"
-                     tooltiptext="&searchEndCap.label;" />
+                     tooltiptext="&searchEndCap.label;"/>
         </xul:hbox>
       </xul:textbox>
     </content>
 
     <implementation implements="nsIObserver">
-
       <constructor><![CDATA[
         if (this.parentNode.parentNode.localName == "toolbarpaletteitem")
           return;
-        setTimeout(function (a) { a.init(); }, 0, this);
-      ]]></constructor>
+        // Make sure we rebuild the popup in onpopupshowing
+        this._needToBuildPopup = true;
 
-      <method name="init">
-        <body><![CDATA[
-          // Make sure we rebuild the popup in onpopupshowing
-          this._needToBuildPopup = true;
-
-          // Refresh the display (updating icon, etc)
-          this.updateDisplay();
-
-          var os =
+        var os =
                Components.classes["@mozilla.org/observer-service;1"]
                          .getService(Components.interfaces.nsIObserverService);
-          os.addObserver(this, "browser-search-engine-modified", false);
-          
-          this._addedObserver = true;
-        ]]></body>
-      </method>
+        os.addObserver(this, "browser-search-engine-modified", false);
+
+        this._addedObserver = true;
+
+        this.searchService.init((function search_init_cb(aStatus) {
+          if (Components.isSuccessCode(aStatus)) {
+            // Refresh the display (updating icon, etc)
+            this.updateDisplay();
+          } else {
+            Components.utils.reportError("Cannot initialize search service, bailing out: " + aStatus);
+          }
+        }).bind(this));
+      ]]></constructor>
 
       <destructor><![CDATA[
         if (this._addedObserver) {
           var os = Components.classes["@mozilla.org/observer-service;1"]
                              .getService(Components.interfaces.nsIObserverService);
           os.removeObserver(this, "browser-search-engine-modified");
+          this._addedObserver = false;
         }
 
-        // Make sure to break the cycle from _texbox to us. Otherwise we leak
+        // Make sure to break the cycle from _textbox to us. Otherwise we leak
         // the world. But make sure it's actually pointing to us.
         if (this._textbox.mController.input == this)
           this._textbox.mController.input = null;
@@ -164,7 +126,7 @@
         <getter><![CDATA[
           var currentEngine = this.searchService.currentEngine;
           // Return a dummy engine if there is no currentEngine
-          return currentEngine || {name:"", uri:null};
+          return currentEngine || {name: "", uri: null};
         ]]></getter>
       </property>
 
@@ -275,7 +237,6 @@
               }
             }
           }
-          BrowserSearch.updateSearchButton();
         ]]></body>
       </method>
 
@@ -303,7 +264,6 @@
               }
             }
           }
-          BrowserSearch.updateSearchButton();
         ]]></body>
       </method>
 
@@ -337,7 +297,8 @@
           // indexes as items are removed.
           var items = popup.childNodes;
           for (var i = items.length - 1; i >= 0; i--) {
-            if (items[i].getAttribute("class").indexOf("addengine") != -1)
+            if (items[i].classList.contains("addengine-item") ||
+                items[i].classList.contains("addengine-separator"))
               popup.removeChild(items[i]);
           }
 
@@ -446,7 +407,7 @@
         <body><![CDATA[
           // Find the new index
           var newIndex = this.engines.indexOf(this.currentEngine);
-          newIndex += (isNextEngine) ? 1 : -1;
+          newIndex += isNextEngine ? 1 : -1;
 
           if (newIndex >= 0 && newIndex < this.engines.length)
             this.currentEngine = this.engines[newIndex];
@@ -475,9 +436,13 @@
           }
 
           // Save the current value in the form history
-          if (textValue) {
-            textBox._formHistSvc.addEntry(textBox.getAttribute("autocompletesearchparam"),
-                                          textValue);
+          if (textValue && !PrivateBrowsingUtils.isWindowPrivate(window)) {
+            try {
+              textBox._formHistSvc.addEntry(textBox.getAttribute("autocompletesearchparam"),
+                                            textValue);
+            } catch (ex) {
+              Components.utils.reportError("Saving search to form history failed: " + ex);
+            }
           }
 
           this.doSearch(textValue, where);
@@ -493,13 +458,12 @@
           openUILinkIn(submission.uri.spec, aWhere, null, submission.postData);
         ]]></body>
       </method>
-
     </implementation>
 
     <handlers>
       <handler event="command"><![CDATA[
         const target = event.originalTarget;
-        if (target.getAttribute("class").indexOf("addengine-item") != -1) {
+        if (target.classList.contains("addengine-item")) {
           var searchService =
             Components.classes["@mozilla.org/browser/search-service;1"]
                       .getService(Components.interfaces.nsIBrowserSearchService);
@@ -521,11 +485,30 @@
 
       <handler event="DOMMouseScroll"
                phase="capturing"
-#ifdef XP_MACOSX
-               action="if (event.metaKey) this.selectEngine(event, (event.detail > 0));"/>
-#else
-               action="if (event.ctrlKey) this.selectEngine(event, (event.detail > 0));"/>
-#endif
+               modifiers="accel"
+               action="this.selectEngine(event, (event.detail > 0));"/>
+
+      <handler event="focus">
+      <![CDATA[
+        // Speculatively connect to the current engine's search URI (and
+        // suggest URI, if different) to reduce request latency
+
+        const SUGGEST_TYPE = "application/x-suggestions+json";
+        var engine = this.currentEngine;
+	var connector =
+            Services.io.QueryInterface(Components.interfaces.nsISpeculativeConnect);
+        var searchURI = engine.getSubmission("dummy").uri;
+        let callbacks = window.QueryInterface(Components.interfaces.nsIInterfaceRequestor)
+                              .getInterface(Components.interfaces.nsIWebNavigation)
+                              .QueryInterface(Components.interfaces.nsILoadContext);
+        connector.speculativeConnect(searchURI, callbacks);
+
+        if (engine.supportsResponseType(SUGGEST_TYPE)) {
+	  var suggestURI = engine.getSubmission("dummy", SUGGEST_TYPE).uri;
+          if (suggestURI.prePath != searchURI.prePath)
+            connector.speculativeConnect(suggestURI, callbacks);
+        }
+      ]]></handler>
     </handlers>
   </binding>
 
@@ -540,9 +523,9 @@
       ]]></constructor>
 
       <destructor><![CDATA[
-          var ps2 = Components.classes["@mozilla.org/preferences-service;1"]
-                              .getService(Components.interfaces.nsIPrefBranch2);
-          ps2.removeObserver("browser.search.suggest.enabled", this);
+          var prefs = Components.classes["@mozilla.org/preferences-service;1"]
+                              .getService(Components.interfaces.nsIPrefBranch);
+          prefs.removeObserver("browser.search.suggest.enabled", this);
 
         // Because XBL and the customize toolbar code interacts poorly,
         // there may not be anything to remove here
@@ -580,16 +563,44 @@
                                                 "anonid", "textbox-input-box");
           var cxmenu = document.getAnonymousElementByAttribute(textBox,
                                             "anonid", "input-box-contextmenu");
+          var pasteAndSearch;
+          cxmenu.addEventListener("popupshowing", function() {
+            if (!pasteAndSearch)
+              return;
+            var controller = document.commandDispatcher.getControllerForCommand("cmd_paste");
+            var enabled = controller.isCommandEnabled("cmd_paste");
+            if (enabled)
+              pasteAndSearch.removeAttribute("disabled");
+            else
+              pasteAndSearch.setAttribute("disabled", "true");
+          }, false);
 
-          var element = document.createElementNS(kXULNS, "menuseparator");
+          var element, label, akey;
+
+          element = document.createElementNS(kXULNS, "menuseparator");
           cxmenu.appendChild(element);
+
+          var insertLocation = cxmenu.firstChild;
+          while (insertLocation.nextSibling &&
+                 insertLocation.getAttribute("cmd") != "cmd_paste")
+            insertLocation = insertLocation.nextSibling;
+          if (insertLocation) {
+            element = document.createElementNS(kXULNS, "menuitem");
+            label = this._stringBundle.getString("cmd_pasteAndSearch");
+            element.setAttribute("label", label);
+            element.setAttribute("anonid", "paste-and-search");
+            element.setAttribute("oncommand",
+                "BrowserSearch.searchBar.select(); goDoCommand('cmd_paste'); BrowserSearch.searchBar.handleSearchCommand();");
+            cxmenu.insertBefore(element, insertLocation.nextSibling);
+            pasteAndSearch = element;
+          }
+
           element = document.createElementNS(kXULNS, "menuitem");
-          var label = this._stringBundle.getString("cmd_clearHistory");
-          var akey = this._stringBundle.getString("cmd_clearHistory_accesskey");
+          label = this._stringBundle.getString("cmd_clearHistory");
+          akey = this._stringBundle.getString("cmd_clearHistory_accesskey");
           element.setAttribute("label", label);
           element.setAttribute("accesskey", akey);
           element.setAttribute("cmd", "cmd_clearhistory");
-
           cxmenu.appendChild(element);
 
           element = document.createElementNS(kXULNS, "menuitem");
@@ -602,19 +613,38 @@
           element.setAttribute("type", "checkbox");
           element.setAttribute("checked", this._suggestEnabled);
           element.setAttribute("autocheck", "false");
-
           this._suggestMenuItem = element;
           cxmenu.appendChild(element);
 
           this.controllers.appendController(this.searchbarController);
 
           // Add observer for suggest preference
-          var ps2 = Components.classes["@mozilla.org/preferences-service;1"]
-                              .getService(Components.interfaces.nsIPrefBranch2);
-          ps2.addObserver("browser.search.suggest.enabled", this, false);
+          var prefs = Components.classes["@mozilla.org/preferences-service;1"]
+                              .getService(Components.interfaces.nsIPrefBranch);
+          prefs.addObserver("browser.search.suggest.enabled", this, false);
         ]]></body>
       </method>
 
+      <!--
+        This overrides the searchParam property in autocomplete.xml.  We're
+        hijacking this property as a vehicle for delivering the privacy
+        information about the window into the guts of nsSearchSuggestions.
+
+        Note that the setter is the same as the parent.  We were not sure whether
+        we can override just the getter.  If that proves to be the case, the setter
+        can be removed.
+      -->
+      <property name="searchParam"
+                onget="return this.getAttribute('autocompletesearchparam') +
+                       (PrivateBrowsingUtils.isWindowPrivate(window) ? '|private' : '');"
+                onset="this.setAttribute('autocompletesearchparam', val); return val;"/>
+
+      <!--
+        This method overrides the autocomplete binding's openPopup (essentially
+        duplicating the logic from the autocomplete popup binding's
+        openAutocompletePopup method), modifying it so that the popup is aligned with
+        the inner textbox, but sized to not extend beyond the search bar border.
+      -->
       <method name="openPopup">
         <body><![CDATA[
           var popup = this.popup;
@@ -631,24 +661,25 @@
             popup.mInput = this;
             popup.view = this.controller.QueryInterface(Components.interfaces.nsITreeView);
             popup.invalidate();
-            
+
             popup.showCommentColumn = this.showCommentColumn;
             popup.showImageColumn = this.showImageColumn;
 
             document.popupNode = null;
 
+            const isRTL = getComputedStyle(this, "").direction == "rtl";
+
             var outerRect = this.getBoundingClientRect();
             var innerRect = this.inputField.getBoundingClientRect();
-            var width = outerRect.right - innerRect.left;
+            if (isRTL) {
+              var width = innerRect.right - outerRect.left;
+            } else {
+              var width = outerRect.right - innerRect.left;
+            }
             popup.setAttribute("width", width > 100 ? width : 100);
 
-            // setConsumeRollupEvent() before we call openPopup(), 
-            // see bug #404438 for more details
-            popup.popupBoxObject.setConsumeRollupEvent(
-              this.consumeRollupEvent ? 
-                Ci.nsIPopupBoxObject.ROLLUP_CONSUME : 
-                Ci.nsIPopupBoxObject.ROLLUP_NO_CONSUME);
-            popup.openPopup(null, "", innerRect.left, outerRect.bottom, false, false);
+            var yOffset = outerRect.bottom - innerRect.bottom;
+            popup.openPopup(this.inputField, "after_start", 0, yOffset, false, false);
           }
         ]]></body>
       </method>
@@ -679,7 +710,7 @@
         </body>
       </method>
 
-      <!-- overload |onTextEntered| in autocomplete.xml -->
+      <!-- override |onTextEntered| in autocomplete.xml -->
       <method name="onTextEntered">
         <parameter name="aEvent"/>
         <body><![CDATA[

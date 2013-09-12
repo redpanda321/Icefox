@@ -1,86 +1,62 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsHTMLEditUtils_h__
 #define nsHTMLEditUtils_h__
 
-#include "prtypes.h"  // for PRBool
-#include "nsError.h"  // for nsresult
-class nsIEditor;
+
 class nsIDOMNode;
+class nsINode;
 
 class nsHTMLEditUtils
 {
 public:
   // from nsTextEditRules:
-  static PRBool IsBig(nsIDOMNode *aNode);
-  static PRBool IsSmall(nsIDOMNode *aNode);
+  static bool IsBig(nsIDOMNode *aNode);
+  static bool IsSmall(nsIDOMNode *aNode);
 
   // from nsHTMLEditRules:
-  static PRBool IsInlineStyle(nsIDOMNode *aNode);
-  static PRBool IsFormatNode(nsIDOMNode *aNode);
-  static PRBool IsNodeThatCanOutdent(nsIDOMNode *aNode);
-  static PRBool IsHeader(nsIDOMNode *aNode);
-  static PRBool IsParagraph(nsIDOMNode *aNode);
-  static PRBool IsHR(nsIDOMNode *aNode);
-  static PRBool IsListItem(nsIDOMNode *aNode);
-  static PRBool IsTable(nsIDOMNode *aNode);
-  static PRBool IsTableRow(nsIDOMNode *aNode);
-  static PRBool IsTableElement(nsIDOMNode *aNode);
-  static PRBool IsTableElementButNotTable(nsIDOMNode *aNode);
-  static PRBool IsTableCell(nsIDOMNode *aNode);
-  static PRBool IsTableCellOrCaption(nsIDOMNode *aNode);
-  static PRBool IsList(nsIDOMNode *aNode);
-  static PRBool IsOrderedList(nsIDOMNode *aNode);
-  static PRBool IsUnorderedList(nsIDOMNode *aNode);
-  static PRBool IsBlockquote(nsIDOMNode *aNode);
-  static PRBool IsPre(nsIDOMNode *aNode);
-  static PRBool IsAddress(nsIDOMNode *aNode);
-  static PRBool IsAnchor(nsIDOMNode *aNode);
-  static PRBool IsImage(nsIDOMNode *aNode);
-  static PRBool IsLink(nsIDOMNode *aNode);
-  static PRBool IsNamedAnchor(nsIDOMNode *aNode);
-  static PRBool IsDiv(nsIDOMNode *aNode);
-  static PRBool IsMozDiv(nsIDOMNode *aNode);
-  static PRBool IsMailCite(nsIDOMNode *aNode);
-  static PRBool IsFormWidget(nsIDOMNode *aNode);
-  static PRBool SupportsAlignAttr(nsIDOMNode *aNode);
-  static PRBool CanContain(PRInt32 aParent, PRInt32 aChild);
-  static PRBool IsContainer(PRInt32 aTag);
+  static bool IsInlineStyle(nsINode* aNode);
+  static bool IsInlineStyle(nsIDOMNode *aNode);
+  static bool IsFormatNode(nsINode* aNode);
+  static bool IsFormatNode(nsIDOMNode *aNode);
+  static bool IsNodeThatCanOutdent(nsIDOMNode *aNode);
+  static bool IsHeader(nsIDOMNode *aNode);
+  static bool IsParagraph(nsIDOMNode *aNode);
+  static bool IsHR(nsIDOMNode *aNode);
+  static bool IsListItem(nsINode* aNode);
+  static bool IsListItem(nsIDOMNode *aNode);
+  static bool IsTable(nsIDOMNode *aNode);
+  static bool IsTableRow(nsIDOMNode *aNode);
+  static bool IsTableElement(nsINode* aNode);
+  static bool IsTableElement(nsIDOMNode *aNode);
+  static bool IsTableElementButNotTable(nsINode* aNode);
+  static bool IsTableElementButNotTable(nsIDOMNode *aNode);
+  static bool IsTableCell(nsINode* node);
+  static bool IsTableCell(nsIDOMNode *aNode);
+  static bool IsTableCellOrCaption(nsIDOMNode *aNode);
+  static bool IsList(nsINode* aNode);
+  static bool IsList(nsIDOMNode *aNode);
+  static bool IsOrderedList(nsIDOMNode *aNode);
+  static bool IsUnorderedList(nsIDOMNode *aNode);
+  static bool IsBlockquote(nsIDOMNode *aNode);
+  static bool IsPre(nsIDOMNode *aNode);
+  static bool IsAnchor(nsIDOMNode *aNode);
+  static bool IsImage(nsIDOMNode *aNode);
+  static bool IsLink(nsIDOMNode *aNode);
+  static bool IsNamedAnchor(nsINode* aNode);
+  static bool IsNamedAnchor(nsIDOMNode *aNode);
+  static bool IsDiv(nsIDOMNode *aNode);
+  static bool IsMozDiv(nsIDOMNode *aNode);
+  static bool IsMailCite(nsINode* aNode);
+  static bool IsMailCite(nsIDOMNode *aNode);
+  static bool IsFormWidget(nsINode* aNode);
+  static bool IsFormWidget(nsIDOMNode *aNode);
+  static bool SupportsAlignAttr(nsIDOMNode *aNode);
+  static bool CanContain(int32_t aParent, int32_t aChild);
+  static bool IsContainer(int32_t aTag);
 };
 
 #endif /* nsHTMLEditUtils_h__ */

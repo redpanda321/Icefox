@@ -1,48 +1,13 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the mozilla zlib configuration.
- *
- * The Initial Developer of the Original Code is IBM Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2004
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef MOZZCONF_H
 #define MOZZCONF_H
 
-#if defined(XP_WIN) && defined(ZLIB_DLL)
-#undef ZLIB_DLL
-#elif defined(HAVE_VISIBILITY_ATTRIBUTE) && !defined(MOZ_ENABLE_LIBXUL)
-#define ZEXTERN __attribute__((visibility ("default"))) extern
-#elif (defined(__SUNPRO_C) || defined(__SUNPRO_CC)) && !defined(MOZ_ENABLE_LIBXUL)
-#define ZEXTERN __global extern
+#if defined(XP_WIN)
+#define ZLIB_DLL 1
 #endif
 
 /* Exported Symbols */
@@ -118,7 +83,7 @@
 #define in_func MOZ_Z_in_func
 #define out_func MOZ_Z_out_func
 
-/* New as of libpng-1.2.3 */
+/* New as of zlib-1.2.3 */
 #define adler32_combine MOZ_Z_adler32_combine
 #define crc32_combine MOZ_Z_crc32_combine
 #define deflateSetHeader MOZ_Z_deflateSetHeader
@@ -126,5 +91,32 @@
 #define gzdirect MOZ_Z_gzdirect
 #define inflatePrime MOZ_Z_inflatePrime
 #define inflateGetHeader MOZ_Z_inflateGetHeader
+
+/* New as of zlib-1.2.4 */
+#define adler32_combine64 MOZ_Z_adler32_combine64
+#define crc32_combine64 MOZ_Z_crc32_combine64
+#define gz_error MOZ_Z_gz_error
+#define gz_intmax MOZ_Z_gz_intmax
+#define gz_strwinerror MOZ_Z_gz_strwinerror
+#define gzbuffer MOZ_Z_gzbuffer
+#define gzclose_r MOZ_Z_gzclose_r
+#define gzclose_w MOZ_Z_gzclose_w
+#define gzoffset MOZ_Z_gzoffset
+#define gzoffset64 MOZ_Z_gzoffset64
+#define gzopen64 MOZ_Z_gzopen64
+#define gzseek64 MOZ_Z_gzseek64
+#define gztell64 MOZ_Z_gztell64
+#define inflateMark MOZ_Z_inflateMark
+#define inflateReset2 MOZ_Z_inflateReset2
+#define inflateUndermine MOZ_Z_inflateUndermine
+
+/* New as of zlib-1.2.6 */
+#define deflatePending MOZ_Z_deflatePending
+#define deflateResetKeep MOZ_Z_deflateResetKeep
+#define inflateResetKeep MOZ_Z_inflateResetKeep
+#define gzgetc_ MOZ_Z_gzgetc_
+
+/* New as of zlib-1.2.7 */
+#define gzopen_w MOZ_Z_gzopen_w
 
 #endif

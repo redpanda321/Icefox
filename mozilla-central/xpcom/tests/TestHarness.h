@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Jeff Walden <jwalden+code@mit.edu>.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Test harness for XPCOM objects, providing a scoped XPCOM initializer,
@@ -44,6 +12,17 @@
 #ifndef TestHarness_h__
 #define TestHarness_h__
 
+#if defined(_MSC_VER) && defined(MOZ_STATIC_JS)
+/*
+ * Including jsdbgapi.h may cause build break with --disable-shared-js
+ * This is a workaround for bug 673616.
+ */
+#define STATIC_JS_API
+#endif
+
+#include "mozilla/Util.h"
+
+#include "prenv.h"
 #include "nsComponentManagerUtils.h"
 #include "nsServiceManagerUtils.h"
 #include "nsCOMPtr.h"
@@ -55,11 +34,14 @@
 #include "nsIDirectoryService.h"
 #include "nsIFile.h"
 #include "nsIProperties.h"
+#include "nsIObserverService.h"
+#include "nsXULAppAPI.h"
+#include "jsdbgapi.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 
-static PRUint32 gFailCount = 0;
+static uint32_t gFailCount = 0;
 
 /**
  * Prints the given failure message and arguments using printf, prepending
@@ -81,157 +63,22 @@ void fail(const char* msg, ...)
 }
 
 /**
- * Prints the given string prepending "TEST-PASS | " for the benefit of
- * the test harness and with "\n" at the end, to be used at the end of a
- * successful test function.
+ * Prints the given success message and arguments using printf, prepending
+ * "TEST-PASS " for the benefit of the test harness and
+ * appending "\n" to eliminate having to type it at each call site.
  */
-void passed(const char* test)
+void passed(const char* msg, ...)
 {
-  printf("TEST-PASS | %s\n", test);
+  va_list ap;
+
+  printf("TEST-PASS | ");
+
+  va_start(ap, msg);
+  vprintf(msg, ap);
+  va_end(ap);
+
+  putchar('\n');
 }
-
-//-----------------------------------------------------------------------------
-// Code profiling
-//
-static const char* gCurrentProfile;
-static PRBool gProfilerTriedInit = PR_FALSE;
-static PRBool gProfilerInited = PR_FALSE;
-
-// Platform profilers must implement these functions.
-// Init and deinit are guaranteed to only be called once, and
-// StartProfile/StopProfile may assume that they are only called
-// when the profiler has successfully been initialized.
-static PRBool _PlatformInitProfiler();
-static PRBool _PlatformStartProfile(const char* profileName);
-static PRBool _PlatformStopProfile(const char* profileName);
-static PRBool _PlatformDeinitProfiler();
-
-/**
- * If the build has been configured properly, start the best code profiler
- * available on this platform.
- *
- * This is NOT thread safe.
- *
- * @precondition Profiling is not started
- * @param profileName A descriptive name for this profiling run.  Every 
- *                    attempt is made to name the profile data according
- *                    to this name, but check your platform's profiler
- *                    documentation for what this means.
- * @return PR_TRUE if profiling was available and successfully started.
- * @see StopProfiling
- */
-inline PRBool
-StartProfiling(const char* profileName)
-{
-    if (!gProfilerTriedInit) {
-        gProfilerTriedInit = PR_TRUE;
-        gProfilerInited = _PlatformInitProfiler();
-    }
-    if (!gProfilerInited)
-        return PR_FALSE;
-
-    NS_ASSERTION(profileName, "need a name for this profile");
-    NS_PRECONDITION(!gCurrentProfile, "started a new profile before stopping another");
-
-    PRBool rv = _PlatformStartProfile(profileName);
-    gCurrentProfile = profileName;
-    return rv;
-}
-
-/**
- * Stop the platform's profiler.  For what this means, what happens after
- * stopping, and how the profile data can be accessed, check the 
- * documentation of your platform's profiler.
- *
- * This is NOT thread safe.
- *
- * @precondition Profiling was started
- * @return PR_TRUE if profiling was successfully stopped.
- * @see StartProfiling
- */
-inline PRBool
-StopProfiling()
-{
-    NS_ASSERTION(gProfilerTriedInit, "tried to stop profile before starting one");
-    if (!gProfilerInited)
-        return PR_FALSE;
-
-    NS_PRECONDITION(gCurrentProfile, "tried to stop profile before starting one");
-
-    const char* profileName = gCurrentProfile;
-    gCurrentProfile = 0;
-    return _PlatformStopProfile(profileName);
-}
-
-//--------------------------------------------------
-// Shark impl
-#if defined(MOZ_SHARK)
-#include <CHUD/CHUD.h>
-
-static PRBool
-_PlatformInitProfiler()
-{
-    if (chudSuccess != chudInitialize())
-        return PR_FALSE;
-    if (chudSuccess != chudAcquireRemoteAccess()) {
-        NS_WARNING("Couldn't connect to Shark.  Is it running and in Programmatic mode (Shift-Cmd-R)?");
-        return PR_FALSE;
-    }
-   return PR_TRUE;
-}
-
-static PRBool
-_PlatformStartProfile(const char* profileName)
-{
-    return (chudSuccess == chudStartRemotePerfMonitor(profileName)) ?
-        PR_TRUE : PR_FALSE;
-}
-
-static PRBool
-_PlatformStopProfile(const char* profileName)
-{
-    return (chudSuccess == chudStopRemotePerfMonitor()) ?
-        PR_TRUE : PR_FALSE;
-}
-
-static PRBool
-_PlatformDeinitProfiler()
-{
-    return (chudIsRemoteAccessAcquired() 
-            && chudSuccess == chudReleaseRemoteAccess()) ?
-        PR_TRUE : PR_FALSE;
-}
-
-//--------------------------------------------------
-// Default, no-profiler impl
-#else 
-
-static PRBool
-_PlatformInitProfiler()
-{
-    NS_WARNING("Profiling is not available/configured for your platform.");
-    return PR_FALSE;
-}
-static PRBool
-_PlatformStartProfile(const char* profileName)
-{
-    NS_WARNING("Profiling is not available/configured for your platform.");
-    return PR_FALSE;
-}
-static PRBool
-_PlatformStopProfile(const char* profileName)
-{
-    NS_WARNING("Profiling is not available/configured for your platform.");
-    return PR_FALSE;
-}
-static PRBool
-_PlatformDeinitProfiler()
-{
-    NS_WARNING("Profiling is not available/configured for your platform.");
-    return PR_FALSE;
-}
-
-#endif
 
 //-----------------------------------------------------------------------------
 
@@ -272,16 +119,22 @@ class ScopedXPCOM : public nsIDirectoryServiceProvider2
 
     ~ScopedXPCOM()
     {
-      if (gProfilerInited)
-        if (!_PlatformDeinitProfiler())
-          NS_WARNING("Problem shutting down profiler");
-
       // If we created a profile directory, we need to remove it.
       if (mProfD) {
-        if (NS_FAILED(mProfD->Remove(PR_TRUE)))
-          NS_WARNING("Problem removing profile direrctory");
+        nsCOMPtr<nsIObserverService> os =
+          do_GetService(NS_OBSERVERSERVICE_CONTRACTID);
+        MOZ_ASSERT(os);
+        if (os) {
+          MOZ_ALWAYS_TRUE(NS_SUCCEEDED(os->NotifyObservers(nullptr, "profile-change-net-teardown", nullptr)));
+          MOZ_ALWAYS_TRUE(NS_SUCCEEDED(os->NotifyObservers(nullptr, "profile-change-teardown", nullptr)));
+          MOZ_ALWAYS_TRUE(NS_SUCCEEDED(os->NotifyObservers(nullptr, "profile-before-change", nullptr)));
+        }
 
-        mProfD = nsnull;
+        if (NS_FAILED(mProfD->Remove(true))) {
+          NS_WARNING("Problem removing profile directory");
+        }
+
+        mProfD = nullptr;
       }
 
       if (mServMgr)
@@ -298,7 +151,7 @@ class ScopedXPCOM : public nsIDirectoryServiceProvider2
       printf("Finished running %s tests.\n", mTestName);
     }
 
-    PRBool failed()
+    bool failed()
     {
       return mServMgr == NULL;
     }
@@ -306,30 +159,48 @@ class ScopedXPCOM : public nsIDirectoryServiceProvider2
     already_AddRefed<nsIFile> GetProfileDirectory()
     {
       if (mProfD) {
-        NS_ADDREF(mProfD);
-        return mProfD.get();
+        nsCOMPtr<nsIFile> copy = mProfD;
+        return copy.forget();
       }
 
       // Create a unique temporary folder to use for this test.
       nsCOMPtr<nsIFile> profD;
       nsresult rv = NS_GetSpecialDirectory(NS_OS_TEMP_DIR,
                                            getter_AddRefs(profD));
-      NS_ENSURE_SUCCESS(rv, nsnull);
+      NS_ENSURE_SUCCESS(rv, nullptr);
 
       rv = profD->Append(NS_LITERAL_STRING("cpp-unit-profd"));
-      NS_ENSURE_SUCCESS(rv, nsnull);
+      NS_ENSURE_SUCCESS(rv, nullptr);
 
       rv = profD->CreateUnique(nsIFile::DIRECTORY_TYPE, 0755);
-      NS_ENSURE_SUCCESS(rv, nsnull);
+      NS_ENSURE_SUCCESS(rv, nullptr);
 
       mProfD = profD;
       return profD.forget();
     }
 
+    already_AddRefed<nsIFile> GetGREDirectory()
+    {
+      if (mGRED) {
+        nsCOMPtr<nsIFile> copy = mGRED;
+        return copy.forget();
+      }
+
+      char* env = PR_GetEnv("MOZ_XRE_DIR");
+      nsCOMPtr<nsIFile> greD;
+      if (env) {
+        NS_NewLocalFile(NS_ConvertUTF8toUTF16(env), false,
+                        getter_AddRefs(greD));
+      }
+
+      mGRED = greD;
+      return greD.forget();
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     //// nsIDirectoryServiceProvider
 
-    NS_IMETHODIMP GetFile(const char *aProperty, PRBool *_persistent,
+    NS_IMETHODIMP GetFile(const char *aProperty, bool *_persistent,
                           nsIFile **_result)
     {
       // If we were supplied a directory service provider, ask it first.
@@ -341,7 +212,8 @@ class ScopedXPCOM : public nsIDirectoryServiceProvider2
 
       // Otherwise, the test harness provides some directories automatically.
       if (0 == strcmp(aProperty, NS_APP_USER_PROFILE_50_DIR) ||
-          0 == strcmp(aProperty, NS_APP_USER_PROFILE_LOCAL_50_DIR)) {
+          0 == strcmp(aProperty, NS_APP_USER_PROFILE_LOCAL_50_DIR) ||
+          0 == strcmp(aProperty, NS_APP_PROFILE_LOCAL_DIR_STARTUP)) {
         nsCOMPtr<nsIFile> profD = GetProfileDirectory();
         NS_ENSURE_TRUE(profD, NS_ERROR_FAILURE);
 
@@ -349,8 +221,17 @@ class ScopedXPCOM : public nsIDirectoryServiceProvider2
         nsresult rv = profD->Clone(getter_AddRefs(clone));
         NS_ENSURE_SUCCESS(rv, rv);
 
-        *_persistent = PR_TRUE;
+        *_persistent = true;
         clone.forget(_result);
+        return NS_OK;
+      }
+
+      if (0 == strcmp(aProperty, NS_GRE_DIR)) {
+        nsCOMPtr<nsIFile> greD = GetGREDirectory();
+        NS_ENSURE_TRUE(greD, NS_ERROR_FAILURE);
+
+        *_persistent = true;
+        greD.forget(_result);
         return NS_OK;
       }
 
@@ -377,6 +258,7 @@ class ScopedXPCOM : public nsIDirectoryServiceProvider2
     nsIServiceManager* mServMgr;
     nsCOMPtr<nsIDirectoryServiceProvider> mDirSvcProvider;
     nsCOMPtr<nsIFile> mProfD;
+    nsCOMPtr<nsIFile> mGRED;
 };
 
 NS_IMPL_QUERY_INTERFACE2(

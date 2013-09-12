@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsIServiceManager.h"
 #include "nsIComponentRegistrar.h"
@@ -46,7 +14,7 @@
 #include "prinrval.h"
 #include "nsIFileStreams.h"
 #include "nsIFileChannel.h"
-#include "nsILocalFile.h"
+#include "nsIFile.h"
 #include "nsNetUtil.h"
 #include <stdio.h>
 
@@ -69,7 +37,7 @@ protected:
     PRIntervalTime      mStartTime;
     double              mSquares;
     double              mTotalTime;
-    PRUint32            mCount;
+    uint32_t            mCount;
     PRIntervalTime      mLastInterval;
 };
 
@@ -119,8 +87,8 @@ nsTimeSampler::PrintStats()
     double mean = mTotalTime / mCount;
     double variance = fabs(mSquares / mCount - mean * mean);
     double stddev = sqrt(variance);
-    PRUint32 imean = (PRUint32)mean;
-    PRUint32 istddev = (PRUint32)stddev;
+    uint32_t imean = (uint32_t)mean;
+    uint32_t istddev = (uint32_t)stddev;
     return PR_smprintf("%d +/- %d ms", 
                        PR_IntervalToMilliseconds(imean),
                        PR_IntervalToMilliseconds(istddev));
@@ -133,22 +101,22 @@ nsTimeSampler gTimeSampler;
 typedef nsresult (*CreateFun)(nsIRunnable* *result,
                               nsIFile* inPath, 
                               nsIFile* outPath, 
-                              PRUint32 bufferSize);
+                              uint32_t bufferSize);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 nsresult
 Copy(nsIInputStream* inStr, nsIOutputStream* outStr, 
-     char* buf, PRUint32 bufSize, PRUint32 *copyCount)
+     char* buf, uint32_t bufSize, uint32_t *copyCount)
 {
     nsresult rv;
-    while (PR_TRUE) {
-        PRUint32 count;
+    while (true) {
+        uint32_t count;
         rv = inStr->Read(buf, bufSize, &count);
         if (NS_FAILED(rv)) return rv;
         if (count == 0) break;
 
-        PRUint32 writeCount;
+        uint32_t writeCount;
         rv = outStr->Write(buf, count, &writeCount);
         if (NS_FAILED(rv)) return rv;
         NS_ASSERTION(writeCount == count, "didn't write all the data");
@@ -170,7 +138,7 @@ public:
         PRIntervalTime endTime;
         nsCOMPtr<nsIInputStream> inStr;
         nsCOMPtr<nsIOutputStream> outStr;
-        PRUint32 copyCount = 0;
+        uint32_t copyCount = 0;
 
         // Open the input stream:
         nsCOMPtr<nsIInputStream> fileIn;
@@ -204,13 +172,13 @@ public:
     NS_DECL_ISUPPORTS
 
     FileSpecWorker()
-        : mInPath(nsnull), mOutPath(nsnull), mBuffer(nsnull),
+        : mInPath(nullptr), mOutPath(nullptr), mBuffer(nullptr),
           mBufferSize(0)
     {
     }
 
     nsresult Init(nsIFile* inPath, nsIFile* outPath,
-                  PRUint32 bufferSize)
+                  uint32_t bufferSize)
     {
         mInPath = inPath;
         mOutPath = outPath;
@@ -223,10 +191,10 @@ public:
     static nsresult Create(nsIRunnable* *result,
                            nsIFile* inPath, 
                            nsIFile* outPath, 
-                           PRUint32 bufferSize)
+                           uint32_t bufferSize)
     {
         FileSpecWorker* worker = new FileSpecWorker();
-        if (worker == nsnull)
+        if (worker == nullptr)
             return NS_ERROR_OUT_OF_MEMORY;
         NS_ADDREF(worker);
 
@@ -247,7 +215,7 @@ protected:
     nsCOMPtr<nsIFile>   mInPath;
     nsCOMPtr<nsIFile>   mOutPath;
     char*               mBuffer;
-    PRUint32            mBufferSize;
+    uint32_t            mBufferSize;
 };
 
 NS_IMPL_ISUPPORTS1(FileSpecWorker, nsIRunnable)
@@ -265,7 +233,7 @@ public:
 
         PRIntervalTime startTime = PR_IntervalNow();
         PRIntervalTime endTime;
-        PRUint32 copyCount = 0;
+        uint32_t copyCount = 0;
         nsCOMPtr<nsIFileChannel> inCh;
         nsCOMPtr<nsIFileChannel> outCh;
         nsCOMPtr<nsIInputStream> inStr;
@@ -296,13 +264,13 @@ public:
     NS_DECL_ISUPPORTS
 
     FileChannelWorker()
-        : mInPath(nsnull), mOutPath(nsnull), mBuffer(nsnull),
+        : mInPath(nullptr), mOutPath(nullptr), mBuffer(nullptr),
           mBufferSize(0)
     {
     }
 
     nsresult Init(nsIFile* inPath, nsIFile* outPath,
-                  PRUint32 bufferSize)
+                  uint32_t bufferSize)
     {
         mInPath = inPath;
         mOutPath = outPath;
@@ -315,10 +283,10 @@ public:
     static nsresult Create(nsIRunnable* *result,
                            nsIFile* inPath, 
                            nsIFile* outPath, 
-                           PRUint32 bufferSize)
+                           uint32_t bufferSize)
     {
         FileChannelWorker* worker = new FileChannelWorker();
-        if (worker == nsnull)
+        if (worker == nullptr)
             return NS_ERROR_OUT_OF_MEMORY;
         NS_ADDREF(worker);
 
@@ -339,7 +307,7 @@ protected:
     nsCOMPtr<nsIFile>   mInPath;
     nsCOMPtr<nsIFile>   mOutPath;
     char*               mBuffer;
-    PRUint32            mBufferSize;
+    uint32_t            mBufferSize;
 };
 
 NS_IMPL_ISUPPORTS1(FileChannelWorker, nsIRunnable)
@@ -347,14 +315,14 @@ NS_IMPL_ISUPPORTS1(FileChannelWorker, nsIRunnable)
 ////////////////////////////////////////////////////////////////////////////////
 
 void
-Test(CreateFun create, PRUint32 count,
-     nsIFile* inDirSpec, nsIFile* outDirSpec, PRUint32 bufSize)
+Test(CreateFun create, uint32_t count,
+     nsIFile* inDirSpec, nsIFile* outDirSpec, uint32_t bufSize)
 {
     nsresult rv;
-    PRUint32 i;
+    uint32_t i;
 
-    nsCAutoString inDir;
-    nsCAutoString outDir;
+    nsAutoCString inDir;
+    nsAutoCString outDir;
     (void)inDirSpec->GetNativePath(inDir);
     (void)outDirSpec->GetNativePath(outDir);
     printf("###########\nTest: from %s to %s, bufSize = %d\n",
@@ -370,7 +338,7 @@ Test(CreateFun create, PRUint32 count,
     NS_ASSERTION(NS_SUCCEEDED(rv), "GetDirectoryEntries failed");
 
     i = 0;
-    PRBool hasMore;
+    bool hasMore;
     while (i < count && NS_SUCCEEDED(entries->HasMoreElements(&hasMore)) && hasMore) {
         nsCOMPtr<nsISupports> next;
         rv = entries->GetNext(getter_AddRefs(next));
@@ -383,19 +351,19 @@ Test(CreateFun create, PRUint32 count,
         rv = outDirSpec->Clone(getter_AddRefs(outSpec)); // don't munge the original
         if (NS_FAILED(rv)) goto done;
 
-        nsCAutoString leafName;
+        nsAutoCString leafName;
         rv = inSpec->GetNativeLeafName(leafName);
         if (NS_FAILED(rv)) goto done;
 
         rv = outSpec->AppendNative(leafName);
         if (NS_FAILED(rv)) goto done;
 
-        PRBool exists;
+        bool exists;
         rv = outSpec->Exists(&exists);
         if (NS_FAILED(rv)) goto done;
 
         if (exists) {
-            rv = outSpec->Remove(PR_FALSE);
+            rv = outSpec->Remove(false);
             if (NS_FAILED(rv)) goto done;
         }
 
@@ -410,13 +378,13 @@ Test(CreateFun create, PRUint32 count,
         rv = NS_NewThread(getter_AddRefs(thread), worker, 0, PR_JOINABLE_THREAD);
         if (NS_FAILED(rv)) goto done;
 
-        PRBool inserted = threads.InsertObjectAt(thread, i);
+        bool inserted = threads.InsertObjectAt(thread, i);
         NS_ASSERTION(inserted, "not inserted");
 
         i++;
     }
 
-    PRUint32 j;
+    uint32_t j;
     for (j = 0; j < i; j++) {
         nsIThread* thread = threads.ObjectAt(j);
         thread->Join();
@@ -450,18 +418,18 @@ main(int argc, char* argv[])
 
     {
         nsCOMPtr<nsIServiceManager> servMan;
-        NS_InitXPCOM2(getter_AddRefs(servMan), nsnull, nsnull);
+        NS_InitXPCOM2(getter_AddRefs(servMan), nullptr, nullptr);
         nsCOMPtr<nsIComponentRegistrar> registrar = do_QueryInterface(servMan);
         NS_ASSERTION(registrar, "Null nsIComponentRegistrar");
         if (registrar)
-            registrar->AutoRegister(nsnull);
+            registrar->AutoRegister(nullptr);
 
-        nsCOMPtr<nsILocalFile> inDirFile;
-        rv = NS_NewNativeLocalFile(nsDependentCString(inDir), PR_FALSE, getter_AddRefs(inDirFile));
+        nsCOMPtr<nsIFile> inDirFile;
+        rv = NS_NewNativeLocalFile(nsDependentCString(inDir), false, getter_AddRefs(inDirFile));
         if (NS_FAILED(rv)) return rv;
 
-        nsCOMPtr<nsILocalFile> outDirFile;
-        rv = NS_NewNativeLocalFile(nsDependentCString(outDir), PR_FALSE, getter_AddRefs(outDirFile));
+        nsCOMPtr<nsIFile> outDirFile;
+        rv = NS_NewNativeLocalFile(nsDependentCString(outDir), false, getter_AddRefs(outDirFile));
         if (NS_FAILED(rv)) return rv;
 
         CreateFun create = FileChannelWorker::Create;
@@ -504,7 +472,7 @@ main(int argc, char* argv[])
 #endif
     } // this scopes the nsCOMPtrs
     // no nsCOMPtrs are allowed to be alive when you call NS_ShutdownXPCOM
-    rv = NS_ShutdownXPCOM(nsnull);
+    rv = NS_ShutdownXPCOM(nullptr);
     NS_ASSERTION(NS_SUCCEEDED(rv), "NS_ShutdownXPCOM failed");
     return 0;
 }

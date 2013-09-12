@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsJSProtocolHandler_h___
 #define nsJSProtocolHandler_h___
@@ -44,6 +12,7 @@
 #include "nsIMutable.h"
 #include "nsISerializable.h"
 #include "nsIClassInfo.h"
+#include "nsSimpleURI.h"
 
 #define NS_JSPROTOCOLHANDLER_CID                     \
 { /* bfc310d2-38a0-11d3-8cd3-0060b0fc14a3 */         \
@@ -90,58 +59,42 @@ protected:
     nsCOMPtr<nsITextToSubURI>  mTextToSubURI;
 };
 
-// Use an extra base object to avoid having to manually retype all the
-// nsIURI methods.  I wish we could just inherit from nsSimpleURI instead.
-class nsJSURI_base : public nsIURI,
-                     public nsIMutable
+
+class nsJSURI : public nsSimpleURI
 {
 public:
-    nsJSURI_base(nsIURI* aSimpleURI) :
-        mSimpleURI(aSimpleURI)
+    using nsSimpleURI::Read;
+    using nsSimpleURI::Write;
+
+    nsJSURI() {}
+
+    nsJSURI(nsIURI* aBaseURI) : mBaseURI(aBaseURI) {}
+
+    nsIURI* GetBaseURI() const
     {
-        mMutable = do_QueryInterface(mSimpleURI);
-        NS_ASSERTION(aSimpleURI && mMutable, "This isn't going to work out");
-    }
-    virtual ~nsJSURI_base() {}
-
-    // For use only from deserialization
-    nsJSURI_base() {}
-    
-    NS_FORWARD_NSIURI(mSimpleURI->)
-    NS_FORWARD_NSIMUTABLE(mMutable->)
-
-protected:
-    nsCOMPtr<nsIURI> mSimpleURI;
-    nsCOMPtr<nsIMutable> mMutable;
-};
-
-class nsJSURI : public nsJSURI_base,
-                public nsISerializable,
-                public nsIClassInfo
-{
-public:
-    nsJSURI(nsIURI* aBaseURI, nsIURI* aSimpleURI) :
-        nsJSURI_base(aSimpleURI), mBaseURI(aBaseURI)
-    {}
-    virtual ~nsJSURI() {}
-
-    // For use only from deserialization
-    nsJSURI() : nsJSURI_base() {}
-
-    NS_DECL_ISUPPORTS
-    NS_DECL_NSISERIALIZABLE
-    NS_DECL_NSICLASSINFO
-
-    // Override Clone() and Equals()
-    NS_IMETHOD Clone(nsIURI** aClone);
-    NS_IMETHOD Equals(nsIURI* aOther, PRBool *aResult);
-
-    nsIURI* GetBaseURI() const {
         return mBaseURI;
     }
 
+    NS_DECL_ISUPPORTS_INHERITED
+
+    // nsIURI overrides
+    virtual nsSimpleURI* StartClone(RefHandlingEnum refHandlingMode);
+
+    // nsISerializable overrides
+    NS_IMETHOD Read(nsIObjectInputStream* aStream);
+    NS_IMETHOD Write(nsIObjectOutputStream* aStream);
+
+    // Override the nsIClassInfo method GetClassIDNoAlloc to make sure our
+    // nsISerializable impl works right.
+    NS_IMETHOD GetClassIDNoAlloc(nsCID *aClassIDNoAlloc);
+    //NS_IMETHOD QueryInterface( const nsIID& aIID, void** aInstancePtr );
+
+protected:
+    virtual nsresult EqualsInternal(nsIURI* other,
+                                    RefHandlingEnum refHandlingMode,
+                                    bool* result);
 private:
     nsCOMPtr<nsIURI> mBaseURI;
 };
-    
+
 #endif /* nsJSProtocolHandler_h___ */

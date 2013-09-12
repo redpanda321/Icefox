@@ -1,42 +1,10 @@
 /*
  * This file contains prototypes for the public SSL functions.
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-/* $Id: ssl.h,v 1.38.2.1 2010/07/31 04:33:52 wtc%google.com Exp $ */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+/* $Id: ssl.h,v 1.59 2012/09/21 21:58:43 wtc%google.com Exp $ */
 
 #ifndef __ssl_h_
 #define __ssl_h_
@@ -80,6 +48,12 @@ SSL_IMPORT PRUint16 SSL_GetNumImplementedCiphers(void);
 SSL_IMPORT PRFileDesc *SSL_ImportFD(PRFileDesc *model, PRFileDesc *fd);
 
 /*
+** Imports fd into DTLS, returning a new socket.  Copies DTLS configuration
+** from model.
+*/
+SSL_IMPORT PRFileDesc *DTLS_ImportFD(PRFileDesc *model, PRFileDesc *fd);
+
+/*
 ** Enable/disable an ssl mode
 **
 ** 	SSL_SECURITY:
@@ -100,17 +74,34 @@ SSL_IMPORT PRFileDesc *SSL_ImportFD(PRFileDesc *model, PRFileDesc *fd);
                                		  /* (off by default) */
 #define SSL_HANDSHAKE_AS_SERVER		6 /* force connect to hs as server */
                                		  /* (off by default) */
-#define SSL_ENABLE_SSL2			7 /* enable ssl v2 (on by default) */
+
+/* OBSOLETE: SSL v2 is obsolete and may be removed soon. */
+#define SSL_ENABLE_SSL2			7 /* enable ssl v2 (off by default) */
+
+/* OBSOLETE: See "SSL Version Range API" below for the replacement and a
+** description of the non-obvious semantics of using SSL_ENABLE_SSL3.
+*/
 #define SSL_ENABLE_SSL3		        8 /* enable ssl v3 (on by default) */
+
 #define SSL_NO_CACHE		        9 /* don't use the session cache */
                     		          /* (off by default) */
 #define SSL_REQUIRE_CERTIFICATE        10 /* (SSL_REQUIRE_FIRST_HANDSHAKE */
                                           /* by default) */
 #define SSL_ENABLE_FDX                 11 /* permit simultaneous read/write */
                                           /* (off by default) */
+
+/* OBSOLETE: SSL v2 compatible hellos are not accepted by some TLS servers
+** and cannot negotiate extensions. SSL v2 is obsolete. This option may be
+** removed soon.
+*/
 #define SSL_V2_COMPATIBLE_HELLO        12 /* send v3 client hello in v2 fmt */
-                                          /* (on by default) */
+                                          /* (off by default) */
+
+/* OBSOLETE: See "SSL Version Range API" below for the replacement and a
+** description of the non-obvious semantics of using SSL_ENABLE_TLS.
+*/
 #define SSL_ENABLE_TLS		       13 /* enable TLS (on by default) */
+
 #define SSL_ROLLBACK_DETECTION         14 /* for compatibility, default: on */
 #define SSL_NO_STEP_DOWN               15 /* Disable export cipher suites   */
                                           /* if step-down keys are needed.  */
@@ -140,6 +131,34 @@ SSL_IMPORT PRFileDesc *SSL_ImportFD(PRFileDesc *model, PRFileDesc *fd);
 /* bits. The advantage of False Start is that it saves a round trip for     */
 /* client-speaks-first protocols when performing a full handshake.          */
 
+/* For SSL 3.0 and TLS 1.0, by default we prevent chosen plaintext attacks
+ * on SSL CBC mode cipher suites (see RFC 4346 Section F.3) by splitting
+ * non-empty application_data records into two records; the first record has
+ * only the first byte of plaintext, and the second has the rest.
+ *
+ * This only prevents the attack in the sending direction; the connection may
+ * still be vulnerable to such attacks if the peer does not implement a similar
+ * countermeasure.
+ *
+ * This protection mechanism is on by default; the default can be overridden by
+ * setting NSS_SSL_CBC_RANDOM_IV=0 in the environment prior to execution,
+ * and/or by the application setting the option SSL_CBC_RANDOM_IV to PR_FALSE.
+ *
+ * The per-record IV in TLS 1.1 and later adds one block of overhead per
+ * record, whereas this hack will add at least two blocks of overhead per
+ * record, so TLS 1.1+ will always be more efficient.
+ *
+ * Other implementations (e.g. some versions of OpenSSL, in some
+ * configurations) prevent the same attack by prepending an empty
+ * application_data record to every application_data record they send; we do
+ * not do that because some implementations cannot handle empty
+ * application_data records. Also, we only split application_data records and
+ * not other types of records, because some implementations will not accept
+ * fragmented records of some other types (e.g. some versions of NSS do not
+ * accept fragmented alerts).
+ */
+#define SSL_CBC_RANDOM_IV 23
+
 #ifdef SSL_DEPRECATED_FUNCTION 
 /* Old deprecated function names */
 SSL_IMPORT SECStatus SSL_Enable(PRFileDesc *fd, int option, PRBool on);
@@ -152,6 +171,62 @@ SSL_IMPORT SECStatus SSL_OptionGet(PRFileDesc *fd, PRInt32 option, PRBool *on);
 SSL_IMPORT SECStatus SSL_OptionSetDefault(PRInt32 option, PRBool on);
 SSL_IMPORT SECStatus SSL_OptionGetDefault(PRInt32 option, PRBool *on);
 SSL_IMPORT SECStatus SSL_CertDBHandleSet(PRFileDesc *fd, CERTCertDBHandle *dbHandle);
+
+/* SSLNextProtoCallback is called during the handshake for the client, when a
+ * Next Protocol Negotiation (NPN) extension has been received from the server.
+ * |protos| and |protosLen| define a buffer which contains the server's
+ * advertisement. This data is guaranteed to be well formed per the NPN spec.
+ * |protoOut| is a buffer provided by the caller, of length 255 (the maximum
+ * allowed by the protocol). On successful return, the protocol to be announced
+ * to the server will be in |protoOut| and its length in |*protoOutLen|.
+ *
+ * The callback must return SECFailure or SECSuccess (not SECWouldBlock).
+ */
+typedef SECStatus (PR_CALLBACK *SSLNextProtoCallback)(
+    void *arg,
+    PRFileDesc *fd,
+    const unsigned char* protos,
+    unsigned int protosLen,
+    unsigned char* protoOut,
+    unsigned int* protoOutLen,
+    unsigned int protoMaxOut);
+
+/* SSL_SetNextProtoCallback sets a callback function to handle Next Protocol
+ * Negotiation. It causes a client to advertise NPN. */
+SSL_IMPORT SECStatus SSL_SetNextProtoCallback(PRFileDesc *fd,
+                                              SSLNextProtoCallback callback,
+                                              void *arg);
+
+/* SSL_SetNextProtoNego can be used as an alternative to
+ * SSL_SetNextProtoCallback. It also causes a client to advertise NPN and
+ * installs a default callback function which selects the first supported
+ * protocol in server-preference order. If no matching protocol is found it
+ * selects the first supported protocol.
+ *
+ * The supported protocols are specified in |data| in wire-format (8-bit
+ * length-prefixed). For example: "\010http/1.1\006spdy/2". */
+SSL_IMPORT SECStatus SSL_SetNextProtoNego(PRFileDesc *fd,
+					  const unsigned char *data,
+					  unsigned int length);
+
+typedef enum SSLNextProtoState { 
+  SSL_NEXT_PROTO_NO_SUPPORT = 0, /* No peer support                */
+  SSL_NEXT_PROTO_NEGOTIATED = 1, /* Mutual agreement               */
+  SSL_NEXT_PROTO_NO_OVERLAP = 2  /* No protocol overlap found      */
+} SSLNextProtoState;
+
+/* SSL_GetNextProto can be used in the HandshakeCallback or any time after
+ * a handshake to retrieve the result of the Next Protocol negotiation.
+ *
+ * The length of the negotiated protocol, if any, is written into *bufLen.
+ * If the negotiated protocol is longer than bufLenMax, then SECFailure is
+ * returned. Otherwise, the negotiated protocol, if any, is written into buf,
+ * and SECSuccess is returned. */
+SSL_IMPORT SECStatus SSL_GetNextProto(PRFileDesc *fd,
+				      SSLNextProtoState *state,
+				      unsigned char *buf,
+				      unsigned int *bufLen,
+				      unsigned int bufLenMax);
 
 /*
 ** Control ciphers that SSL uses. If on is non-zero then the named cipher
@@ -173,6 +248,77 @@ SSL_IMPORT SECStatus SSL_CipherPrefSetDefault(PRInt32 cipher, PRBool enabled);
 SSL_IMPORT SECStatus SSL_CipherPrefGetDefault(PRInt32 cipher, PRBool *enabled);
 SSL_IMPORT SECStatus SSL_CipherPolicySet(PRInt32 cipher, PRInt32 policy);
 SSL_IMPORT SECStatus SSL_CipherPolicyGet(PRInt32 cipher, PRInt32 *policy);
+
+/* SSL Version Range API
+**
+** This API should be used to control SSL 3.0 & TLS support instead of the
+** older SSL_Option* API; however, the SSL_Option* API MUST still be used to
+** control SSL 2.0 support. In this version of libssl, SSL 3.0 and TLS 1.0 are
+** enabled by default. Future versions of libssl may change which versions of
+** the protocol are enabled by default.
+**
+** The SSLProtocolVariant enum indicates whether the protocol is of type
+** stream or datagram. This must be provided to the functions that do not
+** take an fd. Functions which take an fd will get the variant from the fd,
+** which is typed.
+**
+** Using the new version range API in conjunction with the older
+** SSL_OptionSet-based API for controlling the enabled protocol versions may
+** cause unexpected results. Going forward, we guarantee only the following:
+**
+** SSL_OptionGet(SSL_ENABLE_TLS) will return PR_TRUE if *ANY* versions of TLS
+** are enabled.
+**
+** SSL_OptionSet(SSL_ENABLE_TLS, PR_FALSE) will disable *ALL* versions of TLS,
+** including TLS 1.0 and later.
+**
+** The above two properties provide compatibility for applications that use
+** SSL_OptionSet to implement the insecure fallback from TLS 1.x to SSL 3.0.
+**
+** SSL_OptionSet(SSL_ENABLE_TLS, PR_TRUE) will enable TLS 1.0, and may also
+** enable some later versions of TLS, if it is necessary to do so in order to
+** keep the set of enabled versions contiguous. For example, if TLS 1.2 is
+** enabled, then after SSL_OptionSet(SSL_ENABLE_TLS, PR_TRUE), TLS 1.0,
+** TLS 1.1, and TLS 1.2 will be enabled, and the call will have no effect on
+** whether SSL 3.0 is enabled. If no later versions of TLS are enabled at the
+** time SSL_OptionSet(SSL_ENABLE_TLS, PR_TRUE) is called, then no later
+** versions of TLS will be enabled by the call.
+**
+** SSL_OptionSet(SSL_ENABLE_SSL3, PR_FALSE) will disable SSL 3.0, and will not
+** change the set of TLS versions that are enabled.
+**
+** SSL_OptionSet(SSL_ENABLE_SSL3, PR_TRUE) will enable SSL 3.0, and may also
+** enable some versions of TLS if TLS 1.1 or later is enabled at the time of
+** the call, the same way SSL_OptionSet(SSL_ENABLE_TLS, PR_TRUE) works, in
+** order to keep the set of enabled versions contiguous.
+*/
+
+/* Returns, in |*vrange|, the range of SSL3/TLS versions supported for the
+** given protocol variant by the version of libssl linked-to at runtime.
+*/
+SSL_IMPORT SECStatus SSL_VersionRangeGetSupported(
+    SSLProtocolVariant protocolVariant, SSLVersionRange *vrange);
+
+/* Returns, in |*vrange|, the range of SSL3/TLS versions enabled by default
+** for the given protocol variant.
+*/
+SSL_IMPORT SECStatus SSL_VersionRangeGetDefault(
+    SSLProtocolVariant protocolVariant, SSLVersionRange *vrange);
+
+/* Sets the range of enabled-by-default SSL3/TLS versions for the given
+** protocol variant to |*vrange|.
+*/
+SSL_IMPORT SECStatus SSL_VersionRangeSetDefault(
+    SSLProtocolVariant protocolVariant, const SSLVersionRange *vrange);
+
+/* Returns, in |*vrange|, the range of enabled SSL3/TLS versions for |fd|. */
+SSL_IMPORT SECStatus SSL_VersionRangeGet(PRFileDesc *fd,
+					 SSLVersionRange *vrange);
+
+/* Sets the range of enabled SSL3/TLS versions for |fd| to |*vrange|. */
+SSL_IMPORT SECStatus SSL_VersionRangeSet(PRFileDesc *fd,
+					 const SSLVersionRange *vrange);
+
 
 /* Values for "policy" argument to SSL_PolicySet */
 /* Values returned by SSL_CipherPolicyGet. */
@@ -255,6 +401,22 @@ SSL_IMPORT CERTCertificate *SSL_PeerCertificate(PRFileDesc *fd);
 ** Authenticate certificate hook. Called when a certificate comes in
 ** (because of SSL_REQUIRE_CERTIFICATE in SSL_Enable) to authenticate the
 ** certificate.
+**
+** The authenticate certificate hook must return SECSuccess to indicate the
+** certificate is valid, SECFailure to indicate the certificate is invalid,
+** or SECWouldBlock if the application will authenticate the certificate
+** asynchronously. SECWouldBlock is only supported for non-blocking sockets.
+**
+** If the authenticate certificate hook returns SECFailure, then the bad cert
+** hook will be called. The bad cert handler is NEVER called if the
+** authenticate certificate hook returns SECWouldBlock. If the application
+** needs to handle and/or override a bad cert, it should do so before it
+** calls SSL_AuthCertificateComplete (modifying the error it passes to
+** SSL_AuthCertificateComplete as needed).
+**
+** See the documentation for SSL_AuthCertificateComplete for more information
+** about the asynchronous behavior that occurs when the authenticate
+** certificate hook returns SECWouldBlock.
 */
 typedef SECStatus (PR_CALLBACK *SSLAuthCertificate)(void *arg, PRFileDesc *fd, 
                                                     PRBool checkSig,
@@ -358,6 +520,16 @@ SSL_IMPORT SECStatus SSL_SetPKCS11PinArg(PRFileDesc *fd, void *a);
 ** This is a callback for dealing with server certs that are not authenticated
 ** by the client.  The client app can decide that it actually likes the
 ** cert by some external means and restart the connection.
+**
+** The bad cert hook must return SECSuccess to override the result of the
+** authenticate certificate hook, SECFailure if the certificate should still be
+** considered invalid, or SECWouldBlock if the application will authenticate
+** the certificate asynchronously. SECWouldBlock is only supported for
+** non-blocking sockets.
+**
+** See the documentation for SSL_AuthCertificateComplete for more information
+** about the asynchronous behavior that occurs when the bad cert hook returns
+** SECWouldBlock.
 */
 typedef SECStatus (PR_CALLBACK *SSLBadCertHandler)(void *arg, PRFileDesc *fd);
 SSL_IMPORT SECStatus SSL_BadCertHook(PRFileDesc *fd, SSLBadCertHandler f, 
@@ -371,6 +543,15 @@ SSL_IMPORT SECStatus SSL_BadCertHook(PRFileDesc *fd, SSLBadCertHandler f,
 SSL_IMPORT SECStatus SSL_ConfigSecureServer(
 				PRFileDesc *fd, CERTCertificate *cert,
 				SECKEYPrivateKey *key, SSLKEAType kea);
+
+/*
+** Allows SSL socket configuration with caller-supplied certificate chain.
+** If certChainOpt is NULL, tries to find one.
+*/
+SSL_IMPORT SECStatus
+SSL_ConfigSecureServerWithCertChain(PRFileDesc *fd, CERTCertificate *cert,
+                                    const CERTCertificateList *certChainOpt,
+                                    SECKEYPrivateKey *key, SSLKEAType kea);
 
 /*
 ** Configure a secure server's session-id cache. Define the maximum number
@@ -537,6 +718,28 @@ NSS_GetClientAuthData(void *                       arg,
                       struct SECKEYPrivateKeyStr **pRetKey);
 
 /*
+** Configure DTLS-SRTP (RFC 5764) cipher suite preferences.
+** Input is a list of ciphers in descending preference order and a length
+** of the list. As a side effect, this causes the use_srtp extension to be
+** negotiated.
+**
+** Invalid or unimplemented cipher suites in |ciphers| are ignored. If at
+** least one cipher suite in |ciphers| is implemented, returns SECSuccess.
+** Otherwise returns SECFailure.
+*/
+SSL_IMPORT SECStatus SSL_SetSRTPCiphers(PRFileDesc *fd,
+					const PRUint16 *ciphers,
+					unsigned int numCiphers);
+
+/*
+** Get the selected DTLS-SRTP cipher suite (if any).
+** To be called after the handshake completes.
+** Returns SECFailure if not negotiated.
+*/
+SSL_IMPORT SECStatus SSL_GetSRTPCipher(PRFileDesc *fd,
+				       PRUint16 *cipher);
+
+/*
  * Look to see if any of the signers in the cert chain for "cert" are found
  * in the list of caNames.  
  * Returns SECSuccess if so, SECFailure if not.
@@ -585,6 +788,21 @@ SSL_IMPORT SECStatus SSL_GetCipherSuiteInfo(PRUint16 cipherSuite,
 /* Returnes negotiated through SNI host info. */
 SSL_IMPORT SECItem *SSL_GetNegotiatedHostInfo(PRFileDesc *fd);
 
+/* Export keying material according to RFC 5705.
+** fd must correspond to a TLS 1.0 or higher socket and out must
+** already be allocated. If hasContext is false, it uses the no-context
+** construction from the RFC and ignores the context and contextLen
+** arguments.
+*/
+SSL_IMPORT SECStatus SSL_ExportKeyingMaterial(PRFileDesc *fd,
+                                              const char *label,
+                                              unsigned int labelLen,
+                                              PRBool hasContext,
+                                              const unsigned char *context,
+                                              unsigned int contextLen,
+                                              unsigned char *out,
+                                              unsigned int outLen);
+
 /*
 ** Return a new reference to the certificate that was most recently sent
 ** to the peer on this SSL/TLS connection, or NULL if none has been sent.
@@ -630,6 +848,93 @@ SSL_IMPORT SECStatus SSL_HandshakeNegotiatedExtension(PRFileDesc * socket,
                                                       SSLExtensionType extId,
                                                       PRBool *yes);
 
+/*
+** How long should we wait before retransmitting the next flight of
+** the DTLS handshake? Returns SECFailure if not DTLS or not in a
+** handshake.
+*/
+SSL_IMPORT SECStatus DTLS_GetHandshakeTimeout(PRFileDesc *socket,
+                                              PRIntervalTime *timeout);
+
+/*
+ * Return a boolean that indicates whether the underlying library
+ * will perform as the caller expects.
+ *
+ * The only argument is a string, which should be the version
+ * identifier of the NSS library. That string will be compared
+ * against a string that represents the actual build version of
+ * the SSL library.
+ */
+extern PRBool NSSSSL_VersionCheck(const char *importedVersion);
+
+/*
+ * Returns a const string of the SSL library version.
+ */
+extern const char *NSSSSL_GetVersion(void);
+
+/* Restart an SSL connection that was paused to do asynchronous certificate
+ * chain validation (when the auth certificate hook or bad cert handler
+ * returned SECWouldBlock).
+ *
+ * This function only works for non-blocking sockets; Do not use it for
+ * blocking sockets. Currently, this function works only for the client role of
+ * a connection; it does not work for the server role.
+ *
+ * The application must call SSL_AuthCertificateComplete with 0 as the value of
+ * the error parameter after it has successfully validated the peer's
+ * certificate, in order to continue the SSL handshake.
+ *
+ * The application may call SSL_AuthCertificateComplete with a non-zero value
+ * for error (e.g. SEC_ERROR_REVOKED_CERTIFICATE) when certificate validation
+ * fails, before it closes the connection. If the application does so, an
+ * alert corresponding to the error (e.g. certificate_revoked) will be sent to
+ * the peer. See the source code of the internal function
+ * ssl3_SendAlertForCertError for the current mapping of error to alert. This
+ * mapping may change in future versions of libssl.
+ *
+ * This function will not complete the entire handshake. The application must
+ * call SSL_ForceHandshake, PR_Recv, PR_Send, etc. after calling this function
+ * to force the handshake to complete.
+ *
+ * On the first handshake of a connection, libssl will wait for the peer's
+ * certificate to be authenticated before calling the handshake callback,
+ * sending a client certificate, sending any application data, or returning
+ * any application data to the application. On subsequent (renegotiation)
+ * handshakes, libssl will block the handshake unconditionally while the
+ * certificate is being validated.
+ *
+ * libssl may send and receive handshake messages while waiting for the
+ * application to call SSL_AuthCertificateComplete, and it may call other
+ * callbacks (e.g, the client auth data hook) before
+ * SSL_AuthCertificateComplete has been called.
+ *
+ * An application that uses this asynchronous mechanism will usually have lower
+ * handshake latency if it has to do public key operations on the certificate
+ * chain and/or CRL/OCSP/cert fetching during the authentication, especially if
+ * it does so in parallel on another thread. However, if the application can
+ * authenticate the peer's certificate quickly then it may be more efficient
+ * to use the synchronous mechanism (i.e. returning SECFailure/SECSuccess
+ * instead of SECWouldBlock from the authenticate certificate hook).
+ *
+ * Be careful about converting an application from synchronous cert validation
+ * to asynchronous certificate validation. A naive conversion is likely to
+ * result in deadlocks; e.g. the application will wait in PR_Poll for network
+ * I/O on the connection while all network I/O on the connection is blocked
+ * waiting for this function to be called.
+ *
+ * Returns SECFailure on failure, SECSuccess on success. Never returns
+ * SECWouldBlock. Note that SSL_AuthCertificateComplete will (usually) return
+ * SECSuccess; do not interpret the return value of SSL_AuthCertificateComplete
+ * as an indicator of whether it is OK to continue using the connection. For
+ * example, SSL_AuthCertificateComplete(fd, SEC_ERROR_REVOKED_CERTIFICATE) will
+ * return SECSuccess (normally), but that does not mean that the application
+ * should continue using the connection. If the application passes a non-zero
+ * value for second argument (error), or if SSL_AuthCertificateComplete returns
+ * anything other than SECSuccess, then the application should close the
+ * connection.
+ */
+SSL_IMPORT SECStatus SSL_AuthCertificateComplete(PRFileDesc *fd,
+						 PRErrorCode error);
 SEC_END_PROTOS
 
 #endif /* __ssl_h_ */

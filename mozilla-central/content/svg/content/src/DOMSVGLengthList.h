@@ -1,49 +1,21 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla SVG Project code.
- *
- * The Initial Developer of the Original Code is the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef MOZILLA_DOMSVGLENGTHLIST_H__
 #define MOZILLA_DOMSVGLENGTHLIST_H__
 
-#include "nsIDOMSVGLengthList.h"
-#include "SVGLengthList.h"
-#include "SVGLength.h"
 #include "DOMSVGAnimatedLengthList.h"
-#include "nsCOMArray.h"
 #include "nsAutoPtr.h"
+#include "nsCycleCollectionParticipant.h"
+#include "nsDebug.h"
+#include "nsTArray.h"
+#include "SVGLengthList.h"
+#include "mozilla/Attributes.h"
+#include "mozilla/ErrorResult.h"
 
+class nsIDOMSVGLength;
 class nsSVGElement;
 
 namespace mozilla {
@@ -67,26 +39,27 @@ class DOMSVGLength;
  *
  * Our DOM items are created lazily on demand as and when script requests them.
  */
-class DOMSVGLengthList : public nsIDOMSVGLengthList
+class DOMSVGLengthList MOZ_FINAL : public nsISupports,
+                                   public nsWrapperCache
 {
   friend class DOMSVGLength;
 
 public:
   NS_DECL_CYCLE_COLLECTING_ISUPPORTS
-  NS_DECL_CYCLE_COLLECTION_CLASS(DOMSVGLengthList)
-  NS_DECL_NSIDOMSVGLENGTHLIST
+  NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_CLASS(DOMSVGLengthList)
 
-  DOMSVGLengthList(DOMSVGAnimatedLengthList *aAList)
+  DOMSVGLengthList(DOMSVGAnimatedLengthList *aAList,
+                   const SVGLengthList &aInternalList)
     : mAList(aAList)
   {
-    // We silently ignore SetLength OOM failure since being out of sync is safe
-    // so long as we have *fewer* items than our internal list.
+    SetIsDOMBinding();
 
-    mItems.SetLength(InternalList().Length());
-    for (PRUint32 i = 0; i < Length(); ++i) {
-      // null out all the pointers - items are created on-demand
-      mItems[i] = nsnull;
-    }
+    // aInternalList must be passed in explicitly because we can't use
+    // InternalList() here. (Because it depends on IsAnimValList, which depends
+    // on this object having been assigned to aAList's mBaseVal or mAnimVal,
+    // which hasn't happend yet.)
+    
+    InternalListLengthWillChange(aInternalList.Length()); // Sync mItems
   }
 
   ~DOMSVGLengthList() {
@@ -94,56 +67,107 @@ public:
     // unlinked us using the cycle collector code, then that has already
     // happened, and mAList is null.
     if (mAList) {
-      ( IsAnimValList() ? mAList->mAnimVal : mAList->mBaseVal ) = nsnull;
+      ( IsAnimValList() ? mAList->mAnimVal : mAList->mBaseVal ) = nullptr;
     }
-  };
+  }
+
+  virtual JSObject* WrapObject(JSContext *cx, JSObject *scope,
+                               bool *triedToWrap);
+
+  nsISupports* GetParentObject()
+  {
+    return static_cast<nsIContent*>(Element());
+  }
 
   /**
    * This will normally be the same as InternalList().Length(), except if we've
    * hit OOM in which case our length will be zero.
    */
-  PRUint32 Length() const {
+  uint32_t LengthNoFlush() const {
     NS_ABORT_IF_FALSE(mItems.Length() == 0 ||
-                      mItems.Length() ==
-                        const_cast<DOMSVGLengthList*>(this)->InternalList().Length(),
+                      mItems.Length() == InternalList().Length(),
                       "DOM wrapper's list length is out of sync");
     return mItems.Length();
   }
 
   /// Called to notify us to syncronize our length and detach excess items.
-  void InternalListLengthWillChange(PRUint32 aNewLength);
+  void InternalListLengthWillChange(uint32_t aNewLength);
+
+  uint32_t NumberOfItems() const
+  {
+    if (IsAnimValList()) {
+      Element()->FlushAnimations();
+    }
+    return LengthNoFlush();
+  }
+  void Clear(ErrorResult& aError);
+  already_AddRefed<nsIDOMSVGLength> Initialize(nsIDOMSVGLength *newItem,
+                                               ErrorResult& error);
+  nsIDOMSVGLength* GetItem(uint32_t index, ErrorResult& error)
+  {
+    bool found;
+    nsIDOMSVGLength* item = IndexedGetter(index, found, error);
+    if (!found) {
+      error.Throw(NS_ERROR_DOM_INDEX_SIZE_ERR);
+    }
+    return item;
+  }
+  nsIDOMSVGLength* IndexedGetter(uint32_t index, bool& found,
+                                 ErrorResult& error);
+  already_AddRefed<nsIDOMSVGLength> InsertItemBefore(nsIDOMSVGLength *newItem,
+                                                     uint32_t index,
+                                                     ErrorResult& error);
+  already_AddRefed<nsIDOMSVGLength> ReplaceItem(nsIDOMSVGLength *newItem,
+                                                uint32_t index,
+                                                ErrorResult& error);
+  already_AddRefed<nsIDOMSVGLength> RemoveItem(uint32_t index,
+                                               ErrorResult& error);
+  already_AddRefed<nsIDOMSVGLength> AppendItem(nsIDOMSVGLength *newItem,
+                                               ErrorResult& error)
+  {
+    return InsertItemBefore(newItem, LengthNoFlush(), error);
+  }
+  uint32_t Length() const
+  {
+    return NumberOfItems();
+  }
 
 private:
 
-  nsSVGElement* Element() {
+  nsSVGElement* Element() const {
     return mAList->mElement;
   }
 
-  PRUint8 AttrEnum() const {
+  uint8_t AttrEnum() const {
     return mAList->mAttrEnum;
   }
 
-  PRUint8 Axis() const {
+  uint8_t Axis() const {
     return mAList->mAxis;
   }
 
   /// Used to determine if this list is the baseVal or animVal list.
-  PRBool IsAnimValList() const {
+  bool IsAnimValList() const {
+    NS_ABORT_IF_FALSE(this == mAList->mBaseVal || this == mAList->mAnimVal,
+                      "Calling IsAnimValList() too early?!");
     return this == mAList->mAnimVal;
   }
 
   /**
    * Get a reference to this object's corresponding internal SVGLengthList.
    *
-   * To simplyfy the code we just have this one method for obtaining both
+   * To simplify the code we just have this one method for obtaining both
    * baseVal and animVal internal lists. This means that animVal lists don't
    * get const protection, but our setter methods guard against changing
    * animVal lists.
    */
-  SVGLengthList& InternalList();
+  SVGLengthList& InternalList() const;
 
   /// Creates a DOMSVGLength for aIndex, if it doesn't already exist.
-  void EnsureItemAt(PRUint32 aIndex);
+  void EnsureItemAt(uint32_t aIndex);
+
+  void MaybeInsertNullInAnimValListAt(uint32_t aIndex);
+  void MaybeRemoveItemFromAnimValListAt(uint32_t aIndex);
 
   // Weak refs to our DOMSVGLength items. The items are friends and take care
   // of clearing our pointer to them when they die.

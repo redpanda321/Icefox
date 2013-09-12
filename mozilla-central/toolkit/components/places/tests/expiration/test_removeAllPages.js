@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  * vim: sw=2 ts=2 et lcs=trail\:.,tab\:>~ :
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Places Unit Tests.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Marco Bonardo <mak77@bonardo.net> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  * What this is aimed to test:
@@ -88,7 +55,7 @@ function add_old_anno(aIdentifier, aName, aValue, aExpirePolicy,
           "WHERE id = ( " +
             "SELECT a.id FROM moz_annos a " +
             "JOIN moz_anno_attributes n ON n.id = a.anno_attribute_id " +
-            "JOIN moz_places_view h on h.id = a.place_id " +
+            "JOIN moz_places h on h.id = a.place_id " +
             "WHERE h.url = :id " +
             "AND n.name = :anno_name " +
             "ORDER BY a.dateAdded DESC LIMIT 1 " +
@@ -112,6 +79,10 @@ function add_old_anno(aIdentifier, aName, aValue, aExpirePolicy,
 }
 
 function run_test() {
+  run_next_test();
+}
+
+add_task(function test_removeAllPages() {
   // Set interval to a large value so we don't expire on it.
   setInterval(3600); // 1h
 
@@ -122,7 +93,7 @@ function run_test() {
   for (let i = 0; i < 5; i++) {
     let pageURI = uri("http://item_anno." + i + ".mozilla.org/");
     // This visit will be expired.
-    hs.addVisit(pageURI, now++, null, hs.TRANSITION_TYPED, false, 0);
+    yield promiseAddVisits({ uri: pageURI, visitDate: now++ });
     let id = bs.insertBookmark(bs.unfiledBookmarksFolder, pageURI,
                                bs.DEFAULT_INDEX, null);
     // Will persist because it's an EXPIRE_NEVER item anno.
@@ -147,7 +118,7 @@ function run_test() {
     // All page annotations related to these expired pages are expected to
     // expire as well.
     let pageURI = uri("http://page_anno." + i + ".mozilla.org/");
-    hs.addVisit(pageURI, now++, null, hs.TRANSITION_TYPED, false, 0);
+    yield promiseAddVisits({ uri: pageURI, visitDate: now++ });
     as.setPageAnnotation(pageURI, "expire", "test", 0, as.EXPIRE_NEVER);
     as.setPageAnnotation(pageURI, "expire_session", "test", 0, as.EXPIRE_SESSION);
     add_old_anno(pageURI, "expire_days", "test", as.EXPIRE_DAYS, 8);
@@ -155,43 +126,37 @@ function run_test() {
     add_old_anno(pageURI, "expire_months", "test", as.EXPIRE_MONTHS, 181);
   }
 
-  // Observe expirations.
-  observer = {
-    observe: function(aSubject, aTopic, aData) {
-      Services.obs.removeObserver(observer, PlacesUtils.TOPIC_EXPIRATION_FINISHED);
-
-      ["expire_days", "expire_weeks", "expire_months", "expire_session",
-       "expire"].forEach(function(aAnno) {
-        let pages = as.getPagesWithAnnotation(aAnno);
-        do_check_eq(pages.length, 0);
-      });
-
-      ["expire_days", "expire_weeks", "expire_months", "expire_session",
-       "expire"].forEach(function(aAnno) {
-        let items = as.getItemsWithAnnotation(aAnno);
-        do_check_eq(items.length, 0);
-      });
-
-      ["persist"].forEach(function(aAnno) {
-        let pages = as.getPagesWithAnnotation(aAnno);
-        do_check_eq(pages.length, 5);
-      });
-
-      ["persist"].forEach(function(aAnno) {
-        let items = as.getItemsWithAnnotation(aAnno);
-        do_check_eq(items.length, 5);
-        items.forEach(function(aItemId) {
-          // Check item exists.
-          bs.getItemIndex(aItemId);
-        });
-      });
-
-      do_test_finished();
-    }
-  };
-  Services.obs.addObserver(observer, PlacesUtils.TOPIC_EXPIRATION_FINISHED, false);
-
-  // Expire all visits for the bookmarks.
+  // Expire all visits for the bookmarks.  This does the same thing as the
+  // promiseClearHistory helper, but it is made explicit here because
+  // removeAllPages is the function we are testing.
+  let promise =
+      promiseTopicObserved(PlacesUtils.TOPIC_EXPIRATION_FINISHED);
   hs.QueryInterface(Ci.nsIBrowserHistory).removeAllPages();
-  do_test_pending();
-}
+  yield promise;
+
+  ["expire_days", "expire_weeks", "expire_months", "expire_session",
+   "expire"].forEach(function(aAnno) {
+    let pages = as.getPagesWithAnnotation(aAnno);
+    do_check_eq(pages.length, 0);
+  });
+
+  ["expire_days", "expire_weeks", "expire_months", "expire_session",
+   "expire"].forEach(function(aAnno) {
+    let items = as.getItemsWithAnnotation(aAnno);
+    do_check_eq(items.length, 0);
+  });
+
+  ["persist"].forEach(function(aAnno) {
+    let pages = as.getPagesWithAnnotation(aAnno);
+    do_check_eq(pages.length, 5);
+  });
+
+  ["persist"].forEach(function(aAnno) {
+    let items = as.getItemsWithAnnotation(aAnno);
+    do_check_eq(items.length, 5);
+    items.forEach(function(aItemId) {
+      // Check item exists.
+      bs.getItemIndex(aItemId);
+    });
+  });
+});

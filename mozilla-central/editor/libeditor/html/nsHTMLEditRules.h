@@ -1,69 +1,57 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Daniel Glazman <glazman@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsHTMLEditRules_h__
 #define nsHTMLEditRules_h__
 
-#include "nsTextEditRules.h"
-#include "nsIHTMLEditRules.h"
-#include "nsIEditActionListener.h"
-#include "nsCOMArray.h"
-#include "nsCOMPtr.h"
-#include "nsString.h"
-#include "nsEditorUtils.h"
 #include "TypeInState.h"
-#include "nsReadableUtils.h"
+#include "nsAutoPtr.h"
+#include "nsCOMPtr.h"
+#include "nsEditor.h"
+#include "nsIEditActionListener.h"
+#include "nsIEditor.h"
+#include "nsIHTMLEditor.h"
+#include "nsISupportsImpl.h"
+#include "nsSelectionState.h"
 #include "nsTArray.h"
+#include "nsTextEditRules.h"
+#include "nsTraceRefcnt.h"
+#include "nscore.h"
 
-class nsIDOMElement;
-class nsIEditor;
 class nsHTMLEditor;
+class nsIAtom;
+class nsIDOMCharacterData;
+class nsIDOMDocument;
+class nsIDOMElement;
+class nsIDOMNode;
+class nsIDOMRange;
+class nsIEditor;
+class nsINode;
+class nsISelection;
+class nsPlaintextEditor;
+class nsRange;
+class nsRulesInfo;
+namespace mozilla {
+class Selection;
+namespace dom {
+class Element;
+}  // namespace dom
+}  // namespace mozilla
+struct DOMPoint;
+template <class E> class nsCOMArray;
 
 struct StyleCache : public PropItem
 {
-  PRBool mPresent;
+  bool mPresent;
   
-  StyleCache() : PropItem(), mPresent(PR_FALSE) {
+  StyleCache() : PropItem(), mPresent(false) {
     MOZ_COUNT_CTOR(StyleCache);
   }
 
   StyleCache(nsIAtom *aTag, const nsAString &aAttr, const nsAString &aValue) : 
-             PropItem(aTag, aAttr, aValue), mPresent(PR_FALSE) {
+             PropItem(aTag, aAttr, aValue), mPresent(false) {
     MOZ_COUNT_CTOR(StyleCache);
   }
 
@@ -75,7 +63,7 @@ struct StyleCache : public PropItem
 
 #define SIZE_STYLE_TABLE 19
 
-class nsHTMLEditRules : public nsTextEditRules, public nsIHTMLEditRules, public nsIEditActionListener
+class nsHTMLEditRules : public nsTextEditRules, public nsIEditActionListener
 {
 public:
 
@@ -88,38 +76,38 @@ public:
   // nsIEditRules methods
   NS_IMETHOD Init(nsPlaintextEditor *aEditor);
   NS_IMETHOD DetachEditor();
-  NS_IMETHOD BeforeEdit(PRInt32 action, nsIEditor::EDirection aDirection);
-  NS_IMETHOD AfterEdit(PRInt32 action, nsIEditor::EDirection aDirection);
-  NS_IMETHOD WillDoAction(nsISelection *aSelection, nsRulesInfo *aInfo, PRBool *aCancel, PRBool *aHandled);
+  NS_IMETHOD BeforeEdit(EditAction action,
+                        nsIEditor::EDirection aDirection);
+  NS_IMETHOD AfterEdit(EditAction action,
+                       nsIEditor::EDirection aDirection);
+  NS_IMETHOD WillDoAction(mozilla::Selection* aSelection, nsRulesInfo* aInfo,
+                          bool* aCancel, bool* aHandled);
   NS_IMETHOD DidDoAction(nsISelection *aSelection, nsRulesInfo *aInfo, nsresult aResult);
+  NS_IMETHOD DocumentModified();
 
-  // nsIHTMLEditRules methods
-  
-  NS_IMETHOD GetListState(PRBool *aMixed, PRBool *aOL, PRBool *aUL, PRBool *aDL);
-  NS_IMETHOD GetListItemState(PRBool *aMixed, PRBool *aLI, PRBool *aDT, PRBool *aDD);
-  NS_IMETHOD GetIndentState(PRBool *aCanIndent, PRBool *aCanOutdent);
-  NS_IMETHOD GetAlignment(PRBool *aMixed, nsIHTMLEditor::EAlignment *aAlign);
-  NS_IMETHOD GetParagraphState(PRBool *aMixed, nsAString &outFormat);
-  NS_IMETHOD MakeSureElemStartsOrEndsOnCR(nsIDOMNode *aNode);
+  nsresult GetListState(bool *aMixed, bool *aOL, bool *aUL, bool *aDL);
+  nsresult GetListItemState(bool *aMixed, bool *aLI, bool *aDT, bool *aDD);
+  nsresult GetIndentState(bool *aCanIndent, bool *aCanOutdent);
+  nsresult GetAlignment(bool *aMixed, nsIHTMLEditor::EAlignment *aAlign);
+  nsresult GetParagraphState(bool *aMixed, nsAString &outFormat);
+  nsresult MakeSureElemStartsOrEndsOnCR(nsIDOMNode *aNode);
 
   // nsIEditActionListener methods
   
-  NS_IMETHOD WillCreateNode(const nsAString& aTag, nsIDOMNode *aParent, PRInt32 aPosition);
-  NS_IMETHOD DidCreateNode(const nsAString& aTag, nsIDOMNode *aNode, nsIDOMNode *aParent, PRInt32 aPosition, nsresult aResult);
-  NS_IMETHOD WillInsertNode(nsIDOMNode *aNode, nsIDOMNode *aParent, PRInt32 aPosition);
-  NS_IMETHOD DidInsertNode(nsIDOMNode *aNode, nsIDOMNode *aParent, PRInt32 aPosition, nsresult aResult);
+  NS_IMETHOD WillCreateNode(const nsAString& aTag, nsIDOMNode *aParent, int32_t aPosition);
+  NS_IMETHOD DidCreateNode(const nsAString& aTag, nsIDOMNode *aNode, nsIDOMNode *aParent, int32_t aPosition, nsresult aResult);
+  NS_IMETHOD WillInsertNode(nsIDOMNode *aNode, nsIDOMNode *aParent, int32_t aPosition);
+  NS_IMETHOD DidInsertNode(nsIDOMNode *aNode, nsIDOMNode *aParent, int32_t aPosition, nsresult aResult);
   NS_IMETHOD WillDeleteNode(nsIDOMNode *aChild);
   NS_IMETHOD DidDeleteNode(nsIDOMNode *aChild, nsresult aResult);
-  NS_IMETHOD WillSplitNode(nsIDOMNode *aExistingRightNode, PRInt32 aOffset);
-  NS_IMETHOD DidSplitNode(nsIDOMNode *aExistingRightNode, PRInt32 aOffset, nsIDOMNode *aNewLeftNode, nsresult aResult);
+  NS_IMETHOD WillSplitNode(nsIDOMNode *aExistingRightNode, int32_t aOffset);
+  NS_IMETHOD DidSplitNode(nsIDOMNode *aExistingRightNode, int32_t aOffset, nsIDOMNode *aNewLeftNode, nsresult aResult);
   NS_IMETHOD WillJoinNodes(nsIDOMNode *aLeftNode, nsIDOMNode *aRightNode, nsIDOMNode *aParent);
   NS_IMETHOD DidJoinNodes(nsIDOMNode  *aLeftNode, nsIDOMNode *aRightNode, nsIDOMNode *aParent, nsresult aResult);
-  NS_IMETHOD WillInsertText(nsIDOMCharacterData *aTextNode, PRInt32 aOffset, const nsAString &aString);
-  NS_IMETHOD DidInsertText(nsIDOMCharacterData *aTextNode, PRInt32 aOffset, const nsAString &aString, nsresult aResult);
-  NS_IMETHOD WillDeleteText(nsIDOMCharacterData *aTextNode, PRInt32 aOffset, PRInt32 aLength);
-  NS_IMETHOD DidDeleteText(nsIDOMCharacterData *aTextNode, PRInt32 aOffset, PRInt32 aLength, nsresult aResult);
-  NS_IMETHOD WillDeleteRange(nsIDOMRange *aRange);
-  NS_IMETHOD DidDeleteRange(nsIDOMRange *aRange);
+  NS_IMETHOD WillInsertText(nsIDOMCharacterData *aTextNode, int32_t aOffset, const nsAString &aString);
+  NS_IMETHOD DidInsertText(nsIDOMCharacterData *aTextNode, int32_t aOffset, const nsAString &aString, nsresult aResult);
+  NS_IMETHOD WillDeleteText(nsIDOMCharacterData *aTextNode, int32_t aOffset, int32_t aLength);
+  NS_IMETHOD DidDeleteText(nsIDOMCharacterData *aTextNode, int32_t aOffset, int32_t aLength, nsresult aResult);
   NS_IMETHOD WillDeleteSelection(nsISelection *aSelection);
   NS_IMETHOD DidDeleteSelection(nsISelection *aSelection);
 
@@ -138,65 +126,89 @@ protected:
   };
 
   // nsHTMLEditRules implementation methods
-  nsresult WillInsert(nsISelection *aSelection, PRBool *aCancel);
-#ifdef XXX_DEAD_CODE
-  nsresult DidInsert(nsISelection *aSelection, nsresult aResult);
-#endif
-  nsresult WillInsertText(  PRInt32          aAction,
-                            nsISelection *aSelection, 
-                            PRBool          *aCancel,
-                            PRBool          *aHandled,
+  nsresult WillInsert(nsISelection *aSelection, bool *aCancel);
+  nsresult WillInsertText(  EditAction aAction,
+                            mozilla::Selection* aSelection,
+                            bool            *aCancel,
+                            bool            *aHandled,
                             const nsAString *inString,
                             nsAString       *outString,
-                            PRInt32          aMaxLength);
-  nsresult WillLoadHTML(nsISelection *aSelection, PRBool *aCancel);
-  nsresult WillInsertBreak(nsISelection *aSelection, PRBool *aCancel, PRBool *aHandled);
-  nsresult StandardBreakImpl(nsIDOMNode *aNode, PRInt32 aOffset, nsISelection *aSelection);
+                            int32_t          aMaxLength);
+  nsresult WillLoadHTML(nsISelection *aSelection, bool *aCancel);
+  nsresult WillInsertBreak(mozilla::Selection* aSelection,
+                           bool* aCancel, bool* aHandled);
+  nsresult StandardBreakImpl(nsIDOMNode *aNode, int32_t aOffset, nsISelection *aSelection);
   nsresult DidInsertBreak(nsISelection *aSelection, nsresult aResult);
-  nsresult SplitMailCites(nsISelection *aSelection, PRBool aPlaintext, PRBool *aHandled);
-  nsresult WillDeleteSelection(nsISelection *aSelection, nsIEditor::EDirection aAction, 
-                               PRBool *aCancel, PRBool *aHandled);
+  nsresult SplitMailCites(nsISelection *aSelection, bool aPlaintext, bool *aHandled);
+  nsresult WillDeleteSelection(mozilla::Selection* aSelection,
+                               nsIEditor::EDirection aAction,
+                               nsIEditor::EStripWrappers aStripWrappers,
+                               bool* aCancel, bool* aHandled);
   nsresult DidDeleteSelection(nsISelection *aSelection, 
                               nsIEditor::EDirection aDir, 
                               nsresult aResult);
   nsresult InsertBRIfNeeded(nsISelection *aSelection);
   nsresult GetGoodSelPointForNode(nsIDOMNode *aNode, nsIEditor::EDirection aAction, 
-                                  nsCOMPtr<nsIDOMNode> *outSelNode, PRInt32 *outSelOffset);
-  nsresult JoinBlocks(nsCOMPtr<nsIDOMNode> *aLeftBlock, nsCOMPtr<nsIDOMNode> *aRightBlock, PRBool *aCanceled);
-  nsresult MoveBlock(nsIDOMNode *aLeft, nsIDOMNode *aRight, PRInt32 aLeftOffset, PRInt32 aRightOffset);
-  nsresult MoveNodeSmart(nsIDOMNode *aSource, nsIDOMNode *aDest, PRInt32 *aOffset);
-  nsresult MoveContents(nsIDOMNode *aSource, nsIDOMNode *aDest, PRInt32 *aOffset);
-  nsresult DeleteNonTableElements(nsIDOMNode *aNode);
-  nsresult WillMakeList(nsISelection *aSelection, const nsAString *aListType, PRBool aEntireList, const nsAString *aBulletType, PRBool *aCancel, PRBool *aHandled, const nsAString *aItemType=nsnull);
-  nsresult WillRemoveList(nsISelection *aSelection, PRBool aOrderd, PRBool *aCancel, PRBool *aHandled);
-  nsresult WillIndent(nsISelection *aSelection, PRBool *aCancel, PRBool *aHandled);
-  nsresult WillCSSIndent(nsISelection *aSelection, PRBool *aCancel, PRBool *aHandled);
-  nsresult WillHTMLIndent(nsISelection *aSelection, PRBool *aCancel, PRBool *aHandled);
-  nsresult WillOutdent(nsISelection *aSelection, PRBool *aCancel, PRBool *aHandled);
-  nsresult WillAlign(nsISelection *aSelection, const nsAString *alignType, PRBool *aCancel, PRBool *aHandled);
-  nsresult WillAbsolutePosition(nsISelection *aSelection, PRBool *aCancel, PRBool * aHandled);
-  nsresult WillRemoveAbsolutePosition(nsISelection *aSelection, PRBool *aCancel, PRBool * aHandled);
-  nsresult WillRelativeChangeZIndex(nsISelection *aSelection, PRInt32 aChange, PRBool *aCancel, PRBool * aHandled);
-  nsresult WillMakeDefListItem(nsISelection *aSelection, const nsAString *aBlockType, PRBool aEntireList, PRBool *aCancel, PRBool *aHandled);
-  nsresult WillMakeBasicBlock(nsISelection *aSelection, const nsAString *aBlockType, PRBool *aCancel, PRBool *aHandled);
+                                  nsCOMPtr<nsIDOMNode> *outSelNode, int32_t *outSelOffset);
+  nsresult JoinBlocks(nsIDOMNode *aLeftNode, nsIDOMNode *aRightNode, bool *aCanceled);
+  nsresult MoveBlock(nsIDOMNode *aLeft, nsIDOMNode *aRight, int32_t aLeftOffset, int32_t aRightOffset);
+  nsresult MoveNodeSmart(nsIDOMNode *aSource, nsIDOMNode *aDest, int32_t *aOffset);
+  nsresult MoveContents(nsIDOMNode *aSource, nsIDOMNode *aDest, int32_t *aOffset);
+  nsresult DeleteNonTableElements(nsINode* aNode);
+  nsresult WillMakeList(mozilla::Selection* aSelection,
+                        const nsAString* aListType,
+                        bool aEntireList,
+                        const nsAString* aBulletType,
+                        bool* aCancel, bool* aHandled,
+                        const nsAString* aItemType = nullptr);
+  nsresult WillRemoveList(mozilla::Selection* aSelection,
+                          bool aOrdered, bool* aCancel, bool* aHandled);
+  nsresult WillIndent(mozilla::Selection* aSelection,
+                      bool* aCancel, bool* aHandled);
+  nsresult WillCSSIndent(mozilla::Selection* aSelection,
+                         bool* aCancel, bool* aHandled);
+  nsresult WillHTMLIndent(mozilla::Selection* aSelection,
+                          bool* aCancel, bool* aHandled);
+  nsresult WillOutdent(mozilla::Selection* aSelection,
+                       bool* aCancel, bool* aHandled);
+  nsresult WillAlign(mozilla::Selection* aSelection,
+                     const nsAString* alignType,
+                     bool* aCancel, bool* aHandled);
+  nsresult WillAbsolutePosition(mozilla::Selection* aSelection,
+                                bool* aCancel, bool* aHandled);
+  nsresult WillRemoveAbsolutePosition(mozilla::Selection* aSelection,
+                                      bool* aCancel, bool* aHandled);
+  nsresult WillRelativeChangeZIndex(mozilla::Selection* aSelection,
+                                    int32_t aChange,
+                                    bool* aCancel, bool* aHandled);
+  nsresult WillMakeDefListItem(mozilla::Selection* aSelection,
+                               const nsAString* aBlockType, bool aEntireList,
+                               bool* aCancel, bool* aHandled);
+  nsresult WillMakeBasicBlock(mozilla::Selection* aSelection,
+                              const nsAString* aBlockType,
+                              bool* aCancel, bool* aHandled);
   nsresult DidMakeBasicBlock(nsISelection *aSelection, nsRulesInfo *aInfo, nsresult aResult);
   nsresult DidAbsolutePosition();
   nsresult AlignInnerBlocks(nsIDOMNode *aNode, const nsAString *alignType);
   nsresult AlignBlockContents(nsIDOMNode *aNode, const nsAString *alignType);
   nsresult AppendInnerFormatNodes(nsCOMArray<nsIDOMNode>& aArray,
+                                  nsINode* aNode);
+  nsresult AppendInnerFormatNodes(nsCOMArray<nsIDOMNode>& aArray,
                                   nsIDOMNode *aNode);
   nsresult GetFormatString(nsIDOMNode *aNode, nsAString &outFormat);
-  nsresult GetInnerContent(nsIDOMNode *aNode, nsCOMArray<nsIDOMNode>& outArrayOfNodes, PRInt32 *aIndex, PRBool aList = PR_TRUE, PRBool aTble = PR_TRUE);
-  nsCOMPtr<nsIDOMNode> IsInListItem(nsIDOMNode *aNode);
-  nsresult ReturnInHeader(nsISelection *aSelection, nsIDOMNode *aHeader, nsIDOMNode *aTextNode, PRInt32 aOffset);
-  nsresult ReturnInParagraph(nsISelection *aSelection, nsIDOMNode *aHeader, nsIDOMNode *aTextNode, PRInt32 aOffset, PRBool *aCancel, PRBool *aHandled);
+  nsresult GetInnerContent(nsIDOMNode *aNode, nsCOMArray<nsIDOMNode>& outArrayOfNodes, int32_t *aIndex, bool aList = true, bool aTble = true);
+  already_AddRefed<nsIDOMNode> IsInListItem(nsIDOMNode* aNode);
+  nsINode* IsInListItem(nsINode* aNode);
+  nsresult ReturnInHeader(nsISelection *aSelection, nsIDOMNode *aHeader, nsIDOMNode *aTextNode, int32_t aOffset);
+  nsresult ReturnInParagraph(nsISelection *aSelection, nsIDOMNode *aHeader, nsIDOMNode *aTextNode, int32_t aOffset, bool *aCancel, bool *aHandled);
   nsresult SplitParagraph(nsIDOMNode *aPara,
                           nsIDOMNode *aBRNode, 
                           nsISelection *aSelection,
                           nsCOMPtr<nsIDOMNode> *aSelNode, 
-                          PRInt32 *aOffset);
-  nsresult ReturnInListItem(nsISelection *aSelection, nsIDOMNode *aHeader, nsIDOMNode *aTextNode, PRInt32 aOffset);
-  nsresult AfterEditInner(PRInt32 action, nsIEditor::EDirection aDirection);
+                          int32_t *aOffset);
+  nsresult ReturnInListItem(nsISelection *aSelection, nsIDOMNode *aHeader, nsIDOMNode *aTextNode, int32_t aOffset);
+  nsresult AfterEditInner(EditAction action,
+                          nsIEditor::EDirection aDirection);
   nsresult RemovePartOfBlock(nsIDOMNode *aBlock, 
                              nsIDOMNode *aStartChild, 
                              nsIDOMNode *aEndChild,
@@ -211,112 +223,127 @@ protected:
   nsresult OutdentPartOfBlock(nsIDOMNode *aBlock, 
                               nsIDOMNode *aStartChild, 
                               nsIDOMNode *aEndChild,
-                              PRBool aIsBlockIndentedWithCSS,
+                              bool aIsBlockIndentedWithCSS,
                               nsCOMPtr<nsIDOMNode> *aLeftNode = 0,
                               nsCOMPtr<nsIDOMNode> *aRightNode = 0);
-  nsresult ConvertListType(nsIDOMNode *aList, nsCOMPtr<nsIDOMNode> *outList, const nsAString& aListType, const nsAString& aItemType);
+
+  nsresult ConvertListType(nsIDOMNode* aList,
+                           nsCOMPtr<nsIDOMNode>* outList,
+                           nsIAtom* aListType,
+                           nsIAtom* aItemType);
+  nsresult ConvertListType(nsINode* aList,
+                           mozilla::dom::Element** aOutList,
+                           nsIAtom* aListType,
+                           nsIAtom* aItemType);
+
   nsresult CreateStyleForInsertText(nsISelection *aSelection, nsIDOMDocument *aDoc);
   nsresult IsEmptyBlock(nsIDOMNode *aNode, 
-                        PRBool *outIsEmptyBlock, 
-                        PRBool aMozBRDoesntCount = PR_FALSE,
-                        PRBool aListItemsNotEmpty = PR_FALSE);
+                        bool *outIsEmptyBlock, 
+                        bool aMozBRDoesntCount = false,
+                        bool aListItemsNotEmpty = false);
   nsresult CheckForEmptyBlock(nsIDOMNode *aStartNode, 
                               nsIDOMNode *aBodyNode,
                               nsISelection *aSelection,
-                              PRBool *aHandled);
+                              bool *aHandled);
   nsresult CheckForInvisibleBR(nsIDOMNode *aBlock, nsHTMLEditRules::BRLocation aWhere, 
-                               nsCOMPtr<nsIDOMNode> *outBRNode, PRInt32 aOffset=0);
-  PRBool ExpandSelectionForDeletion(nsISelection *aSelection);
-  PRBool IsFirstNode(nsIDOMNode *aNode);
-  PRBool IsLastNode(nsIDOMNode *aNode);
-#ifdef XXX_DEAD_CODE
-  PRBool AtStartOfBlock(nsIDOMNode *aNode, PRInt32 aOffset, nsIDOMNode *aBlock);
-  PRBool AtEndOfBlock(nsIDOMNode *aNode, PRInt32 aOffset, nsIDOMNode *aBlock);
-#endif
+                               nsCOMPtr<nsIDOMNode> *outBRNode, int32_t aOffset=0);
+  nsresult ExpandSelectionForDeletion(nsISelection *aSelection);
+  bool IsFirstNode(nsIDOMNode *aNode);
+  bool IsLastNode(nsIDOMNode *aNode);
   nsresult NormalizeSelection(nsISelection *inSelection);
-  nsresult GetPromotedPoint(RulesEndpoint aWhere, nsIDOMNode *aNode, PRInt32 aOffset, 
-                            PRInt32 actionID, nsCOMPtr<nsIDOMNode> *outNode, PRInt32 *outOffset);
+  void GetPromotedPoint(RulesEndpoint aWhere, nsIDOMNode* aNode,
+                        int32_t aOffset, EditAction actionID,
+                        nsCOMPtr<nsIDOMNode>* outNode, int32_t* outOffset);
   nsresult GetPromotedRanges(nsISelection *inSelection, 
                              nsCOMArray<nsIDOMRange> &outArrayOfRanges, 
-                             PRInt32 inOperationType);
-  nsresult PromoteRange(nsIDOMRange *inRange, PRInt32 inOperationType);
+                             EditAction inOperationType);
+  nsresult PromoteRange(nsIDOMRange *inRange,
+                        EditAction inOperationType);
   nsresult GetNodesForOperation(nsCOMArray<nsIDOMRange>& inArrayOfRanges, 
                                 nsCOMArray<nsIDOMNode>& outArrayOfNodes, 
-                                PRInt32 inOperationType,
-                                PRBool aDontTouchContent=PR_FALSE);
+                                EditAction inOperationType,
+                                bool aDontTouchContent=false);
   nsresult GetChildNodesForOperation(nsIDOMNode *inNode, 
                                      nsCOMArray<nsIDOMNode>& outArrayOfNodes);
   nsresult GetNodesFromPoint(DOMPoint point,
-                             PRInt32 operation,
+                             EditAction operation,
                              nsCOMArray<nsIDOMNode>& arrayOfNodes,
-                             PRBool dontTouchContent);
+                             bool dontTouchContent);
   nsresult GetNodesFromSelection(nsISelection *selection,
-                                 PRInt32 operation,
+                                 EditAction operation,
                                  nsCOMArray<nsIDOMNode>& arrayOfNodes,
-                                 PRBool aDontTouchContent=PR_FALSE);
-  nsresult GetListActionNodes(nsCOMArray<nsIDOMNode> &outArrayOfNodes, PRBool aEntireList, PRBool aDontTouchContent=PR_FALSE);
-  nsresult GetDefinitionListItemTypes(nsIDOMNode *aNode, PRBool &aDT, PRBool &aDD);
-  nsresult GetParagraphFormatNodes(nsCOMArray<nsIDOMNode>& outArrayOfNodes, PRBool aDontTouchContent=PR_FALSE);
+                                 bool aDontTouchContent=false);
+  nsresult GetListActionNodes(nsCOMArray<nsIDOMNode> &outArrayOfNodes, bool aEntireList, bool aDontTouchContent=false);
+  void GetDefinitionListItemTypes(mozilla::dom::Element* aElement, bool* aDT, bool* aDD);
+  nsresult GetParagraphFormatNodes(nsCOMArray<nsIDOMNode>& outArrayOfNodes, bool aDontTouchContent=false);
   nsresult LookInsideDivBQandList(nsCOMArray<nsIDOMNode>& aNodeArray);
   nsresult BustUpInlinesAtRangeEndpoints(nsRangeStore &inRange);
   nsresult BustUpInlinesAtBRs(nsIDOMNode *inNode, 
                               nsCOMArray<nsIDOMNode>& outArrayOfNodes);
   nsCOMPtr<nsIDOMNode> GetHighestInlineParent(nsIDOMNode* aNode);
   nsresult MakeTransitionList(nsCOMArray<nsIDOMNode>& inArrayOfNodes, 
-                              nsTArray<PRPackedBool> &inTransitionArray);
+                              nsTArray<bool> &inTransitionArray);
   nsresult RemoveBlockStyle(nsCOMArray<nsIDOMNode>& arrayOfNodes);
   nsresult ApplyBlockStyle(nsCOMArray<nsIDOMNode>& arrayOfNodes, const nsAString *aBlockTag);
   nsresult MakeBlockquote(nsCOMArray<nsIDOMNode>& arrayOfNodes);
-  nsresult SplitAsNeeded(const nsAString *aTag, nsCOMPtr<nsIDOMNode> *inOutParent, PRInt32 *inOutOffset);
+  nsresult SplitAsNeeded(const nsAString *aTag, nsCOMPtr<nsIDOMNode> *inOutParent, int32_t *inOutOffset);
   nsresult AddTerminatingBR(nsIDOMNode *aBlock);
   nsresult JoinNodesSmart( nsIDOMNode *aNodeLeft, 
                            nsIDOMNode *aNodeRight, 
                            nsCOMPtr<nsIDOMNode> *aOutMergeParent, 
-                           PRInt32 *aOutMergeOffset);
-  nsresult GetTopEnclosingMailCite(nsIDOMNode *aNode, nsCOMPtr<nsIDOMNode> *aOutCiteNode, PRBool aPlaintext);
-  nsresult PopListItem(nsIDOMNode *aListItem, PRBool *aOutOfList);
+                           int32_t *aOutMergeOffset);
+  nsresult GetTopEnclosingMailCite(nsIDOMNode *aNode, nsCOMPtr<nsIDOMNode> *aOutCiteNode, bool aPlaintext);
+  nsresult PopListItem(nsIDOMNode *aListItem, bool *aOutOfList);
   nsresult RemoveListStructure(nsIDOMNode *aList);
   nsresult CacheInlineStyles(nsIDOMNode *aNode);
-  nsresult ReapplyCachedStyles(); 
+  nsresult ReapplyCachedStyles();
   nsresult ClearCachedStyles();
-  nsresult AdjustSpecialBreaks(PRBool aSafeToAskFrames = PR_FALSE);
+  nsresult AdjustSpecialBreaks(bool aSafeToAskFrames = false);
   nsresult AdjustWhitespace(nsISelection *aSelection);
   nsresult PinSelectionToNewBlock(nsISelection *aSelection);
   nsresult CheckInterlinePosition(nsISelection *aSelection);
   nsresult AdjustSelection(nsISelection *aSelection, nsIEditor::EDirection aAction);
   nsresult FindNearSelectableNode(nsIDOMNode *aSelNode, 
-                                  PRInt32 aSelOffset, 
+                                  int32_t aSelOffset, 
                                   nsIEditor::EDirection &aDirection,
                                   nsCOMPtr<nsIDOMNode> *outSelectableNode);
-  nsresult InDifferentTableElements(nsIDOMNode *aNode1, nsIDOMNode *aNode2, PRBool *aResult);
+  /**
+   * Returns true if aNode1 or aNode2 or both is the descendant of some type of
+   * table element, but their nearest table element ancestors differ.  "Table
+   * element" here includes not just <table> but also <td>, <tbody>, <tr>, etc.
+   * The nodes count as being their own descendants for this purpose, so a
+   * table element is its own nearest table element ancestor.
+   */
+  bool     InDifferentTableElements(nsIDOMNode* aNode1, nsIDOMNode* aNode2);
+  bool     InDifferentTableElements(nsINode* aNode1, nsINode* aNode2);
   nsresult RemoveEmptyNodes();
-  nsresult SelectionEndpointInNode(nsIDOMNode *aNode, PRBool *aResult);
+  nsresult SelectionEndpointInNode(nsINode *aNode, bool *aResult);
   nsresult UpdateDocChangeRange(nsIDOMRange *aRange);
   nsresult ConfirmSelectionInBody();
   nsresult InsertMozBRIfNeeded(nsIDOMNode *aNode);
-  PRBool   IsEmptyInline(nsIDOMNode *aNode);
-  PRBool   ListIsEmptyLine(nsCOMArray<nsIDOMNode> &arrayOfNodes);
-  nsresult RemoveAlignment(nsIDOMNode * aNode, const nsAString & aAlignType, PRBool aChildrenOnly);
-  nsresult MakeSureElemStartsOrEndsOnCR(nsIDOMNode *aNode, PRBool aStarts);
-  nsresult AlignBlock(nsIDOMElement * aElement, const nsAString * aAlignType, PRBool aContentsOnly);
-  nsresult RelativeChangeIndentationOfElementNode(nsIDOMNode *aNode, PRInt8 aRelativeChange);
+  bool     IsEmptyInline(nsIDOMNode *aNode);
+  bool     ListIsEmptyLine(nsCOMArray<nsIDOMNode> &arrayOfNodes);
+  nsresult RemoveAlignment(nsIDOMNode * aNode, const nsAString & aAlignType, bool aChildrenOnly);
+  nsresult MakeSureElemStartsOrEndsOnCR(nsIDOMNode *aNode, bool aStarts);
+  nsresult AlignBlock(nsIDOMElement * aElement, const nsAString * aAlignType, bool aContentsOnly);
+  nsresult RelativeChangeIndentationOfElementNode(nsIDOMNode *aNode, int8_t aRelativeChange);
+  void DocumentModifiedWorker();
 
 // data members
 protected:
   nsHTMLEditor           *mHTMLEditor;
-  nsCOMPtr<nsIDOMRange>   mDocChangeRange;
-  PRPackedBool            mListenerEnabled;
-  PRPackedBool            mReturnInEmptyLIKillsList;
-  PRPackedBool            mDidDeleteSelection;
-  PRPackedBool            mDidRangedDelete;
-  nsCOMPtr<nsIDOMRange>   mUtilRange;
-  PRUint32                mJoinOffset;  // need to remember an int across willJoin/didJoin...
+  nsRefPtr<nsRange>       mDocChangeRange;
+  bool                    mListenerEnabled;
+  bool                    mReturnInEmptyLIKillsList;
+  bool                    mDidDeleteSelection;
+  bool                    mDidRangedDelete;
+  bool                    mRestoreContentEditableCount;
+  nsRefPtr<nsRange>       mUtilRange;
+  uint32_t                mJoinOffset;  // need to remember an int across willJoin/didJoin...
   nsCOMPtr<nsIDOMNode>    mNewBlock;
-  nsRangeStore            mRangeItem;
+  nsRefPtr<nsRangeStore>  mRangeItem;
   StyleCache              mCachedStyles[SIZE_STYLE_TABLE];
 };
-
-nsresult NS_NewHTMLEditRules(nsIEditRules** aInstancePtrResult);
 
 #endif //nsHTMLEditRules_h__
 

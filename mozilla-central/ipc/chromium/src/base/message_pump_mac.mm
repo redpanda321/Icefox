@@ -4,14 +4,21 @@
 
 #include "base/message_pump_mac.h"
 
+#ifdef XP_MACOSX
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
 #include <IOKit/IOMessage.h>
 #include <IOKit/pwr_mgt/IOPMLib.h>
+#else
+#import <UIKit/UIKit.h>
+#include <Foundation/NSAutoreleasePool.h>
+#endif
 
 #include <limits>
 
+#ifdef XP_MACOSX
 #import "base/chrome_application_mac.h"
+#endif
 #include "base/logging.h"
 #include "base/time.h"
 
@@ -125,6 +132,7 @@ MessagePumpCFRunLoopBase::MessagePumpCFRunLoopBase()
                                                  &observer_context);
   CFRunLoopAddObserver(run_loop_, enter_exit_observer_, kCFRunLoopCommonModes);
 
+#ifdef XP_MACOSX
   root_power_domain_ = IORegisterForSystemPower(this,
                                                 &power_notification_port_,
                                                 PowerStateNotification,
@@ -135,12 +143,14 @@ MessagePumpCFRunLoopBase::MessagePumpCFRunLoopBase()
         IONotificationPortGetRunLoopSource(power_notification_port_),
         kCFRunLoopCommonModes);
   }
+#endif
 }
 
 // Ideally called on the run loop thread.  If other run loops were running
 // lower on the run loop thread's stack when this object was created, the
 // same number of run loops must be running when this object is destroyed.
 MessagePumpCFRunLoopBase::~MessagePumpCFRunLoopBase() {
+#ifdef XP_MACOSX
   if (root_power_domain_ != MACH_PORT_NULL) {
     CFRunLoopRemoveSource(
         run_loop_,
@@ -150,6 +160,7 @@ MessagePumpCFRunLoopBase::~MessagePumpCFRunLoopBase() {
     IOServiceClose(root_power_domain_);
     IONotificationPortDestroy(power_notification_port_);
   }
+#endif
 
   CFRunLoopRemoveObserver(run_loop_, enter_exit_observer_,
                           kCFRunLoopCommonModes);
@@ -501,6 +512,7 @@ void MessagePumpCFRunLoopBase::EnterExitObserver(CFRunLoopObserverRef observer,
   self->EnterExitRunLoop(activity);
 }
 
+#ifdef XP_MACOSX
 // Called from the run loop.
 // static
 void MessagePumpCFRunLoopBase::PowerStateNotification(void* info,
@@ -567,6 +579,7 @@ void MessagePumpCFRunLoopBase::PowerStateNotification(void* info,
       break;
   }
 }
+#endif
 
 // Called by MessagePumpCFRunLoopBase::EnterExitRunLoop.  The default
 // implementation is a no-op.
@@ -664,6 +677,7 @@ MessagePumpNSApplication::MessagePumpNSApplication()
       running_own_loop_(false) {
 }
 
+#ifdef XP_MACOSX
 void MessagePumpNSApplication::DoRun(Delegate* delegate) {
   bool last_running_own_loop_ = running_own_loop_;
 
@@ -753,6 +767,31 @@ NSAutoreleasePool* MessagePumpNSApplication::CreateAutoreleasePool() {
   }
   return pool;
 }
+#else // iOS
+
+void MessagePumpNSApplication::DoRun(Delegate* delegate) {
+  bool last_running_own_loop_ = running_own_loop_;
+
+  running_own_loop_ = true;
+  NSDate* distant_future = [NSDate distantFuture];
+  NSRunLoop* currentRunLoop = [NSRunLoop currentRunLoop];
+  while (keep_running_) {
+    MessagePumpScopedAutoreleasePool autorelease_pool(this);
+    [currentRunLoop runMode:[currentRunLoop currentMode] beforeDate:distant_future];
+  }
+  keep_running_ = true;
+  
+  running_own_loop_ = last_running_own_loop_;
+}
+
+void MessagePumpNSApplication::Quit() {
+  if (running_own_loop_) {
+    keep_running_ = false;
+  }
+
+  ::CFRunLoopWakeUp([[NSRunLoop currentRunLoop] getCFRunLoop]);
+}
+#endif
 
 // static
 MessagePump* MessagePumpMac::Create() {

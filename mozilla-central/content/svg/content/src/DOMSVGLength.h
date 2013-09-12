@@ -1,47 +1,19 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla SVG Project code.
- *
- * The Initial Developer of the Original Code is the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef MOZILLA_DOMSVGLENGTH_H__
 #define MOZILLA_DOMSVGLENGTH_H__
 
-#include "nsIDOMSVGLength.h"
 #include "DOMSVGLengthList.h"
-#include "SVGLength.h"
-#include "nsCycleCollectionParticipant.h"
 #include "nsAutoPtr.h"
+#include "nsCycleCollectionParticipant.h"
+#include "nsDebug.h"
+#include "nsIDOMSVGLength.h"
+#include "nsTArray.h"
+#include "SVGLength.h"
+#include "mozilla/Attributes.h"
 
 class nsSVGElement;
 
@@ -52,6 +24,8 @@ class nsSVGElement;
 // {A8468350-7F7B-4976-9A7E-3765A1DADF9A}
 #define MOZILLA_DOMSVGLENGTH_IID \
   { 0xA8468350, 0x7F7B, 0x4976, { 0x9A, 0x7E, 0x37, 0x65, 0xA1, 0xDA, 0xDF, 0x9A } }
+
+#define MOZ_SVG_LIST_INDEX_BIT_COUNT 22 // supports > 4 million list items
 
 namespace mozilla {
 
@@ -92,7 +66,7 @@ namespace mozilla {
  * if-else as appropriate. The bug for doing that work is:
  * https://bugzilla.mozilla.org/show_bug.cgi?id=571734
  */
-class DOMSVGLength : public nsIDOMSVGLength
+class DOMSVGLength MOZ_FINAL : public nsIDOMSVGLength
 {
 public:
   NS_DECLARE_STATIC_IID_ACCESSOR(MOZILLA_DOMSVGLENGTH_IID)
@@ -104,9 +78,9 @@ public:
    * Generic ctor for DOMSVGLength objects that are created for an attribute.
    */
   DOMSVGLength(DOMSVGLengthList *aList,
-               PRUint32 aAttrEnum,
-               PRUint8 aListIndex,
-               PRUint8 aIsAnimValItem);
+               uint8_t aAttrEnum,
+               uint32_t aListIndex,
+               bool aIsAnimValItem);
 
   /**
    * Ctor for creating the objects returned by SVGSVGElement.createSVGLength(),
@@ -119,9 +93,9 @@ public:
     // unlinked us using the cycle collector code, then that has already
     // happened, and mList is null.
     if (mList) {
-      mList->mItems[mListIndex] = nsnull;
+      mList->mItems[mListIndex] = nullptr;
     }
-  };
+  }
 
   /**
    * Create an unowned copy of an owned length. The caller is responsible for
@@ -135,7 +109,7 @@ public:
     return copy;
   }
 
-  PRBool IsInList() const {
+  bool IsInList() const {
     return !!mList;
   }
 
@@ -143,7 +117,7 @@ public:
    * In future, if this class is used for non-list lengths, this will be
    * different to IsInList().
    */
-  PRBool HasOwner() const {
+  bool HasOwner() const {
     return !!mList;
   }
 
@@ -157,12 +131,16 @@ public:
    * the necessary notifications) is located elsewhere (in DOMSVGLengthList).)
    */
   void InsertingIntoList(DOMSVGLengthList *aList,
-                         PRUint32 aAttrEnum,
-                         PRUint8 aListIndex,
-                         PRUint8 aIsAnimValItem);
+                         uint8_t aAttrEnum,
+                         uint32_t aListIndex,
+                         bool aIsAnimValItem);
+
+  static uint32_t MaxListIndex() {
+    return (1U << MOZ_SVG_LIST_INDEX_BIT_COUNT) - 1;
+  }
 
   /// This method is called to notify this object that its list index changed.
-  void UpdateListIndex(PRUint8 aListIndex) {
+  void UpdateListIndex(uint32_t aListIndex) {
     mListIndex = aListIndex;
   }
 
@@ -170,7 +148,7 @@ public:
    * This method is called to notify this DOM object that it is about to be
    * removed from its current DOM list so that it can first make a copy of its
    * internal counterpart's values. (If it didn't do this, then it would
-   * "loose" its value on being removed.)
+   * "lose" its value on being removed.)
    */
   void RemovingFromList();
 
@@ -182,7 +160,7 @@ private:
     return mList->Element();
   }
 
-  PRUint8 AttrEnum() const {
+  uint8_t AttrEnum() const {
     return mAttrEnum;
   }
 
@@ -190,7 +168,7 @@ private:
    * Get the axis that this length lies along. This method must only be called
    * when this object is associated with an element (HasOwner() returns true).
    */
-  PRUint8 Axis() const {
+  uint8_t Axis() const {
     return mList->Axis();
   }
 
@@ -198,29 +176,35 @@ private:
    * Get a reference to the internal SVGLength list item that this DOM wrapper
    * object currently wraps.
    *
-   * To simplyfy the code we just have this one method for obtaining both
+   * To simplify the code we just have this one method for obtaining both
    * baseVal and animVal internal items. This means that animVal items don't
    * get const protection, but then our setter methods guard against changing
    * animVal items.
    */
   SVGLength& InternalItem();
 
+#ifdef DEBUG
+  bool IndexIsValid();
+#endif
+
   nsRefPtr<DOMSVGLengthList> mList;
 
   // Bounds for the following are checked in the ctor, so be sure to update
   // that if you change the capacity of any of the following.
 
-  PRUint32 mListIndex:22; // supports > 4 million list items
-  PRUint32 mAttrEnum:4; // supports up to 16 attributes
-  PRUint32 mIsAnimValItem:1;
+  uint32_t mListIndex:MOZ_SVG_LIST_INDEX_BIT_COUNT;
+  uint32_t mAttrEnum:4; // supports up to 16 attributes
+  uint32_t mIsAnimValItem:1;
 
   // The following members are only used when we're not in a list:
-  PRUint32 mUnit:5; // can handle 31 units (the 10 SVG 1.1 units + rem, vw, vh, wm, calc + future additions)
+  uint32_t mUnit:5; // can handle 31 units (the 10 SVG 1.1 units + rem, vw, vh, wm, calc + future additions)
   float mValue;
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(DOMSVGLength, MOZILLA_DOMSVGLENGTH_IID)
 
 } // namespace mozilla
+
+#undef MOZ_SVG_LIST_INDEX_BIT_COUNT
 
 #endif // MOZILLA_DOMSVGLENGTH_H__

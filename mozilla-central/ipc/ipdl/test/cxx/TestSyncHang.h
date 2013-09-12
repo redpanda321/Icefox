@@ -17,11 +17,14 @@ public:
     TestSyncHangParent();
     virtual ~TestSyncHangParent();
 
+    static bool RunTestInProcesses() { return true; }
+    // FIXME/bug 703323 Could work if modified
+    static bool RunTestInThreads() { return false; }
+
     void Main();
 
 protected:    
-    NS_OVERRIDE
-    virtual void ActorDestroy(ActorDestroyReason why)
+    virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE
     {
         if (NormalShutdown != why)
             fail("unexpected destruction!");  
@@ -39,8 +42,7 @@ public:
     virtual ~TestSyncHangChild();
 
 protected:
-    NS_OVERRIDE
-    virtual void ActorDestroy(ActorDestroyReason why)
+    virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE
     {
         if (NormalShutdown != why)
             fail("unexpected destruction!");

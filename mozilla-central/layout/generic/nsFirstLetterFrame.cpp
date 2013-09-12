@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* rendering object for CSS :first-letter pseudo-element */
 
@@ -50,6 +18,8 @@
 #include "nsPlaceholderFrame.h"
 #include "nsCSSFrameConstructor.h"
 
+using namespace::mozilla;
+
 nsIFrame*
 NS_NewFirstLetterFrame(nsIPresShell* aPresShell, nsStyleContext* aContext)
 {
@@ -58,7 +28,11 @@ NS_NewFirstLetterFrame(nsIPresShell* aPresShell, nsStyleContext* aContext)
 
 NS_IMPL_FRAMEARENA_HELPERS(nsFirstLetterFrame)
 
-#ifdef NS_DEBUG
+NS_QUERYFRAME_HEAD(nsFirstLetterFrame)
+  NS_QUERYFRAME_ENTRY(nsFirstLetterFrame)
+NS_QUERYFRAME_TAIL_INHERITING(nsContainerFrame)
+
+#ifdef DEBUG
 NS_IMETHODIMP
 nsFirstLetterFrame::GetFrameName(nsAString& aResult) const
 {
@@ -72,10 +46,18 @@ nsFirstLetterFrame::GetType() const
   return nsGkAtoms::letterFrame;
 }
 
-PRIntn
+int
 nsFirstLetterFrame::GetSkipSides() const
 {
   return 0;
+}
+
+NS_IMETHODIMP
+nsFirstLetterFrame::BuildDisplayList(nsDisplayListBuilder*   aBuilder,
+                                     const nsRect&           aDirtyRect,
+                                     const nsDisplayListSet& aLists)
+{
+  return BuildDisplayListForInline(aBuilder, aDirtyRect, aLists);
 }
 
 NS_IMETHODIMP
@@ -97,11 +79,11 @@ nsFirstLetterFrame::Init(nsIContent*      aContent,
     }
   }
 
-  return nsFirstLetterFrameSuper::Init(aContent, aParent, aPrevInFlow);
+  return nsContainerFrame::Init(aContent, aParent, aPrevInFlow);
 }
 
 NS_IMETHODIMP
-nsFirstLetterFrame::SetInitialChildList(nsIAtom*     aListName,
+nsFirstLetterFrame::SetInitialChildList(ChildListID  aListID,
                                         nsFrameList& aChildList)
 {
   nsFrameManager *frameManager = PresContext()->FrameManager();
@@ -116,9 +98,9 @@ nsFirstLetterFrame::SetInitialChildList(nsIAtom*     aListName,
 }
 
 NS_IMETHODIMP
-nsFirstLetterFrame::GetChildFrameContainingOffset(PRInt32 inContentOffset,
-                                                  PRBool inHint,
-                                                  PRInt32* outFrameContentOffset,
+nsFirstLetterFrame::GetChildFrameContainingOffset(int32_t inContentOffset,
+                                                  bool inHint,
+                                                  int32_t* outFrameContentOffset,
                                                   nsIFrame **outChildFrame)
 {
   nsIFrame *kid = mFrames.FirstChild();
@@ -133,7 +115,7 @@ nsFirstLetterFrame::GetChildFrameContainingOffset(PRInt32 inContentOffset,
 // Needed for non-floating first-letter frames and for the continuations
 // following the first-letter that we also use nsFirstLetterFrame for.
 /* virtual */ void
-nsFirstLetterFrame::AddInlineMinWidth(nsIRenderingContext *aRenderingContext,
+nsFirstLetterFrame::AddInlineMinWidth(nsRenderingContext *aRenderingContext,
                                       nsIFrame::InlineMinWidthData *aData)
 {
   DoInlineIntrinsicWidth(aRenderingContext, aData, nsLayoutUtils::MIN_WIDTH);
@@ -142,7 +124,7 @@ nsFirstLetterFrame::AddInlineMinWidth(nsIRenderingContext *aRenderingContext,
 // Needed for non-floating first-letter frames and for the continuations
 // following the first-letter that we also use nsFirstLetterFrame for.
 /* virtual */ void
-nsFirstLetterFrame::AddInlinePrefWidth(nsIRenderingContext *aRenderingContext,
+nsFirstLetterFrame::AddInlinePrefWidth(nsRenderingContext *aRenderingContext,
                                        nsIFrame::InlinePrefWidthData *aData)
 {
   DoInlineIntrinsicWidth(aRenderingContext, aData, nsLayoutUtils::PREF_WIDTH);
@@ -150,31 +132,31 @@ nsFirstLetterFrame::AddInlinePrefWidth(nsIRenderingContext *aRenderingContext,
 
 // Needed for floating first-letter frames.
 /* virtual */ nscoord
-nsFirstLetterFrame::GetMinWidth(nsIRenderingContext *aRenderingContext)
+nsFirstLetterFrame::GetMinWidth(nsRenderingContext *aRenderingContext)
 {
   return nsLayoutUtils::MinWidthFromInline(this, aRenderingContext);
 }
 
 // Needed for floating first-letter frames.
 /* virtual */ nscoord
-nsFirstLetterFrame::GetPrefWidth(nsIRenderingContext *aRenderingContext)
+nsFirstLetterFrame::GetPrefWidth(nsRenderingContext *aRenderingContext)
 {
   return nsLayoutUtils::PrefWidthFromInline(this, aRenderingContext);
 }
 
 /* virtual */ nsSize
-nsFirstLetterFrame::ComputeSize(nsIRenderingContext *aRenderingContext,
+nsFirstLetterFrame::ComputeSize(nsRenderingContext *aRenderingContext,
                                 nsSize aCBSize, nscoord aAvailableWidth,
                                 nsSize aMargin, nsSize aBorder, nsSize aPadding,
-                                PRBool aShrinkWrap)
+                                uint32_t aFlags)
 {
   if (GetPrevInFlow()) {
     // We're wrapping the text *after* the first letter, so behave like an
     // inline frame.
     return nsSize(NS_UNCONSTRAINEDSIZE, NS_UNCONSTRAINEDSIZE);
   }
-  return nsFirstLetterFrameSuper::ComputeSize(aRenderingContext,
-      aCBSize, aAvailableWidth, aMargin, aBorder, aPadding, aShrinkWrap);
+  return nsContainerFrame::ComputeSize(aRenderingContext,
+      aCBSize, aAvailableWidth, aMargin, aBorder, aPadding, aFlags);
 }
 
 NS_IMETHODIMP
@@ -210,84 +192,102 @@ nsFirstLetterFrame::Reflow(nsPresContext*          aPresContext,
     // only time that the first-letter-frame is not reflowing in a
     // line context is when its floating.
     nsHTMLReflowState rs(aPresContext, aReflowState, kid, availSize);
-    nsLineLayout ll(aPresContext, nsnull, &aReflowState, nsnull);
+    nsLineLayout ll(aPresContext, nullptr, &aReflowState, nullptr);
+
+    // For unicode-bidi: plaintext, we need to get the direction of the line
+    // from the resolved paragraph level of the child, not the block frame,
+    // because the block frame could be split by hard line breaks into
+    // multiple paragraphs with different base direction
+    uint8_t direction;
+    nsIFrame* containerFrame = ll.GetLineContainerFrame();
+    if (containerFrame->GetStyleTextReset()->mUnicodeBidi &
+        NS_STYLE_UNICODE_BIDI_PLAINTEXT) {
+      FramePropertyTable *propTable = aPresContext->PropertyTable();
+      direction = NS_PTR_TO_INT32(propTable->Get(kid, BaseLevelProperty())) & 1;
+    } else {
+      direction = containerFrame->GetStyleVisibility()->mDirection;
+    }
     ll.BeginLineReflow(bp.left, bp.top, availSize.width, NS_UNCONSTRAINEDSIZE,
-                       PR_FALSE, PR_TRUE);
+                       false, true, direction);
     rs.mLineLayout = &ll;
-    ll.SetInFirstLetter(PR_TRUE);
-    ll.SetFirstLetterStyleOK(PR_TRUE);
+    ll.SetInFirstLetter(true);
+    ll.SetFirstLetterStyleOK(true);
 
     kid->WillReflow(aPresContext);
     kid->Reflow(aPresContext, aMetrics, rs, aReflowStatus);
 
     ll.EndLineReflow();
-    ll.SetInFirstLetter(PR_FALSE);
+    ll.SetInFirstLetter(false);
+
+    // In the floating first-letter case, we need to set this ourselves;
+    // nsLineLayout::BeginSpan will set it in the other case
+    mBaseline = aMetrics.ascent;
   }
   else {
     // Pretend we are a span and reflow the child frame
     nsLineLayout* ll = aReflowState.mLineLayout;
-    PRBool        pushedFrame;
+    bool          pushedFrame;
 
     ll->SetInFirstLetter(
       mStyleContext->GetPseudo() == nsCSSPseudoElements::firstLetter);
-    ll->BeginSpan(this, &aReflowState, bp.left, availSize.width);
+    ll->BeginSpan(this, &aReflowState, bp.left, availSize.width, &mBaseline);
     ll->ReflowFrame(kid, aReflowStatus, &aMetrics, pushedFrame);
     ll->EndSpan(this);
-    ll->SetInFirstLetter(PR_FALSE);
+    ll->SetInFirstLetter(false);
   }
 
   // Place and size the child and update the output metrics
   kid->SetRect(nsRect(bp.left, bp.top, aMetrics.width, aMetrics.height));
   kid->FinishAndStoreOverflow(&aMetrics);
-  kid->DidReflow(aPresContext, nsnull, NS_FRAME_REFLOW_FINISHED);
+  kid->DidReflow(aPresContext, nullptr, nsDidReflowStatus::FINISHED);
 
   aMetrics.width += lr;
   aMetrics.height += tb;
   aMetrics.ascent += bp.top;
-  mBaseline = aMetrics.ascent;
 
   // Ensure that the overflow rect contains the child textframe's overflow rect.
   // Note that if this is floating, the overline/underline drawable area is in
   // the overflow rect of the child textframe.
-  aMetrics.mOverflowArea.UnionRect(aMetrics.mOverflowArea,
-                           nsRect(0, 0, aMetrics.width, aMetrics.height));
-  ConsiderChildOverflow(aMetrics.mOverflowArea, kid);
+  aMetrics.UnionOverflowAreasWithDesiredBounds();
+  ConsiderChildOverflow(aMetrics.mOverflowAreas, kid);
 
-  // Create a continuation or remove existing continuations based on
-  // the reflow completion status.
-  if (NS_FRAME_IS_COMPLETE(aReflowStatus)) {
-    if (aReflowState.mLineLayout) {
-      aReflowState.mLineLayout->SetFirstLetterStyleOK(PR_FALSE);
-    }
-    nsIFrame* kidNextInFlow = kid->GetNextInFlow();
-    if (kidNextInFlow) {
-      // Remove all of the childs next-in-flows
-      static_cast<nsContainerFrame*>(kidNextInFlow->GetParent())
-        ->DeleteNextInFlowChild(aPresContext, kidNextInFlow, PR_TRUE);
-    }
-  }
-  else {
-    // Create a continuation for the child frame if it doesn't already
-    // have one.
-    if (!GetStyleDisplay()->IsFloating()) {
-      nsIFrame* nextInFlow;
-      rv = CreateNextInFlow(aPresContext, kid, nextInFlow);
-      if (NS_FAILED(rv)) {
-        return rv;
+  if (!NS_INLINE_IS_BREAK_BEFORE(aReflowStatus)) {
+    // Create a continuation or remove existing continuations based on
+    // the reflow completion status.
+    if (NS_FRAME_IS_COMPLETE(aReflowStatus)) {
+      if (aReflowState.mLineLayout) {
+        aReflowState.mLineLayout->SetFirstLetterStyleOK(false);
       }
-
-      // And then push it to our overflow list
-      const nsFrameList& overflow = mFrames.RemoveFramesAfter(kid);
-      if (overflow.NotEmpty()) {
-        SetOverflowFrames(aPresContext, overflow);
+      nsIFrame* kidNextInFlow = kid->GetNextInFlow();
+      if (kidNextInFlow) {
+        // Remove all of the childs next-in-flows
+        static_cast<nsContainerFrame*>(kidNextInFlow->GetParent())
+          ->DeleteNextInFlowChild(aPresContext, kidNextInFlow, true);
       }
-    } else if (!kid->GetNextInFlow()) {
-      // For floating first letter frames (if a continuation wasn't already
-      // created for us) we need to put the continuation with the rest of the
-      // text that the first letter frame was made out of.
-      nsIFrame* continuation;
-      rv = CreateContinuationForFloatingParent(aPresContext, kid,
-                                               &continuation, PR_TRUE);
+    }
+    else {
+      // Create a continuation for the child frame if it doesn't already
+      // have one.
+      if (!IsFloating()) {
+        nsIFrame* nextInFlow;
+        rv = CreateNextInFlow(aPresContext, kid, nextInFlow);
+        if (NS_FAILED(rv)) {
+          return rv;
+        }
+    
+        // And then push it to our overflow list
+        const nsFrameList& overflow = mFrames.RemoveFramesAfter(kid);
+        if (overflow.NotEmpty()) {
+          SetOverflowFrames(aPresContext, overflow);
+        }
+      } else if (!kid->GetNextInFlow()) {
+        // For floating first letter frames (if a continuation wasn't already
+        // created for us) we need to put the continuation with the rest of the
+        // text that the first letter frame was made out of.
+        nsIFrame* continuation;
+        rv = CreateContinuationForFloatingParent(aPresContext, kid,
+                                                 &continuation, true);
+      }
     }
   }
 
@@ -297,24 +297,24 @@ nsFirstLetterFrame::Reflow(nsPresContext*          aPresContext,
   return rv;
 }
 
-/* virtual */ PRBool
+/* virtual */ bool
 nsFirstLetterFrame::CanContinueTextRun() const
 {
   // We can continue a text run through a first-letter frame.
-  return PR_TRUE;
+  return true;
 }
 
 nsresult
 nsFirstLetterFrame::CreateContinuationForFloatingParent(nsPresContext* aPresContext,
                                                         nsIFrame* aChild,
                                                         nsIFrame** aContinuation,
-                                                        PRBool aIsFluid)
+                                                        bool aIsFluid)
 {
-  NS_ASSERTION(GetStyleDisplay()->IsFloating(),
+  NS_ASSERTION(IsFloating(),
                "can only call this on floating first letter frames");
   NS_PRECONDITION(aContinuation, "bad args");
 
-  *aContinuation = nsnull;
+  *aContinuation = nullptr;
   nsresult rv = NS_OK;
 
   nsIPresShell* presShell = aPresContext->PresShell();
@@ -342,11 +342,11 @@ nsFirstLetterFrame::CreateContinuationForFloatingParent(nsPresContext* aPresCont
   }
 
   //XXX Bidi may not be involved but we have to use the list name
-  // nsGkAtoms::nextBidi because this is just like creating a continuation
+  // kNoReflowPrincipalList because this is just like creating a continuation
   // except we have to insert it in a different place and we don't want a
   // reflow command to try to be issued.
   nsFrameList temp(continuation, continuation);
-  rv = parent->InsertFrames(nsGkAtoms::nextBidi, placeholderFrame, temp);
+  rv = parent->InsertFrames(kNoReflowPrincipalList, placeholderFrame, temp);
 
   *aContinuation = continuation;
   return rv;
@@ -359,16 +359,16 @@ nsFirstLetterFrame::DrainOverflowFrames(nsPresContext* aPresContext)
 
   // Check for an overflow list with our prev-in-flow
   nsFirstLetterFrame* prevInFlow = (nsFirstLetterFrame*)GetPrevInFlow();
-  if (nsnull != prevInFlow) {
+  if (nullptr != prevInFlow) {
     overflowFrames = prevInFlow->StealOverflowFrames();
     if (overflowFrames) {
       NS_ASSERTION(mFrames.IsEmpty(), "bad overflow list");
 
       // When pushing and pulling frames we need to check for whether any
       // views need to be reparented.
-      nsHTMLContainerFrame::ReparentFrameViewList(aPresContext, *overflowFrames,
-                                                  prevInFlow, this);
-      mFrames.InsertFrames(this, nsnull, *overflowFrames);
+      nsContainerFrame::ReparentFrameViewList(aPresContext, *overflowFrames,
+                                              prevInFlow, this);
+      mFrames.InsertFrames(this, nullptr, *overflowFrames);
     }
   }
 
@@ -376,7 +376,7 @@ nsFirstLetterFrame::DrainOverflowFrames(nsPresContext* aPresContext)
   overflowFrames = StealOverflowFrames();
   if (overflowFrames) {
     NS_ASSERTION(mFrames.NotEmpty(), "overflow list w/o frames");
-    mFrames.AppendFrames(nsnull, *overflowFrames);
+    mFrames.AppendFrames(nullptr, *overflowFrames);
   }
 
   // Now repair our first frames style context (since we only reflow
@@ -395,4 +395,10 @@ nsFirstLetterFrame::DrainOverflowFrames(nsPresContext* aPresContext)
       }
     }
   }
+}
+
+nscoord
+nsFirstLetterFrame::GetBaseline() const
+{
+  return mBaseline;
 }

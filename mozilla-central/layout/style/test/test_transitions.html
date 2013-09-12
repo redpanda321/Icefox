@@ -5,8 +5,8 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=435441
 -->
 <head>
   <title>Test for Bug 435441</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
+  <script type="application/javascript" src="animation_utils.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
   <style type="text/css">
 
@@ -22,7 +22,7 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=435441
   #display .before.started::before, #display .after.started::after {
     width: 100px;
     text-indent: 100px;
-    -moz-transition: 8s width ease-in-out, 8s text-indent ease-in-out;
+    transition: 8s width ease-in-out, 8s text-indent ease-in-out;
   }
   #display .before::before {
     content: "Before";
@@ -42,11 +42,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=435441
 <script type="application/javascript">
 
 /** Test for Bug 435441 **/
-
-function px_to_num(str)
-{
-    return Number(String(str).match(/^([\d.]+)px$/)[1]);
-}
 
 // Run tests simultaneously so we don't have to take up too much time.
 SimpleTest.waitForExplicitFinish();
@@ -79,36 +74,6 @@ function process_future_calls(index)
     for (var i = 0; i < calls.length; ++i) {
         calls[i]();
         TestFinished();
-    }
-}
-
-function bezier(x1, y1, x2, y2) {
-    // Cubic bezier with control points (0, 0), (x1, y1), (x2, y2), and (1, 1).
-    function x_for_t(t) {
-        var omt = 1-t;
-        return 3 * omt * omt * t * x1 + 3 * omt * t * t * x2 + t * t * t;
-    }
-    function y_for_t(t) {
-        var omt = 1-t;
-        return 3 * omt * omt * t * y1 + 3 * omt * t * t * y2 + t * t * t;
-    }
-    function t_for_x(x) {
-        // Binary subdivision.
-        var mint = 0, maxt = 1;
-        for (var i = 0; i < 30; ++i) {
-            var guesst = (mint + maxt) / 2;
-            var guessx = x_for_t(guesst);
-            if (x < guessx)
-                maxt = guesst;
-            else
-                mint = guesst;
-        }
-        return (mint + maxt) / 2;
-    }
-    return function bezier_closure(x) {
-        if (x == 0) return 0;
-        if (x == 1) return 1;
-        return y_for_t(t_for_x(x));
     }
 }
 
@@ -160,7 +125,7 @@ function make_reference_p() {
     var p = document.createElement("p");
     p.appendChild(document.createTextNode("reference"));
     p.style.textIndent = "0px";
-    p.style.MozTransition = "8s text-indent linear";
+    p.style.transition = "8s text-indent linear";
     div.appendChild(p);
     return p;
 }
@@ -175,8 +140,8 @@ for (var tf in timingFunctions) {
     var t = document.createTextNode("transition-timing-function: " + tf);
     p.appendChild(t);
     p.style.textIndent = "0px";
-    p.style.MozTransition = "8s text-indent linear";
-    p.style.MozTransitionTimingFunction = tf;
+    p.style.transition = "8s text-indent linear";
+    p.style.transitionTimingFunction = tf;
     div.appendChild(p);
     is(getComputedStyle(p, "").textIndent, "0px",
        "should be zero before changing value");
@@ -186,7 +151,7 @@ for (var tf in timingFunctions) {
 // Check that the timing function continues even when we restyle in the
 // middle.
 var interrupt_tests = [];
-for each (var restyleParent in [true, false]) {
+for (var restyleParent of [true, false]) {
     for (var itime = 2; itime < 8; itime += 2) {
         var p = document.createElement("p");
         var t = document.createTextNode("interrupt on " +
@@ -194,7 +159,7 @@ for each (var restyleParent in [true, false]) {
                                         " at " + itime + "s");
         p.appendChild(t);
         p.style.textIndent = "0px";
-        p.style.MozTransition = "8s text-indent cubic-bezier(0, 1, 1, 0)";
+        p.style.transition = "8s text-indent cubic-bezier(0, 1, 1, 0)";
         if (restyleParent) {
           var d = document.createElement("div");
           d.appendChild(p);
@@ -221,11 +186,27 @@ for (var d = -4; d <= 4; ++d) {
     var t = document.createTextNode("transition-delay: " + delay);
     p.appendChild(t);
     p.style.marginLeft = "0px";
-    p.style.MozTransition = "4s margin-left ease-out " + delay;
+    p.style.transition = "4s margin-left ease-out " + delay;
     div.appendChild(p);
     is(getComputedStyle(p, "").marginLeft, "0px",
        "should be zero before changing value");
     delay_tests[d] = p;
+}
+
+// Test transition-delay values of -4s through 4s on a 4s transition
+// with duration of zero.
+var delay_zero_tests = {};
+for (var d = -4; d <= 4; ++d) {
+    var p = document.createElement("p");
+    var delay = d + "s";
+    var t = document.createTextNode("transition-delay: " + delay);
+    p.appendChild(t);
+    p.style.marginLeft = "0px";
+    p.style.transition = "0s margin-left linear " + delay;
+    div.appendChild(p);
+    is(getComputedStyle(p, "").marginLeft, "0px",
+       "should be zero before changing value");
+    delay_zero_tests[d] = p;
 }
 
 // Test that changing the value on an already-running transition to the
@@ -236,7 +217,7 @@ function make_reset_test(transition, description)
     var t = document.createTextNode(description);
     p.appendChild(t);
     p.style.marginLeft = "0px";
-    p.style.MozTransition = transition;
+    p.style.transition = transition;
     div.appendChild(p);
     is(getComputedStyle(p, "").marginLeft, "0px",
        "should be zero before changing value");
@@ -285,8 +266,8 @@ for (var i in descendant_tests) {
     test.childNode.appendChild(document.createTextNode(
         "parent with \"" + test.parent_transition + "\" and " +
         "child with \"" + test.child_transition + "\""));
-    test.parentNode.style.MozTransition = test.parent_transition;
-    test.childNode.style.MozTransition = test.child_transition;
+    test.parentNode.style.transition = test.parent_transition;
+    test.childNode.style.transition = test.child_transition;
     test.parentNode.style.textIndent = "50px"; // transition from 50 to 150
     test.parentNode.style.letterSpacing = "10px"; // transition from 10 to 5
     div.appendChild(test.parentNode);
@@ -309,26 +290,26 @@ for (var i in descendant_tests) {
 // This is because we're implementing the proposal in
 // http://lists.w3.org/Archives/Public/www-style/2009Aug/0109.html
 var number_tests = [
-  { style: "-moz-transition: 4s margin, 8s margin-left" },
-  { style: "-moz-transition: 4s margin-left, 8s margin" },
-  { style: "-moz-transition-property: margin-left; " +
-             "-moz-transition-duration: 8s, 2s" },
-  { style: "-moz-transition-property: margin-left, margin-left; " + 
-             "-moz-transition-duration: 2s, 8s" },
-  { style: "-moz-transition-property: margin-left, margin-left, margin-left; " +
-             "-moz-transition-duration: 8s, 2s" },
-  { style: "-moz-transition-property: margin-left; " +
-             "-moz-transition-duration: 8s, 16s" },
-  { style: "-moz-transition-property: margin-left, margin-left; " + 
-             "-moz-transition-duration: 16s, 8s" },
-  { style: "-moz-transition-property: margin-left, margin-left, margin-left; " +
-             "-moz-transition-duration: 8s, 16s" },
-  { style: "-moz-transition-property: text-indent,word-spacing,margin-left; " +
-             "-moz-transition-duration: 8s; " +
-             "-moz-transition-delay: 0, 8s" },
-  { style: "-moz-transition-property: text-indent,word-spacing,margin-left; " +
-             "-moz-transition-duration: 8s, 16s; " +
-             "-moz-transition-delay: 8s, 8s, 0, 8s, 8s, 8s" },
+  { style: "transition: 4s margin, 8s margin-left" },
+  { style: "transition: 4s margin-left, 8s margin" },
+  { style: "transition-property: margin-left; " +
+             "transition-duration: 8s, 2s" },
+  { style: "transition-property: margin-left, margin-left; " + 
+             "transition-duration: 2s, 8s" },
+  { style: "transition-property: margin-left, margin-left, margin-left; " +
+             "transition-duration: 8s, 2s" },
+  { style: "transition-property: margin-left; " +
+             "transition-duration: 8s, 16s" },
+  { style: "transition-property: margin-left, margin-left; " + 
+             "transition-duration: 16s, 8s" },
+  { style: "transition-property: margin-left, margin-left, margin-left; " +
+             "transition-duration: 8s, 16s" },
+  { style: "transition-property: text-indent,word-spacing,margin-left; " +
+             "transition-duration: 8s; " +
+             "transition-delay: 0, 8s" },
+  { style: "transition-property: text-indent,word-spacing,margin-left; " +
+             "transition-duration: 8s, 16s; " +
+             "transition-delay: 8s, 8s, 0, 8s, 8s, 8s" },
 ];
 
 for (var i in number_tests) {
@@ -352,7 +333,7 @@ function make_display_test(initially_none, text)
     var p = document.createElement("p");
     p.appendChild(document.createTextNode(text));
     p.style.textIndent = "0px";
-    p.style.MozTransition = "8s text-indent ease-in-out";
+    p.style.transition = "8s text-indent ease-in-out";
     if (initially_none)
         p.style.display = "none";
     div.appendChild(p);
@@ -404,6 +385,10 @@ for (var test in interrupt_tests) {
 }
 for (var d in delay_tests) {
     var p = delay_tests[d];
+    p.style.marginLeft = "100px";
+}
+for (var d in delay_zero_tests) {
+    var p = delay_zero_tests[d];
     p.style.marginLeft = "100px";
 }
 reset_test.style.marginLeft = "100px";
@@ -583,6 +568,29 @@ function check_delay_test(time)
 check_delay_test(0);
 for (var i = 1; i <= 8; ++i) {
     add_future_call(i, check_delay_test);
+}
+
+function check_delay_zero_test(time)
+{
+    for (var d in delay_zero_tests) {
+        var p = delay_zero_tests[d];
+
+        time_range = [ px_to_num(earlyrefcs.textIndent) / 125,
+                       px_to_num(laterefcs.textIndent) / 125 ];
+        var m = getComputedStyle(p, "").marginLeft;
+        var desc = "delay_zero test for delay " + d + "s";
+        if (time_range[0] < d && time_range[1] < d) {
+            is(m, "0px", desc);
+        } else if ((time_range[0] > d && time_range[1] > d) ||
+                   (d == 0 && time == 0)) {
+            is(m, "100px", desc);
+        }
+    }
+}
+
+check_delay_zero_test(0);
+for (var i = 1; i <= 8; ++i) {
+    add_future_call(i, check_delay_zero_test);
 }
 
 function reset_reset_test(time)

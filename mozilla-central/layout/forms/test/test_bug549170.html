@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=549170
 -->
 <head>
   <title>Test for Bug 549170</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
@@ -21,6 +20,12 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=549170
 <textarea id='t'
   onmouseup="mouseHandler(event);"
   onmousedown="mouseHandler(event);"></textarea>
+<input id='ip' placeholder='foo'
+  onmouseup="mouseHandler(event);"
+  onmousedown="mouseHandler(event);">
+<textarea id='tp' placeholder='foo'
+  onmouseup="mouseHandler(event);"
+  onmousedown="mouseHandler(event);"></textarea>
 <pre id="test">
 
 <script type="application/javascript">
@@ -34,24 +39,25 @@ SimpleTest.waitForExplicitFinish();
 function mouseHandler(aEvent)
 {
   gNumberOfMouseEventsCatched++;
+  var classList = SpecialPowers.getPrivilegedProps(aEvent, "originalTarget.classList");
+  var nodeName = SpecialPowers.getPrivilegedProps(aEvent, "originalTarget.nodeName");
 
-  is(aEvent.originalTarget.nodeName, "DIV", "An inner div should be the target of the event");
+  is(nodeName, "DIV", "An inner div should be the target of the event");
 
-  ok(aEvent.originalTarget.classList.contains("anonymous-div") && !aEvent.originalTarget.classList.contains("placeholder"),
-    "The target div class doesn't correcspond to the editor div class");
+  ok(classList.contains("anonymous-div"), "the target div should be the editor div");
 }
 
 function checkMouseEvents(element)
 {
   gNumberOfMouseEventsCatched = 0;
 
-  synthesizeMouse(element, 5, 5, {type: "mousedown", button: 0})
-  synthesizeMouse(element, 5, 5, {type: "mouseup",   button: 0})
-  synthesizeMouse(element, 5, 5, {type: "mousedown", button: 1})
+  synthesizeMouse(element, 5, 5, {type: "mousedown", button: 0});
+  synthesizeMouse(element, 5, 5, {type: "mouseup",   button: 0});
+  synthesizeMouse(element, 5, 5, {type: "mousedown", button: 1});
   // NOTE: this event is going to copy the buffer on linux, this should not be a problem
-  synthesizeMouse(element, 5, 5, {type: "mouseup",   button: 1})
-  synthesizeMouse(element, 5, 5, {type: "mousedown", button: 2})
-  synthesizeMouse(element, 5, 5, {type: "mouseup",   button: 2})
+  synthesizeMouse(element, 5, 5, {type: "mouseup",   button: 1});
+  synthesizeMouse(element, 5, 5, {type: "mousedown", button: 2});
+  synthesizeMouse(element, 5, 5, {type: "mouseup",   button: 2});
 
   is(gNumberOfMouseEventsCatched, 6, "Some mouse events have not been catched");
 }
@@ -60,6 +66,8 @@ function runTests()
 {
   checkMouseEvents(document.getElementById('i'));
   checkMouseEvents(document.getElementById('t'));
+  checkMouseEvents(document.getElementById('ip'));
+  checkMouseEvents(document.getElementById('tp'));
 
   SimpleTest.finish();
 }

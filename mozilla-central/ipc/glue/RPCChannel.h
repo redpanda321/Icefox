@@ -1,54 +1,21 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  * vim: sw=4 ts=4 et :
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Plugin App.
- *
- * The Initial Developer of the Original Code is
- *   Chris Jones <jones.chris.g@gmail.com>
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef ipc_glue_RPCChannel_h
 #define ipc_glue_RPCChannel_h 1
 
 #include <stdio.h>
 
-// FIXME/cjones probably shouldn't depend on STL
-#include <queue>
+#include <deque>
 #include <stack>
 #include <vector>
 
 #include "base/basictypes.h"
 
-#include "pratom.h"
+#include "nsAtomicRefcnt.h"
 
 #include "mozilla/ipc/SyncChannel.h"
 #include "nsAutoPtr.h"
@@ -78,11 +45,14 @@ public:
         virtual void OnChannelClose() = 0;
         virtual void OnChannelError() = 0;
         virtual Result OnMessageReceived(const Message& aMessage) = 0;
+        virtual void OnProcessingError(Result aError) = 0;
+        virtual int32_t GetProtocolTypeId() = 0;
         virtual bool OnReplyTimeout() = 0;
         virtual Result OnMessageReceived(const Message& aMessage,
                                          Message*& aReply) = 0;
         virtual Result OnCallReceived(const Message& aMessage,
                                       Message*& aReply) = 0;
+        virtual void OnChannelConnected(int32_t peer_pid) {}
 
         virtual void OnEnteredCxxStack()
         {
@@ -109,24 +79,22 @@ public:
         {
             return RRPChildWins;
         }
+        virtual void ProcessRemoteNativeEventsInRPCCall() {};
     };
 
     RPCChannel(RPCListener* aListener);
 
     virtual ~RPCChannel();
 
-    NS_OVERRIDE
-    void Clear();
+    void Clear() MOZ_OVERRIDE;
 
     // Make an RPC to the other side of the channel
     bool Call(Message* msg, Message* reply);
 
     // RPCChannel overrides these so that the async and sync messages
     // can be counted against mStackFrames
-    NS_OVERRIDE
-    virtual bool Send(Message* msg);
-    NS_OVERRIDE
-    virtual bool Send(Message* msg, Message* reply);
+    virtual bool Send(Message* msg) MOZ_OVERRIDE;
+    virtual bool Send(Message* msg, Message* reply) MOZ_OVERRIDE;
 
     // Asynchronously, send the child a message that puts it in such a
     // state that it can't send messages to the parent unless the
@@ -156,15 +124,8 @@ public:
         return !mCxxStackFrames.empty();
     }
 
-    NS_OVERRIDE
-    virtual bool OnSpecialMessage(uint16 id, const Message& msg);
+    virtual bool OnSpecialMessage(uint16_t id, const Message& msg) MOZ_OVERRIDE;
 
-    // Override the SyncChannel handler so we can dispatch RPC
-    // messages.  Called on the IO thread only.
-    NS_OVERRIDE
-    virtual void OnMessageReceived(const Message& msg);
-    NS_OVERRIDE
-    virtual void OnChannelError();
 
     /**
      * If there is a pending RPC message, process all pending messages.
@@ -176,27 +137,31 @@ public:
 
 #ifdef OS_WIN
     void ProcessNativeEventsInRPCCall();
+    static void NotifyGeckoEventDispatch();
 
 protected:
     bool WaitForNotify();
     void SpinInternalEventLoop();
 #endif
 
-  private:
+protected:
+    virtual void OnMessageReceivedFromLink(const Message& msg) MOZ_OVERRIDE;
+    virtual void OnChannelErrorFromLink() MOZ_OVERRIDE;
+
+private:
     // Called on worker thread only
 
     RPCListener* Listener() const {
         return static_cast<RPCListener*>(mListener);
     }
 
-    NS_OVERRIDE
-    virtual bool ShouldDeferNotifyMaybeError() const {
+    virtual bool ShouldDeferNotifyMaybeError() const MOZ_OVERRIDE {
         return IsOnCxxStack();
     }
 
     bool EventOccurred() const;
 
-    bool MaybeProcessDeferredIncall();
+    void MaybeUndeferIncall();
     void EnqueuePendingMessages();
 
     /**
@@ -204,6 +169,18 @@ protected:
      * @return true if a message was processed
      */
     bool OnMaybeDequeueOne();
+
+    /**
+     * The "remote view of stack depth" can be different than the
+     * actual stack depth when there are out-of-turn replies.  When we
+     * receive one, our actual RPC stack depth doesn't decrease, but
+     * the other side (that sent the reply) thinks it has.  So, the
+     * "view" returned here is |stackDepth| minus the number of
+     * out-of-turn replies.
+     *
+     * Only called from the worker thread.
+     */
+    size_t RemoteViewOfStackDepth(size_t stackDepth) const;
 
     void Incall(const Message& call, size_t stackDepth);
     void DispatchIncall(const Message& call);
@@ -248,7 +225,7 @@ protected:
             return mMsg->is_rpc() && OUT_MESSAGE == mDirection;
         }
 
-        void Describe(int32* id, const char** dir, const char** sems,
+        void Describe(int32_t* id, const char** dir, const char** sems,
                       const char** name) const
         {
             *id = mMsg->routing_id();
@@ -309,7 +286,7 @@ protected:
 
     // Called from both threads
     size_t StackDepth() const {
-        mMutex.AssertCurrentThreadOwns();
+        mMonitor->AssertCurrentThreadOwns();
         return mStack.size();
     }
 
@@ -318,8 +295,8 @@ protected:
                     const char* type="rpc", bool reply=false) const;
 
     // This method is only safe to call on the worker thread, or in a
-    // debugger with all threads paused.  |outfile| defaults to stdout.
-    void DumpRPCStack(FILE* outfile=NULL, const char* const pfx="") const;
+    // debugger with all threads paused.
+    void DumpRPCStack(const char* const pfx="") const;
 
     // 
     // Queue of all incoming messages, except for replies to sync
@@ -361,7 +338,7 @@ protected:
     // sent us another blocking message, because it's blocked on a
     // reply from us.
     //
-    typedef std::queue<Message> MessageQueue;
+    typedef std::deque<Message> MessageQueue;
     MessageQueue mPending;
 
     // 
@@ -423,7 +400,7 @@ protected:
     //  !mCxxStackFrames.empty() => RPCChannel code on C++ stack
     //
     // This member is only accessed on the worker thread, and so is
-    // not protected by mMutex.  It is managed exclusively by the
+    // not protected by mMonitor.  It is managed exclusively by the
     // helper |class CxxStackFrame|.
     std::vector<RPCFrame> mCxxStackFrames;
 
@@ -448,12 +425,10 @@ private:
         void Run() { mTask->Run(); }
         void Cancel() { mTask->Cancel(); }
         void AddRef() {
-            PR_AtomicIncrement(reinterpret_cast<PRInt32*>(&mRefCnt));
+            NS_AtomicIncrementRefcnt(mRefCnt);
         }
         void Release() {
-            nsrefcnt count =
-                PR_AtomicDecrement(reinterpret_cast<PRInt32*>(&mRefCnt));
-            if (0 == count)
+            if (NS_AtomicDecrementRefcnt(mRefCnt) == 0)
                 delete this;
         }
 

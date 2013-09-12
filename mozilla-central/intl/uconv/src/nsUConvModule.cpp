@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *   IBM Corporation
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "nsCOMPtr.h"
 #include "nsCRT.h"
 #include "mozilla/ModuleUtils.h"
@@ -45,25 +11,19 @@
 #include "nsEncoderDecoderUtils.h"
 #include "nsIUnicodeDecoder.h"
 #include "nsIUnicodeEncoder.h"
-#include "nsICharsetAlias.h"
 #include "nsIServiceManager.h"
 
 
 #include "nsUConvCID.h"
 #include "nsCharsetConverterManager.h"
-#include "nsCharsetAlias.h"
 #include "nsTextToSubURI.h"
 #include "nsUTF8ConverterService.h"
 #include "nsConverterInputStream.h"
 #include "nsConverterOutputStream.h"
-#include "nsPlatformCharset.h"
 #include "nsScriptableUConv.h"
 
-#ifndef MOZ_USE_NATIVE_UCONV
-#include "nsIPlatformCharset.h"
 #include "nsITextToSubURI.h"
 
-#include "nsUConvDll.h"
 #include "nsIFile.h"
 
 #include "nsCRT.h"
@@ -121,15 +81,13 @@
 #include "nsMacRomanianToUnicode.h"
 #include "nsMacCyrillicToUnicode.h"
 #include "nsMacIcelandicToUnicode.h"
-#include "nsGEOSTD8ToUnicode.h"
 #include "nsARMSCII8ToUnicode.h"
 #include "nsTCVN5712ToUnicode.h"
 #include "nsVISCIIToUnicode.h"
 #include "nsVPSToUnicode.h"
 #include "nsUTF7ToUnicode.h"
 #include "nsMUTF7ToUnicode.h"
-#include "nsUTF32ToUnicode.h"
-#include "nsUCS2BEToUnicode.h"
+#include "nsUTF16ToUnicode.h"
 #include "nsT61ToUnicode.h"
 #include "nsUserDefinedToUnicode.h"
 #include "nsUnicodeToAscii.h"
@@ -172,15 +130,13 @@
 #include "nsUnicodeToMacRomanian.h"
 #include "nsUnicodeToMacCyrillic.h"
 #include "nsUnicodeToMacIcelandic.h"
-#include "nsUnicodeToGEOSTD8.h"
 #include "nsUnicodeToARMSCII8.h"
 #include "nsUnicodeToTCVN5712.h"
 #include "nsUnicodeToVISCII.h"
 #include "nsUnicodeToVPS.h"
 #include "nsUnicodeToUTF7.h"
 #include "nsUnicodeToMUTF7.h"
-#include "nsUnicodeToUCS2BE.h"
-#include "nsUnicodeToUTF32.h"
+#include "nsUnicodeToUTF16.h"
 #include "nsUnicodeToT61.h"
 #include "nsUnicodeToUserDefined.h"
 #include "nsUnicodeToSymbol.h"
@@ -209,7 +165,6 @@
 #include "nsCP857ToUnicode.h"
 #include "nsCP862ToUnicode.h"
 #include "nsCP864ToUnicode.h"
-#include "nsCP864iToUnicode.h"
 #ifdef XP_OS2
 #include "nsCP869ToUnicode.h"
 #include "nsCP1125ToUnicode.h"
@@ -221,7 +176,6 @@
 #include "nsUnicodeToCP857.h"
 #include "nsUnicodeToCP862.h"
 #include "nsUnicodeToCP864.h"
-#include "nsUnicodeToCP864i.h"
 #ifdef XP_OS2
 #include "nsUnicodeToCP869.h"
 #include "nsUnicodeToCP1125.h"
@@ -256,14 +210,11 @@
 // ucvko
 #include "nsUCvKOCID.h"
 #include "nsUCvKODll.h"
-#include "nsEUCKRToUnicode.h"
-#include "nsUnicodeToEUCKR.h"
 #include "nsJohabToUnicode.h"
 #include "nsUnicodeToJohab.h"
 #include "nsCP949ToUnicode.h"
 #include "nsUnicodeToCP949.h"
 #include "nsISO2022KRToUnicode.h"
-#include "nsUnicodeToJamoTTF.h"
 
 // ucvcn
 #include "nsUCvCnCID.h"
@@ -272,21 +223,16 @@
 #include "nsUnicodeToHZ.h"
 #include "nsGBKToUnicode.h"
 #include "nsUnicodeToGBK.h"
-#include "nsCP936ToUnicode.h"
-#include "nsUnicodeToCP936.h"
 #include "nsGB2312ToUnicodeV2.h"
 #include "nsUnicodeToGB2312V2.h"
 #include "nsISO2022CNToUnicode.h"
 #include "nsUnicodeToISO2022CN.h"
 #include "gbku.h"
 
-#define DECODER_NAME_BASE "Unicode Decoder-"
-#define ENCODER_NAME_BASE "Unicode Encoder-"
-
 NS_CONVERTER_REGISTRY_START
 NS_UCONV_REG_UNREG("ISO-8859-1", NS_ISO88591TOUNICODE_CID, NS_UNICODETOISO88591_CID)
 NS_UCONV_REG_UNREG("windows-1252", NS_CP1252TOUNICODE_CID, NS_UNICODETOCP1252_CID)
-NS_UCONV_REG_UNREG("x-mac-roman", NS_MACROMANTOUNICODE_CID, NS_UNICODETOMACROMAN_CID)
+NS_UCONV_REG_UNREG("macintosh", NS_MACROMANTOUNICODE_CID, NS_UNICODETOMACROMAN_CID)
 NS_UCONV_REG_UNREG("UTF-8", NS_UTF8TOUNICODE_CID, NS_UNICODETOUTF8_CID)
 
   // ucvlatin
@@ -330,7 +276,6 @@ NS_UCONV_REG_UNREG("x-mac-croatian", NS_MACCROATIANTOUNICODE_CID, NS_UNICODETOMA
 NS_UCONV_REG_UNREG("x-mac-romanian", NS_MACROMANIANTOUNICODE_CID, NS_UNICODETOMACROMANIAN_CID)
 NS_UCONV_REG_UNREG("x-mac-cyrillic", NS_MACCYRILLICTOUNICODE_CID, NS_UNICODETOMACCYRILLIC_CID)
 NS_UCONV_REG_UNREG("x-mac-icelandic", NS_MACICELANDICTOUNICODE_CID, NS_UNICODETOMACICELANDIC_CID)
-NS_UCONV_REG_UNREG("GEOSTD8", NS_GEOSTD8TOUNICODE_CID, NS_UNICODETOGEOSTD8_CID)
 NS_UCONV_REG_UNREG("armscii-8", NS_ARMSCII8TOUNICODE_CID, NS_UNICODETOARMSCII8_CID)
 NS_UCONV_REG_UNREG("x-viet-tcvn5712", NS_TCVN5712TOUNICODE_CID, NS_UNICODETOTCVN5712_CID)
 NS_UCONV_REG_UNREG("VISCII", NS_VISCIITOUNICODE_CID, NS_UNICODETOVISCII_CID)
@@ -340,9 +285,6 @@ NS_UCONV_REG_UNREG("x-imap4-modified-utf7", NS_MUTF7TOUNICODE_CID, NS_UNICODETOM
 NS_UCONV_REG_UNREG("UTF-16", NS_UTF16TOUNICODE_CID, NS_UNICODETOUTF16_CID)
 NS_UCONV_REG_UNREG("UTF-16BE", NS_UTF16BETOUNICODE_CID, NS_UNICODETOUTF16BE_CID)
 NS_UCONV_REG_UNREG("UTF-16LE", NS_UTF16LETOUNICODE_CID, NS_UNICODETOUTF16LE_CID)
-NS_UCONV_REG_UNREG("UTF-32", NS_UTF32TOUNICODE_CID, NS_UNICODETOUTF32_CID)
-NS_UCONV_REG_UNREG("UTF-32BE", NS_UTF32BETOUNICODE_CID, NS_UNICODETOUTF32BE_CID)
-NS_UCONV_REG_UNREG("UTF-32LE", NS_UTF32LETOUNICODE_CID, NS_UNICODETOUTF32LE_CID)
 NS_UCONV_REG_UNREG("T.61-8bit", NS_T61TOUNICODE_CID, NS_UNICODETOT61_CID)
 NS_UCONV_REG_UNREG("x-user-defined", NS_USERDEFINEDTOUNICODE_CID, NS_UNICODETOUSERDEFINED_CID)
 NS_UCONV_REG_UNREG("x-mac-arabic" , NS_MACARABICTOUNICODE_CID, NS_UNICODETOMACARABIC_CID)
@@ -364,7 +306,6 @@ NS_UCONV_REG_UNREG("IBM855", NS_CP855TOUNICODE_CID, NS_UNICODETOCP855_CID)
 NS_UCONV_REG_UNREG("IBM857", NS_CP857TOUNICODE_CID, NS_UNICODETOCP857_CID)
 NS_UCONV_REG_UNREG("IBM862", NS_CP862TOUNICODE_CID, NS_UNICODETOCP862_CID)
 NS_UCONV_REG_UNREG("IBM864", NS_CP864TOUNICODE_CID, NS_UNICODETOCP864_CID)
-NS_UCONV_REG_UNREG("IBM864i", NS_CP864ITOUNICODE_CID, NS_UNICODETOCP864I_CID)
 #ifdef XP_OS2
 NS_UCONV_REG_UNREG("IBM869", NS_CP869TOUNICODE_CID, NS_UNICODETOCP869_CID)
 NS_UCONV_REG_UNREG("IBM1125", NS_CP1125TOUNICODE_CID, NS_UNICODETOCP1125_CID)
@@ -390,14 +331,11 @@ NS_UCONV_REG_UNREG_ENCODER("hkscs-1" , NS_UNICODETOHKSCS_CID)
     // ucvko
 NS_UCONV_REG_UNREG("EUC-KR", NS_EUCKRTOUNICODE_CID, NS_UNICODETOEUCKR_CID)
 NS_UCONV_REG_UNREG("x-johab", NS_JOHABTOUNICODE_CID, NS_UNICODETOJOHAB_CID)
-NS_UCONV_REG_UNREG("x-windows-949", NS_CP949TOUNICODE_CID, NS_UNICODETOCP949_CID)
 NS_UCONV_REG_UNREG_DECODER("ISO-2022-KR", NS_ISO2022KRTOUNICODE_CID)
-NS_UCONV_REG_UNREG_ENCODER("x-koreanjamo-0",  NS_UNICODETOJAMOTTF_CID)
 
 // ucvcn
 NS_UCONV_REG_UNREG("GB2312", NS_GB2312TOUNICODE_CID, NS_UNICODETOGB2312_CID)
-NS_UCONV_REG_UNREG("windows-936", NS_CP936TOUNICODE_CID, NS_UNICODETOCP936_CID)
-NS_UCONV_REG_UNREG("x-gbk", NS_GBKTOUNICODE_CID, NS_UNICODETOGBK_CID)
+NS_UCONV_REG_UNREG("gbk", NS_GBKTOUNICODE_CID, NS_UNICODETOGBK_CID)
 NS_UCONV_REG_UNREG("HZ-GB-2312", NS_HZTOUNICODE_CID, NS_UNICODETOHZ_CID)
 NS_UCONV_REG_UNREG("gb18030", NS_GB18030TOUNICODE_CID, NS_UNICODETOGB18030_CID)
 NS_UCONV_REG_UNREG_DECODER("ISO-2022-CN", NS_ISO2022CNTOUNICODE_CID)
@@ -416,17 +354,11 @@ NS_GENERIC_FACTORY_CONSTRUCTOR(nsMUTF7ToUnicode)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsUTF16ToUnicode)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsUTF16BEToUnicode)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsUTF16LEToUnicode)
-NS_GENERIC_FACTORY_CONSTRUCTOR(nsUTF32ToUnicode)
-NS_GENERIC_FACTORY_CONSTRUCTOR(nsUTF32BEToUnicode)
-NS_GENERIC_FACTORY_CONSTRUCTOR(nsUTF32LEToUnicode)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsUnicodeToUTF7)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsUnicodeToMUTF7)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsUnicodeToUTF16BE)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsUnicodeToUTF16LE)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsUnicodeToUTF16)
-NS_GENERIC_FACTORY_CONSTRUCTOR(nsUnicodeToUTF32BE)
-NS_GENERIC_FACTORY_CONSTRUCTOR(nsUnicodeToUTF32LE)
-NS_GENERIC_FACTORY_CONSTRUCTOR(nsUnicodeToUTF32)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsUnicodeToTSCII)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsUnicodeToTamilTTF)
 
@@ -444,13 +376,10 @@ NS_GENERIC_FACTORY_CONSTRUCTOR(nsUnicodeToISO2022JP)
 
 // ucvko
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsISO2022KRToUnicode)
-NS_GENERIC_FACTORY_CONSTRUCTOR(nsUnicodeToJamoTTF)
 
 // ucvcn
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsGB2312ToUnicodeV2)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsUnicodeToGB2312V2)
-NS_GENERIC_FACTORY_CONSTRUCTOR(nsCP936ToUnicode)
-NS_GENERIC_FACTORY_CONSTRUCTOR(nsUnicodeToCP936)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsGBKToUnicode)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsUnicodeToGBK)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsHZToUnicode)
@@ -463,161 +392,130 @@ NS_GENERIC_FACTORY_CONSTRUCTOR(nsISO2022CNToUnicode)
 //----------------------------------------------------------------------------
 // Global functions and data [declaration]
 
-#define DECODER_NAME_BASE "Unicode Decoder-"
-#define ENCODER_NAME_BASE "Unicode Encoder-"
-
 // ucvja
-const PRUint16 g_uf0201Mapping[] = {
+const uint16_t g_uf0201Mapping[] = {
 #include "jis0201.uf"
 };
 
-const PRUint16 g_uf0201GLMapping[] = {
+const uint16_t g_uf0201GLMapping[] = {
 #include "jis0201gl.uf"
 };
 
-const PRUint16 g_uf0208Mapping[] = {
+const uint16_t g_uf0208Mapping[] = {
 #include "jis0208.uf"
 };
 
-const PRUint16 g_uf0208extMapping[] = {
+const uint16_t g_uf0208extMapping[] = {
 #include "jis0208ext.uf"
 };
 
-const PRUint16 g_uf0212Mapping[] = {
-#include "jis0212.uf"
-};
-
 // ucvtw2
-const PRUint16 g_ufCNS1MappingTable[] = {
+const uint16_t g_ufCNS1MappingTable[] = {
 #include "cns_1.uf"
 };
 
-const PRUint16 g_ufCNS2MappingTable[] = {
+const uint16_t g_ufCNS2MappingTable[] = {
 #include "cns_2.uf"
 };
 
-const PRUint16 g_ufCNS3MappingTable[] = {
+const uint16_t g_ufCNS3MappingTable[] = {
 #include "cns3.uf"
 };
 
-const PRUint16 g_ufCNS4MappingTable[] = {
+const uint16_t g_ufCNS4MappingTable[] = {
 #include "cns4.uf"
 };
 
-const PRUint16 g_ufCNS5MappingTable[] = {
+const uint16_t g_ufCNS5MappingTable[] = {
 #include "cns5.uf"
 };
 
-const PRUint16 g_ufCNS6MappingTable[] = {
+const uint16_t g_ufCNS6MappingTable[] = {
 #include "cns6.uf"
 };
 
-const PRUint16 g_ufCNS7MappingTable[] = {
+const uint16_t g_ufCNS7MappingTable[] = {
 #include "cns7.uf"
 };
 
-const PRUint16 g_utCNS1MappingTable[] = {
+const uint16_t g_utCNS1MappingTable[] = {
 #include "cns_1.ut"
 };
 
-const PRUint16 g_utCNS2MappingTable[] = {
+const uint16_t g_utCNS2MappingTable[] = {
 #include "cns_2.ut"
 };
 
-const PRUint16 g_utCNS3MappingTable[] = {
+const uint16_t g_utCNS3MappingTable[] = {
 #include "cns3.ut"
 };
 
-const PRUint16 g_utCNS4MappingTable[] = {
+const uint16_t g_utCNS4MappingTable[] = {
 #include "cns4.ut"
 };
 
-const PRUint16 g_utCNS5MappingTable[] = {
+const uint16_t g_utCNS5MappingTable[] = {
 #include "cns5.ut"
 };
 
-const PRUint16 g_utCNS6MappingTable[] = {
+const uint16_t g_utCNS6MappingTable[] = {
 #include "cns6.ut"
 };
 
-const PRUint16 g_utCNS7MappingTable[] = {
+const uint16_t g_utCNS7MappingTable[] = {
 #include "cns7.ut"
 };
 
-const PRUint16 g_ASCIIMappingTable[] = {
+const uint16_t g_ASCIIMappingTable[] = {
   0x0001, 0x0004, 0x0005, 0x0008, 0x0000, 0x0000, 0x007F, 0x0000
 };
 
 // ucvtw
-const PRUint16 g_ufBig5Mapping[] = {
+const uint16_t g_ufBig5Mapping[] = {
 #include "big5.uf"
 };
 
-const PRUint16 g_utBIG5Mapping[] = {
+const uint16_t g_utBIG5Mapping[] = {
 #include "big5.ut"
 };
 
-const PRUint16 g_ufBig5HKSCSMapping[] = {
+const uint16_t g_ufBig5HKSCSMapping[] = {
 #include "hkscs.uf"
 };
 
-const PRUint16 g_ASCIIMapping[] = {
-  0x0001, 0x0004, 0x0005, 0x0008, 0x0000, 0x0000, 0x007F, 0x0000
-};
-
-const PRUint16 g_utBig5HKSCSMapping[] = {
+const uint16_t g_utBig5HKSCSMapping[] = {
 #include "hkscs.ut"
 };
 
 // ucvko
-const PRUint16 g_utKSC5601Mapping[] = {
+const uint16_t g_utKSC5601Mapping[] = {
 #include "u20kscgl.ut"
 };
 
-const PRUint16 g_ufKSC5601Mapping[] = {
+const uint16_t g_ufKSC5601Mapping[] = {
 #include "u20kscgl.uf"
 };
 
-const PRUint16 g_ucvko_AsciiMapping[] = {
-  0x0001, 0x0004, 0x0005, 0x0008, 0x0000, 0x0000, 0x007F, 0x0000
-};
-
-const PRUint16 g_HangulNullMapping[] ={
+const uint16_t g_HangulNullMapping[] ={
   0x0001, 0x0004, 0x0005, 0x0008, 0x0000, 0xAC00, 0xD7A3, 0xAC00
 };
 
-const PRUint16 g_ufJohabJamoMapping[] ={   
+const uint16_t g_ufJohabJamoMapping[] ={   
 #include "johabjamo.uf"
 };
-
-#else // MOZ_USE_NATIVE_UCONV
-
-#include "nsINativeUConvService.h"
-#include "nsNativeUConvService.h"
-
-NS_GENERIC_FACTORY_CONSTRUCTOR(NativeUConvService)
-
-#endif // #ifndef MOZ_USE_NATIVE_UCONV
 
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsCharsetConverterManager)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsTextToSubURI)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsUTF8ConverterService)
-NS_GENERIC_FACTORY_CONSTRUCTOR(nsCharsetAlias2)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsConverterInputStream)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsConverterOutputStream)
-NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsPlatformCharset, Init)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsScriptableUnicodeConverter)
 
 NS_DEFINE_NAMED_CID(NS_ICHARSETCONVERTERMANAGER_CID);
-NS_DEFINE_NAMED_CID(NS_CHARSETALIAS_CID);
 NS_DEFINE_NAMED_CID(NS_TEXTTOSUBURI_CID);
-NS_DEFINE_NAMED_CID(NS_PLATFORMCHARSET_CID);
 NS_DEFINE_NAMED_CID(NS_CONVERTERINPUTSTREAM_CID);
 NS_DEFINE_NAMED_CID(NS_CONVERTEROUTPUTSTREAM_CID);
 NS_DEFINE_NAMED_CID(NS_ISCRIPTABLEUNICODECONVERTER_CID);
-#ifdef MOZ_USE_NATIVE_UCONV
-NS_DEFINE_NAMED_CID(NS_NATIVE_UCONV_SERVICE_CID);
-#else
 NS_DEFINE_NAMED_CID(NS_UTF8CONVERTERSERVICE_CID);
 NS_DEFINE_NAMED_CID(NS_ISO88591TOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_CP1252TOUNICODE_CID);
@@ -667,7 +565,6 @@ NS_DEFINE_NAMED_CID(NS_MACCROATIANTOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_MACROMANIANTOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_MACCYRILLICTOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_MACICELANDICTOUNICODE_CID);
-NS_DEFINE_NAMED_CID(NS_GEOSTD8TOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_ARMSCII8TOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_TCVN5712TOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_VISCIITOUNICODE_CID);
@@ -677,9 +574,6 @@ NS_DEFINE_NAMED_CID(NS_MUTF7TOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_UTF16TOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_UTF16BETOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_UTF16LETOUNICODE_CID);
-NS_DEFINE_NAMED_CID(NS_UTF32TOUNICODE_CID);
-NS_DEFINE_NAMED_CID(NS_UTF32BETOUNICODE_CID);
-NS_DEFINE_NAMED_CID(NS_UTF32LETOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_T61TOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_USERDEFINEDTOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_MACARABICTOUNICODE_CID);
@@ -728,7 +622,6 @@ NS_DEFINE_NAMED_CID(NS_UNICODETOMACCROATIAN_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOMACROMANIAN_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOMACCYRILLIC_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOMACICELANDIC_CID);
-NS_DEFINE_NAMED_CID(NS_UNICODETOGEOSTD8_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOARMSCII8_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOTCVN5712_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOVISCII_CID);
@@ -738,9 +631,6 @@ NS_DEFINE_NAMED_CID(NS_UNICODETOMUTF7_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOUTF16BE_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOUTF16LE_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOUTF16_CID);
-NS_DEFINE_NAMED_CID(NS_UNICODETOUTF32BE_CID);
-NS_DEFINE_NAMED_CID(NS_UNICODETOUTF32LE_CID);
-NS_DEFINE_NAMED_CID(NS_UNICODETOUTF32_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOT61_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOUSERDEFINED_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOSYMBOL_CID);
@@ -760,7 +650,6 @@ NS_DEFINE_NAMED_CID(NS_CP855TOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_CP857TOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_CP862TOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_CP864TOUNICODE_CID);
-NS_DEFINE_NAMED_CID(NS_CP864ITOUNICODE_CID);
 #ifdef XP_OS2
 NS_DEFINE_NAMED_CID(NS_CP869TOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_CP1125TOUNICODE_CID);
@@ -772,7 +661,6 @@ NS_DEFINE_NAMED_CID(NS_UNICODETOCP855_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOCP857_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOCP862_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOCP864_CID);
-NS_DEFINE_NAMED_CID(NS_UNICODETOCP864I_CID);
 #ifdef XP_OS2
 NS_DEFINE_NAMED_CID(NS_UNICODETOCP869_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOCP1125_CID);
@@ -796,14 +684,9 @@ NS_DEFINE_NAMED_CID(NS_EUCKRTOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOEUCKR_CID);
 NS_DEFINE_NAMED_CID(NS_JOHABTOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOJOHAB_CID);
-NS_DEFINE_NAMED_CID(NS_CP949TOUNICODE_CID);
-NS_DEFINE_NAMED_CID(NS_UNICODETOCP949_CID);
 NS_DEFINE_NAMED_CID(NS_ISO2022KRTOUNICODE_CID);
-NS_DEFINE_NAMED_CID(NS_UNICODETOJAMOTTF_CID);
 NS_DEFINE_NAMED_CID(NS_GB2312TOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOGB2312_CID);
-NS_DEFINE_NAMED_CID(NS_CP936TOUNICODE_CID);
-NS_DEFINE_NAMED_CID(NS_UNICODETOCP936_CID);
 NS_DEFINE_NAMED_CID(NS_GBKTOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOGBK_CID);
 NS_DEFINE_NAMED_CID(NS_HZTOUNICODE_CID);
@@ -811,227 +694,200 @@ NS_DEFINE_NAMED_CID(NS_UNICODETOHZ_CID);
 NS_DEFINE_NAMED_CID(NS_GB18030TOUNICODE_CID);
 NS_DEFINE_NAMED_CID(NS_UNICODETOGB18030_CID);
 NS_DEFINE_NAMED_CID(NS_ISO2022CNTOUNICODE_CID);
-#endif
 
 static const mozilla::Module::CIDEntry kUConvCIDs[] = {
-  { &kNS_ICHARSETCONVERTERMANAGER_CID, false, NULL, nsCharsetConverterManagerConstructor },
-  { &kNS_CHARSETALIAS_CID, false, NULL, nsCharsetAlias2Constructor },
-  { &kNS_TEXTTOSUBURI_CID, false, NULL, nsTextToSubURIConstructor },
-  { &kNS_PLATFORMCHARSET_CID, false, NULL, nsPlatformCharsetConstructor },
-  { &kNS_CONVERTERINPUTSTREAM_CID, false, NULL, nsConverterInputStreamConstructor },
-  { &kNS_CONVERTEROUTPUTSTREAM_CID, false, NULL, nsConverterOutputStreamConstructor },
-  { &kNS_ISCRIPTABLEUNICODECONVERTER_CID, false, NULL, nsScriptableUnicodeConverterConstructor },
-#ifdef MOZ_USE_NATIVE_ICONV
-  { &kNS_NATIVE_UCONV_SERVICE_CID, false, NULL, NativeUConvServiceConstructor },
-#else
-  { &kNS_UTF8CONVERTERSERVICE_CID, false, NULL, nsUTF8ConverterServiceConstructor },
-  { &kNS_ISO88591TOUNICODE_CID, false, NULL, nsISO88591ToUnicodeConstructor },
-  { &kNS_CP1252TOUNICODE_CID, false, NULL, nsCP1252ToUnicodeConstructor },
-  { &kNS_MACROMANTOUNICODE_CID, false, NULL, nsMacRomanToUnicodeConstructor },
-  { &kNS_UTF8TOUNICODE_CID, false, NULL, nsUTF8ToUnicodeConstructor },
-  { &kNS_UNICODETOISO88591_CID, false, NULL, nsUnicodeToISO88591Constructor },
-  { &kNS_UNICODETOCP1252_CID, false, NULL, nsUnicodeToCP1252Constructor },
-  { &kNS_UNICODETOMACROMAN_CID, false, NULL, nsUnicodeToMacRomanConstructor },
-  { &kNS_UNICODETOUTF8_CID, false, NULL, nsUnicodeToUTF8Constructor },
-  { &kNS_ASCIITOUNICODE_CID, false, NULL, nsAsciiToUnicodeConstructor },
-  { &kNS_ISO88592TOUNICODE_CID, false, NULL, nsISO88592ToUnicodeConstructor },
-  { &kNS_ISO88593TOUNICODE_CID, false, NULL, nsISO88593ToUnicodeConstructor },
-  { &kNS_ISO88594TOUNICODE_CID, false, NULL, nsISO88594ToUnicodeConstructor },
-  { &kNS_ISO88595TOUNICODE_CID, false, NULL, nsISO88595ToUnicodeConstructor },
-  { &kNS_ISO88596TOUNICODE_CID, false, NULL, nsISO88596ToUnicodeConstructor },
-  { &kNS_ISO88596ITOUNICODE_CID, false, NULL, nsISO88596IToUnicodeConstructor },
-  { &kNS_ISO88596ETOUNICODE_CID, false, NULL, nsISO88596EToUnicodeConstructor },
-  { &kNS_ISO88597TOUNICODE_CID, false, NULL, nsISO88597ToUnicodeConstructor },
-  { &kNS_ISO88598TOUNICODE_CID, false, NULL, nsISO88598ToUnicodeConstructor },
-  { &kNS_ISO88598ITOUNICODE_CID, false, NULL, nsISO88598IToUnicodeConstructor },
-  { &kNS_ISO88598ETOUNICODE_CID, false, NULL, nsISO88598EToUnicodeConstructor },
-  { &kNS_ISO88599TOUNICODE_CID, false, NULL, nsISO88599ToUnicodeConstructor },
-  { &kNS_ISO885910TOUNICODE_CID, false, NULL, nsISO885910ToUnicodeConstructor },
-  { &kNS_ISO885913TOUNICODE_CID, false, NULL, nsISO885913ToUnicodeConstructor },
-  { &kNS_ISO885914TOUNICODE_CID, false, NULL, nsISO885914ToUnicodeConstructor },
-  { &kNS_ISO885915TOUNICODE_CID, false, NULL, nsISO885915ToUnicodeConstructor },
-  { &kNS_ISO885916TOUNICODE_CID, false, NULL, nsISO885916ToUnicodeConstructor },
-  { &kNS_ISOIR111TOUNICODE_CID, false, NULL, nsISOIR111ToUnicodeConstructor },
-  { &kNS_CP1250TOUNICODE_CID, false, NULL, nsCP1250ToUnicodeConstructor },
-  { &kNS_CP1251TOUNICODE_CID, false, NULL, nsCP1251ToUnicodeConstructor },
-  { &kNS_CP1253TOUNICODE_CID, false, NULL, nsCP1253ToUnicodeConstructor },
-  { &kNS_CP1254TOUNICODE_CID, false, NULL, nsCP1254ToUnicodeConstructor },
-  { &kNS_CP1255TOUNICODE_CID, false, NULL, nsCP1255ToUnicodeConstructor },
-  { &kNS_CP1256TOUNICODE_CID, false, NULL, nsCP1256ToUnicodeConstructor },
-  { &kNS_CP1257TOUNICODE_CID, false, NULL, nsCP1257ToUnicodeConstructor },
-  { &kNS_CP1258TOUNICODE_CID, false, NULL, nsCP1258ToUnicodeConstructor },
-  { &kNS_TIS620TOUNICODE_CID, false, NULL, nsTIS620ToUnicodeConstructor },
-  { &kNS_ISO885911TOUNICODE_CID, false, NULL, nsISO885911ToUnicodeConstructor },
-  { &kNS_CP874TOUNICODE_CID, false, NULL, nsCP874ToUnicodeConstructor },
-  { &kNS_CP866TOUNICODE_CID, false, NULL, nsCP866ToUnicodeConstructor },
-  { &kNS_KOI8RTOUNICODE_CID, false, NULL, nsKOI8RToUnicodeConstructor },
-  { &kNS_KOI8UTOUNICODE_CID, false, NULL, nsKOI8UToUnicodeConstructor },
-  { &kNS_MACCETOUNICODE_CID, false, NULL, nsMacCEToUnicodeConstructor },
-  { &kNS_MACGREEKTOUNICODE_CID, false, NULL, nsMacGreekToUnicodeConstructor },
-  { &kNS_MACTURKISHTOUNICODE_CID, false, NULL, nsMacTurkishToUnicodeConstructor },
-  { &kNS_MACCROATIANTOUNICODE_CID, false, NULL, nsMacCroatianToUnicodeConstructor },
-  { &kNS_MACROMANIANTOUNICODE_CID, false, NULL, nsMacRomanianToUnicodeConstructor },
-  { &kNS_MACCYRILLICTOUNICODE_CID, false, NULL, nsMacCyrillicToUnicodeConstructor },
-  { &kNS_MACICELANDICTOUNICODE_CID, false, NULL, nsMacIcelandicToUnicodeConstructor },
-  { &kNS_GEOSTD8TOUNICODE_CID, false, NULL, nsGEOSTD8ToUnicodeConstructor },
-  { &kNS_ARMSCII8TOUNICODE_CID, false, NULL, nsARMSCII8ToUnicodeConstructor },
-  { &kNS_TCVN5712TOUNICODE_CID, false, NULL, nsTCVN5712ToUnicodeConstructor },
-  { &kNS_VISCIITOUNICODE_CID, false, NULL, nsVISCIIToUnicodeConstructor },
-  { &kNS_VPSTOUNICODE_CID, false, NULL, nsVPSToUnicodeConstructor },
-  { &kNS_UTF7TOUNICODE_CID, false, NULL, nsUTF7ToUnicodeConstructor },
-  { &kNS_MUTF7TOUNICODE_CID, false, NULL, nsMUTF7ToUnicodeConstructor },
-  { &kNS_UTF16TOUNICODE_CID, false, NULL, nsUTF16ToUnicodeConstructor },
-  { &kNS_UTF16BETOUNICODE_CID, false, NULL, nsUTF16BEToUnicodeConstructor },
-  { &kNS_UTF16LETOUNICODE_CID, false, NULL, nsUTF16LEToUnicodeConstructor },
-  { &kNS_UTF32TOUNICODE_CID, false, NULL, nsUTF32ToUnicodeConstructor },
-  { &kNS_UTF32BETOUNICODE_CID, false, NULL, nsUTF32BEToUnicodeConstructor },
-  { &kNS_UTF32LETOUNICODE_CID, false, NULL, nsUTF32LEToUnicodeConstructor },
-  { &kNS_T61TOUNICODE_CID, false, NULL, nsT61ToUnicodeConstructor },
-  { &kNS_USERDEFINEDTOUNICODE_CID, false, NULL, nsUserDefinedToUnicodeConstructor },
-  { &kNS_MACARABICTOUNICODE_CID, false, NULL, nsMacArabicToUnicodeConstructor },
-  { &kNS_MACDEVANAGARITOUNICODE_CID, false, NULL, nsMacDevanagariToUnicodeConstructor },
-  { &kNS_MACFARSITOUNICODE_CID, false, NULL, nsMacFarsiToUnicodeConstructor },
-  { &kNS_MACGURMUKHITOUNICODE_CID, false, NULL, nsMacGurmukhiToUnicodeConstructor },
-  { &kNS_MACGUJARATITOUNICODE_CID, false, NULL, nsMacGujaratiToUnicodeConstructor },
-  { &kNS_MACHEBREWTOUNICODE_CID, false, NULL, nsMacHebrewToUnicodeConstructor },
-  { &kNS_UNICODETOASCII_CID, false, NULL, nsUnicodeToAsciiConstructor },
-  { &kNS_UNICODETOISO88592_CID, false, NULL, nsUnicodeToISO88592Constructor },
-  { &kNS_UNICODETOISO88593_CID, false, NULL, nsUnicodeToISO88593Constructor },
-  { &kNS_UNICODETOISO88594_CID, false, NULL, nsUnicodeToISO88594Constructor },
-  { &kNS_UNICODETOISO88595_CID, false, NULL, nsUnicodeToISO88595Constructor },
-  { &kNS_UNICODETOISO88596_CID, false, NULL, nsUnicodeToISO88596Constructor },
-  { &kNS_UNICODETOISO88596I_CID, false, NULL, nsUnicodeToISO88596IConstructor },
-  { &kNS_UNICODETOISO88596E_CID, false, NULL, nsUnicodeToISO88596EConstructor },
-  { &kNS_UNICODETOISO88597_CID, false, NULL, nsUnicodeToISO88597Constructor },
-  { &kNS_UNICODETOISO88598_CID, false, NULL, nsUnicodeToISO88598Constructor },
-  { &kNS_UNICODETOISO88598I_CID, false, NULL, nsUnicodeToISO88598IConstructor },
-  { &kNS_UNICODETOISO88598E_CID, false, NULL, nsUnicodeToISO88598EConstructor },
-  { &kNS_UNICODETOISO88599_CID, false, NULL, nsUnicodeToISO88599Constructor },
-  { &kNS_UNICODETOISO885910_CID, false, NULL, nsUnicodeToISO885910Constructor },
-  { &kNS_UNICODETOISO885913_CID, false, NULL, nsUnicodeToISO885913Constructor },
-  { &kNS_UNICODETOISO885914_CID, false, NULL, nsUnicodeToISO885914Constructor },
-  { &kNS_UNICODETOISO885915_CID, false, NULL, nsUnicodeToISO885915Constructor },
-  { &kNS_UNICODETOISO885916_CID, false, NULL, nsUnicodeToISO885916Constructor },
-  { &kNS_UNICODETOISOIR111_CID, false, NULL, nsUnicodeToISOIR111Constructor },
-  { &kNS_UNICODETOCP1250_CID, false, NULL, nsUnicodeToCP1250Constructor },
-  { &kNS_UNICODETOCP1251_CID, false, NULL, nsUnicodeToCP1251Constructor },
-  { &kNS_UNICODETOCP1253_CID, false, NULL, nsUnicodeToCP1253Constructor },
-  { &kNS_UNICODETOCP1254_CID, false, NULL, nsUnicodeToCP1254Constructor },
-  { &kNS_UNICODETOCP1255_CID, false, NULL, nsUnicodeToCP1255Constructor },
-  { &kNS_UNICODETOCP1256_CID, false, NULL, nsUnicodeToCP1256Constructor },
-  { &kNS_UNICODETOCP1257_CID, false, NULL, nsUnicodeToCP1257Constructor },
-  { &kNS_UNICODETOCP1258_CID, false, NULL, nsUnicodeToCP1258Constructor },
-  { &kNS_UNICODETOTIS620_CID, false, NULL, nsUnicodeToTIS620Constructor },
-  { &kNS_UNICODETOISO885911_CID, false, NULL, nsUnicodeToISO885911Constructor },
-  { &kNS_UNICODETOCP874_CID, false, NULL, nsUnicodeToCP874Constructor },
-  { &kNS_UNICODETOCP866_CID, false, NULL, nsUnicodeToCP866Constructor },
-  { &kNS_UNICODETOKOI8R_CID, false, NULL, nsUnicodeToKOI8RConstructor },
-  { &kNS_UNICODETOKOI8U_CID, false, NULL, nsUnicodeToKOI8UConstructor },
-  { &kNS_UNICODETOMACCE_CID, false, NULL, nsUnicodeToMacCEConstructor },
-  { &kNS_UNICODETOMACGREEK_CID, false, NULL, nsUnicodeToMacGreekConstructor },
-  { &kNS_UNICODETOMACTURKISH_CID, false, NULL, nsUnicodeToMacTurkishConstructor },
-  { &kNS_UNICODETOMACCROATIAN_CID, false, NULL, nsUnicodeToMacCroatianConstructor },
-  { &kNS_UNICODETOMACROMANIAN_CID, false, NULL, nsUnicodeToMacRomanianConstructor },
-  { &kNS_UNICODETOMACCYRILLIC_CID, false, NULL, nsUnicodeToMacCyrillicConstructor },
-  { &kNS_UNICODETOMACICELANDIC_CID, false, NULL, nsUnicodeToMacIcelandicConstructor },
-  { &kNS_UNICODETOGEOSTD8_CID, false, NULL, nsUnicodeToGEOSTD8Constructor },
-  { &kNS_UNICODETOARMSCII8_CID, false, NULL, nsUnicodeToARMSCII8Constructor },
-  { &kNS_UNICODETOTCVN5712_CID, false, NULL, nsUnicodeToTCVN5712Constructor },
-  { &kNS_UNICODETOVISCII_CID, false, NULL, nsUnicodeToVISCIIConstructor },
-  { &kNS_UNICODETOVPS_CID, false, NULL, nsUnicodeToVPSConstructor },
-  { &kNS_UNICODETOUTF7_CID, false, NULL, nsUnicodeToUTF7Constructor },
-  { &kNS_UNICODETOMUTF7_CID, false, NULL, nsUnicodeToMUTF7Constructor },
-  { &kNS_UNICODETOUTF16BE_CID, false, NULL, nsUnicodeToUTF16BEConstructor },
-  { &kNS_UNICODETOUTF16LE_CID, false, NULL, nsUnicodeToUTF16LEConstructor },
-  { &kNS_UNICODETOUTF16_CID, false, NULL, nsUnicodeToUTF16Constructor },
-  { &kNS_UNICODETOUTF32BE_CID, false, NULL, nsUnicodeToUTF32BEConstructor },
-  { &kNS_UNICODETOUTF32LE_CID, false, NULL, nsUnicodeToUTF32LEConstructor },
-  { &kNS_UNICODETOUTF32_CID, false, NULL, nsUnicodeToUTF32Constructor },
-  { &kNS_UNICODETOT61_CID, false, NULL, nsUnicodeToT61Constructor },
-  { &kNS_UNICODETOUSERDEFINED_CID, false, NULL, nsUnicodeToUserDefinedConstructor },
-  { &kNS_UNICODETOSYMBOL_CID, false, NULL, nsUnicodeToSymbolConstructor },
-  { &kNS_UNICODETOZAPFDINGBATS_CID, false, NULL, nsUnicodeToZapfDingbatConstructor },
-  { &kNS_UNICODETOADOBEEURO_CID, false, NULL, nsUnicodeToAdobeEuroConstructor },
-  { &kNS_UNICODETOMACARABIC_CID, false, NULL, nsUnicodeToMacArabicConstructor },
-  { &kNS_UNICODETOMACDEVANAGARI_CID, false, NULL, nsUnicodeToMacDevanagariConstructor },
-  { &kNS_UNICODETOMACFARSI_CID, false, NULL, nsUnicodeToMacFarsiConstructor },
-  { &kNS_UNICODETOMACGURMUKHI_CID, false, NULL, nsUnicodeToMacGurmukhiConstructor },
-  { &kNS_UNICODETOMACGUJARATI_CID, false, NULL, nsUnicodeToMacGujaratiConstructor },
-  { &kNS_UNICODETOMACHEBREW_CID, false, NULL, nsUnicodeToMacHebrewConstructor },
-  { &kNS_UNICODETOTSCII_CID, false, NULL, nsUnicodeToTSCIIConstructor },
-  { &kNS_UNICODETOTAMILTTF_CID, false, NULL, nsUnicodeToTamilTTFConstructor },
-  { &kNS_CP850TOUNICODE_CID, false, NULL, nsCP850ToUnicodeConstructor },
-  { &kNS_CP852TOUNICODE_CID, false, NULL, nsCP852ToUnicodeConstructor },
-  { &kNS_CP855TOUNICODE_CID, false, NULL, nsCP855ToUnicodeConstructor },
-  { &kNS_CP857TOUNICODE_CID, false, NULL, nsCP857ToUnicodeConstructor },
-  { &kNS_CP862TOUNICODE_CID, false, NULL, nsCP862ToUnicodeConstructor },
-  { &kNS_CP864TOUNICODE_CID, false, NULL, nsCP864ToUnicodeConstructor },
-  { &kNS_CP864ITOUNICODE_CID, false, NULL, nsCP864iToUnicodeConstructor },
+  { &kNS_ICHARSETCONVERTERMANAGER_CID, false, nullptr, nsCharsetConverterManagerConstructor },
+  { &kNS_TEXTTOSUBURI_CID, false, nullptr, nsTextToSubURIConstructor },
+  { &kNS_CONVERTERINPUTSTREAM_CID, false, nullptr, nsConverterInputStreamConstructor },
+  { &kNS_CONVERTEROUTPUTSTREAM_CID, false, nullptr, nsConverterOutputStreamConstructor },
+  { &kNS_ISCRIPTABLEUNICODECONVERTER_CID, false, nullptr, nsScriptableUnicodeConverterConstructor },
+  { &kNS_UTF8CONVERTERSERVICE_CID, false, nullptr, nsUTF8ConverterServiceConstructor },
+  { &kNS_ISO88591TOUNICODE_CID, false, nullptr, nsISO88591ToUnicodeConstructor },
+  { &kNS_CP1252TOUNICODE_CID, false, nullptr, nsCP1252ToUnicodeConstructor },
+  { &kNS_MACROMANTOUNICODE_CID, false, nullptr, nsMacRomanToUnicodeConstructor },
+  { &kNS_UTF8TOUNICODE_CID, false, nullptr, nsUTF8ToUnicodeConstructor },
+  { &kNS_UNICODETOISO88591_CID, false, nullptr, nsUnicodeToISO88591Constructor },
+  { &kNS_UNICODETOCP1252_CID, false, nullptr, nsUnicodeToCP1252Constructor },
+  { &kNS_UNICODETOMACROMAN_CID, false, nullptr, nsUnicodeToMacRomanConstructor },
+  { &kNS_UNICODETOUTF8_CID, false, nullptr, nsUnicodeToUTF8Constructor },
+  { &kNS_ASCIITOUNICODE_CID, false, nullptr, nsAsciiToUnicodeConstructor },
+  { &kNS_ISO88592TOUNICODE_CID, false, nullptr, nsISO88592ToUnicodeConstructor },
+  { &kNS_ISO88593TOUNICODE_CID, false, nullptr, nsISO88593ToUnicodeConstructor },
+  { &kNS_ISO88594TOUNICODE_CID, false, nullptr, nsISO88594ToUnicodeConstructor },
+  { &kNS_ISO88595TOUNICODE_CID, false, nullptr, nsISO88595ToUnicodeConstructor },
+  { &kNS_ISO88596TOUNICODE_CID, false, nullptr, nsISO88596ToUnicodeConstructor },
+  { &kNS_ISO88596ITOUNICODE_CID, false, nullptr, nsISO88596IToUnicodeConstructor },
+  { &kNS_ISO88596ETOUNICODE_CID, false, nullptr, nsISO88596EToUnicodeConstructor },
+  { &kNS_ISO88597TOUNICODE_CID, false, nullptr, nsISO88597ToUnicodeConstructor },
+  { &kNS_ISO88598TOUNICODE_CID, false, nullptr, nsISO88598ToUnicodeConstructor },
+  { &kNS_ISO88598ITOUNICODE_CID, false, nullptr, nsISO88598IToUnicodeConstructor },
+  { &kNS_ISO88598ETOUNICODE_CID, false, nullptr, nsISO88598EToUnicodeConstructor },
+  { &kNS_ISO88599TOUNICODE_CID, false, nullptr, nsISO88599ToUnicodeConstructor },
+  { &kNS_ISO885910TOUNICODE_CID, false, nullptr, nsISO885910ToUnicodeConstructor },
+  { &kNS_ISO885913TOUNICODE_CID, false, nullptr, nsISO885913ToUnicodeConstructor },
+  { &kNS_ISO885914TOUNICODE_CID, false, nullptr, nsISO885914ToUnicodeConstructor },
+  { &kNS_ISO885915TOUNICODE_CID, false, nullptr, nsISO885915ToUnicodeConstructor },
+  { &kNS_ISO885916TOUNICODE_CID, false, nullptr, nsISO885916ToUnicodeConstructor },
+  { &kNS_ISOIR111TOUNICODE_CID, false, nullptr, nsISOIR111ToUnicodeConstructor },
+  { &kNS_CP1250TOUNICODE_CID, false, nullptr, nsCP1250ToUnicodeConstructor },
+  { &kNS_CP1251TOUNICODE_CID, false, nullptr, nsCP1251ToUnicodeConstructor },
+  { &kNS_CP1253TOUNICODE_CID, false, nullptr, nsCP1253ToUnicodeConstructor },
+  { &kNS_CP1254TOUNICODE_CID, false, nullptr, nsCP1254ToUnicodeConstructor },
+  { &kNS_CP1255TOUNICODE_CID, false, nullptr, nsCP1255ToUnicodeConstructor },
+  { &kNS_CP1256TOUNICODE_CID, false, nullptr, nsCP1256ToUnicodeConstructor },
+  { &kNS_CP1257TOUNICODE_CID, false, nullptr, nsCP1257ToUnicodeConstructor },
+  { &kNS_CP1258TOUNICODE_CID, false, nullptr, nsCP1258ToUnicodeConstructor },
+  { &kNS_TIS620TOUNICODE_CID, false, nullptr, nsTIS620ToUnicodeConstructor },
+  { &kNS_ISO885911TOUNICODE_CID, false, nullptr, nsISO885911ToUnicodeConstructor },
+  { &kNS_CP874TOUNICODE_CID, false, nullptr, nsCP874ToUnicodeConstructor },
+  { &kNS_CP866TOUNICODE_CID, false, nullptr, nsCP866ToUnicodeConstructor },
+  { &kNS_KOI8RTOUNICODE_CID, false, nullptr, nsKOI8RToUnicodeConstructor },
+  { &kNS_KOI8UTOUNICODE_CID, false, nullptr, nsKOI8UToUnicodeConstructor },
+  { &kNS_MACCETOUNICODE_CID, false, nullptr, nsMacCEToUnicodeConstructor },
+  { &kNS_MACGREEKTOUNICODE_CID, false, nullptr, nsMacGreekToUnicodeConstructor },
+  { &kNS_MACTURKISHTOUNICODE_CID, false, nullptr, nsMacTurkishToUnicodeConstructor },
+  { &kNS_MACCROATIANTOUNICODE_CID, false, nullptr, nsMacCroatianToUnicodeConstructor },
+  { &kNS_MACROMANIANTOUNICODE_CID, false, nullptr, nsMacRomanianToUnicodeConstructor },
+  { &kNS_MACCYRILLICTOUNICODE_CID, false, nullptr, nsMacCyrillicToUnicodeConstructor },
+  { &kNS_MACICELANDICTOUNICODE_CID, false, nullptr, nsMacIcelandicToUnicodeConstructor },
+  { &kNS_ARMSCII8TOUNICODE_CID, false, nullptr, nsARMSCII8ToUnicodeConstructor },
+  { &kNS_TCVN5712TOUNICODE_CID, false, nullptr, nsTCVN5712ToUnicodeConstructor },
+  { &kNS_VISCIITOUNICODE_CID, false, nullptr, nsVISCIIToUnicodeConstructor },
+  { &kNS_VPSTOUNICODE_CID, false, nullptr, nsVPSToUnicodeConstructor },
+  { &kNS_UTF7TOUNICODE_CID, false, nullptr, nsUTF7ToUnicodeConstructor },
+  { &kNS_MUTF7TOUNICODE_CID, false, nullptr, nsMUTF7ToUnicodeConstructor },
+  { &kNS_UTF16TOUNICODE_CID, false, nullptr, nsUTF16ToUnicodeConstructor },
+  { &kNS_UTF16BETOUNICODE_CID, false, nullptr, nsUTF16BEToUnicodeConstructor },
+  { &kNS_UTF16LETOUNICODE_CID, false, nullptr, nsUTF16LEToUnicodeConstructor },
+  { &kNS_T61TOUNICODE_CID, false, nullptr, nsT61ToUnicodeConstructor },
+  { &kNS_USERDEFINEDTOUNICODE_CID, false, nullptr, nsUserDefinedToUnicodeConstructor },
+  { &kNS_MACARABICTOUNICODE_CID, false, nullptr, nsMacArabicToUnicodeConstructor },
+  { &kNS_MACDEVANAGARITOUNICODE_CID, false, nullptr, nsMacDevanagariToUnicodeConstructor },
+  { &kNS_MACFARSITOUNICODE_CID, false, nullptr, nsMacFarsiToUnicodeConstructor },
+  { &kNS_MACGURMUKHITOUNICODE_CID, false, nullptr, nsMacGurmukhiToUnicodeConstructor },
+  { &kNS_MACGUJARATITOUNICODE_CID, false, nullptr, nsMacGujaratiToUnicodeConstructor },
+  { &kNS_MACHEBREWTOUNICODE_CID, false, nullptr, nsMacHebrewToUnicodeConstructor },
+  { &kNS_UNICODETOASCII_CID, false, nullptr, nsUnicodeToAsciiConstructor },
+  { &kNS_UNICODETOISO88592_CID, false, nullptr, nsUnicodeToISO88592Constructor },
+  { &kNS_UNICODETOISO88593_CID, false, nullptr, nsUnicodeToISO88593Constructor },
+  { &kNS_UNICODETOISO88594_CID, false, nullptr, nsUnicodeToISO88594Constructor },
+  { &kNS_UNICODETOISO88595_CID, false, nullptr, nsUnicodeToISO88595Constructor },
+  { &kNS_UNICODETOISO88596_CID, false, nullptr, nsUnicodeToISO88596Constructor },
+  { &kNS_UNICODETOISO88596I_CID, false, nullptr, nsUnicodeToISO88596IConstructor },
+  { &kNS_UNICODETOISO88596E_CID, false, nullptr, nsUnicodeToISO88596EConstructor },
+  { &kNS_UNICODETOISO88597_CID, false, nullptr, nsUnicodeToISO88597Constructor },
+  { &kNS_UNICODETOISO88598_CID, false, nullptr, nsUnicodeToISO88598Constructor },
+  { &kNS_UNICODETOISO88598I_CID, false, nullptr, nsUnicodeToISO88598IConstructor },
+  { &kNS_UNICODETOISO88598E_CID, false, nullptr, nsUnicodeToISO88598EConstructor },
+  { &kNS_UNICODETOISO88599_CID, false, nullptr, nsUnicodeToISO88599Constructor },
+  { &kNS_UNICODETOISO885910_CID, false, nullptr, nsUnicodeToISO885910Constructor },
+  { &kNS_UNICODETOISO885913_CID, false, nullptr, nsUnicodeToISO885913Constructor },
+  { &kNS_UNICODETOISO885914_CID, false, nullptr, nsUnicodeToISO885914Constructor },
+  { &kNS_UNICODETOISO885915_CID, false, nullptr, nsUnicodeToISO885915Constructor },
+  { &kNS_UNICODETOISO885916_CID, false, nullptr, nsUnicodeToISO885916Constructor },
+  { &kNS_UNICODETOISOIR111_CID, false, nullptr, nsUnicodeToISOIR111Constructor },
+  { &kNS_UNICODETOCP1250_CID, false, nullptr, nsUnicodeToCP1250Constructor },
+  { &kNS_UNICODETOCP1251_CID, false, nullptr, nsUnicodeToCP1251Constructor },
+  { &kNS_UNICODETOCP1253_CID, false, nullptr, nsUnicodeToCP1253Constructor },
+  { &kNS_UNICODETOCP1254_CID, false, nullptr, nsUnicodeToCP1254Constructor },
+  { &kNS_UNICODETOCP1255_CID, false, nullptr, nsUnicodeToCP1255Constructor },
+  { &kNS_UNICODETOCP1256_CID, false, nullptr, nsUnicodeToCP1256Constructor },
+  { &kNS_UNICODETOCP1257_CID, false, nullptr, nsUnicodeToCP1257Constructor },
+  { &kNS_UNICODETOCP1258_CID, false, nullptr, nsUnicodeToCP1258Constructor },
+  { &kNS_UNICODETOTIS620_CID, false, nullptr, nsUnicodeToTIS620Constructor },
+  { &kNS_UNICODETOISO885911_CID, false, nullptr, nsUnicodeToISO885911Constructor },
+  { &kNS_UNICODETOCP874_CID, false, nullptr, nsUnicodeToCP874Constructor },
+  { &kNS_UNICODETOCP866_CID, false, nullptr, nsUnicodeToCP866Constructor },
+  { &kNS_UNICODETOKOI8R_CID, false, nullptr, nsUnicodeToKOI8RConstructor },
+  { &kNS_UNICODETOKOI8U_CID, false, nullptr, nsUnicodeToKOI8UConstructor },
+  { &kNS_UNICODETOMACCE_CID, false, nullptr, nsUnicodeToMacCEConstructor },
+  { &kNS_UNICODETOMACGREEK_CID, false, nullptr, nsUnicodeToMacGreekConstructor },
+  { &kNS_UNICODETOMACTURKISH_CID, false, nullptr, nsUnicodeToMacTurkishConstructor },
+  { &kNS_UNICODETOMACCROATIAN_CID, false, nullptr, nsUnicodeToMacCroatianConstructor },
+  { &kNS_UNICODETOMACROMANIAN_CID, false, nullptr, nsUnicodeToMacRomanianConstructor },
+  { &kNS_UNICODETOMACCYRILLIC_CID, false, nullptr, nsUnicodeToMacCyrillicConstructor },
+  { &kNS_UNICODETOMACICELANDIC_CID, false, nullptr, nsUnicodeToMacIcelandicConstructor },
+  { &kNS_UNICODETOARMSCII8_CID, false, nullptr, nsUnicodeToARMSCII8Constructor },
+  { &kNS_UNICODETOTCVN5712_CID, false, nullptr, nsUnicodeToTCVN5712Constructor },
+  { &kNS_UNICODETOVISCII_CID, false, nullptr, nsUnicodeToVISCIIConstructor },
+  { &kNS_UNICODETOVPS_CID, false, nullptr, nsUnicodeToVPSConstructor },
+  { &kNS_UNICODETOUTF7_CID, false, nullptr, nsUnicodeToUTF7Constructor },
+  { &kNS_UNICODETOMUTF7_CID, false, nullptr, nsUnicodeToMUTF7Constructor },
+  { &kNS_UNICODETOUTF16BE_CID, false, nullptr, nsUnicodeToUTF16BEConstructor },
+  { &kNS_UNICODETOUTF16LE_CID, false, nullptr, nsUnicodeToUTF16LEConstructor },
+  { &kNS_UNICODETOUTF16_CID, false, nullptr, nsUnicodeToUTF16Constructor },
+  { &kNS_UNICODETOT61_CID, false, nullptr, nsUnicodeToT61Constructor },
+  { &kNS_UNICODETOUSERDEFINED_CID, false, nullptr, nsUnicodeToUserDefinedConstructor },
+  { &kNS_UNICODETOSYMBOL_CID, false, nullptr, nsUnicodeToSymbolConstructor },
+  { &kNS_UNICODETOZAPFDINGBATS_CID, false, nullptr, nsUnicodeToZapfDingbatConstructor },
+  { &kNS_UNICODETOADOBEEURO_CID, false, nullptr, nsUnicodeToAdobeEuroConstructor },
+  { &kNS_UNICODETOMACARABIC_CID, false, nullptr, nsUnicodeToMacArabicConstructor },
+  { &kNS_UNICODETOMACDEVANAGARI_CID, false, nullptr, nsUnicodeToMacDevanagariConstructor },
+  { &kNS_UNICODETOMACFARSI_CID, false, nullptr, nsUnicodeToMacFarsiConstructor },
+  { &kNS_UNICODETOMACGURMUKHI_CID, false, nullptr, nsUnicodeToMacGurmukhiConstructor },
+  { &kNS_UNICODETOMACGUJARATI_CID, false, nullptr, nsUnicodeToMacGujaratiConstructor },
+  { &kNS_UNICODETOMACHEBREW_CID, false, nullptr, nsUnicodeToMacHebrewConstructor },
+  { &kNS_UNICODETOTSCII_CID, false, nullptr, nsUnicodeToTSCIIConstructor },
+  { &kNS_UNICODETOTAMILTTF_CID, false, nullptr, nsUnicodeToTamilTTFConstructor },
+  { &kNS_CP850TOUNICODE_CID, false, nullptr, nsCP850ToUnicodeConstructor },
+  { &kNS_CP852TOUNICODE_CID, false, nullptr, nsCP852ToUnicodeConstructor },
+  { &kNS_CP855TOUNICODE_CID, false, nullptr, nsCP855ToUnicodeConstructor },
+  { &kNS_CP857TOUNICODE_CID, false, nullptr, nsCP857ToUnicodeConstructor },
+  { &kNS_CP862TOUNICODE_CID, false, nullptr, nsCP862ToUnicodeConstructor },
+  { &kNS_CP864TOUNICODE_CID, false, nullptr, nsCP864ToUnicodeConstructor },
 #ifdef XP_OS2
-  { &kNS_CP869TOUNICODE_CID, false, NULL, nsCP869ToUnicodeConstructor },
-  { &kNS_CP1125TOUNICODE_CID, false, NULL, nsCP1125ToUnicodeConstructor },
-  { &kNS_CP1131TOUNICODE_CID, false, NULL, nsCP1131ToUnicodeConstructor },
+  { &kNS_CP869TOUNICODE_CID, false, nullptr, nsCP869ToUnicodeConstructor },
+  { &kNS_CP1125TOUNICODE_CID, false, nullptr, nsCP1125ToUnicodeConstructor },
+  { &kNS_CP1131TOUNICODE_CID, false, nullptr, nsCP1131ToUnicodeConstructor },
 #endif
-  { &kNS_UNICODETOCP850_CID, false, NULL, nsUnicodeToCP850Constructor },
-  { &kNS_UNICODETOCP852_CID, false, NULL, nsUnicodeToCP852Constructor },
-  { &kNS_UNICODETOCP855_CID, false, NULL, nsUnicodeToCP855Constructor },
-  { &kNS_UNICODETOCP857_CID, false, NULL, nsUnicodeToCP857Constructor },
-  { &kNS_UNICODETOCP862_CID, false, NULL, nsUnicodeToCP862Constructor },
-  { &kNS_UNICODETOCP864_CID, false, NULL, nsUnicodeToCP864Constructor },
-  { &kNS_UNICODETOCP864I_CID, false, NULL, nsUnicodeToCP864iConstructor },
+  { &kNS_UNICODETOCP850_CID, false, nullptr, nsUnicodeToCP850Constructor },
+  { &kNS_UNICODETOCP852_CID, false, nullptr, nsUnicodeToCP852Constructor },
+  { &kNS_UNICODETOCP855_CID, false, nullptr, nsUnicodeToCP855Constructor },
+  { &kNS_UNICODETOCP857_CID, false, nullptr, nsUnicodeToCP857Constructor },
+  { &kNS_UNICODETOCP862_CID, false, nullptr, nsUnicodeToCP862Constructor },
+  { &kNS_UNICODETOCP864_CID, false, nullptr, nsUnicodeToCP864Constructor },
 #ifdef XP_OS2
-  { &kNS_UNICODETOCP869_CID, false, NULL, nsUnicodeToCP869Constructor },
-  { &kNS_UNICODETOCP1125_CID, false, NULL, nsUnicodeToCP1125Constructor },
-  { &kNS_UNICODETOCP1131_CID, false, NULL, nsUnicodeToCP1131Constructor },
+  { &kNS_UNICODETOCP869_CID, false, nullptr, nsUnicodeToCP869Constructor },
+  { &kNS_UNICODETOCP1125_CID, false, nullptr, nsUnicodeToCP1125Constructor },
+  { &kNS_UNICODETOCP1131_CID, false, nullptr, nsUnicodeToCP1131Constructor },
 #endif
-  { &kNS_SJISTOUNICODE_CID, false, NULL, nsShiftJISToUnicodeConstructor },
-  { &kNS_EUCJPTOUNICODE_CID, false, NULL, nsEUCJPToUnicodeV2Constructor },
-  { &kNS_ISO2022JPTOUNICODE_CID, false, NULL, nsISO2022JPToUnicodeV2Constructor },
-  { &kNS_UNICODETOSJIS_CID, false, NULL, nsUnicodeToSJISConstructor },
-  { &kNS_UNICODETOEUCJP_CID, false, NULL, nsUnicodeToEUCJPConstructor },
-  { &kNS_UNICODETOISO2022JP_CID, false, NULL, nsUnicodeToISO2022JPConstructor },
-  { &kNS_UNICODETOJISX0201_CID, false, NULL, nsUnicodeToJISx0201Constructor },
-  { &kNS_EUCTWTOUNICODE_CID, false, NULL, nsEUCTWToUnicodeConstructor },
-  { &kNS_UNICODETOEUCTW_CID, false, NULL, nsUnicodeToEUCTWConstructor },
-  { &kNS_UNICODETOBIG5_CID, false, NULL, nsUnicodeToBIG5Constructor },
-  { &kNS_BIG5TOUNICODE_CID, false, NULL, nsBIG5ToUnicodeConstructor },
-  { &kNS_UNICODETOBIG5HKSCS_CID, false, NULL, nsUnicodeToBIG5HKSCSConstructor },
-  { &kNS_UNICODETOHKSCS_CID, false, NULL, nsUnicodeToHKSCSConstructor },
-  { &kNS_BIG5HKSCSTOUNICODE_CID, false, NULL, nsBIG5HKSCSToUnicodeConstructor },
-  { &kNS_EUCKRTOUNICODE_CID, false, NULL, nsEUCKRToUnicodeConstructor },
-  { &kNS_UNICODETOEUCKR_CID, false, NULL, nsUnicodeToEUCKRConstructor },
-  { &kNS_JOHABTOUNICODE_CID, false, NULL, nsJohabToUnicodeConstructor },
-  { &kNS_UNICODETOJOHAB_CID, false, NULL, nsUnicodeToJohabConstructor },
-  { &kNS_CP949TOUNICODE_CID, false, NULL, nsCP949ToUnicodeConstructor },
-  { &kNS_UNICODETOCP949_CID, false, NULL, nsUnicodeToCP949Constructor },
-  { &kNS_ISO2022KRTOUNICODE_CID, false, NULL, nsISO2022KRToUnicodeConstructor },
-  { &kNS_UNICODETOJAMOTTF_CID, false, NULL, nsUnicodeToJamoTTFConstructor },
-  { &kNS_GB2312TOUNICODE_CID, false, NULL, nsGB2312ToUnicodeV2Constructor },
-  { &kNS_UNICODETOGB2312_CID, false, NULL, nsUnicodeToGB2312V2Constructor },
-  { &kNS_CP936TOUNICODE_CID, false, NULL, nsCP936ToUnicodeConstructor },
-  { &kNS_UNICODETOCP936_CID, false, NULL, nsUnicodeToCP936Constructor },
-  { &kNS_GBKTOUNICODE_CID, false, NULL, nsGBKToUnicodeConstructor },
-  { &kNS_UNICODETOGBK_CID, false, NULL, nsUnicodeToGBKConstructor },
-  { &kNS_HZTOUNICODE_CID, false, NULL, nsHZToUnicodeConstructor },
-  { &kNS_UNICODETOHZ_CID, false, NULL, nsUnicodeToHZConstructor },
-  { &kNS_GB18030TOUNICODE_CID, false, NULL, nsGB18030ToUnicodeConstructor },
-  { &kNS_UNICODETOGB18030_CID, false, NULL, nsUnicodeToGB18030Constructor },
-  { &kNS_ISO2022CNTOUNICODE_CID, false, NULL, nsISO2022CNToUnicodeConstructor },
-#endif
-  { NULL },
+  { &kNS_SJISTOUNICODE_CID, false, nullptr, nsShiftJISToUnicodeConstructor },
+  { &kNS_EUCJPTOUNICODE_CID, false, nullptr, nsEUCJPToUnicodeV2Constructor },
+  { &kNS_ISO2022JPTOUNICODE_CID, false, nullptr, nsISO2022JPToUnicodeV2Constructor },
+  { &kNS_UNICODETOSJIS_CID, false, nullptr, nsUnicodeToSJISConstructor },
+  { &kNS_UNICODETOEUCJP_CID, false, nullptr, nsUnicodeToEUCJPConstructor },
+  { &kNS_UNICODETOISO2022JP_CID, false, nullptr, nsUnicodeToISO2022JPConstructor },
+  { &kNS_UNICODETOJISX0201_CID, false, nullptr, nsUnicodeToJISx0201Constructor },
+  { &kNS_EUCTWTOUNICODE_CID, false, nullptr, nsEUCTWToUnicodeConstructor },
+  { &kNS_UNICODETOEUCTW_CID, false, nullptr, nsUnicodeToEUCTWConstructor },
+  { &kNS_UNICODETOBIG5_CID, false, nullptr, nsUnicodeToBIG5Constructor },
+  { &kNS_BIG5TOUNICODE_CID, false, nullptr, nsBIG5ToUnicodeConstructor },
+  { &kNS_UNICODETOBIG5HKSCS_CID, false, nullptr, nsUnicodeToBIG5HKSCSConstructor },
+  { &kNS_UNICODETOHKSCS_CID, false, nullptr, nsUnicodeToHKSCSConstructor },
+  { &kNS_BIG5HKSCSTOUNICODE_CID, false, nullptr, nsBIG5HKSCSToUnicodeConstructor },
+  { &kNS_EUCKRTOUNICODE_CID, false, nullptr, nsCP949ToUnicodeConstructor },
+  { &kNS_UNICODETOEUCKR_CID, false, nullptr, nsUnicodeToCP949Constructor },
+  { &kNS_JOHABTOUNICODE_CID, false, nullptr, nsJohabToUnicodeConstructor },
+  { &kNS_UNICODETOJOHAB_CID, false, nullptr, nsUnicodeToJohabConstructor },
+  { &kNS_ISO2022KRTOUNICODE_CID, false, nullptr, nsISO2022KRToUnicodeConstructor },
+  { &kNS_GB2312TOUNICODE_CID, false, nullptr, nsGB2312ToUnicodeV2Constructor },
+  { &kNS_UNICODETOGB2312_CID, false, nullptr, nsUnicodeToGB2312V2Constructor },
+  { &kNS_GBKTOUNICODE_CID, false, nullptr, nsGBKToUnicodeConstructor },
+  { &kNS_UNICODETOGBK_CID, false, nullptr, nsUnicodeToGBKConstructor },
+  { &kNS_HZTOUNICODE_CID, false, nullptr, nsHZToUnicodeConstructor },
+  { &kNS_UNICODETOHZ_CID, false, nullptr, nsUnicodeToHZConstructor },
+  { &kNS_GB18030TOUNICODE_CID, false, nullptr, nsGB18030ToUnicodeConstructor },
+  { &kNS_UNICODETOGB18030_CID, false, nullptr, nsUnicodeToGB18030Constructor },
+  { &kNS_ISO2022CNTOUNICODE_CID, false, nullptr, nsISO2022CNToUnicodeConstructor },
+  { nullptr },
 };
 
 static const mozilla::Module::ContractIDEntry kUConvContracts[] = {
   { NS_CHARSETCONVERTERMANAGER_CONTRACTID, &kNS_ICHARSETCONVERTERMANAGER_CID },
-  { NS_CHARSETALIAS_CONTRACTID, &kNS_CHARSETALIAS_CID },
   { NS_ITEXTTOSUBURI_CONTRACTID, &kNS_TEXTTOSUBURI_CID },
-  { NS_PLATFORMCHARSET_CONTRACTID, &kNS_PLATFORMCHARSET_CID },
   { NS_CONVERTERINPUTSTREAM_CONTRACTID, &kNS_CONVERTERINPUTSTREAM_CID },
   { "@mozilla.org/intl/converter-output-stream;1", &kNS_CONVERTEROUTPUTSTREAM_CID },
   { NS_ISCRIPTABLEUNICODECONVERTER_CONTRACTID, &kNS_ISCRIPTABLEUNICODECONVERTER_CID },
-#ifdef MOZ_USE_NATIVE_ICONV
-  { NS_NATIVE_UCONV_SERVICE_CONTRACT_ID, &kNS_NATIVE_UCONV_SERVICE_CID },
-#else
   { NS_UTF8CONVERTERSERVICE_CONTRACTID, &kNS_UTF8CONVERTERSERVICE_CID },
   { NS_ISO88591TOUNICODE_CONTRACTID, &kNS_ISO88591TOUNICODE_CID },
   { NS_CP1252TOUNICODE_CONTRACTID, &kNS_CP1252TOUNICODE_CID },
@@ -1081,7 +937,6 @@ static const mozilla::Module::ContractIDEntry kUConvContracts[] = {
   { NS_UNICODEDECODER_CONTRACTID_BASE "x-mac-romanian", &kNS_MACROMANIANTOUNICODE_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "x-mac-cyrillic", &kNS_MACCYRILLICTOUNICODE_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "x-mac-icelandic", &kNS_MACICELANDICTOUNICODE_CID },
-  { NS_UNICODEDECODER_CONTRACTID_BASE "GEOSTD8", &kNS_GEOSTD8TOUNICODE_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "armscii-8", &kNS_ARMSCII8TOUNICODE_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "x-viet-tcvn5712", &kNS_TCVN5712TOUNICODE_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "VISCII", &kNS_VISCIITOUNICODE_CID },
@@ -1091,9 +946,6 @@ static const mozilla::Module::ContractIDEntry kUConvContracts[] = {
   { NS_UNICODEDECODER_CONTRACTID_BASE "UTF-16", &kNS_UTF16TOUNICODE_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "UTF-16BE", &kNS_UTF16BETOUNICODE_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "UTF-16LE", &kNS_UTF16LETOUNICODE_CID },
-  { NS_UNICODEDECODER_CONTRACTID_BASE "UTF-32", &kNS_UTF32TOUNICODE_CID },
-  { NS_UNICODEDECODER_CONTRACTID_BASE "UTF-32BE", &kNS_UTF32BETOUNICODE_CID },
-  { NS_UNICODEDECODER_CONTRACTID_BASE "UTF-32LE", &kNS_UTF32LETOUNICODE_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "T.61-8bit", &kNS_T61TOUNICODE_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "x-user-defined", &kNS_USERDEFINEDTOUNICODE_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "x-mac-arabic", &kNS_MACARABICTOUNICODE_CID },
@@ -1142,7 +994,6 @@ static const mozilla::Module::ContractIDEntry kUConvContracts[] = {
   { NS_UNICODEENCODER_CONTRACTID_BASE "x-mac-romanian", &kNS_UNICODETOMACROMANIAN_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "x-mac-cyrillic", &kNS_UNICODETOMACCYRILLIC_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "x-mac-icelandic", &kNS_UNICODETOMACICELANDIC_CID },
-  { NS_UNICODEENCODER_CONTRACTID_BASE "GEOSTD8", &kNS_UNICODETOGEOSTD8_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "armscii-8", &kNS_UNICODETOARMSCII8_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "x-viet-tcvn5712", &kNS_UNICODETOTCVN5712_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "VISCII", &kNS_UNICODETOVISCII_CID },
@@ -1152,9 +1003,6 @@ static const mozilla::Module::ContractIDEntry kUConvContracts[] = {
   { NS_UNICODEENCODER_CONTRACTID_BASE "UTF-16BE", &kNS_UNICODETOUTF16BE_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "UTF-16LE", &kNS_UNICODETOUTF16LE_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "UTF-16", &kNS_UNICODETOUTF16_CID },
-  { NS_UNICODEENCODER_CONTRACTID_BASE "UTF-32BE", &kNS_UNICODETOUTF32BE_CID },
-  { NS_UNICODEENCODER_CONTRACTID_BASE "UTF-32LE", &kNS_UNICODETOUTF32LE_CID },
-  { NS_UNICODEENCODER_CONTRACTID_BASE "UTF-32", &kNS_UNICODETOUTF32_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "T.61-8bit", &kNS_UNICODETOT61_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "x-user-defined", &kNS_UNICODETOUSERDEFINED_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "Adobe-Symbol-Encoding", &kNS_UNICODETOSYMBOL_CID },
@@ -1174,7 +1022,6 @@ static const mozilla::Module::ContractIDEntry kUConvContracts[] = {
   { NS_UNICODEDECODER_CONTRACTID_BASE "IBM857", &kNS_CP857TOUNICODE_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "IBM862", &kNS_CP862TOUNICODE_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "IBM864", &kNS_CP864TOUNICODE_CID },
-  { NS_UNICODEDECODER_CONTRACTID_BASE "IBM864i", &kNS_CP864ITOUNICODE_CID },
 #ifdef XP_OS2
   { NS_UNICODEDECODER_CONTRACTID_BASE "IBM869", &kNS_CP869TOUNICODE_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "IBM1125", &kNS_CP1125TOUNICODE_CID },
@@ -1186,7 +1033,6 @@ static const mozilla::Module::ContractIDEntry kUConvContracts[] = {
   { NS_UNICODEENCODER_CONTRACTID_BASE "IBM857", &kNS_UNICODETOCP857_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "IBM862", &kNS_UNICODETOCP862_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "IBM864", &kNS_UNICODETOCP864_CID },
-  { NS_UNICODEENCODER_CONTRACTID_BASE "IBM864i", &kNS_UNICODETOCP864I_CID },
 #ifdef XP_OS2
   { NS_UNICODEENCODER_CONTRACTID_BASE "IBM869", &kNS_UNICODETOCP869_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "IBM1125", &kNS_UNICODETOCP1125_CID },
@@ -1210,23 +1056,17 @@ static const mozilla::Module::ContractIDEntry kUConvContracts[] = {
   { NS_UNICODEENCODER_CONTRACTID_BASE "EUC-KR", &kNS_UNICODETOEUCKR_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "x-johab", &kNS_JOHABTOUNICODE_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "x-johab", &kNS_UNICODETOJOHAB_CID },
-  { NS_UNICODEDECODER_CONTRACTID_BASE "x-windows-949", &kNS_CP949TOUNICODE_CID },
-  { NS_UNICODEENCODER_CONTRACTID_BASE "x-windows-949", &kNS_UNICODETOCP949_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "ISO-2022-KR", &kNS_ISO2022KRTOUNICODE_CID },
-  { NS_UNICODEENCODER_CONTRACTID_BASE "x-koreanjamo-0", &kNS_UNICODETOJAMOTTF_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "GB2312", &kNS_GB2312TOUNICODE_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "GB2312", &kNS_UNICODETOGB2312_CID },
-  { NS_UNICODEDECODER_CONTRACTID_BASE "windows-936", &kNS_CP936TOUNICODE_CID },
-  { NS_UNICODEENCODER_CONTRACTID_BASE "windows-936", &kNS_UNICODETOCP936_CID },
-  { NS_UNICODEDECODER_CONTRACTID_BASE "x-gbk", &kNS_GBKTOUNICODE_CID },
-  { NS_UNICODEENCODER_CONTRACTID_BASE "x-gbk", &kNS_UNICODETOGBK_CID },
+  { NS_UNICODEDECODER_CONTRACTID_BASE "gbk", &kNS_GBKTOUNICODE_CID },
+  { NS_UNICODEENCODER_CONTRACTID_BASE "gbk", &kNS_UNICODETOGBK_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "HZ-GB-2312", &kNS_HZTOUNICODE_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "HZ-GB-2312", &kNS_UNICODETOHZ_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "gb18030", &kNS_GB18030TOUNICODE_CID },
   { NS_UNICODEENCODER_CONTRACTID_BASE "gb18030", &kNS_UNICODETOGB18030_CID },
   { NS_UNICODEDECODER_CONTRACTID_BASE "ISO-2022-CN", &kNS_ISO2022CNTOUNICODE_CID },
-#endif
-  { NULL }
+  { nullptr }
 };
 
 static const mozilla::Module kUConvModule = {

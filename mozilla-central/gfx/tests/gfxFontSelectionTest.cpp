@@ -1,53 +1,18 @@
 /* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 4 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Corporation code.
- *
- * The Initial Developer of the Original Code is Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Vladimir Vukicevic <vladimir@pobox.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsCOMPtr.h"
 #include "nsTArray.h"
 #include "nsString.h"
 #include "nsDependentString.h"
 
-#include "nsServiceManagerUtils.h"
-#include "nsIPrefService.h"
-#include "nsIPrefBranch.h"
+#include "mozilla/Preferences.h"
 
 #include "gfxContext.h"
 #include "gfxFont.h"
 #include "gfxPlatform.h"
-#include "gfxTextRunWordCache.h"
 
 #include "gfxFontTest.h"
 
@@ -55,9 +20,11 @@
 #include "gfxTestCocoaHelper.h"
 #endif
 
-#ifdef MOZ_WIDGET_GTK2
+#ifdef MOZ_WIDGET_GTK
 #include "gtk/gtk.h"
 #endif
+
+using namespace mozilla;
 
 enum {
     S_UTF8 = 0,
@@ -65,8 +32,6 @@ enum {
 };
 
 class FrameTextRunCache;
-
-static gfxTextRunWordCache *gTextRunCache;
 
 struct LiteralArray {
     LiteralArray (unsigned long l1) {
@@ -112,7 +77,7 @@ struct TestEntry {
           fontStyle(aFontStyle),
           stringType(S_ASCII),
           string(aString),
-          isRTL(PR_FALSE)
+          isRTL(false)
     {
     }
 
@@ -124,7 +89,7 @@ struct TestEntry {
           fontStyle(aFontStyle),
           stringType(stringType),
           string(aString),
-          isRTL(PR_FALSE)
+          isRTL(false)
     {
     }
 
@@ -134,24 +99,24 @@ struct TestEntry {
             : fontName(aFontName), glyphs(aGlyphs)
         { }
 
-        PRBool Compare(const nsCString& aFontName,
+        bool Compare(const nsCString& aFontName,
                        cairo_glyph_t *aGlyphs,
                        int num_glyphs)
         {
             // bit that allowed for empty fontname to match all is commented
             // out
             if (/*!fontName.IsEmpty() &&*/ !fontName.Equals(aFontName))
-                return PR_FALSE;
+                return false;
 
             if (num_glyphs != int(glyphs.data.Length()))
-                return PR_FALSE;
+                return false;
 
             for (int j = 0; j < num_glyphs; j++) {
                 if (glyphs.data[j] != aGlyphs[j].index)
-                return PR_FALSE;
+                return false;
             }
 
-            return PR_TRUE;
+            return true;
         }
 
         nsCString fontName;
@@ -160,7 +125,7 @@ struct TestEntry {
     
     void SetRTL()
     {
-        isRTL = PR_TRUE;
+        isRTL = true;
     }
 
     // empty/NULL fontName means ignore font name
@@ -194,21 +159,21 @@ struct TestEntry {
         expectItems.AppendElement(ExpectItem(fontName, glyphs));
     }
 
-    PRBool Check (gfxFontTestStore *store) {
+    bool Check (gfxFontTestStore *store) {
         if (expectItems.Length() == 0 ||
             store->items.Length() != expectItems.Length())
         {
-            return PR_FALSE;
+            return false;
         }
 
-        for (PRUint32 i = 0; i < expectItems.Length(); i++) {
+        for (uint32_t i = 0; i < expectItems.Length(); i++) {
             if (!expectItems[i].Compare(store->items[i].platformFont,
                                         store->items[i].glyphs,
                                         store->items[i].num_glyphs))
-                return PR_FALSE;
+                return false;
         }
 
-        return PR_TRUE;
+        return true;
     }
 
     const char *utf8FamilyString;
@@ -216,7 +181,7 @@ struct TestEntry {
 
     int stringType;
     const char *string;
-    PRPackedBool isRTL;
+    bool isRTL;
 
     nsTArray<ExpectItem> expectItems;
 };
@@ -230,7 +195,9 @@ MakeContext ()
 
     nsRefPtr<gfxASurface> surface;
 
-    surface = gfxPlatform::GetPlatform()->CreateOffscreenSurface(gfxIntSize(size, size), gfxASurface::ImageFormatRGB24);
+    surface = gfxPlatform::GetPlatform()->
+        CreateOffscreenSurface(gfxIntSize(size, size),
+                               gfxASurface::ContentFromFormat(gfxASurface::ImageFormatRGB24));
     gfxContext *ctx = new gfxContext(surface);
     NS_IF_ADDREF(ctx);
     return ctx;
@@ -260,7 +227,7 @@ DumpStore (gfxFontTestStore *store) {
         printf ("(empty)\n");
     }
 
-    for (PRUint32 i = 0;
+    for (uint32_t i = 0;
          i < store->items.Length();
          i++)
     {
@@ -275,42 +242,42 @@ DumpStore (gfxFontTestStore *store) {
 
 void
 DumpTestExpect (TestEntry *test) {
-    for (PRUint32 i = 0; i < test->expectItems.Length(); i++) {
+    for (uint32_t i = 0; i < test->expectItems.Length(); i++) {
         printf ("Run[% 2d]: '%s' ", i, nsPromiseFlatCString(test->expectItems[i].fontName).get());
-        for (PRUint32 j = 0; j < test->expectItems[i].glyphs.data.Length(); j++)
+        for (uint32_t j = 0; j < test->expectItems[i].glyphs.data.Length(); j++)
             printf ("%d ", int(test->expectItems[i].glyphs.data[j]));
 
         printf ("\n");
     }
 }
 
-PRBool
+bool
 RunTest (TestEntry *test, gfxContext *ctx) {
     nsRefPtr<gfxFontGroup> fontGroup;
 
-    fontGroup = gfxPlatform::GetPlatform()->CreateFontGroup(NS_ConvertUTF8toUTF16(test->utf8FamilyString), &test->fontStyle, nsnull);
+    fontGroup = gfxPlatform::GetPlatform()->CreateFontGroup(NS_ConvertUTF8toUTF16(test->utf8FamilyString), &test->fontStyle, nullptr);
 
     nsAutoPtr<gfxTextRun> textRun;
     gfxTextRunFactory::Parameters params = {
-      ctx, nsnull, nsnull, nsnull, 0, 60
+      ctx, nullptr, nullptr, nullptr, 0, 60
     };
-    PRUint32 flags = gfxTextRunFactory::TEXT_IS_PERSISTENT;
+    uint32_t flags = gfxTextRunFactory::TEXT_IS_PERSISTENT;
     if (test->isRTL) {
         flags |= gfxTextRunFactory::TEXT_IS_RTL;
     }
-    PRUint32 length;
+    uint32_t length;
     if (test->stringType == S_ASCII) {
         flags |= gfxTextRunFactory::TEXT_IS_ASCII | gfxTextRunFactory::TEXT_IS_8BIT;
         length = strlen(test->string);
-        textRun = gfxTextRunWordCache::MakeTextRun(reinterpret_cast<const PRUint8*>(test->string), length, fontGroup, &params, flags);
+        textRun = fontGroup->MakeTextRun(reinterpret_cast<const uint8_t*>(test->string), length, &params, flags);
     } else {
         NS_ConvertUTF8toUTF16 str(nsDependentCString(test->string));
         length = str.Length();
-        textRun = gfxTextRunWordCache::MakeTextRun(str.get(), length, fontGroup, &params, flags);
+        textRun = fontGroup->MakeTextRun(str.get(), length, &params, flags);
     }
 
     gfxFontTestStore::NewStore();
-    textRun->Draw(ctx, gfxPoint(0,0), 0, length, nsnull, nsnull, nsnull);
+    textRun->Draw(ctx, gfxPoint(0,0), 0, length, nullptr, nullptr);
     gfxFontTestStore *s = gfxFontTestStore::CurrentStore();
 
     gTextRunCache->RemoveTextRun(textRun);
@@ -319,10 +286,10 @@ RunTest (TestEntry *test, gfxContext *ctx) {
         DumpStore(s);
         printf ("  expected:\n");
         DumpTestExpect(test);
-        return PR_FALSE;
+        return false;
     }
 
-    return PR_TRUE;
+    return true;
 }
 
 int
@@ -330,7 +297,7 @@ main (int argc, char **argv) {
     int passed = 0;
     int failed = 0;
 
-#ifdef MOZ_WIDGET_GTK2
+#ifdef MOZ_WIDGET_GTK
     gtk_init(&argc, &argv); 
 #endif
 #ifdef XP_MACOSX
@@ -338,15 +305,12 @@ main (int argc, char **argv) {
 #endif
 
     // Initialize XPCOM
-    nsresult rv = NS_InitXPCOM2(nsnull, nsnull, nsnull);
+    nsresult rv = NS_InitXPCOM2(nullptr, nullptr, nullptr);
     if (NS_FAILED(rv))
         return -1;
 
-    rv = gfxPlatform::Init();
-    if (NS_FAILED(rv))
+    if (!gfxPlatform::GetPlatform())
         return -1;
-
-    gTextRunCache = new gfxTextRunWordCache();
 
     // let's get all the xpcom goop out of the system
     fflush (stderr);
@@ -356,21 +320,7 @@ main (int argc, char **argv) {
     if (0) {
         nsresult rv;
 
-        nsCOMPtr<nsIPrefService> prefsvc = do_GetService(NS_PREFSERVICE_CONTRACTID);
-        if (!prefsvc) {
-            printf ("Pref svc get failed!\n");
-        }
-
-        nsCOMPtr<nsIPrefBranch> branch;
-        rv = prefsvc->GetBranch(nsnull, getter_AddRefs(branch));
-        if (NS_FAILED(rv))
-            printf ("Failed 0x%08x\n", rv);
-
-        nsXPIDLCString str;
-        rv = branch->GetCharPref("font.name.sans-serif.x-western", getter_Copies(str));
-        if (NS_FAILED(rv))
-            printf ("Failed[2] 0x%08x\n", rv);
-
+        nsAdoptingCString str = Preferences::GetCString("font.name.sans-serif.x-western");
         printf ("sans-serif.x-western: %s\n", nsPromiseFlatCString(str).get());
     }
 
@@ -384,7 +334,7 @@ main (int argc, char **argv) {
          test++)
     {
         printf ("==== Test %d\n", test);
-        PRBool result = RunTest (&testList[test], context);
+        bool result = RunTest (&testList[test], context);
         if (result) {
             printf ("Test %d succeeded\n", test);
             passed++;

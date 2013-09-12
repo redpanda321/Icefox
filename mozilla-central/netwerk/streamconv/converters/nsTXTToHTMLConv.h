@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef ____nstxttohtmlconv___h___
 #define ____nstxttohtmlconv___h___
@@ -57,7 +25,7 @@
 typedef struct convToken {
     nsString token;     // the actual string (i.e. "http://")
     nsString modText;   // replacement text or href prepend text.
-    PRBool   prepend;   // flag indicating how the modText should be used.
+    bool     prepend;   // flag indicating how the modText should be used.
 } convToken;
     
 /**
@@ -108,7 +76,7 @@ public:
             return NS_ERROR_NO_AGGREGATION;
 
         nsTXTToHTMLConv* _s = new nsTXTToHTMLConv();
-        if (_s == nsnull)
+        if (_s == nullptr)
             return NS_ERROR_OUT_OF_MEMORY;
         NS_ADDREF(_s);
         rv = _s->Init();
@@ -124,18 +92,18 @@ public:
 
 protected:
     // return the token and it's location in the underlying buffer.
-    PRInt32 FindToken(PRInt32 cursor, convToken* *_retval);
+    int32_t FindToken(int32_t cursor, convToken* *_retval);
 
     // return the cursor location after munging HTML into the 
     // underlying buffer, according to mToken
-    PRInt32 CatHTML(PRInt32 front, PRInt32 back);
+    int32_t CatHTML(int32_t front, int32_t back);
 
     nsCOMPtr<nsIStreamListener>     mListener; // final listener (consumer)
     nsString                        mBuffer;   // any carry over data
     nsTArray<nsAutoPtr<convToken> > mTokens;   // list of tokens to search for
     convToken                       *mToken;   // current token (if any)
     nsString                        mPageTitle; // Page title
-    PRBool                          mPreFormatHTML; // Whether to use <pre> tags
+    bool                            mPreFormatHTML; // Whether to use <pre> tags
 };
 
 #endif // ____nstxttohtmlconv___h___

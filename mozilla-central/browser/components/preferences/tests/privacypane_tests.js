@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- *   Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Privacy PrefPane Test.
- *
- * The Initial Developer of the Original Code is
- * Ehsan Akhgari.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Ehsan Akhgari <ehsan.akhgari@gmail.com> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- * 
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 function runTestOnPrivacyPrefPane(testFunc) {
   let observer = {
@@ -92,7 +59,6 @@ function test_dependent_elements(win) {
   ok(pbautostart, "the private browsing auto-start checkbox should exist");
   let controls = [
     win.document.getElementById("rememberHistory"),
-    win.document.getElementById("rememberDownloads"),
     win.document.getElementById("rememberForms"),
     win.document.getElementById("keepUntil"),
     win.document.getElementById("keepCookiesUntil"),
@@ -116,8 +82,6 @@ function test_dependent_elements(win) {
   ok(alwaysclear, "the clear data on close checkbox should exist");
   let rememberhistory = win.document.getElementById("rememberHistory");
   ok(rememberhistory, "the remember history checkbox should exist");
-  let rememberdownloads = win.document.getElementById("rememberDownloads");
-  ok(rememberdownloads, "the remember downloads checkbox should exist");
   let rememberforms = win.document.getElementById("rememberForms");
   ok(rememberforms, "the remember forms checkbox should exist");
   let alwaysclearsettings = win.document.getElementById("clearDataSettings");
@@ -135,8 +99,6 @@ function test_dependent_elements(win) {
         "the clear data on close checkbox value should be as expected");
      ok(!rememberhistory.checked,
         "the remember history checkbox value should be as expected");
-     ok(!rememberdownloads.checked,
-        "the remember downloads checkbox value should be as expected");
      ok(!rememberforms.checked,
         "the remember forms checkbox value should be as expected");
     }
@@ -302,7 +264,6 @@ function test_dependent_prefs(win) {
   ok(historymode, "history mode menulist should exist");
   let controls = [
     win.document.getElementById("rememberHistory"),
-    win.document.getElementById("rememberDownloads"),
     win.document.getElementById("rememberForms"),
     win.document.getElementById("acceptCookies"),
     win.document.getElementById("acceptThirdParty"),

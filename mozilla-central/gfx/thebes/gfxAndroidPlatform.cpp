@@ -1,132 +1,125 @@
-/* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 4 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Android port code.
- *
- * The Initial Developer of the Original Code is
- *   Mozilla Foundation
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Vladimir Vukicevic <vladimir@pobox.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include <android/log.h>
-
-#include <sys/types.h>
-#include <dirent.h>
+#include "base/basictypes.h"
 
 #include "gfxAndroidPlatform.h"
+#include "mozilla/gfx/2D.h"
+
+#include "gfxFT2FontList.h"
+#include "gfxImageSurface.h"
+#include "mozilla/dom/ContentChild.h"
+#include "nsXULAppAPI.h"
+#include "nsIScreen.h"
+#include "nsIScreenManager.h"
 
 #include "cairo.h"
-#include "cairo-ft.h"
-
-#include "gfxImageSurface.h"
-
-#include "nsUnicharUtils.h"
-
-#include "nsMathUtils.h"
-#include "nsTArray.h"
-
-#include "qcms.h"
 
 #include "ft2build.h"
 #include FT_FREETYPE_H
-#include "gfxFT2Fonts.h"
-#include "gfxPlatformFontList.h"
-#include "gfxFT2FontList.h"
+#include FT_MODULE_H
+
+using namespace mozilla;
+using namespace mozilla::dom;
+using namespace mozilla::gfx;
 
 static FT_Library gPlatformFTLibrary = NULL;
 
-#define LOG(args...)  __android_log_print(ANDROID_LOG_INFO, "Gecko" , ## args)
+#define LOG(args...)  __android_log_print(ANDROID_LOG_INFO, "GeckoFonts" , ## args)
+
+static int64_t sFreetypeMemoryUsed;
+static FT_MemoryRec_ sFreetypeMemoryRecord;
+
+static int64_t
+GetFreetypeSize()
+{
+    return sFreetypeMemoryUsed;
+}
+
+NS_MEMORY_REPORTER_IMPLEMENT(Freetype,
+    "explicit/freetype",
+    KIND_HEAP,
+    UNITS_BYTES,
+    GetFreetypeSize,
+    "Memory used by Freetype."
+)
+
+NS_MEMORY_REPORTER_MALLOC_SIZEOF_ON_ALLOC_FUN(FreetypeMallocSizeOfOnAlloc, "freetype")
+NS_MEMORY_REPORTER_MALLOC_SIZEOF_ON_FREE_FUN(FreetypeMallocSizeOfOnFree)
+
+static void*
+CountingAlloc(FT_Memory memory, long size)
+{
+    void *p = malloc(size);
+    sFreetypeMemoryUsed += FreetypeMallocSizeOfOnAlloc(p);
+    return p;
+}
+
+static void
+CountingFree(FT_Memory memory, void* p)
+{
+    sFreetypeMemoryUsed -= FreetypeMallocSizeOfOnFree(p);
+    free(p);
+}
+
+static void*
+CountingRealloc(FT_Memory memory, long cur_size, long new_size, void* p)
+{
+    sFreetypeMemoryUsed -= FreetypeMallocSizeOfOnFree(p);
+    void *pnew = realloc(p, new_size);
+    if (pnew) {
+        sFreetypeMemoryUsed += FreetypeMallocSizeOfOnAlloc(pnew);
+    } else {
+        // realloc failed;  undo the decrement from above
+        sFreetypeMemoryUsed += FreetypeMallocSizeOfOnAlloc(p);
+    }
+    return pnew;
+}
 
 gfxAndroidPlatform::gfxAndroidPlatform()
 {
-    FT_Init_FreeType(&gPlatformFTLibrary);
+    // A custom allocator.  It counts allocations, enabling memory reporting.
+    sFreetypeMemoryRecord.user    = nullptr;
+    sFreetypeMemoryRecord.alloc   = CountingAlloc;
+    sFreetypeMemoryRecord.free    = CountingFree;
+    sFreetypeMemoryRecord.realloc = CountingRealloc;
 
-    mFonts.Init(200);
-    mFontAliases.Init(20);
-    mFontSubstitutes.Init(50);
-    mPrefFonts.Init(10);
+    // These two calls are equivalent to FT_Init_FreeType(), but allow us to
+    // provide a custom memory allocator.
+    FT_New_Library(&sFreetypeMemoryRecord, &gPlatformFTLibrary);
+    FT_Add_Default_Modules(gPlatformFTLibrary);
 
-    UpdateFontList();
+    NS_RegisterMemoryReporter(new NS_MEMORY_REPORTER_NAME(Freetype));
+
+    nsCOMPtr<nsIScreenManager> screenMgr = do_GetService("@mozilla.org/gfx/screenmanager;1");
+    nsCOMPtr<nsIScreen> screen;
+    screenMgr->GetPrimaryScreen(getter_AddRefs(screen));
+    mScreenDepth = 24;
+    screen->GetColorDepth(&mScreenDepth);
+
+    mOffscreenFormat = mScreenDepth == 16
+                       ? gfxASurface::ImageFormatRGB16_565
+                       : gfxASurface::ImageFormatRGB24;
 }
 
 gfxAndroidPlatform::~gfxAndroidPlatform()
 {
     cairo_debug_reset_static_data();
 
-    FT_Done_FreeType(gPlatformFTLibrary);
+    FT_Done_Library(gPlatformFTLibrary);
     gPlatformFTLibrary = NULL;
 }
 
 already_AddRefed<gfxASurface>
 gfxAndroidPlatform::CreateOffscreenSurface(const gfxIntSize& size,
-                                      gfxASurface::gfxImageFormat imageFormat)
+                                      gfxASurface::gfxContentType contentType)
 {
     nsRefPtr<gfxASurface> newSurface;
-    if (imageFormat == gfxImageSurface::ImageFormatRGB24)
-        newSurface = new gfxImageSurface (size, gfxASurface::ImageFormatRGB16_565);
-    else
-        newSurface = new gfxImageSurface (size, imageFormat);
+    newSurface = new gfxImageSurface(size, OptimalFormatForContent(contentType));
 
     return newSurface.forget();
-}
-
-struct FontListData {
-    FontListData(nsIAtom *aLangGroup, const nsACString& aGenericFamily, nsTArray<nsString>& aListOfFonts) :
-        mLangGroup(aLangGroup), mGenericFamily(aGenericFamily), mStringArray(aListOfFonts) {}
-    nsIAtom *mLangGroup;
-    const nsACString& mGenericFamily;
-    nsTArray<nsString>& mStringArray;
-};
-
-static PLDHashOperator
-FontListHashEnumFunc(nsStringHashKey::KeyType aKey,
-                     nsRefPtr<FontFamily>& aFontFamily,
-                     void* userArg)
-{
-    FontListData *data = (FontListData*)userArg;
-
-    // use the first variation for now.  This data should be the same
-    // for all the variations and should probably be moved up to
-    // the Family
-    gfxFontStyle style;
-    style.language = data->mLangGroup;
-    nsRefPtr<FontEntry> aFontEntry = aFontFamily->FindFontEntry(style);
-    NS_ASSERTION(aFontEntry, "couldn't find any font entry in family");
-    if (!aFontEntry)
-        return PL_DHASH_NEXT;
-
-
-    data->mStringArray.AppendElement(aFontFamily->Name());
-
-    return PL_DHASH_NEXT;
 }
 
 nsresult
@@ -134,87 +127,22 @@ gfxAndroidPlatform::GetFontList(nsIAtom *aLangGroup,
                                 const nsACString& aGenericFamily,
                                 nsTArray<nsString>& aListOfFonts)
 {
-    FontListData data(aLangGroup, aGenericFamily, aListOfFonts);
-
-    mFonts.Enumerate(FontListHashEnumFunc, &data);
-
-    aListOfFonts.Sort();
-    aListOfFonts.Compact();
-
+    gfxPlatformFontList::PlatformFontList()->GetFontList(aLangGroup,
+                                                         aGenericFamily,
+                                                         aListOfFonts);
     return NS_OK;
 }
 
-
 void
-gfxAndroidPlatform::AppendFacesFromFontFile(const char *fileName)
+gfxAndroidPlatform::GetFontList(InfallibleTArray<FontListEntry>* retValue)
 {
-    FT_Face dummy;
-    if (FT_Err_Ok == FT_New_Face(GetFTLibrary(), fileName, -1, &dummy)) {
-        for (FT_Long i = 0; i < dummy->num_faces; i++) {
-            FT_Face face;
-            if (FT_Err_Ok != FT_New_Face(GetFTLibrary(), fileName, 
-                                         i, &face))
-                continue;
-
-            FontEntry* fe = FontEntry::CreateFontEntryFromFace(face);
-            if (fe) {
-                LOG("font family: %s", face->family_name);
-
-                NS_ConvertUTF8toUTF16 name(face->family_name);
-                ToLowerCase(name);
-
-                nsRefPtr<FontFamily> ff;
-                if (!mFonts.Get(name, &ff)) {
-                    ff = new FontFamily(name);
-                    mFonts.Put(name, ff);
-                }
-
-                ff->AddFontEntry(fe);
-                ff->SetHasStyles(PR_TRUE);
-            }
-        }
-        FT_Done_Face(dummy);
-    }
+    gfxFT2FontList::PlatformFontList()->GetFontList(retValue);
 }
 
 nsresult
 gfxAndroidPlatform::UpdateFontList()
 {
-    gfxFontCache *fc = gfxFontCache::GetCache();
-    if (fc)
-        fc->AgeAllGenerations();
-    mFonts.Clear();
-    mFontAliases.Clear();
-    mFontSubstitutes.Clear();
-    mPrefFonts.Clear();
-    mCodepointsWithNoFonts.reset();
-
-    //CancelLoader();
-
-    DIR *d = opendir("/system/fonts");
-    struct dirent *ent = NULL;
-    while(d && (ent = readdir(d)) != NULL) {
-        int namelen = strlen(ent->d_name);
-        if (namelen > 4 &&
-            strcasecmp(ent->d_name + namelen - 4, ".ttf") == 0)
-        {
-            nsCString s("/system/fonts");
-            s.Append("/");
-            s.Append(nsDependentCString(ent->d_name));
-
-            LOG("Font: %s", nsPromiseFlatCString(s).get());
-
-            AppendFacesFromFontFile(nsPromiseFlatCString(s).get());
-        }
-    }
-
-    // initialize the cmap loading process after font list has been initialized
-    //StartLoader(kDelayBeforeLoadingCmaps, kIntervalBetweenLoadingCmaps); 
-
-    // initialize ranges of characters for which system-wide font search should be skipped
-    mCodepointsWithNoFonts.SetRange(0,0x1f);     // C0 controls
-    mCodepointsWithNoFonts.SetRange(0x7f,0x9f);  // C1 controls
-
+    gfxPlatformFontList::PlatformFontList()->UpdateFontList();
     return NS_OK;
 }
 
@@ -222,77 +150,57 @@ nsresult
 gfxAndroidPlatform::ResolveFontName(const nsAString& aFontName,
                                     FontResolverCallback aCallback,
                                     void *aClosure,
-                                    PRBool& aAborted)
+                                    bool& aAborted)
 {
-    if (aFontName.IsEmpty())
-        return NS_ERROR_FAILURE;
-
     nsAutoString resolvedName;
-    gfxPlatformFontList* platformFontList = gfxPlatformFontList::PlatformFontList();
-    if (platformFontList) {
-        if (!platformFontList->ResolveFontName(aFontName, resolvedName)) {
-            aAborted = PR_FALSE;
-            return NS_OK;
-        }
+    if (!gfxPlatformFontList::PlatformFontList()->
+             ResolveFontName(aFontName, resolvedName)) {
+        aAborted = false;
+        return NS_OK;
     }
-
-    nsAutoString keyName(aFontName);
-    ToLowerCase(keyName);
-
-    nsRefPtr<FontFamily> ff;
-    if (mFonts.Get(keyName, &ff) ||
-        mFontSubstitutes.Get(keyName, &ff) ||
-        mFontAliases.Get(keyName, &ff))
-    {
-        aAborted = !(*aCallback)(ff->Name(), aClosure);
-    } else {
-        aAborted = PR_FALSE;
-    }
-
+    aAborted = !(*aCallback)(resolvedName, aClosure);
     return NS_OK;
-}
-
-static PRBool SimpleResolverCallback(const nsAString& aName, void* aClosure)
-{
-    nsString *result = static_cast<nsString*>(aClosure);
-    result->Assign(aName);
-    return PR_FALSE;
 }
 
 nsresult
 gfxAndroidPlatform::GetStandardFamilyName(const nsAString& aFontName, nsAString& aFamilyName)
 {
-    aFamilyName.Truncate();
-    PRBool aborted;
-    return ResolveFontName(aFontName, SimpleResolverCallback, &aFamilyName, aborted);
+    gfxPlatformFontList::PlatformFontList()->GetStandardFamilyName(aFontName, aFamilyName);
+    return NS_OK;
 }
 
 gfxPlatformFontList*
 gfxAndroidPlatform::CreatePlatformFontList()
 {
-    return new gfxFT2FontList();
+    gfxPlatformFontList* list = new gfxFT2FontList();
+    if (NS_SUCCEEDED(list->InitFontList())) {
+        return list;
+    }
+    gfxPlatformFontList::Shutdown();
+    return nullptr;
 }
 
-PRBool
-gfxAndroidPlatform::IsFontFormatSupported(nsIURI *aFontURI, PRUint32 aFormatFlags)
+bool
+gfxAndroidPlatform::IsFontFormatSupported(nsIURI *aFontURI, uint32_t aFormatFlags)
 {
     // check for strange format flags
     NS_ASSERTION(!(aFormatFlags & gfxUserFontSet::FLAG_FORMAT_NOT_USED),
                  "strange font format hint set");
 
     // accept supported formats
-    if (aFormatFlags & (gfxUserFontSet::FLAG_FORMAT_OPENTYPE | 
+    if (aFormatFlags & (gfxUserFontSet::FLAG_FORMAT_OPENTYPE |
+                        gfxUserFontSet::FLAG_FORMAT_WOFF |
                         gfxUserFontSet::FLAG_FORMAT_TRUETYPE)) {
-        return PR_TRUE;
+        return true;
     }
 
     // reject all other formats, known and unknown
     if (aFormatFlags != 0) {
-        return PR_FALSE;
+        return false;
     }
 
     // no format hint set, need to look at data
-    return PR_TRUE;
+    return true;
 }
 
 gfxFontGroup *
@@ -300,7 +208,7 @@ gfxAndroidPlatform::CreateFontGroup(const nsAString &aFamilies,
                                const gfxFontStyle *aStyle,
                                gfxUserFontSet* aUserFontSet)
 {
-    return new gfxFT2FontGroup(aFamilies, aStyle, aUserFontSet);
+    return new gfxFontGroup(aFamilies, aStyle, aUserFontSet);
 }
 
 FT_Library
@@ -309,85 +217,54 @@ gfxAndroidPlatform::GetFTLibrary()
     return gPlatformFTLibrary;
 }
 
-FontFamily *
-gfxAndroidPlatform::FindFontFamily(const nsAString& aName)
-{
-    nsAutoString name(aName);
-    ToLowerCase(name);
-
-    nsRefPtr<FontFamily> ff;
-    if (!mFonts.Get(name, &ff) &&
-        !mFontSubstitutes.Get(name, &ff) &&
-        !mFontAliases.Get(name, &ff)) {
-        return nsnull;
-    }
-    return ff.get();
-}
-
-FontEntry *
-gfxAndroidPlatform::FindFontEntry(const nsAString& aName, const gfxFontStyle& aFontStyle)
-{
-    nsRefPtr<FontFamily> ff = FindFontFamily(aName);
-    if (!ff)
-        return nsnull;
-
-    return ff->FindFontEntry(aFontStyle);
-}
-
-static PLDHashOperator
-FindFontForCharProc(nsStringHashKey::KeyType aKey,
-                    nsRefPtr<FontFamily>& aFontFamily,
-                    void* aUserArg)
-{
-    FontSearch *data = (FontSearch*)aUserArg;
-    aFontFamily->FindFontForChar(data);
-    return PL_DHASH_NEXT;
-}
-
-already_AddRefed<gfxFont>
-gfxAndroidPlatform::FindFontForChar(PRUint32 aCh, gfxFont *aFont)
-{
-    // is codepoint with no matching font? return null immediately
-    if (mCodepointsWithNoFonts.test(aCh)) {
-        return nsnull;
-    }
-
-    FontSearch data(aCh, aFont);
-
-    // find fonts that support the character
-    mFonts.Enumerate(FindFontForCharProc, &data);
-
-    if (data.mBestMatch) {
-        nsRefPtr<gfxFT2Font> font =
-            gfxFT2Font::GetOrMakeFont(static_cast<FontEntry*>(data.mBestMatch.get()), 
-                                      aFont->GetStyle()); 
-        gfxFont* ret = font.forget().get();
-        return already_AddRefed<gfxFont>(ret);
-    }
-
-    // no match? add to set of non-matching codepoints
-    mCodepointsWithNoFonts.set(aCh);
-
-    return nsnull;
-}
-
 gfxFontEntry* 
 gfxAndroidPlatform::MakePlatformFont(const gfxProxyFontEntry *aProxyEntry,
-                                     const PRUint8 *aFontData, PRUint32 aLength)
+                                     const uint8_t *aFontData, uint32_t aLength)
 {
     return gfxPlatformFontList::PlatformFontList()->MakePlatformFont(aProxyEntry,
                                                                      aFontData,
                                                                      aLength);
 }
 
-PRBool
-gfxAndroidPlatform::GetPrefFontEntries(const nsCString& aKey, nsTArray<nsRefPtr<gfxFontEntry> > *aFontEntryList)
+TemporaryRef<ScaledFont>
+gfxAndroidPlatform::GetScaledFontForFont(DrawTarget* aTarget, gfxFont *aFont)
 {
-    return mPrefFonts.Get(aKey, aFontEntryList);
+    NativeFont nativeFont;
+    if (aTarget->GetType() == BACKEND_CAIRO) {
+        nativeFont.mType = NATIVE_FONT_CAIRO_FONT_FACE;
+        nativeFont.mFont = NULL;
+        return Factory::CreateScaledFontWithCairo(nativeFont, aFont->GetAdjustedSize(), aFont->GetCairoScaledFont());
+    }
+ 
+    NS_ASSERTION(aFont->GetType() == gfxFont::FONT_TYPE_FT2, "Expecting Freetype font");
+    nativeFont.mType = NATIVE_FONT_SKIA_FONT_FACE;
+    nativeFont.mFont = static_cast<gfxFT2FontBase*>(aFont)->GetFontOptions();
+    return Factory::CreateScaledFontForNativeFont(nativeFont, aFont->GetAdjustedSize());
 }
 
-void
-gfxAndroidPlatform::SetPrefFontEntries(const nsCString& aKey, nsTArray<nsRefPtr<gfxFontEntry> >& aFontEntryList)
+bool
+gfxAndroidPlatform::FontHintingEnabled()
 {
-    mPrefFonts.Put(aKey, aFontEntryList);
+    // In "mobile" builds, we sometimes use non-reflow-zoom, so we
+    // might not want hinting.  Let's see.
+#ifdef MOZ_USING_ANDROID_JAVA_WIDGETS
+    // On android-java, we currently only use gecko to render web
+    // content that can always be be non-reflow-zoomed.  So turn off
+    // hinting.
+    // 
+    // XXX when gecko-android-java is used as an "app runtime", we'll
+    // want to re-enable hinting.
+    return false;
+#else
+    // Otherwise, enable hinting unless we're in a content process
+    // that might be used for non-reflowing zoom.
+    return XRE_GetProcessType() != GeckoProcessType_Content ||
+           ContentChild::GetSingleton()->HasOwnApp();
+#endif //  MOZ_USING_ANDROID_JAVA_WIDGETS
+}
+
+int
+gfxAndroidPlatform::GetScreenDepth() const
+{
+    return mScreenDepth;
 }

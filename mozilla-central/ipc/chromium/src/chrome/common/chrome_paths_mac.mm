@@ -4,7 +4,12 @@
 
 #import "chrome/common/chrome_paths_internal.h"
 
+#ifdef XP_MACOSX
 #import <Cocoa/Cocoa.h>
+#else
+#import <Foundation/NSArray.h>
+#import <Foundation/NSPathUtilities.h>
+#endif
 
 #import "base/base_paths.h"
 #import "base/file_path.h"

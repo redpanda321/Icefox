@@ -1,47 +1,13 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsDOMEvent_h__
 #define nsDOMEvent_h__
 
 #include "nsIDOMEvent.h"
-#include "nsIDOMNSEvent.h"
 #include "nsISupports.h"
-#include "nsIPrivateDOMEvent.h"
 #include "nsCOMPtr.h"
 #include "nsIDOMEventTarget.h"
 #include "nsPIDOMWindow.h"
@@ -49,145 +15,17 @@
 #include "nsGUIEvent.h"
 #include "nsCycleCollectionParticipant.h"
 #include "nsAutoPtr.h"
+#include "nsIJSNativeInitializer.h"
 
 class nsIContent;
 class nsPresContext;
+struct JSContext;
+struct JSObject;
  
 class nsDOMEvent : public nsIDOMEvent,
-                   public nsIDOMNSEvent,
-                   public nsIPrivateDOMEvent
+                   public nsIJSNativeInitializer
 {
 public:
-
-  // Note: this enum must be kept in sync with sEventNames in nsDOMEvent.cpp
-  enum nsDOMEvents {
-    eDOMEvents_mousedown=0,
-    eDOMEvents_mouseup,
-    eDOMEvents_click,
-    eDOMEvents_dblclick,
-    eDOMEvents_mouseover,
-    eDOMEvents_mouseout,
-    eDOMEvents_MozMouseHittest,
-    eDOMEvents_mousemove,
-    eDOMEvents_contextmenu,
-    eDOMEvents_keydown,
-    eDOMEvents_keyup,
-    eDOMEvents_keypress,
-    eDOMEvents_focus,
-    eDOMEvents_blur,
-    eDOMEvents_load,
-    eDOMEvents_popstate,
-    eDOMEvents_beforeunload,
-    eDOMEvents_unload,
-    eDOMEvents_hashchange,
-    eDOMEvents_readystatechange,
-    eDOMEvents_abort,
-    eDOMEvents_error,
-    eDOMEvents_submit,
-    eDOMEvents_reset,
-    eDOMEvents_change,
-    eDOMEvents_select,
-    eDOMEvents_input,
-    eDOMEvents_invalid,
-    eDOMEvents_text,
-    eDOMEvents_compositionstart,
-    eDOMEvents_compositionend,
-    eDOMEvents_popupShowing,
-    eDOMEvents_popupShown,
-    eDOMEvents_popupHiding,
-    eDOMEvents_popupHidden,
-    eDOMEvents_close,
-    eDOMEvents_command,
-    eDOMEvents_broadcast,
-    eDOMEvents_commandupdate,
-    eDOMEvents_dragenter,
-    eDOMEvents_dragover,
-    eDOMEvents_dragexit,
-    eDOMEvents_dragdrop,
-    eDOMEvents_draggesture,
-    eDOMEvents_drag,
-    eDOMEvents_dragend,
-    eDOMEvents_dragstart,
-    eDOMEvents_dragleave,
-    eDOMEvents_drop,
-    eDOMEvents_resize,
-    eDOMEvents_scroll,
-    eDOMEvents_overflow,
-    eDOMEvents_underflow,
-    eDOMEvents_overflowchanged,
-    eDOMEvents_subtreemodified,
-    eDOMEvents_nodeinserted,
-    eDOMEvents_noderemoved,
-    eDOMEvents_noderemovedfromdocument,
-    eDOMEvents_nodeinsertedintodocument,
-    eDOMEvents_attrmodified,
-    eDOMEvents_characterdatamodified,
-    eDOMEvents_DOMActivate,
-    eDOMEvents_DOMFocusIn,
-    eDOMEvents_DOMFocusOut,
-    eDOMEvents_pageshow,
-    eDOMEvents_pagehide,
-    eDOMEvents_DOMMouseScroll,
-    eDOMEvents_MozMousePixelScroll,
-    eDOMEvents_offline,
-    eDOMEvents_online,
-    eDOMEvents_copy,
-    eDOMEvents_cut,
-    eDOMEvents_paste,
-#ifdef MOZ_SVG
-    eDOMEvents_SVGLoad,
-    eDOMEvents_SVGUnload,
-    eDOMEvents_SVGAbort,
-    eDOMEvents_SVGError,
-    eDOMEvents_SVGResize,
-    eDOMEvents_SVGScroll,
-    eDOMEvents_SVGZoom,
-#endif // MOZ_SVG
-#ifdef MOZ_SMIL
-    eDOMEvents_beginEvent,
-    eDOMEvents_endEvent,
-    eDOMEvents_repeatEvent,
-#endif // MOZ_SMIL
-#ifdef MOZ_MEDIA
-    eDOMEvents_loadstart,
-    eDOMEvents_progress,
-    eDOMEvents_suspend,
-    eDOMEvents_emptied,
-    eDOMEvents_stalled,
-    eDOMEvents_play,
-    eDOMEvents_pause,
-    eDOMEvents_loadedmetadata,
-    eDOMEvents_loadeddata,
-    eDOMEvents_waiting,
-    eDOMEvents_playing,
-    eDOMEvents_canplay,
-    eDOMEvents_canplaythrough,
-    eDOMEvents_seeking,
-    eDOMEvents_seeked,
-    eDOMEvents_timeupdate,
-    eDOMEvents_ended,
-    eDOMEvents_ratechange,
-    eDOMEvents_durationchange,
-    eDOMEvents_volumechange,
-    eDOMEvents_mozaudioavailable,
-#endif
-    eDOMEvents_afterpaint,
-    eDOMEvents_beforepaint,
-    eDOMEvents_MozSwipeGesture,
-    eDOMEvents_MozMagnifyGestureStart,
-    eDOMEvents_MozMagnifyGestureUpdate,
-    eDOMEvents_MozMagnifyGesture,
-    eDOMEvents_MozRotateGestureStart,
-    eDOMEvents_MozRotateGestureUpdate,
-    eDOMEvents_MozRotateGesture,
-    eDOMEvents_MozTapGesture,
-    eDOMEvents_MozPressTapGesture,
-    eDOMEvents_MozTouchDown,
-    eDOMEvents_MozTouchMove,
-    eDOMEvents_MozTouchUp,
-    eDOMEvents_MozScrolledAreaChanged,
-    eDOMEvents_transitionend
-  };
 
   nsDOMEvent(nsPresContext* aPresContext, nsEvent* aEvent);
   virtual ~nsDOMEvent();
@@ -198,18 +36,14 @@ public:
   // nsIDOMEvent Interface
   NS_DECL_NSIDOMEVENT
 
-  // nsIDOMNSEvent Interface
-  NS_DECL_NSIDOMNSEVENT
+  // nsIJSNativeInitializer
+  NS_IMETHOD Initialize(nsISupports* aOwner, JSContext* aCx, JSObject* aObj,
+                        uint32_t aArgc, jsval* aArgv);
 
-  // nsIPrivateDOMEvent interface
-  NS_IMETHOD    DuplicatePrivateData();
-  NS_IMETHOD    SetTarget(nsIDOMEventTarget* aTarget);
-  NS_IMETHOD_(PRBool)    IsDispatchStopped();
-  NS_IMETHOD_(nsEvent*)    GetInternalNSEvent();
-  NS_IMETHOD    SetTrusted(PRBool aTrusted);
+  virtual nsresult InitFromCtor(const nsAString& aType,
+                                JSContext* aCx, jsval* aVal);
 
-  virtual void Serialize(IPC::Message* aMsg, PRBool aSerializeInterfaceType);
-  virtual PRBool Deserialize(const IPC::Message* aMsg, void** aIter);
+  void InitPresContextData(nsPresContext* aPresContext);
 
   static PopupControlState GetEventPopupControlState(nsEvent *aEvent);
 
@@ -217,24 +51,60 @@ public:
 
   static void Shutdown();
 
-  static const char* GetEventName(PRUint32 aEventType);
+  static const char* GetEventName(uint32_t aEventType);
+  static nsIntPoint GetClientCoords(nsPresContext* aPresContext,
+                                    nsEvent* aEvent,
+                                    nsIntPoint aPoint,
+                                    nsIntPoint aDefaultPoint);
+  static nsIntPoint GetPageCoords(nsPresContext* aPresContext,
+                                  nsEvent* aEvent,
+                                  nsIntPoint aPoint,
+                                  nsIntPoint aDefaultPoint);
+  static nsIntPoint GetScreenCoords(nsPresContext* aPresContext,
+                                    nsEvent* aEvent,
+                                    nsIntPoint aPoint);
 protected:
 
   // Internal helper functions
-  nsresult SetEventType(const nsAString& aEventTypeArg);
+  void SetEventType(const nsAString& aEventTypeArg);
   already_AddRefed<nsIContent> GetTargetFromFrame();
-  nsresult ReportWrongPropertyAccessWarning(const char* aPropertyName);
 
   nsEvent*                    mEvent;
   nsRefPtr<nsPresContext>     mPresContext;
-  nsCOMPtr<nsIDOMEventTarget> mTmpRealOriginalTarget;
-  nsIDOMEventTarget*          mExplicitOriginalTarget;
+  nsCOMPtr<nsIDOMEventTarget> mExplicitOriginalTarget;
   nsString                    mCachedType;
-  PRPackedBool                mEventIsInternal;
-  PRPackedBool                mPrivateDataDuplicated;
+  bool                        mEventIsInternal;
+  bool                        mPrivateDataDuplicated;
 };
 
 #define NS_FORWARD_TO_NSDOMEVENT \
   NS_FORWARD_NSIDOMEVENT(nsDOMEvent::)
+
+#define NS_FORWARD_NSIDOMEVENT_NO_SERIALIZATION_NO_DUPLICATION(_to) \
+  NS_IMETHOD GetType(nsAString& aType){ return _to GetType(aType); } \
+  NS_IMETHOD GetTarget(nsIDOMEventTarget * *aTarget) { return _to GetTarget(aTarget); } \
+  NS_IMETHOD GetCurrentTarget(nsIDOMEventTarget * *aCurrentTarget) { return _to GetCurrentTarget(aCurrentTarget); } \
+  NS_IMETHOD GetEventPhase(uint16_t *aEventPhase) { return _to GetEventPhase(aEventPhase); } \
+  NS_IMETHOD GetBubbles(bool *aBubbles) { return _to GetBubbles(aBubbles); } \
+  NS_IMETHOD GetCancelable(bool *aCancelable) { return _to GetCancelable(aCancelable); } \
+  NS_IMETHOD GetTimeStamp(DOMTimeStamp *aTimeStamp) { return _to GetTimeStamp(aTimeStamp); } \
+  NS_IMETHOD StopPropagation(void) { return _to StopPropagation(); } \
+  NS_IMETHOD PreventDefault(void) { return _to PreventDefault(); } \
+  NS_IMETHOD InitEvent(const nsAString & eventTypeArg, bool canBubbleArg, bool cancelableArg) { return _to InitEvent(eventTypeArg, canBubbleArg, cancelableArg); } \
+  NS_IMETHOD GetDefaultPrevented(bool *aDefaultPrevented) { return _to GetDefaultPrevented(aDefaultPrevented); } \
+  NS_IMETHOD StopImmediatePropagation(void) { return _to StopImmediatePropagation(); } \
+  NS_IMETHOD GetOriginalTarget(nsIDOMEventTarget** aOriginalTarget) { return _to GetOriginalTarget(aOriginalTarget); } \
+  NS_IMETHOD GetExplicitOriginalTarget(nsIDOMEventTarget** aExplicitOriginalTarget) { return _to GetExplicitOriginalTarget(aExplicitOriginalTarget); } \
+  NS_IMETHOD PreventBubble() { return _to PreventBubble(); } \
+  NS_IMETHOD PreventCapture() { return _to PreventCapture(); } \
+  NS_IMETHOD GetPreventDefault(bool* aRetval) { return _to GetPreventDefault(aRetval); } \
+  NS_IMETHOD GetIsTrusted(bool* aIsTrusted) { return _to GetIsTrusted(aIsTrusted); } \
+  NS_IMETHOD SetTarget(nsIDOMEventTarget *aTarget) { return _to SetTarget(aTarget); } \
+  NS_IMETHOD_(bool) IsDispatchStopped(void) { return _to IsDispatchStopped(); } \
+  NS_IMETHOD_(nsEvent *) GetInternalNSEvent(void) { return _to GetInternalNSEvent(); } \
+  NS_IMETHOD_(void) SetTrusted(bool aTrusted) { _to SetTrusted(aTrusted); }
+
+#define NS_FORWARD_TO_NSDOMEVENT_NO_SERIALIZATION_NO_DUPLICATION \
+  NS_FORWARD_NSIDOMEVENT_NO_SERIALIZATION_NO_DUPLICATION(nsDOMEvent::)
 
 #endif // nsDOMEvent_h__

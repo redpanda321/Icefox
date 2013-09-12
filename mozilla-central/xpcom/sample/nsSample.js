@@ -1,4 +1,8 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 
 Components.utils.import("resource://gre/modules/XPCOMUtils.jsm");
 
@@ -51,6 +55,6 @@ mySample.prototype = {
  * XPCOMUtils.generateNSGetModule is for Mozilla 1.9.2 (Firefox 3.6).
  */
 if (XPCOMUtils.generateNSGetFactory)
-    var NSGetFactory = XPCOMUtils.generateNSGetFactory([mySample]);
+    this.NSGetFactory = XPCOMUtils.generateNSGetFactory([mySample]);
 else
     var NSGetModule = XPCOMUtils.generateNSGetModule([mySample]);

@@ -1,42 +1,8 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is spacetrace.h/spacetrace.c code, released
- * Nov 6, 2001.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Garrett Arch Blythe, 31-October-2001
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 ** spacetrace.c
@@ -70,9 +36,6 @@
 #include <gdfontmb.h>
 #endif /* HAVE_BOUTELL_GD */
 
-/*
-** Ugh, MSVC6's qsort is too slow...
-*/
 #include "nsQuickSort.h"
 #include "prlong.h"
 /*
@@ -145,20 +108,10 @@ showHelp(void)
 ** Convert platform specific ticks to second units
 ** Returns 0 on success.
 */
-PRUint32
-ticks2xsec(tmreader * aReader, PRUint32 aTicks, PRUint32 aResolution)
+uint32_t
+ticks2xsec(tmreader * aReader, uint32_t aTicks, uint32_t aResolution)
 {
-    PRUint32 retval = 0;
-    PRUint64 bigone;
-    PRUint64 tmp64;
-
-    LL_UI2L(bigone, aResolution);
-    LL_UI2L(tmp64, aTicks);
-    LL_MUL(bigone, bigone, tmp64);
-    LL_UI2L(tmp64, aReader->ticksPerSec);
-    LL_DIV(bigone, bigone, tmp64);
-    LL_L2UI(retval, bigone);
-    return retval;
+    return (uint32_t)((aResolution * aTicks)/aReader->ticksPerSec);
 }
 
 #define ticks2msec(reader, ticks) ticks2xsec((reader), (ticks), 1000)
@@ -184,7 +137,7 @@ initOptions(int aArgCount, char **aArgArray)
 #define ST_CMD_OPTION_STRING_ARRAY(option_name, option_genre, array_size, option_help) { int loop; for(loop = 0; loop < array_size; loop++) { globals.mCommandLineOptions.m##option_name[loop][0] = '\0'; } }
 #define ST_CMD_OPTION_STRING_PTR_ARRAY(option_name, option_genre, option_help) globals.mCommandLineOptions.m##option_name = NULL; globals.mCommandLineOptions.m##option_name##Count = 0;
 #define ST_CMD_OPTION_UINT32(option_name, option_genre, default_value, multiplier, option_help) globals.mCommandLineOptions.m##option_name = default_value * multiplier;
-#define ST_CMD_OPTION_UINT64(option_name, option_genre, default_value, multiplier, option_help) { PRUint64 def64 = default_value; PRUint64 mul64 = multiplier; LL_MUL(globals.mCommandLineOptions.m##option_name##64, def64, mul64); }
+#define ST_CMD_OPTION_UINT64(option_name, option_genre, default_value, multiplier, option_help) { uint64_t def64 = default_value; uint64_t mul64 = multiplier; globals.mCommandLineOptions.m##option_name##64 = def64 * mul64; }
 
 #include "stoptions.h"
 
@@ -259,7 +212,7 @@ initOptions(int aArgCount, char **aArgArray)
 #define ST_CMD_OPTION_UINT32(option_name, option_genre, default_value, multiplier, option_help) \
     else if(0 == strncasecmp(option, #option_name "=", strlen(#option_name "="))) \
     { \
-        PRInt32 scanRes = 0; \
+        int32_t scanRes = 0; \
         \
         scanRes = PR_sscanf(option + strlen(#option_name "="), "%u", &globals.mCommandLineOptions.m##option_name); \
         if(1 != scanRes) \
@@ -272,7 +225,7 @@ initOptions(int aArgCount, char **aArgArray)
 #define ST_CMD_OPTION_UINT64(option_name, option_genre, default_value, multiplier, option_help) \
     else if(0 == strncasecmp(option, #option_name "=", strlen(#option_name "="))) \
     { \
-        PRInt32 scanRes = 0; \
+        int32_t scanRes = 0; \
         \
         scanRes = PR_sscanf(option + strlen(#option_name "="), "%llu", &globals.mCommandLineOptions.m##option_name##64); \
         if(1 != scanRes) \
@@ -389,13 +342,13 @@ drawGraph(gdImagePtr aImage, int aColor,
           const char *aGraphTitle,
           const char *aXAxisTitle,
           const char *aYAxisTitle,
-          PRUint32 aXMarkCount,
-          PRUint32 * aXMarkPercents,
+          uint32_t aXMarkCount,
+          uint32_t * aXMarkPercents,
           const char **aXMarkTexts,
-          PRUint32 aYMarkCount,
-          PRUint32 * aYMarkPercents,
+          uint32_t aYMarkCount,
+          uint32_t * aYMarkPercents,
           const char **aYMarkTexts,
-          PRUint32 aLegendCount,
+          uint32_t aLegendCount,
           int *aLegendColors, const char **aLegendTexts)
 {
     if (NULL != aImage && NULL != aGraphTitle &&
@@ -406,8 +359,8 @@ drawGraph(gdImagePtr aImage, int aColor,
         && (0 == aLegendCount
             || (NULL != aLegendColors && NULL != aLegendTexts))) {
         int margin = 1;
-        PRUint32 traverse = 0;
-        PRUint32 target = 0;
+        uint32_t traverse = 0;
+        uint32_t target = 0;
         const int markSize = 2;
         int x1 = 0;
         int y1 = 0;
@@ -590,7 +543,7 @@ pngSink(void *aContext, const char *aBuffer, int aLen)
 ** static data.
 */
 char *
-FormatNumber(PRInt32 num)
+FormatNumber(int32_t num)
 {
     static char buf[64];
     char tmpbuf[64];
@@ -621,8 +574,8 @@ FormatNumber(PRInt32 num)
 **
 ** Apply alignment and overhead to size to figure out actual byte size
 */
-PRUint32
-actualByteSize(STOptions * inOptions, PRUint32 retval)
+uint32_t
+actualByteSize(STOptions * inOptions, uint32_t retval)
 {
     /*
      ** Need to bump the result by our alignment and overhead.
@@ -633,8 +586,8 @@ actualByteSize(STOptions * inOptions, PRUint32 retval)
      ** The win32 HeapAlloc has an alignment of 8 with an overhead of 8.
      */
     if (0 != retval) {
-        PRUint32 eval = 0;
-        PRUint32 over = 0;
+        uint32_t eval = 0;
+        uint32_t over = 0;
 
         eval = retval - 1;
         if (0 != inOptions->mAlignBy) {
@@ -653,13 +606,13 @@ actualByteSize(STOptions * inOptions, PRUint32 retval)
 ** Might expand in the future to report size at a given time.
 ** For now, just use last relevant event.
 */
-PRUint32
+uint32_t
 byteSize(STOptions * inOptions, STAllocation * aAlloc)
 {
-    PRUint32 retval = 0;
+    uint32_t retval = 0;
 
     if (NULL != aAlloc && 0 != aAlloc->mEventCount) {
-        PRUint32 index = aAlloc->mEventCount;
+        uint32_t index = aAlloc->mEventCount;
 
         /*
          ** Generally, the size is the last event's size.
@@ -694,17 +647,13 @@ recalculateAllocationCost(STOptions * inOptions, STContext * inContext,
      **  the current run in question.
      */
     if (NULL != inContext && 0 != aRun->mStats[inContext->mIndex].mStamp) {
-        PRUint32 timeval =
+        uint32_t timeval =
             aAllocation->mMaxTimeval - aAllocation->mMinTimeval;
-        PRUint32 size = byteSize(inOptions, aAllocation);
-        PRUint64 weight64 = LL_INIT(0, 0);
-        PRUint32 heapCost = aAllocation->mHeapRuntimeCost;
-        PRUint64 timeval64 = LL_INIT(0, 0);
-        PRUint64 size64 = LL_INIT(0, 0);
-
-        LL_UI2L(timeval64, timeval);
-        LL_UI2L(size64, size);
-        LL_MUL(weight64, timeval64, size64);
+        uint32_t size = byteSize(inOptions, aAllocation);
+        uint32_t heapCost = aAllocation->mHeapRuntimeCost;
+        uint64_t timeval64 = timeval;
+        uint64_t size64 = size;
+        uint64_t weight64 = timeval64 * size64;
 
         /*
          ** First, update this run.
@@ -712,10 +661,8 @@ recalculateAllocationCost(STOptions * inOptions, STContext * inContext,
         aRun->mStats[inContext->mIndex].mCompositeCount++;
         aRun->mStats[inContext->mIndex].mHeapRuntimeCost += heapCost;
         aRun->mStats[inContext->mIndex].mSize += size;
-        LL_ADD(aRun->mStats[inContext->mIndex].mTimeval64,
-               aRun->mStats[inContext->mIndex].mTimeval64, timeval64);
-        LL_ADD(aRun->mStats[inContext->mIndex].mWeight64,
-               aRun->mStats[inContext->mIndex].mWeight64, weight64);
+        aRun->mStats[inContext->mIndex].mTimeval64 += timeval64;
+        aRun->mStats[inContext->mIndex].mWeight64 += weight64;
 
         /*
          ** Use the first event of the allocation to update the parent
@@ -764,12 +711,10 @@ recalculateAllocationCost(STOptions * inOptions, STContext * inContext,
                     callsiteRun->mStats[inContext->mIndex].mHeapRuntimeCost +=
                         heapCost;
                     callsiteRun->mStats[inContext->mIndex].mSize += size;
-                    LL_ADD(callsiteRun->mStats[inContext->mIndex].mTimeval64,
-                           callsiteRun->mStats[inContext->mIndex].mTimeval64,
-                           timeval64);
-                    LL_ADD(callsiteRun->mStats[inContext->mIndex].mWeight64,
-                           callsiteRun->mStats[inContext->mIndex].mWeight64,
-                           weight64);
+                    callsiteRun->mStats[inContext->mIndex].mTimeval64 +=
+                        timeval64;
+                    callsiteRun->mStats[inContext->mIndex].mWeight64 +=
+                        weight64;
                 }
 
                 callsite = callsite->parent;
@@ -930,18 +875,18 @@ harvestRun(const STRun * aInRun, STRun * aOutRun,
 
     if (NULL != aInRun && NULL != aOutRun && aInRun != aOutRun
         && NULL != aOptions && NULL != inContext) {
-        PRUint32 traverse = 0;
+        uint32_t traverse = 0;
         STAllocation *current = NULL;
 
         for (traverse = 0;
              0 == retval && traverse < aInRun->mAllocationCount; traverse++) {
             current = aInRun->mAllocations[traverse];
             if (NULL != current) {
-                PRUint32 lifetime = 0;
-                PRUint32 bytesize = 0;
-                PRUint64 weight64 = LL_INIT(0, 0);
-                PRUint64 bytesize64 = LL_INIT(0, 0);
-                PRUint64 lifetime64 = LL_INIT(0, 0);
+                uint32_t lifetime = 0;
+                uint32_t bytesize = 0;
+                uint64_t weight64 = 0;
+                uint64_t bytesize64 = 0;
+                uint64_t lifetime64 = 0;
                 int appendRes = 0;
                 int looper = 0;
                 PRBool matched = PR_FALSE;
@@ -1000,11 +945,9 @@ harvestRun(const STRun * aInRun, STRun * aOutRun,
                 /*
                  ** Check weight restrictions.
                  */
-                LL_UI2L(bytesize64, bytesize);
-                LL_UI2L(lifetime64, lifetime);
-                LL_MUL(weight64, bytesize64, lifetime64);
-                if (LL_UCMP(weight64, <, aOptions->mWeightMin64) ||
-                    LL_UCMP(weight64, >, aOptions->mWeightMax64)) {
+                weight64 = (uint64_t)(bytesize * lifetime);
+                if (weight64 < aOptions->mWeightMin64 ||
+                    weight64 > aOptions->mWeightMax64) {
                     continue;
                 }
 
@@ -1066,7 +1009,7 @@ harvestRun(const STRun * aInRun, STRun * aOutRun,
 int
 recalculateRunCost(STOptions * inOptions, STContext * inContext, STRun * aRun)
 {
-    PRUint32 traverse = 0;
+    uint32_t traverse = 0;
     STAllocation *current = NULL;
 
 #if defined(DEBUG_dp)
@@ -1130,26 +1073,24 @@ compareAllocations(const void *aAlloc1, const void *aAlloc2, void *aContext)
                  */
             case ST_WEIGHT:
                 {
-                    PRUint64 weight164 = LL_INIT(0, 0);
-                    PRUint64 weight264 = LL_INIT(0, 0);
-                    PRUint64 bytesize164 = LL_INIT(0, 0);
-                    PRUint64 bytesize264 = LL_INIT(0, 0);
-                    PRUint64 timeval164 = LL_INIT(0, 0);
-                    PRUint64 timeval264 = LL_INIT(0, 0);
+                    uint64_t weight164 = 0;
+                    uint64_t weight264 = 0;
+                    uint64_t bytesize164 = 0;
+                    uint64_t bytesize264 = 0;
+                    uint64_t timeval164 = 0;
+                    uint64_t timeval264 = 0;
 
-                    LL_UI2L(bytesize164, byteSize(inOptions, alloc1));
-                    LL_UI2L(timeval164,
-                            (alloc1->mMaxTimeval - alloc1->mMinTimeval));
-                    LL_MUL(weight164, bytesize164, timeval164);
-                    LL_UI2L(bytesize264, byteSize(inOptions, alloc2));
-                    LL_UI2L(timeval264,
-                            (alloc2->mMaxTimeval - alloc2->mMinTimeval));
-                    LL_MUL(weight264, bytesize264, timeval264);
+                    bytesize164 = byteSize(inOptions, alloc1);
+                    timeval164 = alloc1->mMaxTimeval - alloc1->mMinTimeval;
+                    weight164 = bytesize164 * timeval164;
+                    bytesize264 = byteSize(inOptions, alloc2);
+                    timeval264 = alloc2->mMaxTimeval - alloc2->mMinTimeval;
+                    weight264 = bytesize264 * timeval264;
 
-                    if (LL_UCMP(weight164, <, weight264)) {
+                    if (weight164 < weight264) {
                         retval = __LINE__;
                     }
-                    else if (LL_UCMP(weight164, >, weight264)) {
+                    else if (weight164 > weight264) {
                         retval = -__LINE__;
                     }
                 }
@@ -1157,8 +1098,8 @@ compareAllocations(const void *aAlloc1, const void *aAlloc2, void *aContext)
 
             case ST_SIZE:
                 {
-                    PRUint32 size1 = byteSize(inOptions, alloc1);
-                    PRUint32 size2 = byteSize(inOptions, alloc2);
+                    uint32_t size1 = byteSize(inOptions, alloc1);
+                    uint32_t size2 = byteSize(inOptions, alloc2);
 
                     if (size1 < size2) {
                         retval = __LINE__;
@@ -1171,9 +1112,9 @@ compareAllocations(const void *aAlloc1, const void *aAlloc2, void *aContext)
 
             case ST_TIMEVAL:
                 {
-                    PRUint32 timeval1 =
+                    uint32_t timeval1 =
                         (alloc1->mMaxTimeval - alloc1->mMinTimeval);
-                    PRUint32 timeval2 =
+                    uint32_t timeval2 =
                         (alloc2->mMaxTimeval - alloc2->mMinTimeval);
 
                     if (timeval1 < timeval2) {
@@ -1187,8 +1128,8 @@ compareAllocations(const void *aAlloc1, const void *aAlloc2, void *aContext)
 
             case ST_HEAPCOST:
                 {
-                    PRUint32 cost1 = alloc1->mHeapRuntimeCost;
-                    PRUint32 cost2 = alloc2->mHeapRuntimeCost;
+                    uint32_t cost1 = alloc1->mHeapRuntimeCost;
+                    uint32_t cost2 = alloc2->mHeapRuntimeCost;
 
                     if (cost1 < cost2) {
                         retval = __LINE__;
@@ -1251,7 +1192,7 @@ sortRun(STOptions * inOptions, STRun * aRun)
 ** Returns NULL on failure.
 */
 STRun *
-createRun(STContext * inContext, PRUint32 aStamp)
+createRun(STContext * inContext, uint32_t aStamp)
 {
     STRun *retval = NULL;
 
@@ -1388,12 +1329,12 @@ createRunFromGlobal(STOptions * inOptions, STContext * inContext)
 ** Returns the allocation on success, otherwise NULL.
 */
 STAllocation *
-getLiveAllocationByHeapID(STRun * aRun, PRUint32 aHeapID)
+getLiveAllocationByHeapID(STRun * aRun, uint32_t aHeapID)
 {
     STAllocation *retval = NULL;
 
     if (NULL != aRun && 0 != aHeapID) {
-        PRUint32 traverse = aRun->mAllocationCount;
+        uint32_t traverse = aRun->mAllocationCount;
         STAllocation *eval = NULL;
 
         /*
@@ -1465,8 +1406,8 @@ getLiveAllocationByHeapID(STRun * aRun, PRUint32 aHeapID)
 ** Returns the new event on success, otherwise NULL.
 */
 STAllocEvent *
-appendEvent(STAllocation * aAllocation, PRUint32 aTimeval, char aEventType,
-            PRUint32 aHeapID, PRUint32 aHeapSize, tmcallsite * aCallsite)
+appendEvent(STAllocation * aAllocation, uint32_t aTimeval, char aEventType,
+            uint32_t aHeapID, uint32_t aHeapSize, tmcallsite * aCallsite)
 {
     STAllocEvent *retval = NULL;
 
@@ -1547,7 +1488,7 @@ hasAllocation(STRun * aRun, STAllocation * aTestFor)
     int retval = 0;
 
     if (NULL != aRun && NULL != aTestFor) {
-        PRUint32 traverse = aRun->mAllocationCount;
+        uint32_t traverse = aRun->mAllocationCount;
 
         /*
          ** Go through reverse, in the hopes it exists nearer the end.
@@ -1581,15 +1522,15 @@ hasAllocation(STRun * aRun, STAllocation * aTestFor)
 ** Return NULL on failure.
 */
 STAllocation *
-allocationTracker(PRUint32 aTimeval, char aType, PRUint32 aHeapRuntimeCost,
-                  tmcallsite * aCallsite, PRUint32 aHeapID, PRUint32 aSize,
-                  tmcallsite * aOldCallsite, PRUint32 aOldHeapID,
-                  PRUint32 aOldSize)
+allocationTracker(uint32_t aTimeval, char aType, uint32_t aHeapRuntimeCost,
+                  tmcallsite * aCallsite, uint32_t aHeapID, uint32_t aSize,
+                  tmcallsite * aOldCallsite, uint32_t aOldHeapID,
+                  uint32_t aOldSize)
 {
     STAllocation *retval = NULL;
     static int compactor = 1;
     const int frequency = 10000;
-    PRUint32 actualSize, actualOldSize = 0;
+    uint32_t actualSize, actualOldSize = 0;
 
     actualSize = actualByteSize(&globals.mCommandLineOptions, aSize);
     if (aOldSize)
@@ -1599,7 +1540,7 @@ allocationTracker(PRUint32 aTimeval, char aType, PRUint32 aHeapRuntimeCost,
     if (NULL != aCallsite) {
         int newAllocation = 0;
         tmcallsite *searchCallsite = NULL;
-        PRUint32 searchHeapID = 0;
+        uint32_t searchHeapID = 0;
         STAllocation *allocation = NULL;
 
         /*
@@ -1871,9 +1812,9 @@ allocationTracker(PRUint32 aTimeval, char aType, PRUint32 aHeapRuntimeCost,
 ** We need to do the right thing and track it.
 */
 void
-trackEvent(PRUint32 aTimeval, char aType, PRUint32 aHeapRuntimeCost,
-           tmcallsite * aCallsite, PRUint32 aHeapID, PRUint32 aSize,
-           tmcallsite * aOldCallsite, PRUint32 aOldHeapID, PRUint32 aOldSize)
+trackEvent(uint32_t aTimeval, char aType, uint32_t aHeapRuntimeCost,
+           tmcallsite * aCallsite, uint32_t aHeapID, uint32_t aSize,
+           tmcallsite * aOldCallsite, uint32_t aOldHeapID, uint32_t aOldSize)
 {
     if (NULL != aCallsite) {
         /*
@@ -1920,7 +1861,7 @@ static const char spinner_chars[] = { '/', '-', '\\', '|' };
 void
 tmEventHandler(tmreader * aReader, tmevent * aEvent)
 {
-    static event_count = 0;     /* for spinner */
+    static int event_count = 0;     /* for spinner */
     if ((event_count++ % SPINNER_UPDATE_FREQUENCY) == 0)
         printf("\rReading... %c", SPINNER_CHAR(event_count));
     
@@ -1944,8 +1885,8 @@ tmEventHandler(tmreader * aReader, tmevent * aEvent)
         case TM_EVENT_REALLOC:
         case TM_EVENT_FREE:
             {
-                PRUint32 oldptr = 0;
-                PRUint32 oldsize = 0;
+                uint32_t oldptr = 0;
+                uint32_t oldsize = 0;
                 tmcallsite *callsite = NULL;
                 tmcallsite *oldcallsite = NULL;
 
@@ -1973,7 +1914,7 @@ tmEventHandler(tmreader * aReader, tmevent * aEvent)
                      */
                     if (NULL != CALLSITE_RUN(callsite)) {
                         char eventType = aEvent->type;
-                        PRUint32 eventSize = aEvent->u.alloc.size;
+                        uint32_t eventSize = aEvent->u.alloc.size;
 
                         /*
                          ** Play a nasty trick on reallocs of size zero.
@@ -2070,7 +2011,7 @@ optionGetDataOut(PRFileDesc * inFD, STOptions * inOptions)
     PR_fprintf(inFD, "%s%s=%s", (0 == mark++) ? "?" : "&", #option_name, inOptions->m##option_name);
 #define ST_WEB_OPTION_STRING_ARRAY(option_name, option_genre, array_size, option_help) \
     { \
-        PRUint32 loop = 0; \
+        uint32_t loop = 0; \
         \
         for(loop = 0; loop < array_size; loop++) \
         { \
@@ -2082,11 +2023,11 @@ optionGetDataOut(PRFileDesc * inFD, STOptions * inOptions)
     PR_fprintf(inFD, "%s%s=%u", (0 == mark++) ? "?" : "&", #option_name, inOptions->m##option_name / multiplier);
 #define ST_WEB_OPTION_UINT64(option_name, option_genre, default_value, multiplier, option_help) \
     { \
-        PRUint64 def64 = default_value; \
-        PRUint64 mul64 = multiplier; \
-        PRUint64 div64; \
+        uint64_t def64 = default_value; \
+        uint64_t mul64 = multiplier; \
+        uint64_t div64; \
         \
-        LL_DIV(div64, inOptions->m##option_name##64, mul64); \
+        div64 = inOptions->m##option_name##64 / mul64; \
         PR_fprintf(inFD, "%s%s=%llu", (0 == mark++) ? "?" : "&", #option_name, div64); \
     }
 
@@ -2112,7 +2053,7 @@ htmlAnchor(STRequest * inRequest,
          ** In batch mode, we need to verify the anchor is live.
          */
         if (0 != inRequest->mOptions.mBatchRequestCount) {
-            PRUint32 loop = 0;
+            uint32_t loop = 0;
             int comparison = 1;
 
             for (loop = 0; loop < inRequest->mOptions.mBatchRequestCount;
@@ -2320,14 +2261,14 @@ htmlCallsiteAnchor(STRequest * inRequest, tmcallsite * aCallsite,
                 PR_snprintf(textBuf, sizeof(textBuf),
                             "<span class=\"source binary-source\">%s [<span class=\"source-extra\">+%u(%u)</span>]</span>",
                             methodName, namesite->offset,
-                            (PRUint32) namesite->entry.key);
+                            (uint32_t) namesite->entry.key);
             }
 
             aText = textBuf;
         }
 
         PR_snprintf(hrefBuf, sizeof(hrefBuf), "callsite_%u.html",
-                    (PRUint32) aCallsite->entry.key);
+                    (uint32_t) aCallsite->entry.key);
 
         htmlAnchor(inRequest, hrefBuf, aText, NULL, "callsite",
                    &inRequest->mOptions);
@@ -2408,9 +2349,9 @@ htmlStartTable(STRequest* inRequest,
                const char* table_class,
                const char* id,
                const char* caption,
-               const char * const headers[], PRUint32 header_length)
+               const char * const headers[], uint32_t header_length)
 {
-        PRUint32 i;
+        uint32_t i;
         
         PR_fprintf(inRequest->mFD,
                    "<div id=\"%s\"><table class=\"data %s\">\n"
@@ -2437,11 +2378,11 @@ htmlStartTable(STRequest* inRequest,
 ** Returns the number of items in the array.
 ** If the same as aExistingCount, then nothing happened.
 */
-PRUint32
-callsiteArrayFromCallsite(tmcallsite *** aArray, PRUint32 aExistingCount,
+uint32_t
+callsiteArrayFromCallsite(tmcallsite *** aArray, uint32_t aExistingCount,
                           tmcallsite * aSite, int aFollow)
 {
-    PRUint32 retval = 0;
+    uint32_t retval = 0;
 
     if (NULL != aArray && NULL != aSite) {
         tmcallsite **expand = NULL;
@@ -2511,15 +2452,15 @@ callsiteArrayFromCallsite(tmcallsite *** aArray, PRUint32 aExistingCount,
 ** Returns the number of items in the array.
 ** If the same as aExistingCount, then nothing happened.
 */
-PRUint32
-callsiteArrayFromRun(tmcallsite *** aArray, PRUint32 aExistingCount,
+uint32_t
+callsiteArrayFromRun(tmcallsite *** aArray, uint32_t aExistingCount,
                      STRun * aRun)
 {
-    PRUint32 retval = 0;
+    uint32_t retval = 0;
 
     if (NULL != aArray && NULL != aRun && 0 < aRun->mAllocationCount) {
-        PRUint32 allocLoop = 0;
-        PRUint32 eventLoop = 0;
+        uint32_t allocLoop = 0;
+        uint32_t eventLoop = 0;
         int stopLoops = 0;
 
         /*
@@ -2592,7 +2533,7 @@ callsiteArrayFromRun(tmcallsite *** aArray, PRUint32 aExistingCount,
 */
 int
 getDataPRUint32Base(const FormData * aGetData, const char *aCheckFor,
-                    int inIndex, void *aStoreResult, PRUint32 aBits)
+                    int inIndex, void *aStoreResult, uint32_t aBits)
 {
     int retval = 0;
 
@@ -2609,7 +2550,7 @@ getDataPRUint32Base(const FormData * aGetData, const char *aCheckFor,
                 inIndex--;
 
                 if (0 == inIndex) {
-                    PRInt32 scanRes = 0;
+                    int32_t scanRes = 0;
 
                     if (64 == aBits) {
                         scanRes =
@@ -2640,7 +2581,7 @@ getDataPRUint32Base(const FormData * aGetData, const char *aCheckFor,
 
 int
 getDataPRUint32(const FormData * aGetData, const char *aCheckFor, int inIndex,
-                PRUint32 * aStoreResult, PRUint32 aConversion)
+                uint32_t * aStoreResult, uint32_t aConversion)
 {
     int retval = 0;
 
@@ -2653,13 +2594,13 @@ getDataPRUint32(const FormData * aGetData, const char *aCheckFor, int inIndex,
 
 int
 getDataPRUint64(const FormData * aGetData, const char *aCheckFor, int inIndex,
-                PRUint64 * aStoreResult64, PRUint64 aConversion64)
+                uint64_t * aStoreResult64, uint64_t aConversion64)
 {
     int retval = 0;
-    PRUint64 value64 = LL_INIT(0, 0);
+    uint64_t value64 = 0;
 
     retval = getDataPRUint32Base(aGetData, aCheckFor, inIndex, &value64, 64);
-    LL_MUL(*aStoreResult64, value64, aConversion64);
+    *aStoreResult64 = value64 * aConversion64;
 
     return retval;
 }
@@ -2724,7 +2665,7 @@ displayTopAllocations(STRequest * inRequest, STRun * aRun,
 
     if (NULL != aRun) {
         if (0 < aRun->mAllocationCount) {
-            PRUint32 loop = 0;
+            uint32_t loop = 0;
             STAllocation *current = NULL;
 
             static const char* const headers[] = {
@@ -2754,18 +2695,14 @@ displayTopAllocations(STRequest * inRequest, STRun * aRun,
                  && loop < aRun->mAllocationCount; loop++) {
                 current = aRun->mAllocations[loop];
                 if (NULL != current) {
-                    PRUint32 lifespan =
+                    uint32_t lifespan =
                         current->mMaxTimeval - current->mMinTimeval;
-                    PRUint32 size = byteSize(&inRequest->mOptions, current);
-                    PRUint32 heapCost = current->mHeapRuntimeCost;
-                    PRUint64 weight64 = LL_INIT(0, 0);
-                    PRUint64 size64 = LL_INIT(0, 0);
-                    PRUint64 lifespan64 = LL_INIT(0, 0);
+                    uint32_t size = byteSize(&inRequest->mOptions, current);
+                    uint32_t heapCost = current->mHeapRuntimeCost;
+                    uint64_t weight64 = 0;
                     char buffer[32];
 
-                    LL_UI2L(size64, size);
-                    LL_UI2L(lifespan64, lifespan);
-                    LL_MUL(weight64, size64, lifespan64);
+                    weight64 =(uint64_t)(size * lifespan);
 
                     PR_fprintf(inRequest->mFD, "<tr>\n");
 
@@ -2850,8 +2787,8 @@ displayMemoryLeaks(STRequest * inRequest, STRun * aRun)
     int retval = 0;
 
     if (NULL != aRun) {
-        PRUint32 loop = 0;
-        PRUint32 displayed = 0;
+        uint32_t loop = 0;
+        uint32_t displayed = 0;
         STAllocation *current = NULL;
 
         static const char * headers[] = {
@@ -2878,18 +2815,14 @@ displayMemoryLeaks(STRequest * inRequest, STRun * aRun)
                  */
                 if (TM_EVENT_FREE !=
                     current->mEvents[current->mEventCount - 1].mEventType) {
-                    PRUint32 lifespan =
+                    uint32_t lifespan =
                         current->mMaxTimeval - current->mMinTimeval;
-                    PRUint32 size = byteSize(&inRequest->mOptions, current);
-                    PRUint32 heapCost = current->mHeapRuntimeCost;
-                    PRUint64 weight64 = LL_INIT(0, 0);
-                    PRUint64 size64 = LL_INIT(0, 0);
-                    PRUint64 lifespan64 = LL_INIT(0, 0);
+                    uint32_t size = byteSize(&inRequest->mOptions, current);
+                    uint32_t heapCost = current->mHeapRuntimeCost;
+                    uint64_t weight64 = 0;
                     char buffer[32];
 
-                    LL_UI2L(size64, size);
-                    LL_UI2L(lifespan64, lifespan);
-                    LL_MUL(weight64, size64, lifespan64);
+                    weight64 =(uint64_t)(size * lifespan);
 
                     /*
                      ** One more shown.
@@ -2973,7 +2906,7 @@ displayMemoryLeaks(STRequest * inRequest, STRun * aRun)
 */
 int
 displayCallsites(STRequest * inRequest, tmcallsite * aCallsite, int aFollow,
-                 PRUint32 aStamp,
+                 uint32_t aStamp,
                  const char* id,
                  const char* caption,
                  int aRealNames)
@@ -3135,20 +3068,16 @@ displayAllocationDetails(STRequest * inRequest, STAllocation * aAllocation)
     int retval = 0;
 
     if (NULL != aAllocation) {
-        PRUint32 traverse = 0;
-        PRUint32 bytesize = byteSize(&inRequest->mOptions, aAllocation);
-        PRUint32 timeval =
+        uint32_t traverse = 0;
+        uint32_t bytesize = byteSize(&inRequest->mOptions, aAllocation);
+        uint32_t timeval =
             aAllocation->mMaxTimeval - aAllocation->mMinTimeval;
-        PRUint32 heapCost = aAllocation->mHeapRuntimeCost;
-        PRUint64 weight64 = LL_INIT(0, 0);
-        PRUint64 bytesize64 = LL_INIT(0, 0);
-        PRUint64 timeval64 = LL_INIT(0, 0);
-        PRUint32 cacheval = 0;
+        uint32_t heapCost = aAllocation->mHeapRuntimeCost;
+        uint64_t weight64 = 0;
+        uint32_t cacheval = 0;
         int displayRes = 0;
 
-        LL_UI2L(bytesize64, bytesize);
-        LL_UI2L(timeval64, timeval);
-        LL_MUL(weight64, bytesize64, timeval64);
+        weight64 = (uint64_t)(bytesize * timeval);
 
         PR_fprintf(inRequest->mFD, "<p>Allocation %u Details:</p>\n",
                    aAllocation->mRunIndex);
@@ -3301,13 +3230,13 @@ compareCallsites(const void *aSite1, const void *aSite2, void *aContext)
                 switch (inRequest->mOptions.mOrderBy) {
                 case ST_WEIGHT:
                     {
-                        PRUint64 weight164 = stats1->mWeight64;
-                        PRUint64 weight264 = stats2->mWeight64;
+                        uint64_t weight164 = stats1->mWeight64;
+                        uint64_t weight264 = stats2->mWeight64;
 
-                        if (LL_UCMP(weight164, <, weight264)) {
+                        if (weight164 < weight264) {
                             retval = __LINE__;
                         }
-                        else if (LL_UCMP(weight164, >, weight264)) {
+                        else if (weight164 > weight264) {
                             retval = -__LINE__;
                         }
                     }
@@ -3315,8 +3244,8 @@ compareCallsites(const void *aSite1, const void *aSite2, void *aContext)
 
                 case ST_SIZE:
                     {
-                        PRUint32 size1 = stats1->mSize;
-                        PRUint32 size2 = stats2->mSize;
+                        uint32_t size1 = stats1->mSize;
+                        uint32_t size2 = stats2->mSize;
 
                         if (size1 < size2) {
                             retval = __LINE__;
@@ -3329,13 +3258,13 @@ compareCallsites(const void *aSite1, const void *aSite2, void *aContext)
 
                 case ST_TIMEVAL:
                     {
-                        PRUint64 timeval164 = stats1->mTimeval64;
-                        PRUint64 timeval264 = stats2->mTimeval64;
+                        uint64_t timeval164 = stats1->mTimeval64;
+                        uint64_t timeval264 = stats2->mTimeval64;
 
-                        if (LL_UCMP(timeval164, <, timeval264)) {
+                        if (timeval164 < timeval264) {
                             retval = __LINE__;
                         }
-                        else if (LL_UCMP(timeval164, >, timeval264)) {
+                        else if (timeval164 > timeval264) {
                             retval = -__LINE__;
                         }
                     }
@@ -3343,8 +3272,8 @@ compareCallsites(const void *aSite1, const void *aSite2, void *aContext)
 
                 case ST_COUNT:
                     {
-                        PRUint32 count1 = stats1->mCompositeCount;
-                        PRUint32 count2 = stats2->mCompositeCount;
+                        uint32_t count1 = stats1->mCompositeCount;
+                        uint32_t count2 = stats2->mCompositeCount;
 
                         if (count1 < count2) {
                             retval = __LINE__;
@@ -3357,8 +3286,8 @@ compareCallsites(const void *aSite1, const void *aSite2, void *aContext)
 
                 case ST_HEAPCOST:
                     {
-                        PRUint32 cost1 = stats1->mHeapRuntimeCost;
-                        PRUint32 cost2 = stats2->mHeapRuntimeCost;
+                        uint32_t cost1 = stats1->mHeapRuntimeCost;
+                        uint32_t cost2 = stats2->mHeapRuntimeCost;
 
                         if (cost1 < cost2) {
                             retval = __LINE__;
@@ -3409,7 +3338,7 @@ compareCallsites(const void *aSite1, const void *aSite2, void *aContext)
 */
 int
 displayTopCallsites(STRequest * inRequest, tmcallsite ** aCallsites,
-                    PRUint32 aCallsiteCount, PRUint32 aStamp,
+                    uint32_t aCallsiteCount, uint32_t aStamp,
                     const char* id,
                     const char* caption,
                     int aRealName)
@@ -3417,11 +3346,11 @@ displayTopCallsites(STRequest * inRequest, tmcallsite ** aCallsites,
     int retval = 0;
 
     if (NULL != aCallsites && 0 < aCallsiteCount) {
-        PRUint32 traverse = 0;
+        uint32_t traverse = 0;
         STRun *run = NULL;
         tmcallsite *site = NULL;
         int headerDisplayed = 0;
-        PRUint32 displayed = 0;
+        uint32_t displayed = 0;
 
         /*
          ** Fixup the stamp.
@@ -3596,7 +3525,7 @@ displayCallsiteDetails(STRequest * inRequest, tmcallsite * aCallsite)
             PR_fprintf(inRequest->mFD,
                        "<p><b>%s</b>+%u(%u) Callsite Details:</p>\n",
                        tmmethodnode_name(aCallsite->method),
-                       aCallsite->offset, (PRUint32) aCallsite->entry.key);
+                       aCallsite->offset, (uint32_t) aCallsite->entry.key);
         }
 
         PR_fprintf(inRequest->mFD, "</div>\n\n");
@@ -3630,7 +3559,7 @@ displayCallsiteDetails(STRequest * inRequest, tmcallsite * aCallsite)
          */
         if (NULL != aCallsite->kids && NULL != aCallsite->kids->method) {
             int displayRes = 0;
-            PRUint32 siteCount = 0;
+            uint32_t siteCount = 0;
             tmcallsite **sites = NULL;
 
             /*
@@ -3754,11 +3683,11 @@ graphFootprint(STRequest * inRequest, STRun * aRun)
     int retval = 0;
 
     if (NULL != aRun) {
-        PRUint32 *YData = NULL;
-        PRUint32 YDataArray[STGD_SPACE_X];
-        PRUint32 traverse = 0;
-        PRUint32 timeval = 0;
-        PRUint32 loop = 0;
+        uint32_t *YData = NULL;
+        uint32_t YDataArray[STGD_SPACE_X];
+        uint32_t traverse = 0;
+        uint32_t timeval = 0;
+        uint32_t loop = 0;
         PRBool underLock = PR_FALSE;
 
         /*
@@ -3785,7 +3714,7 @@ graphFootprint(STRequest * inRequest, STRun * aRun)
          */
         if (YData != inRequest->mContext->mFootprintYData
             || PR_FALSE == inRequest->mContext->mFootprintCached) {
-            memset(YData, 0, sizeof(PRUint32) * STGD_SPACE_X);
+            memset(YData, 0, sizeof(uint32_t) * STGD_SPACE_X);
 
             /*
              ** Initialize our Y data.
@@ -3832,8 +3761,8 @@ graphFootprint(STRequest * inRequest, STRun * aRun)
         }
 
         if (0 == retval) {
-            PRUint32 minMemory = (PRUint32) - 1;
-            PRUint32 maxMemory = 0;
+            uint32_t minMemory = (uint32_t) - 1;
+            uint32_t maxMemory = 0;
             int transparent = 0;
             gdImagePtr graph = NULL;
 
@@ -3860,7 +3789,7 @@ graphFootprint(STRequest * inRequest, STRun * aRun)
                 int y1 = 0;
                 int x2 = 0;
                 int y2 = 0;
-                PRUint32 percents[11] =
+                uint32_t percents[11] =
                     { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
                 char *timevals[11];
                 char *bytes[11];
@@ -3868,7 +3797,7 @@ graphFootprint(STRequest * inRequest, STRun * aRun)
                 char byteSpace[11][32];
                 int legendColors[1];
                 const char *legends[1] = { "Memory in Use" };
-                PRUint32 cached = 0;
+                uint32_t cached = 0;
 
                 /*
                  ** Figure out what the labels will say.
@@ -3896,11 +3825,11 @@ graphFootprint(STRequest * inRequest, STRun * aRun)
                           legends);
 
                 if (maxMemory != minMemory) {
-                    PRInt64 in64 = LL_INIT(0, 0);
-                    PRInt64 ydata64 = LL_INIT(0, 0);
-                    PRInt64 spacey64 = LL_INIT(0, 0);
-                    PRInt64 mem64 = LL_INIT(0, 0);
-                    PRInt32 in32 = 0;
+                    int64_t in64 = 0;
+                    int64_t ydata64 = 0;
+                    int64_t spacey64 = 0;
+                    int64_t mem64 = 0;
+                    int32_t in32 = 0;
 
                     /*
                      ** Go through our Y data and mark it up.
@@ -3912,13 +3841,13 @@ graphFootprint(STRequest * inRequest, STRun * aRun)
                         /*
                          ** Need to do this math in 64 bits.
                          */
-                        LL_I2L(ydata64, YData[traverse]);
-                        LL_I2L(spacey64, STGD_SPACE_Y);
-                        LL_I2L(mem64, (maxMemory - minMemory));
+                        ydata64 = (int64_t)YData[traverse];
+                        spacey64 = (int64_t)STGD_SPACE_Y;
+                        mem64 = (int64_t)(maxMemory - minMemory);
 
-                        LL_MUL(in64, ydata64, spacey64);
-                        LL_DIV(in64, in64, mem64);
-                        LL_L2I(in32, in64);
+                        in64 = ydata64 * spacey64;
+                        in64 /= mem64;
+                        in32 = int32_t(in64);
 
                         x2 = x1;
                         y2 = y1 - in32;
@@ -3966,11 +3895,11 @@ graphTimeval(STRequest * inRequest, STRun * aRun)
     int retval = 0;
 
     if (NULL != aRun) {
-        PRUint32 *YData = NULL;
-        PRUint32 YDataArray[STGD_SPACE_X];
-        PRUint32 traverse = 0;
-        PRUint32 timeval = globals.mMinTimeval;
-        PRUint32 loop = 0;
+        uint32_t *YData = NULL;
+        uint32_t YDataArray[STGD_SPACE_X];
+        uint32_t traverse = 0;
+        uint32_t timeval = globals.mMinTimeval;
+        uint32_t loop = 0;
         PRBool underLock = PR_FALSE;
 
         /*
@@ -3997,9 +3926,9 @@ graphTimeval(STRequest * inRequest, STRun * aRun)
          */
         if (YData != inRequest->mContext->mTimevalYData
             || PR_FALSE == inRequest->mContext->mTimevalCached) {
-            PRUint32 prevTimeval = 0;
+            uint32_t prevTimeval = 0;
 
-            memset(YData, 0, sizeof(PRUint32) * STGD_SPACE_X);
+            memset(YData, 0, sizeof(uint32_t) * STGD_SPACE_X);
 
             /*
              ** Initialize our Y data.
@@ -4048,8 +3977,8 @@ graphTimeval(STRequest * inRequest, STRun * aRun)
         }
 
         if (0 == retval) {
-            PRUint32 minMemory = (PRUint32) - 1;
-            PRUint32 maxMemory = 0;
+            uint32_t minMemory = (uint32_t) - 1;
+            uint32_t maxMemory = 0;
             int transparent = 0;
             gdImagePtr graph = NULL;
 
@@ -4076,7 +4005,7 @@ graphTimeval(STRequest * inRequest, STRun * aRun)
                 int y1 = 0;
                 int x2 = 0;
                 int y2 = 0;
-                PRUint32 percents[11] =
+                uint32_t percents[11] =
                     { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
                 char *timevals[11];
                 char *bytes[11];
@@ -4084,7 +4013,7 @@ graphTimeval(STRequest * inRequest, STRun * aRun)
                 char byteSpace[11][32];
                 int legendColors[1];
                 const char *legends[1] = { "Memory Allocated" };
-                PRUint32 cached = 0;
+                uint32_t cached = 0;
 
                 /*
                  ** Figure out what the labels will say.
@@ -4112,11 +4041,11 @@ graphTimeval(STRequest * inRequest, STRun * aRun)
                           legends);
 
                 if (maxMemory != minMemory) {
-                    PRInt64 in64 = LL_INIT(0, 0);
-                    PRInt64 ydata64 = LL_INIT(0, 0);
-                    PRInt64 spacey64 = LL_INIT(0, 0);
-                    PRInt64 mem64 = LL_INIT(0, 0);
-                    PRInt32 in32 = 0;
+                    int64_t in64 = 0;
+                    int64_t ydata64 = 0;
+                    int64_t spacey64 = 0;
+                    int64_t mem64 = 0;
+                    int32_t in32 = 0;
 
                     /*
                      ** Go through our Y data and mark it up.
@@ -4128,13 +4057,13 @@ graphTimeval(STRequest * inRequest, STRun * aRun)
                         /*
                          ** Need to do this math in 64 bits.
                          */
-                        LL_I2L(ydata64, YData[traverse]);
-                        LL_I2L(spacey64, STGD_SPACE_Y);
-                        LL_I2L(mem64, (maxMemory - minMemory));
+                        ydata64 = (int64_t)YData[traverse];
+                        spacey64 = (int64_t)STGD_SPACE_Y;
+                        mem64 = (int64_t)(maxMemory - minMemory);
 
-                        LL_MUL(in64, ydata64, spacey64);
-                        LL_DIV(in64, in64, mem64);
-                        LL_L2I(in32, in64);
+                        in64 = ydata64 * spacey64;
+                        in64 /= mem64;
+                        in32 = int32_t(in64);
 
                         x2 = x1;
                         y2 = y1 - in32;
@@ -4182,11 +4111,11 @@ graphLifespan(STRequest * inRequest, STRun * aRun)
     int retval = 0;
 
     if (NULL != aRun) {
-        PRUint32 *YData = NULL;
-        PRUint32 YDataArray[STGD_SPACE_X];
-        PRUint32 traverse = 0;
-        PRUint32 timeval = 0;
-        PRUint32 loop = 0;
+        uint32_t *YData = NULL;
+        uint32_t YDataArray[STGD_SPACE_X];
+        uint32_t traverse = 0;
+        uint32_t timeval = 0;
+        uint32_t loop = 0;
         PRBool underLock = PR_FALSE;
 
         /*
@@ -4213,10 +4142,10 @@ graphLifespan(STRequest * inRequest, STRun * aRun)
          */
         if (YData != inRequest->mContext->mLifespanYData
             || PR_FALSE == inRequest->mContext->mLifespanCached) {
-            PRUint32 prevTimeval = 0;
-            PRUint32 lifespan = 0;
+            uint32_t prevTimeval = 0;
+            uint32_t lifespan = 0;
 
-            memset(YData, 0, sizeof(PRUint32) * STGD_SPACE_X);
+            memset(YData, 0, sizeof(uint32_t) * STGD_SPACE_X);
 
             /*
              ** Initialize our Y data.
@@ -4266,8 +4195,8 @@ graphLifespan(STRequest * inRequest, STRun * aRun)
         }
 
         if (0 == retval) {
-            PRUint32 minMemory = (PRUint32) - 1;
-            PRUint32 maxMemory = 0;
+            uint32_t minMemory = (uint32_t) - 1;
+            uint32_t maxMemory = 0;
             int transparent = 0;
             gdImagePtr graph = NULL;
 
@@ -4294,7 +4223,7 @@ graphLifespan(STRequest * inRequest, STRun * aRun)
                 int y1 = 0;
                 int x2 = 0;
                 int y2 = 0;
-                PRUint32 percents[11] =
+                uint32_t percents[11] =
                     { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
                 char *timevals[11];
                 char *bytes[11];
@@ -4302,7 +4231,7 @@ graphLifespan(STRequest * inRequest, STRun * aRun)
                 char byteSpace[11][32];
                 int legendColors[1];
                 const char *legends[1] = { "Live Memory" };
-                PRUint32 cached = 0;
+                uint32_t cached = 0;
 
                 /*
                  ** Figure out what the labels will say.
@@ -4330,11 +4259,11 @@ graphLifespan(STRequest * inRequest, STRun * aRun)
                           legends);
 
                 if (maxMemory != minMemory) {
-                    PRInt64 in64 = LL_INIT(0, 0);
-                    PRInt64 ydata64 = LL_INIT(0, 0);
-                    PRInt64 spacey64 = LL_INIT(0, 0);
-                    PRInt64 mem64 = LL_INIT(0, 0);
-                    PRInt32 in32 = 0;
+                    int64_t in64 = 0;
+                    int64_t ydata64 = 0;
+                    int64_t spacey64 = 0;
+                    int64_t mem64 = 0;
+                    int32_t in32 = 0;
 
                     /*
                      ** Go through our Y data and mark it up.
@@ -4346,13 +4275,13 @@ graphLifespan(STRequest * inRequest, STRun * aRun)
                         /*
                          ** Need to do this math in 64 bits.
                          */
-                        LL_I2L(ydata64, YData[traverse]);
-                        LL_I2L(spacey64, STGD_SPACE_Y);
-                        LL_I2L(mem64, (maxMemory - minMemory));
+                        ydata64 = (int64_t)YData[traverse];
+                        spacey64 = (int64_t)STGD_SPACE_Y;
+                        mem64 = (int64_t)(maxMemory - minMemory);
 
-                        LL_MUL(in64, ydata64, spacey64);
-                        LL_DIV(in64, in64, mem64);
-                        LL_L2I(in32, in64);
+                        in64 = ydata64 * spacey64;
+                        in64 /= mem64;
+                        in32 = int32_t(in64);
 
                         x2 = x1;
                         y2 = y1 - in32;
@@ -4400,11 +4329,11 @@ graphWeight(STRequest * inRequest, STRun * aRun)
     int retval = 0;
 
     if (NULL != aRun) {
-        PRUint64 *YData64 = NULL;
-        PRUint64 YDataArray64[STGD_SPACE_X];
-        PRUint32 traverse = 0;
-        PRUint32 timeval = globals.mMinTimeval;
-        PRUint32 loop = 0;
+        uint64_t *YData64 = NULL;
+        uint64_t YDataArray64[STGD_SPACE_X];
+        uint32_t traverse = 0;
+        uint32_t timeval = globals.mMinTimeval;
+        uint32_t loop = 0;
         PRBool underLock = PR_FALSE;
 
         /*
@@ -4431,9 +4360,9 @@ graphWeight(STRequest * inRequest, STRun * aRun)
          */
         if (YData64 != inRequest->mContext->mWeightYData64
             || PR_FALSE == inRequest->mContext->mWeightCached) {
-            PRUint32 prevTimeval = 0;
+            uint32_t prevTimeval = 0;
 
-            memset(YData64, 0, sizeof(PRUint64) * STGD_SPACE_X);
+            memset(YData64, 0, sizeof(uint64_t) * STGD_SPACE_X);
 
             /*
              ** Initialize our Y data.
@@ -4459,20 +4388,17 @@ graphWeight(STRequest * inRequest, STRun * aRun)
                 for (loop = 0; loop < aRun->mAllocationCount; loop++) {
                     if (prevTimeval < aRun->mAllocations[loop]->mMinTimeval
                         && timeval >= aRun->mAllocations[loop]->mMinTimeval) {
-                        PRUint64 size64 = LL_INIT(0, 0);
-                        PRUint64 lifespan64 = LL_INIT(0, 0);
-                        PRUint64 weight64 = LL_INIT(0, 0);
+                        uint64_t size64 = 0;
+                        uint64_t lifespan64 = 0;
+                        uint64_t weight64 = 0;
 
-                        LL_UI2L(size64,
-                                byteSize(&inRequest->mOptions,
-                                         aRun->mAllocations[loop]));
-                        LL_UI2L(lifespan64,
-                                (aRun->mAllocations[loop]->mMaxTimeval -
-                                 aRun->mAllocations[loop]->mMinTimeval));
-                        LL_MUL(weight64, size64, lifespan64);
+                        size64 = byteSize(&inRequest->mOptions,
+                                          aRun->mAllocations[loop]);
+                        lifespan64 = aRun->mAllocations[loop]->mMaxTimeval -
+                                     aRun->mAllocations[loop]->mMinTimeval;
+                        weight64 = size64 * lifespan64;
 
-                        LL_ADD(YData64[traverse], YData64[traverse],
-                               weight64);
+                        YData64[traverse] += weight64;
                     }
                 }
             }
@@ -4493,8 +4419,8 @@ graphWeight(STRequest * inRequest, STRun * aRun)
         }
 
         if (0 == retval) {
-            PRUint64 minWeight64 = LL_INIT(0xFFFFFFFF, 0xFFFFFFFF);
-            PRUint64 maxWeight64 = LL_INIT(0, 0);
+            uint64_t minWeight64 = (0xFFFFFFFFLL << 32) + 0xFFFFFFFFLL;
+            uint64_t maxWeight64 = 0;
             int transparent = 0;
             gdImagePtr graph = NULL;
 
@@ -4502,10 +4428,10 @@ graphWeight(STRequest * inRequest, STRun * aRun)
              ** Go through and find the minimum and maximum weights.
              */
             for (traverse = 0; traverse < STGD_SPACE_X; traverse++) {
-                if (LL_UCMP(YData64[traverse], <, minWeight64)) {
+                if (YData64[traverse] < minWeight64) {
                     minWeight64 = YData64[traverse];
                 }
-                if (LL_UCMP(YData64[traverse], >, maxWeight64)) {
+                if (YData64[traverse] > maxWeight64) {
                     maxWeight64 = YData64[traverse];
                 }
             }
@@ -4521,7 +4447,7 @@ graphWeight(STRequest * inRequest, STRun * aRun)
                 int y1 = 0;
                 int x2 = 0;
                 int y2 = 0;
-                PRUint32 percents[11] =
+                uint32_t percents[11] =
                     { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
                 char *timevals[11];
                 char *bytes[11];
@@ -4529,12 +4455,11 @@ graphWeight(STRequest * inRequest, STRun * aRun)
                 char byteSpace[11][32];
                 int legendColors[1];
                 const char *legends[1] = { "Memory Weight" };
-                PRUint64 percent64 = LL_INIT(0, 0);
-                PRUint64 result64 = LL_INIT(0, 0);
-                PRUint64 hundred64 = LL_INIT(0, 0);
-                PRUint32 cached = 0;
+                uint64_t percent64 = 0;
+                uint64_t result64 = 0;
 
-                LL_UI2L(hundred64, 100);
+                uint32_t cached = 0;
+                uint64_t hundred64 = 100;
 
                 /*
                  ** Figure out what the labels will say.
@@ -4549,10 +4474,8 @@ graphWeight(STRequest * inRequest, STRun * aRun)
                     PR_snprintf(timevals[traverse], 32, ST_TIMEVAL_FORMAT,
                                 ST_TIMEVAL_PRINTABLE(cached));
 
-                    LL_UI2L(percent64, percents[traverse]);
-                    LL_SUB(result64, maxWeight64, minWeight64);
-                    LL_MUL(result64, result64, percent64);
-                    LL_DIV(result64, result64, hundred64);
+                    result64 = (maxWeight64 - minWeight64) * percents[traverse];
+                    result64 /= hundred64;
                     PR_snprintf(bytes[traverse], 32, "%llu", result64);
                 }
 
@@ -4564,11 +4487,11 @@ graphWeight(STRequest * inRequest, STRun * aRun)
                           11, percents, (const char **) bytes, 1,
                           legendColors, legends);
 
-                if (LL_NE(maxWeight64, minWeight64)) {
-                    PRInt64 in64 = LL_INIT(0, 0);
-                    PRInt64 spacey64 = LL_INIT(0, 0);
-                    PRInt64 weight64 = LL_INIT(0, 0);
-                    PRInt32 in32 = 0;
+                if (maxWeight64 != minWeight64) {
+                    int64_t in64 = 0;
+                    int64_t spacey64 = 0;
+                    int64_t weight64 = 0;
+                    int32_t in32 = 0;
 
                     /*
                      ** Go through our Y data and mark it up.
@@ -4580,12 +4503,12 @@ graphWeight(STRequest * inRequest, STRun * aRun)
                         /*
                          ** Need to do this math in 64 bits.
                          */
-                        LL_I2L(spacey64, STGD_SPACE_Y);
-                        LL_SUB(weight64, maxWeight64, minWeight64);
+                        spacey64 = (int64_t)STGD_SPACE_Y;
+                        weight64 = maxWeight64 - minWeight64;
 
-                        LL_MUL(in64, YData64[traverse], spacey64);
-                        LL_DIV(in64, in64, weight64);
-                        LL_L2I(in32, in64);
+                        in64 = YData64[traverse] * spacey64;
+                        in64 /= weight64;
+                        in32 = int32_t(in64);
 
                         x2 = x1;
                         y2 = y1 - in32;
@@ -4618,7 +4541,7 @@ graphWeight(STRequest * inRequest, STRun * aRun)
 
 #define ST_WEB_OPTION_BOOL(option_name, option_genre, option_help) \
     { \
-        PRUint32 convert = (PRUint32)outOptions->m##option_name; \
+        uint32_t convert = (uint32_t)outOptions->m##option_name; \
         \
         getDataPRUint32(inFormData, #option_name, 1, &convert, 1); \
         outOptions->m##option_name = (PRBool)convert; \
@@ -4627,8 +4550,8 @@ graphWeight(STRequest * inRequest, STRun * aRun)
     getDataString(inFormData, #option_name, 1, outOptions->m##option_name, sizeof(outOptions->m##option_name));
 #define ST_WEB_OPTION_STRING_ARRAY(option_name, option_genre, array_size, option_help) \
     { \
-        PRUint32 loop = 0; \
-        PRUint32 found = 0; \
+        uint32_t loop = 0; \
+        uint32_t found = 0; \
         char buffer[ST_OPTION_STRING_MAX]; \
         \
         for(loop = 0; loop < array_size; loop++) \
@@ -4653,7 +4576,7 @@ graphWeight(STRequest * inRequest, STRun * aRun)
     getDataPRUint32(inFormData, #option_name, 1, &outOptions->m##option_name, multiplier);
 #define ST_WEB_OPTION_UINT64(option_name, option_genre, default_value, multiplier, option_help) \
     { \
-        PRUint64 mul64 = multiplier; \
+        uint64_t mul64 = multiplier; \
         \
         getDataPRUint64(inFormData, #option_name, 1, &outOptions->m##option_name##64, mul64); \
     }
@@ -4711,7 +4634,7 @@ static void
 displayOptionStringArray(STRequest * inRequest,
                          const char *option_name,
                          const char *option_genre,
-                         PRUint32 array_size,
+                         uint32_t array_size,
                          const char *option_help, const char values[5]
                          [ST_OPTION_STRING_MAX])
 {
@@ -4722,7 +4645,7 @@ displayOptionStringArray(STRequest * inRequest,
 #endif
     PR_fprintf(inRequest->mFD, "<div class=\"option-box\">\n");
     PR_fprintf(inRequest->mFD, "<p class=option-name>%s</p>\n", option_name); {
-        PRUint32 loop = 0;
+        uint32_t loop = 0;
 
         for (loop = 0; loop < array_size; loop++) {
             PR_fprintf(inRequest->mFD,
@@ -4740,8 +4663,8 @@ static void
 displayOptionInt(STRequest * inRequest,
                  const char *option_name,
                  const char *option_genre,
-                 PRUint32 default_value,
-                 PRUint32 multiplier, const char *option_help, PRUint32 value)
+                 uint32_t default_value,
+                 uint32_t multiplier, const char *option_help, uint32_t value)
 {
 #if 0
     PR_fprintf(inRequest->mFD, "<input type=submit value=%s>\n", option_name);
@@ -4761,20 +4684,20 @@ static void
 displayOptionInt64(STRequest * inRequest,
                    const char *option_name,
                    const char *option_genre,
-                   PRUint64 default_value,
-                   PRUint64 multiplier,
-                   const char *option_help, PRUint64 value)
+                   uint64_t default_value,
+                   uint64_t multiplier,
+                   const char *option_help, uint64_t value)
 {
 #if 0
     PR_fprintf(inRequest->mFD, "<input type=submit value=%s>\n", option_name);
 #endif
     PR_fprintf(inRequest->mFD, "<div class=\"option-box\">\n");
     PR_fprintf(inRequest->mFD, "<p class=option-name>%s</p>\n", option_name); {
-        PRUint64 def64 = default_value;
-        PRUint64 mul64 = multiplier;
-        PRUint64 div64;
+        uint64_t def64 = default_value;
+        uint64_t mul64 = multiplier;
+        uint64_t div64;
 
-        LL_DIV(div64, value, mul64);
+        div64 = value / mul64;
         PR_fprintf(inRequest->mFD,
                    "<input type=text name=%s value=%llu>\n",
                    option_name, div64);
@@ -4861,7 +4784,7 @@ displayFile(STRequest * inRequest, const char *aFilename)
     const char *filepath =
         PR_smprintf("res%c%s", PR_GetDirectorySeparator(), aFilename);
     char buffer[2048];
-    PRInt32 readRes;
+    int32_t readRes;
 
     inFd = PR_Open(filepath, PR_RDONLY, PR_IRUSR);
     if (!inFd)
@@ -4973,7 +4896,7 @@ contextLookup(STOptions * inOptions)
     STContextCache *inCache = &globals.mContextCache;
 
     if (NULL != inOptions && NULL != inCache) {
-        PRUint32 loop = 0;
+        uint32_t loop = 0;
         STContext *categoryException = NULL;
         PRBool newContext = PR_FALSE;
         PRBool evictContext = PR_FALSE;
@@ -5018,7 +4941,7 @@ contextLookup(STOptions * inOptions)
     }
 #define ST_WEB_OPTION_STRING_ARRAY(option_name, option_genre, array_size, option_help) \
     { \
-        PRUint32 macro_loop = 0; \
+        uint32_t macro_loop = 0; \
         \
         for(macro_loop = 0; macro_loop < array_size; macro_loop++) \
         { \
@@ -5040,7 +4963,7 @@ contextLookup(STOptions * inOptions)
         delta[(STOptionGenre)option_genre]++; \
     }
 #define ST_WEB_OPTION_UINT64(option_name, option_genre, default_value, multiplier, option_help) \
-    if(LL_NE(inOptions->m##option_name##64, inCache->mItems[loop].mOptions.m##option_name##64)) \
+    if(inOptions->m##option_name##64 != inCache->mItems[loop].mOptions.m##option_name##64) \
     { \
         delta[(STOptionGenre)option_genre]++; \
     }
@@ -5419,7 +5342,7 @@ handleRequest(tmreader * aTMR, PRFileDesc * aFD,
             else if (0 == strcmp("top_callsites.html", aFileName)) {
                 int displayRes = 0;
                 tmcallsite **array = NULL;
-                PRUint32 arrayCount = 0;
+                uint32_t arrayCount = 0;
 
                 /*
                  ** Display header after we figure out if we are going to focus
@@ -5473,7 +5396,7 @@ handleRequest(tmreader * aTMR, PRFileDesc * aFD,
             }
             else if (0 == strncmp("allocation_", aFileName, 11)) {
                 int scanRes = 0;
-                PRUint32 allocationIndex = 0;
+                uint32_t allocationIndex = 0;
 
                 /*
                  ** Oh, what a hack....
@@ -5508,7 +5431,7 @@ handleRequest(tmreader * aTMR, PRFileDesc * aFD,
             }
             else if (0 == strncmp("callsite_", aFileName, 9)) {
                 int scanRes = 0;
-                PRUint32 callsiteSerial = 0;
+                uint32_t callsiteSerial = 0;
                 tmcallsite *resolved = NULL;
 
                 /*
@@ -5714,7 +5637,7 @@ handleClient(void *inArg)
     if (NULL != aFD) {
         PRStatus closeRes = PR_SUCCESS;
         char aBuffer[2048];
-        PRInt32 readRes = 0;
+        int32_t readRes = 0;
 
         readRes = PR_Read(aFD, aBuffer, sizeof(aBuffer));
         if (0 <= readRes) {
@@ -5877,7 +5800,7 @@ serverMode(void)
          */
         bindAddr.inet.family = PR_AF_INET;
         bindAddr.inet.port =
-            PR_htons((PRUint16) globals.mCommandLineOptions.mHttpdPort);
+            PR_htons((uint16_t) globals.mCommandLineOptions.mHttpdPort);
         bindAddr.inet.ip = PR_htonl(PR_INADDR_ANY);
         bindRes = PR_Bind(socket, &bindAddr);
         if (PR_SUCCESS == bindRes) {
@@ -6019,11 +5942,11 @@ batchMode(void)
     int retval = 0;
 
     if (0 != globals.mCommandLineOptions.mBatchRequestCount) {
-        PRUint32 loop = 0;
+        uint32_t loop = 0;
         int failureSum = 0;
         int handleRes = 0;
         char aFileName[1024];
-        PRUint32 sprintfRes = 0;
+        uint32_t sprintfRes = 0;
 
         /*
          ** Go through and process the various files requested.
@@ -6037,7 +5960,7 @@ batchMode(void)
                             globals.mCommandLineOptions.mOutputDir,
                             PR_GetDirectorySeparator(),
                             globals.mCommandLineOptions.mBatchRequest[loop]);
-            if ((PRUint32) - 1 != sprintfRes) {
+            if ((uint32_t) - 1 != sprintfRes) {
                 PRFileDesc *outFile = NULL;
 
                 outFile = PR_Open(aFileName, ST_FLAGS, ST_PERMS);
@@ -6186,7 +6109,7 @@ initCaches(void)
                                                   mContexts,
                                                   sizeof(STContextCacheItem));
                 if (NULL != inCache->mItems) {
-                    PRUint32 loop = 0;
+                    uint32_t loop = 0;
                     char buffer[64];
 
                     inCache->mItemCount =
@@ -6253,7 +6176,7 @@ destroyCaches(void)
     STContextCache *inCache = &globals.mContextCache;
 
     if (NULL != inCache) {
-        PRUint32 loop = 0;
+        uint32_t loop = 0;
 
         /*
          **  Uninit item data one by one.

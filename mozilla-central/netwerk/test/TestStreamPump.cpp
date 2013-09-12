@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "TestCommon.h"
 #include "nsIComponentRegistrar.h"
@@ -42,7 +9,6 @@
 #include "nsIProgressEventSink.h"
 #include "nsIInterfaceRequestor.h"
 #include "nsIInterfaceRequestorUtils.h"
-#include "nsIProxyObjectManager.h"
 #include "nsIRequest.h"
 #include "nsIServiceManager.h"
 #include "nsIComponentManager.h"
@@ -52,7 +18,7 @@
 #include "nsStringAPI.h"
 #include "nsIFileStreams.h"
 #include "nsIStreamListener.h"
-#include "nsILocalFile.h"
+#include "nsIFile.h"
 #include "nsNetUtil.h"
 #include "nsAutoLock.h"
 #include "prlog.h"
@@ -64,7 +30,7 @@
 //
 // set NSPR_LOG_MODULES=Test:5
 //
-static PRLogModuleInfo *gTestLog = nsnull;
+static PRLogModuleInfo *gTestLog = nullptr;
 #define LOG(args) PR_LOG(gTestLog, PR_LOG_DEBUG, args)
 #else
 #define LOG(args)
@@ -88,15 +54,15 @@ public:
 
     NS_IMETHOD OnDataAvailable(nsIRequest *req, nsISupports *ctx,
                                nsIInputStream *stream,
-                               PRUint32 offset, PRUint32 count)
+                               uint64_t offset, uint32_t count)
     {
-        LOG(("MyListener::OnDataAvailable [offset=%u count=%u]\n", offset, count));
+        LOG(("MyListener::OnDataAvailable [offset=%llu count=%u]\n", offset, count));
 
         char buf[500];
         nsresult rv;
 
         while (count) {
-            PRUint32 n, amt = PR_MIN(count, sizeof(buf));
+            uint32_t n, amt = NS_MIN<uint32_t>(count, sizeof(buf));
 
             rv = stream->Read(buf, amt, &n);
             if (NS_FAILED(rv)) {
@@ -132,7 +98,7 @@ NS_IMPL_ISUPPORTS2(MyListener,
  * asynchronously copy file.
  */
 static nsresult
-RunTest(nsIFile *file, PRInt64 offset, PRInt64 length)
+RunTest(nsIFile *file, int64_t offset, int64_t length)
 {
     nsresult rv;
 
@@ -146,7 +112,7 @@ RunTest(nsIFile *file, PRInt64 offset, PRInt64 length)
     rv = NS_NewInputStreamPump(getter_AddRefs(pump), stream, offset, length);
     if (NS_FAILED(rv)) return rv;
 
-    rv = pump->AsyncRead(new MyListener(), nsnull);
+    rv = pump->AsyncRead(new MyListener(), nullptr);
     if (NS_FAILED(rv)) return rv;
 
     PumpEvents();
@@ -168,7 +134,7 @@ main(int argc, char* argv[])
         return -1;
     }
     char* fileName = argv[1];
-    PRInt64 offset, length;
+    int64_t offset, length;
     int err = PR_sscanf(argv[2], "%lld", &offset);
     if (err == -1) {
       printf("Start offset must be an integer!\n");
@@ -182,18 +148,18 @@ main(int argc, char* argv[])
 
     {
         nsCOMPtr<nsIServiceManager> servMan;
-        NS_InitXPCOM2(getter_AddRefs(servMan), nsnull, nsnull);
+        NS_InitXPCOM2(getter_AddRefs(servMan), nullptr, nullptr);
         nsCOMPtr<nsIComponentRegistrar> registrar = do_QueryInterface(servMan);
         NS_ASSERTION(registrar, "Null nsIComponentRegistrar");
         if (registrar)
-            registrar->AutoRegister(nsnull);
+            registrar->AutoRegister(nullptr);
 
 #if defined(PR_LOGGING)
         gTestLog = PR_NewLogModule("Test");
 #endif
 
-        nsCOMPtr<nsILocalFile> file;
-        rv = NS_NewNativeLocalFile(nsDependentCString(fileName), PR_FALSE, getter_AddRefs(file));
+        nsCOMPtr<nsIFile> file;
+        rv = NS_NewNativeLocalFile(nsDependentCString(fileName), false, getter_AddRefs(file));
         if (NS_FAILED(rv)) return rv;
 
         rv = RunTest(file, offset, length);
@@ -204,7 +170,7 @@ main(int argc, char* argv[])
         PR_Sleep(PR_SecondsToInterval(1));
     } // this scopes the nsCOMPtrs
     // no nsCOMPtrs are allowed to be alive when you call NS_ShutdownXPCOM
-    rv = NS_ShutdownXPCOM(nsnull);
+    rv = NS_ShutdownXPCOM(nullptr);
     NS_ASSERTION(NS_SUCCEEDED(rv), "NS_ShutdownXPCOM failed");
     return NS_OK;
 }

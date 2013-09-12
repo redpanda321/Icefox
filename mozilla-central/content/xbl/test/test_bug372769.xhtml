@@ -4,7 +4,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=372769
 -->
 <head>
   <title>Test for Bug 372769</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
   <bindings xmlns="http://www.mozilla.org/xbl">
@@ -117,8 +116,9 @@ addLoadEvent(function() {
   is(found, true, "Enumeration is broken");
 
   is(d.four, 9, "Shouldn't have rerun field six");
-  is(d.five, 5, "Should have run field 7");
+  is(d.five, 11, "Shouldn't have run field 7");
   is(d.seven, 7, "Should be 7")
+  is(d.five, 5, "Should have run field 7");
 
   d = $("display2");
   is(typeof(d.eight), "undefined", "Recursive resolve should bail out");

@@ -1,42 +1,8 @@
 /* -*- Mode: Java; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Bug 378079 unit test code.
- *
- * The Initial Developer of the Original Code is POTI Inc.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Matt Crocker <matt@songbirdnest.com>
- *   Seth Spitzer <sspitzer@mozilla.org>
- *   Edward Lee <edward.lee@engineering.uiuc.edu>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 var current_test = 0;
 
@@ -159,6 +125,22 @@ var tests = [function() { ensure_tag_results([uri1, uri2, uri3], "foo"); },
              function() { ensure_tag_results([uri4, uri5, uri6], "BAR MUD"); },
              function() { ensure_tag_results([uri4, uri5, uri6], "Bar Mud"); }];
 
+/**
+ * Properly tags a uri adding it to bookmarks.
+ *
+ * @param aURI
+ *        The nsIURI to tag.
+ * @param aTags
+ *        The tags to add.
+ */
+function tagURI(aURI, aTags) {
+  PlacesUtils.bookmarks.insertBookmark(PlacesUtils.unfiledBookmarksFolderId,
+                                       aURI,
+                                       PlacesUtils.bookmarks.DEFAULT_INDEX,
+                                       "A title");
+  tagssvc.tagURI(aURI, aTags);
+}
+
 /** 
  * Test bug #408221
  */
@@ -169,15 +151,15 @@ function run_test() {
   prefs.setIntPref("browser.urlbar.search.sources", 3);
   prefs.setIntPref("browser.urlbar.default.behavior", 0);
 
-  tagssvc.tagURI(uri1, ["Foo"]);
-  tagssvc.tagURI(uri2, ["FOO"]);
-  tagssvc.tagURI(uri3, ["foO"]);
-  tagssvc.tagURI(uri4, ["BAR"]);
-  tagssvc.tagURI(uri4, ["MUD"]);
-  tagssvc.tagURI(uri5, ["bar"]);
-  tagssvc.tagURI(uri5, ["mud"]);
-  tagssvc.tagURI(uri6, ["baR"]);
-  tagssvc.tagURI(uri6, ["muD"]);
+  tagURI(uri1, ["Foo"]);
+  tagURI(uri2, ["FOO"]);
+  tagURI(uri3, ["foO"]);
+  tagURI(uri4, ["BAR"]);
+  tagURI(uri4, ["MUD"]);
+  tagURI(uri5, ["bar"]);
+  tagURI(uri5, ["mud"]);
+  tagURI(uri6, ["baR"]);
+  tagURI(uri6, ["muD"]);
 
   tests[0]();
 }

@@ -1,3 +1,7 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 <html>
 <head>
 <title>xptcall Porting Guide</title>
@@ -51,8 +55,8 @@ following on each platform (from <a href="http://lxr.mozilla.org/mozilla/source/
 
 <pre>
 XPTC_PUBLIC_API(nsresult)
-NS_InvokeByIndex(nsISupports* that, PRUint32 methodIndex,
-                   PRUint32 paramCount, nsXPTCVariant* params);
+NS_InvokeByIndex(nsISupports* that, uint32_t methodIndex,
+                   uint32_t paramCount, nsXPTCVariant* params);
 </pre>
 
 Calling code is expected to supply an array of <code>nsXPTCVariant</code>
@@ -97,7 +101,7 @@ public:
     NS_IMETHOD GetInterfaceInfo(nsIInterfaceInfo** info) = 0;
 
     // call this method and return result
-    NS_IMETHOD CallMethod(PRUint16 methodIndex,
+    NS_IMETHOD CallMethod(uint16_t methodIndex,
                           const nsXPTMethodInfo* info,
                           nsXPTCMiniVariant* params) = 0;
 };
@@ -186,7 +190,7 @@ yet been done.
 A full 'test' at this point requires building the client and running the
 XPConnect test called <i>TestXPC</i> in
 <a
-href="http://lxr.mozilla.org/mozilla/source/js/src/xpconnect/tests">mozilla/js/src/xpconnect/tests
+href="http://lxr.mozilla.org/mozilla/source/js/xpconnect/tests">mozilla/js/xpconnect/tests
 </a>.
 
 <p>

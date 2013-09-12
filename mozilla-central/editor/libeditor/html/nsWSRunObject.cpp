@@ -1,79 +1,59 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "nsTextFragment.h"
-#include "nsWSRunObject.h"
-#include "nsIDOMNode.h"
+#include "mozilla/Assertions.h"
+#include "mozilla/mozalloc.h"
+#include "nsAString.h"
+#include "nsAutoPtr.h"
+#include "nsCRT.h"
+#include "nsContentUtils.h"
+#include "nsDebug.h"
+#include "nsEditorUtils.h"
+#include "nsError.h"
 #include "nsHTMLEditor.h"
-#include "nsTextEditUtils.h"
 #include "nsIContent.h"
 #include "nsIDOMCharacterData.h"
-#include "nsCRT.h"
-#include "nsIRangeUtils.h"
+#include "nsIDOMNode.h"
+#include "nsIDOMRange.h"
+#include "nsISupportsImpl.h"
+#include "nsRange.h"
+#include "nsSelectionState.h"
+#include "nsString.h"
+#include "nsTextEditUtils.h"
+#include "nsTextFragment.h"
+#include "nsWSRunObject.h"
 
 const PRUnichar nbsp = 160;
 
-static PRBool IsBlockNode(nsIDOMNode* node)
+static bool IsBlockNode(nsIDOMNode* node)
 {
-  PRBool isBlock (PR_FALSE);
+  bool isBlock (false);
   nsHTMLEditor::NodeIsBlockStatic(node, &isBlock);
   return isBlock;
 }
 
 //- constructor / destructor -----------------------------------------------
-nsWSRunObject::nsWSRunObject(nsHTMLEditor *aEd, nsIDOMNode *aNode, PRInt32 aOffset) :
+nsWSRunObject::nsWSRunObject(nsHTMLEditor *aEd, nsIDOMNode *aNode, int32_t aOffset) :
 mNode(aNode)
 ,mOffset(aOffset)
-,mPRE(PR_FALSE)
+,mPRE(false)
 ,mStartNode()
 ,mStartOffset(0)
-,mStartReason(0)
+,mStartReason()
 ,mStartReasonNode()
 ,mEndNode()
 ,mEndOffset(0)
-,mEndReason(0)
+,mEndReason()
 ,mEndReasonNode()
 ,mFirstNBSPNode()
 ,mFirstNBSPOffset(0)
 ,mLastNBSPNode()
 ,mLastNBSPOffset(0)
 ,mNodeArray()
-,mStartRun(nsnull)
-,mEndRun(nsnull)
+,mStartRun(nullptr)
+,mEndRun(nullptr)
 ,mHTMLEditor(aEd)
 {
   GetWSNodes();
@@ -95,7 +75,7 @@ nsresult
 nsWSRunObject::ScrubBlockBoundary(nsHTMLEditor *aHTMLEd, 
                                   nsCOMPtr<nsIDOMNode> *aBlock,
                                   BlockBoundary aBoundary,
-                                  PRInt32 *aOffset)
+                                  int32_t *aOffset)
 {
   NS_ENSURE_TRUE(aBlock && aHTMLEd, NS_ERROR_NULL_POINTER);
   if ((aBoundary == kBlockStart) || (aBoundary == kBlockEnd))
@@ -115,7 +95,7 @@ nsWSRunObject::PrepareToJoinBlocks(nsHTMLEditor *aHTMLEd,
                                    nsIDOMNode *aRightParent)
 {
   NS_ENSURE_TRUE(aLeftParent && aRightParent && aHTMLEd, NS_ERROR_NULL_POINTER);
-  PRUint32 count;
+  uint32_t count;
   aHTMLEd->GetLengthOfDOMNode(aLeftParent, count);
   nsWSRunObject leftWSObj(aHTMLEd, aLeftParent, count);
   nsWSRunObject rightWSObj(aHTMLEd, aRightParent, 0);
@@ -126,9 +106,9 @@ nsWSRunObject::PrepareToJoinBlocks(nsHTMLEditor *aHTMLEd,
 nsresult 
 nsWSRunObject::PrepareToDeleteRange(nsHTMLEditor *aHTMLEd, 
                                     nsCOMPtr<nsIDOMNode> *aStartNode,
-                                    PRInt32 *aStartOffset, 
+                                    int32_t *aStartOffset, 
                                     nsCOMPtr<nsIDOMNode> *aEndNode,
-                                    PRInt32 *aEndOffset)
+                                    int32_t *aEndOffset)
 {
   NS_ENSURE_TRUE(aStartNode && aEndNode && *aStartNode && *aEndNode && aStartOffset && aEndOffset && aHTMLEd, NS_ERROR_NULL_POINTER);
 
@@ -146,12 +126,9 @@ nsWSRunObject::PrepareToDeleteNode(nsHTMLEditor *aHTMLEd,
                                    nsIDOMNode *aNode)
 {
   NS_ENSURE_TRUE(aNode && aHTMLEd, NS_ERROR_NULL_POINTER);
-  nsresult res = NS_OK;
   
-  nsCOMPtr<nsIDOMNode> parent;
-  PRInt32 offset;
-  res = aHTMLEd->GetNodeLocation(aNode, address_of(parent), &offset);
-  NS_ENSURE_SUCCESS(res, res);
+  int32_t offset;
+  nsCOMPtr<nsIDOMNode> parent = aHTMLEd->GetNodeLocation(aNode, &offset);
   
   nsWSRunObject leftWSObj(aHTMLEd, parent, offset);
   nsWSRunObject rightWSObj(aHTMLEd, parent, offset+1);
@@ -162,7 +139,7 @@ nsWSRunObject::PrepareToDeleteNode(nsHTMLEditor *aHTMLEd,
 nsresult 
 nsWSRunObject::PrepareToSplitAcrossBlocks(nsHTMLEditor *aHTMLEd, 
                                           nsCOMPtr<nsIDOMNode> *aSplitNode, 
-                                          PRInt32 *aSplitOffset)
+                                          int32_t *aSplitOffset)
 {
   NS_ENSURE_TRUE(aSplitNode && aSplitOffset && *aSplitNode && aHTMLEd, NS_ERROR_NULL_POINTER);
 
@@ -179,7 +156,7 @@ nsWSRunObject::PrepareToSplitAcrossBlocks(nsHTMLEditor *aHTMLEd,
 
 nsresult 
 nsWSRunObject::InsertBreak(nsCOMPtr<nsIDOMNode> *aInOutParent, 
-                           PRInt32 *aInOutOffset, 
+                           int32_t *aInOutOffset, 
                            nsCOMPtr<nsIDOMNode> *outBRNode, 
                            nsIEditor::EDirection aSelect)
 {
@@ -189,8 +166,8 @@ nsWSRunObject::InsertBreak(nsCOMPtr<nsIDOMNode> *aInOutParent,
 
   nsresult res = NS_OK;
   WSFragment *beforeRun, *afterRun;
-  res = FindRun(*aInOutParent, *aInOutOffset, &beforeRun, PR_FALSE);
-  res = FindRun(*aInOutParent, *aInOutOffset, &afterRun, PR_TRUE);
+  FindRun(*aInOutParent, *aInOutOffset, &beforeRun, false);
+  FindRun(*aInOutParent, *aInOutOffset, &afterRun, true);
   
   {
     // some scoping for nsAutoTrackDOMPoint.  This will track our insertion point
@@ -198,35 +175,24 @@ nsWSRunObject::InsertBreak(nsCOMPtr<nsIDOMNode> *aInOutParent,
     nsAutoTrackDOMPoint tracker(mHTMLEditor->mRangeUpdater, aInOutParent, aInOutOffset);
 
     // handle any changes needed to ws run after inserted br
-    if (!afterRun)
-    {
+    if (!afterRun) {
       // don't need to do anything.  just insert break.  ws won't change.
-    }
-    else if (afterRun->mType & eTrailingWS)
-    {
+    } else if (afterRun->mType & WSType::trailingWS) {
       // don't need to do anything.  just insert break.  ws won't change.
-    }
-    else if (afterRun->mType & eLeadingWS)
-    {
+    } else if (afterRun->mType & WSType::leadingWS) {
       // delete the leading ws that is after insertion point.  We don't
       // have to (it would still not be significant after br), but it's 
       // just more aesthetically pleasing to.
       res = DeleteChars(*aInOutParent, *aInOutOffset, afterRun->mEndNode, afterRun->mEndOffset,
                         eOutsideUserSelectAll);
       NS_ENSURE_SUCCESS(res, res);
-    }
-    else if (afterRun->mType == eNormalWS)
-    {
+    } else if (afterRun->mType == WSType::normalWS) {
       // need to determine if break at front of non-nbsp run.  if so
       // convert run to nbsp.
-      WSPoint thePoint;
-      res = GetCharAfter(*aInOutParent, *aInOutOffset, &thePoint);
-      if ( (NS_SUCCEEDED(res)) && thePoint.mTextNode && (nsCRT::IsAsciiSpace(thePoint.mChar)) )
-      {
-        WSPoint prevPoint;
-        res = GetCharBefore(thePoint, &prevPoint);
-        if ( (NS_FAILED(res)) || (prevPoint.mTextNode && !nsCRT::IsAsciiSpace(prevPoint.mChar)) )
-        {
+      WSPoint thePoint = GetCharAfter(*aInOutParent, *aInOutOffset);
+      if (thePoint.mTextNode && nsCRT::IsAsciiSpace(thePoint.mChar)) {
+        WSPoint prevPoint = GetCharBefore(thePoint);
+        if (prevPoint.mTextNode && !nsCRT::IsAsciiSpace(prevPoint.mChar)) {
           // we are at start of non-nbsps.  convert to a single nbsp.
           res = ConvertToNBSP(thePoint);
           NS_ENSURE_SUCCESS(res, res);
@@ -235,24 +201,17 @@ nsWSRunObject::InsertBreak(nsCOMPtr<nsIDOMNode> *aInOutParent,
     }
     
     // handle any changes needed to ws run before inserted br
-    if (!beforeRun)
-    {
+    if (!beforeRun) {
       // don't need to do anything.  just insert break.  ws won't change.
-    }
-    else if (beforeRun->mType & eLeadingWS)
-    {
+    } else if (beforeRun->mType & WSType::leadingWS) {
       // don't need to do anything.  just insert break.  ws won't change.
-    }
-    else if (beforeRun->mType & eTrailingWS)
-    {
+    } else if (beforeRun->mType & WSType::trailingWS) {
       // need to delete the trailing ws that is before insertion point, because it 
       // would become significant after break inserted.
       res = DeleteChars(beforeRun->mStartNode, beforeRun->mStartOffset, *aInOutParent, *aInOutOffset,
                         eOutsideUserSelectAll);
       NS_ENSURE_SUCCESS(res, res);
-    }
-    else if (beforeRun->mType == eNormalWS)
-    {
+    } else if (beforeRun->mType == WSType::normalWS) {
       // try to change an nbsp to a space, if possible, just to prevent nbsp proliferation
       res = CheckTrailingNBSP(beforeRun, *aInOutParent, *aInOutOffset);
       NS_ENSURE_SUCCESS(res, res);
@@ -266,7 +225,7 @@ nsWSRunObject::InsertBreak(nsCOMPtr<nsIDOMNode> *aInOutParent,
 nsresult 
 nsWSRunObject::InsertText(const nsAString& aStringToInsert, 
                           nsCOMPtr<nsIDOMNode> *aInOutParent, 
-                          PRInt32 *aInOutOffset,
+                          int32_t *aInOutOffset,
                           nsIDOMDocument *aDoc)
 {
   // MOOSE: for now, we always assume non-PRE formatting.  Fix this later.
@@ -285,8 +244,8 @@ nsWSRunObject::InsertText(const nsAString& aStringToInsert,
   nsAutoString theString(aStringToInsert);
   
   WSFragment *beforeRun, *afterRun;
-  res = FindRun(*aInOutParent, *aInOutOffset, &beforeRun, PR_FALSE);
-  res = FindRun(*aInOutParent, *aInOutOffset, &afterRun, PR_TRUE);
+  FindRun(*aInOutParent, *aInOutOffset, &beforeRun, false);
+  FindRun(*aInOutParent, *aInOutOffset, &afterRun, true);
   
   {
     // some scoping for nsAutoTrackDOMPoint.  This will track our insertion point
@@ -294,48 +253,34 @@ nsWSRunObject::InsertText(const nsAString& aStringToInsert,
     nsAutoTrackDOMPoint tracker(mHTMLEditor->mRangeUpdater, aInOutParent, aInOutOffset);
 
     // handle any changes needed to ws run after inserted text
-    if (!afterRun)
-    {
+    if (!afterRun) {
       // don't need to do anything.  just insert text.  ws won't change.
-    }
-    else if (afterRun->mType & eTrailingWS)
-    {
+    } else if (afterRun->mType & WSType::trailingWS) {
       // don't need to do anything.  just insert text.  ws won't change.
-    }
-    else if (afterRun->mType & eLeadingWS)
-    {
+    } else if (afterRun->mType & WSType::leadingWS) {
       // delete the leading ws that is after insertion point, because it 
       // would become significant after text inserted.
       res = DeleteChars(*aInOutParent, *aInOutOffset, afterRun->mEndNode, afterRun->mEndOffset,
                          eOutsideUserSelectAll);
       NS_ENSURE_SUCCESS(res, res);
-    }
-    else if (afterRun->mType == eNormalWS)
-    {
+    } else if (afterRun->mType == WSType::normalWS) {
       // try to change an nbsp to a space, if possible, just to prevent nbsp proliferation
       res = CheckLeadingNBSP(afterRun, *aInOutParent, *aInOutOffset);
       NS_ENSURE_SUCCESS(res, res);
     }
     
     // handle any changes needed to ws run before inserted text
-    if (!beforeRun)
-    {
+    if (!beforeRun) {
       // don't need to do anything.  just insert text.  ws won't change.
-    }
-    else if (beforeRun->mType & eLeadingWS)
-    {
+    } else if (beforeRun->mType & WSType::leadingWS) {
       // don't need to do anything.  just insert text.  ws won't change.
-    }
-    else if (beforeRun->mType & eTrailingWS)
-    {
+    } else if (beforeRun->mType & WSType::trailingWS) {
       // need to delete the trailing ws that is before insertion point, because it 
       // would become significant after text inserted.
       res = DeleteChars(beforeRun->mStartNode, beforeRun->mStartOffset, *aInOutParent, *aInOutOffset,
                         eOutsideUserSelectAll);
       NS_ENSURE_SUCCESS(res, res);
-    }
-    else if (beforeRun->mType == eNormalWS)
-    {
+    } else if (beforeRun->mType == WSType::normalWS) {
       // try to change an nbsp to a space, if possible, just to prevent nbsp proliferation
       res = CheckTrailingNBSP(beforeRun, *aInOutParent, *aInOutOffset);
       NS_ENSURE_SUCCESS(res, res);
@@ -350,57 +295,42 @@ nsWSRunObject::InsertText(const nsAString& aStringToInsert,
   if (nsCRT::IsAsciiSpace(theString[0]))
   {
     // we have a leading space
-    if (beforeRun)
-    {
-      if (beforeRun->mType & eLeadingWS) 
-      {
+    if (beforeRun) {
+      if (beforeRun->mType & WSType::leadingWS) {
         theString.SetCharAt(nbsp, 0);
-      }
-      else if (beforeRun->mType & eNormalWS) 
-      {
-        WSPoint wspoint;
-        res = GetCharBefore(*aInOutParent, *aInOutOffset, &wspoint);
-        if (NS_SUCCEEDED(res) && wspoint.mTextNode && nsCRT::IsAsciiSpace(wspoint.mChar))
-        {
+      } else if (beforeRun->mType & WSType::normalWS) {
+        WSPoint wspoint = GetCharBefore(*aInOutParent, *aInOutOffset);
+        if (wspoint.mTextNode && nsCRT::IsAsciiSpace(wspoint.mChar)) {
           theString.SetCharAt(nbsp, 0);
         }
       }
-    }
-    else
-    {
-      if ((mStartReason & eBlock) || (mStartReason == eBreak))
-      {
+    } else {
+      if (mStartReason & WSType::block || mStartReason == WSType::br) {
         theString.SetCharAt(nbsp, 0);
       }
     }
   }
 
   // then the tail
-  PRUint32 lastCharIndex = theString.Length()-1;
+  uint32_t lastCharIndex = theString.Length()-1;
 
   if (nsCRT::IsAsciiSpace(theString[lastCharIndex]))
   {
     // we have a leading space
     if (afterRun)
     {
-      if (afterRun->mType & eTrailingWS)
-      {
+      if (afterRun->mType & WSType::trailingWS) {
         theString.SetCharAt(nbsp, lastCharIndex);
-      }
-      else if (afterRun->mType & eNormalWS) 
-      {
-        WSPoint wspoint;
-        res = GetCharAfter(*aInOutParent, *aInOutOffset, &wspoint);
-        if (NS_SUCCEEDED(res) && wspoint.mTextNode && nsCRT::IsAsciiSpace(wspoint.mChar))
-        {
+      } else if (afterRun->mType & WSType::normalWS) {
+        WSPoint wspoint = GetCharAfter(*aInOutParent, *aInOutOffset);
+        if (wspoint.mTextNode && nsCRT::IsAsciiSpace(wspoint.mChar)) {
           theString.SetCharAt(nbsp, lastCharIndex);
         }
       }
     }
     else
     {
-      if ((mEndReason & eBlock))
-      {
+      if (mEndReason & WSType::block) {
         theString.SetCharAt(nbsp, lastCharIndex);
       }
     }
@@ -410,8 +340,8 @@ nsWSRunObject::InsertText(const nsAString& aStringToInsert,
   // MOOSE: don't need to convert tabs here since that is done by WillInsertText() 
   // before we are called.  Eventually, all that logic will be pushed down into
   // here and made more efficient.
-  PRUint32 j;
-  PRBool prevWS = PR_FALSE;
+  uint32_t j;
+  bool prevWS = false;
   for (j=0; j<=lastCharIndex; j++)
   {
     if (nsCRT::IsAsciiSpace(theString[j]))
@@ -422,12 +352,12 @@ nsWSRunObject::InsertText(const nsAString& aStringToInsert,
       }
       else
       {
-        prevWS = PR_TRUE;
+        prevWS = true;
       }
     }
     else
     {
-      prevWS = PR_FALSE;
+      prevWS = false;
     }
   }
   
@@ -440,9 +370,7 @@ nsresult
 nsWSRunObject::DeleteWSBackward()
 {
   nsresult res = NS_OK;
-  WSPoint point;
-  res = GetCharBefore(mNode, mOffset, &point);  
-  NS_ENSURE_SUCCESS(res, res);
+  WSPoint point = GetCharBefore(mNode, mOffset);
   NS_ENSURE_TRUE(point.mTextNode, NS_OK);  // nothing to delete
   
   if (mPRE)  // easy case, preformatted ws
@@ -450,8 +378,8 @@ nsWSRunObject::DeleteWSBackward()
     if (nsCRT::IsAsciiSpace(point.mChar) || (point.mChar == nbsp))
     {
       nsCOMPtr<nsIDOMNode> node(do_QueryInterface(point.mTextNode));
-      PRInt32 startOffset = point.mOffset;
-      PRInt32 endOffset = point.mOffset+1;
+      int32_t startOffset = point.mOffset;
+      int32_t endOffset = point.mOffset+1;
       return DeleteChars(node, startOffset, node, endOffset);
     }
   }
@@ -461,10 +389,9 @@ nsWSRunObject::DeleteWSBackward()
   if (nsCRT::IsAsciiSpace(point.mChar))
   {
     nsCOMPtr<nsIDOMNode> startNode, endNode, node(do_QueryInterface(point.mTextNode));
-    PRInt32 startOffset, endOffset;
-    res = GetAsciiWSBounds(eBoth, node, point.mOffset+1, address_of(startNode), 
-                         &startOffset, address_of(endNode), &endOffset);
-    NS_ENSURE_SUCCESS(res, res);
+    int32_t startOffset, endOffset;
+    GetAsciiWSBounds(eBoth, node, point.mOffset+1, address_of(startNode),
+                     &startOffset, address_of(endNode), &endOffset);
     
     // adjust surrounding ws
     res = nsWSRunObject::PrepareToDeleteRange(mHTMLEditor, address_of(startNode), &startOffset, 
@@ -478,8 +405,8 @@ nsWSRunObject::DeleteWSBackward()
   {
     nsCOMPtr<nsIDOMNode> node(do_QueryInterface(point.mTextNode));
     // adjust surrounding ws
-    PRInt32 startOffset = point.mOffset;
-    PRInt32 endOffset = point.mOffset+1;
+    int32_t startOffset = point.mOffset;
+    int32_t endOffset = point.mOffset+1;
     res = nsWSRunObject::PrepareToDeleteRange(mHTMLEditor, address_of(node), &startOffset, 
                                               address_of(node), &endOffset);
     NS_ENSURE_SUCCESS(res, res);
@@ -495,9 +422,7 @@ nsresult
 nsWSRunObject::DeleteWSForward()
 {
   nsresult res = NS_OK;
-  WSPoint point;
-  res = GetCharAfter(mNode, mOffset, &point);  
-  NS_ENSURE_SUCCESS(res, res);
+  WSPoint point = GetCharAfter(mNode, mOffset);
   NS_ENSURE_TRUE(point.mTextNode, NS_OK);  // nothing to delete
   
   if (mPRE)  // easy case, preformatted ws
@@ -505,8 +430,8 @@ nsWSRunObject::DeleteWSForward()
     if (nsCRT::IsAsciiSpace(point.mChar) || (point.mChar == nbsp))
     {
       nsCOMPtr<nsIDOMNode> node(do_QueryInterface(point.mTextNode));
-      PRInt32 startOffset = point.mOffset;
-      PRInt32 endOffset = point.mOffset+1;
+      int32_t startOffset = point.mOffset;
+      int32_t endOffset = point.mOffset+1;
       return DeleteChars(node, startOffset, node, endOffset);
     }
   }
@@ -516,10 +441,9 @@ nsWSRunObject::DeleteWSForward()
   if (nsCRT::IsAsciiSpace(point.mChar))
   {
     nsCOMPtr<nsIDOMNode> startNode, endNode, node(do_QueryInterface(point.mTextNode));
-    PRInt32 startOffset, endOffset;
-    res = GetAsciiWSBounds(eBoth, node, point.mOffset+1, address_of(startNode), 
-                         &startOffset, address_of(endNode), &endOffset);
-    NS_ENSURE_SUCCESS(res, res);
+    int32_t startOffset, endOffset;
+    GetAsciiWSBounds(eBoth, node, point.mOffset+1, address_of(startNode),
+                     &startOffset, address_of(endNode), &endOffset);
     
     // adjust surrounding ws
     res = nsWSRunObject::PrepareToDeleteRange(mHTMLEditor, address_of(startNode), &startOffset, 
@@ -533,8 +457,8 @@ nsWSRunObject::DeleteWSForward()
   {
     nsCOMPtr<nsIDOMNode> node(do_QueryInterface(point.mTextNode));
     // adjust surrounding ws
-    PRInt32 startOffset = point.mOffset;
-    PRInt32 endOffset = point.mOffset+1;
+    int32_t startOffset = point.mOffset;
+    int32_t endOffset = point.mOffset+1;
     res = nsWSRunObject::PrepareToDeleteRange(mHTMLEditor, address_of(node), &startOffset, 
                                               address_of(node), &endOffset);
     NS_ENSURE_SUCCESS(res, res);
@@ -546,46 +470,44 @@ nsWSRunObject::DeleteWSForward()
   return NS_OK;
 }
 
-nsresult 
+void
 nsWSRunObject::PriorVisibleNode(nsIDOMNode *aNode, 
-                                PRInt32 aOffset, 
+                                int32_t aOffset, 
                                 nsCOMPtr<nsIDOMNode> *outVisNode, 
-                                PRInt32 *outVisOffset,
-                                PRInt16 *outType)
+                                int32_t *outVisOffset,
+                                WSType *outType)
 {
   // Find first visible thing before the point.  position outVisNode/outVisOffset
   // just _after_ that thing.  If we don't find anything return start of ws.
-  NS_ENSURE_TRUE(aNode && outVisNode && outVisOffset && outType, NS_ERROR_NULL_POINTER);
+  MOZ_ASSERT(aNode && outVisNode && outVisOffset && outType);
     
-  *outType = eNone;
+  *outType = WSType::none;
   WSFragment *run;
-  FindRun(aNode, aOffset, &run, PR_FALSE);
+  FindRun(aNode, aOffset, &run, false);
   
   // is there a visible run there or earlier?
   while (run)
   {
-    if (run->mType == eNormalWS)
-    {
-      WSPoint point;
-      GetCharBefore(aNode, aOffset, &point);
+    if (run->mType == WSType::normalWS) {
+      WSPoint point = GetCharBefore(aNode, aOffset);
       if (point.mTextNode)
       {
         *outVisNode = do_QueryInterface(point.mTextNode);
         *outVisOffset = point.mOffset+1;
         if (nsCRT::IsAsciiSpace(point.mChar) || (point.mChar==nbsp))
         {
-          *outType = eNormalWS;
+          *outType = WSType::normalWS;
         }
         else if (!point.mChar)
         {
           // MOOSE: not possible?
-          *outType = eNone;
+          *outType = WSType::none;
         }
         else
         {
-          *outType = eText;
+          *outType = WSType::text;
         }
-        return NS_OK;
+        return;
       }
       // else if no text node then keep looking.  We should eventually fall out of loop
     }
@@ -597,49 +519,46 @@ nsWSRunObject::PriorVisibleNode(nsIDOMNode *aNode,
   *outVisNode = mStartReasonNode;
   *outVisOffset = mStartOffset;  // this really isn't meaningful if mStartReasonNode!=mStartNode
   *outType = mStartReason;
-  return NS_OK;
 }
 
 
-nsresult 
+void
 nsWSRunObject::NextVisibleNode (nsIDOMNode *aNode, 
-                                PRInt32 aOffset, 
+                                int32_t aOffset, 
                                 nsCOMPtr<nsIDOMNode> *outVisNode, 
-                                PRInt32 *outVisOffset,
-                                PRInt16 *outType)
+                                int32_t *outVisOffset,
+                                WSType *outType)
 {
   // Find first visible thing after the point.  position outVisNode/outVisOffset
   // just _before_ that thing.  If we don't find anything return end of ws.
-  NS_ENSURE_TRUE(aNode && outVisNode && outVisOffset && outType, NS_ERROR_NULL_POINTER);
+  MOZ_ASSERT(aNode && outVisNode && outVisOffset && outType);
     
   WSFragment *run;
-  FindRun(aNode, aOffset, &run, PR_TRUE);
+  FindRun(aNode, aOffset, &run, true);
   
   // is there a visible run there or later?
   while (run)
   {
-    if (run->mType == eNormalWS)
-    {
-      WSPoint point;
-      GetCharAfter(aNode, aOffset, &point);
+    if (run->mType == WSType::normalWS) {
+      WSPoint point = GetCharAfter(aNode, aOffset);
       if (point.mTextNode)
       {
         *outVisNode = do_QueryInterface(point.mTextNode);
         *outVisOffset = point.mOffset;
         if (nsCRT::IsAsciiSpace(point.mChar) || (point.mChar==nbsp))
         {
-          *outType = eNormalWS;
+          *outType = WSType::normalWS;
         }
         else if (!point.mChar)
         {
           // MOOSE: not possible?
-          *outType = eNone;
+          *outType = WSType::none;
         }
         else
         {
-          *outType = eText;
+          *outType = WSType::text;
         }
-        return NS_OK;
+        return;
       }
       // else if no text node then keep looking.  We should eventually fall out of loop
     }
@@ -651,7 +570,6 @@ nsWSRunObject::NextVisibleNode (nsIDOMNode *aNode,
   *outVisNode = mEndReasonNode;
   *outVisOffset = mEndOffset; // this really isn't meaningful if mEndReasonNode!=mEndNode
   *outType = mEndReason;
-  return NS_OK;
 }
 
 nsresult 
@@ -660,14 +578,16 @@ nsWSRunObject::AdjustWhitespace()
   // this routine examines a run of ws and tries to get rid of some unneeded nbsp's,
   // replacing them with regualr ascii space if possible.  Keeping things simple
   // for now and just trying to fix up the trailing ws in the run.
-  NS_ENSURE_TRUE(mLastNBSPNode, NS_OK); // nothing to do!
+  if (!mLastNBSPNode) {
+    // nothing to do!
+    return NS_OK;
+  }
   nsresult res = NS_OK;
   WSFragment *curRun = mStartRun;
   while (curRun)
   {
     // look for normal ws run
-    if (curRun->mType == eNormalWS)
-    {
+    if (curRun->mType == WSType::normalWS) {
       res = CheckTrailingNBSPOfRun(curRun);
       break;
     }
@@ -684,7 +604,7 @@ nsWSRunObject::AdjustWhitespace()
 already_AddRefed<nsIDOMNode>
 nsWSRunObject::GetWSBoundingParent()
 {
-  NS_ENSURE_TRUE(mNode, nsnull);
+  NS_ENSURE_TRUE(mNode, nullptr);
   nsCOMPtr<nsIDOMNode> wsBoundingParent = mNode;
   while (!IsBlockNode(wsBoundingParent))
   {
@@ -718,11 +638,11 @@ nsWSRunObject::GetWSNodes()
     NS_ENSURE_SUCCESS(res, res);
     if (mOffset)
     {
-      PRInt32 pos;
+      int32_t pos;
       for (pos=mOffset-1; pos>=0; pos--)
       {
         // sanity bounds check the char position.  bug 136165
-        if (PRUint32(pos) >= textFrag->GetLength())
+        if (uint32_t(pos) >= textFrag->GetLength())
         {
           NS_NOTREACHED("looking beyond end of text fragment");
           continue;
@@ -734,7 +654,7 @@ nsWSRunObject::GetWSNodes()
           {
             mStartNode = mNode;
             mStartOffset = pos+1;
-            mStartReason = eText;
+            mStartReason = WSType::text;
             mStartReasonNode = mNode;
             break;
           }
@@ -764,7 +684,7 @@ nsWSRunObject::GetWSNodes()
       if (IsBlockNode(priorNode))
       {
         start.GetPoint(mStartNode, mStartOffset);
-        mStartReason = eOtherBlock;
+        mStartReason = WSType::otherBlock;
         mStartReasonNode = priorNode;
       }
       else if (mHTMLEditor->IsTextNode(priorNode))
@@ -776,7 +696,7 @@ nsWSRunObject::GetWSNodes()
         if (!textNode || !(textFrag = textNode->GetText())) {
           return NS_ERROR_NULL_POINTER;
         }
-        PRUint32 len = textNode->TextLength();
+        uint32_t len = textNode->TextLength();
 
         if (len < 1)
         {
@@ -786,11 +706,11 @@ nsWSRunObject::GetWSNodes()
         }
         else
         {
-          PRInt32 pos;
+          int32_t pos;
           for (pos=len-1; pos>=0; pos--)
           {
             // sanity bounds check the char position.  bug 136165
-            if (PRUint32(pos) >= textFrag->GetLength())
+            if (uint32_t(pos) >= textFrag->GetLength())
             {
               NS_NOTREACHED("looking beyond end of text fragment");
               continue;
@@ -802,7 +722,7 @@ nsWSRunObject::GetWSNodes()
               {
                 mStartNode = priorNode;
                 mStartOffset = pos+1;
-                mStartReason = eText;
+                mStartReason = WSType::text;
                 mStartReasonNode = priorNode;
                 break;
               }
@@ -826,9 +746,9 @@ nsWSRunObject::GetWSNodes()
         // a break but still serves as a terminator to ws runs.
         start.GetPoint(mStartNode, mStartOffset);
         if (nsTextEditUtils::IsBreak(priorNode))
-          mStartReason = eBreak;
+          mStartReason = WSType::br;
         else
-          mStartReason = eSpecial;
+          mStartReason = WSType::special;
         mStartReasonNode = priorNode;
       }
     }
@@ -836,7 +756,7 @@ nsWSRunObject::GetWSNodes()
     {
       // no prior node means we exhausted wsBoundingParent
       start.GetPoint(mStartNode, mStartOffset);
-      mStartReason = eThisBlock;
+      mStartReason = WSType::thisBlock;
       mStartReasonNode = wsBoundingParent;
     } 
   }
@@ -848,14 +768,14 @@ nsWSRunObject::GetWSNodes()
     nsCOMPtr<nsIContent> textNode(do_QueryInterface(mNode));
     const nsTextFragment *textFrag = textNode->GetText();
 
-    PRUint32 len = textNode->TextLength();
-    if (PRUint16(mOffset)<len)
+    uint32_t len = textNode->TextLength();
+    if (uint16_t(mOffset)<len)
     {
-      PRInt32 pos;
-      for (pos=mOffset; PRUint32(pos)<len; pos++)
+      int32_t pos;
+      for (pos=mOffset; uint32_t(pos)<len; pos++)
       {
         // sanity bounds check the char position.  bug 136165
-        if ((pos<0) || (PRUint32(pos)>=textFrag->GetLength()))
+        if ((pos<0) || (uint32_t(pos)>=textFrag->GetLength()))
         {
           NS_NOTREACHED("looking beyond end of text fragment");
           continue;
@@ -867,7 +787,7 @@ nsWSRunObject::GetWSNodes()
           {
             mEndNode = mNode;
             mEndOffset = pos;
-            mEndReason = eText;
+            mEndReason = WSType::text;
             mEndReasonNode = mNode;
             break;
           }
@@ -898,7 +818,7 @@ nsWSRunObject::GetWSNodes()
       {
         // we encountered a new block.  therefore no more ws.
         end.GetPoint(mEndNode, mEndOffset);
-        mEndReason = eOtherBlock;
+        mEndReason = WSType::otherBlock;
         mEndReasonNode = nextNode;
       }
       else if (mHTMLEditor->IsTextNode(nextNode))
@@ -910,7 +830,7 @@ nsWSRunObject::GetWSNodes()
         if (!textNode || !(textFrag = textNode->GetText())) {
           return NS_ERROR_NULL_POINTER;
         }
-        PRUint32 len = textNode->TextLength();
+        uint32_t len = textNode->TextLength();
 
         if (len < 1)
         {
@@ -920,11 +840,11 @@ nsWSRunObject::GetWSNodes()
         }
         else
         {
-          PRInt32 pos;
-          for (pos=0; PRUint32(pos)<len; pos++)
+          int32_t pos;
+          for (pos=0; uint32_t(pos)<len; pos++)
           {
             // sanity bounds check the char position.  bug 136165
-            if (PRUint32(pos) >= textFrag->GetLength())
+            if (uint32_t(pos) >= textFrag->GetLength())
             {
               NS_NOTREACHED("looking beyond end of text fragment");
               continue;
@@ -936,7 +856,7 @@ nsWSRunObject::GetWSNodes()
               {
                 mEndNode = nextNode;
                 mEndOffset = pos;
-                mEndReason = eText;
+                mEndReason = WSType::text;
                 mEndReasonNode = nextNode;
                 break;
               }
@@ -961,9 +881,9 @@ nsWSRunObject::GetWSNodes()
         // serves as a terminator to ws runs.
         end.GetPoint(mEndNode, mEndOffset);
         if (nsTextEditUtils::IsBreak(nextNode))
-          mEndReason = eBreak;
+          mEndReason = WSType::br;
         else
-          mEndReason = eSpecial;
+          mEndReason = WSType::special;
         mEndReasonNode = nextNode;
       }
     }
@@ -971,7 +891,7 @@ nsWSRunObject::GetWSNodes()
     {
       // no next node means we exhausted wsBoundingParent
       end.GetPoint(mEndNode, mEndOffset);
-      mEndReason = eThisBlock;
+      mEndReason = WSType::thisBlock;
       mEndReasonNode = wsBoundingParent;
     } 
   }
@@ -979,7 +899,7 @@ nsWSRunObject::GetWSNodes()
   return NS_OK;
 }
 
-nsresult
+void
 nsWSRunObject::GetRuns()
 {
   ClearRuns();
@@ -988,51 +908,52 @@ nsWSRunObject::GetRuns()
   mHTMLEditor->IsPreformatted(mNode, &mPRE);
   // if it's preformatedd, or if we are surrounded by text or special, it's all one
   // big normal ws run
-  if ( mPRE || (((mStartReason == eText) || (mStartReason == eSpecial)) &&
-       ((mEndReason == eText) || (mEndReason == eSpecial) || (mEndReason == eBreak))) )
-  {
-    return MakeSingleWSRun(eNormalWS);
+  if (mPRE ||
+      ((mStartReason == WSType::text || mStartReason == WSType::special) &&
+       (mEndReason == WSType::text || mEndReason == WSType::special ||
+        mEndReason == WSType::br))) {
+    MakeSingleWSRun(WSType::normalWS);
+    return;
   }
 
   // if we are before or after a block (or after a break), and there are no nbsp's,
   // then it's all non-rendering ws.
-  if ( !(mFirstNBSPNode || mLastNBSPNode) &&
-      ( (mStartReason & eBlock) || (mStartReason == eBreak) || (mEndReason & eBlock) ) )
-  {
-    PRInt16 wstype = eNone;
-    if ((mStartReason & eBlock) || (mStartReason == eBreak))
-      wstype = eLeadingWS;
-    if (mEndReason & eBlock) 
-      wstype |= eTrailingWS;
-    return MakeSingleWSRun(wstype);
+  if (!mFirstNBSPNode && !mLastNBSPNode &&
+      ((mStartReason & WSType::block) || mStartReason == WSType::br ||
+       (mEndReason & WSType::block))) {
+    WSType wstype;
+    if ((mStartReason & WSType::block) || mStartReason == WSType::br) {
+      wstype = WSType::leadingWS;
+    }
+    if (mEndReason & WSType::block) {
+      wstype |= WSType::trailingWS;
+    }
+    MakeSingleWSRun(wstype);
+    return;
   }
   
   // otherwise a little trickier.  shucks.
   mStartRun = new WSFragment();
-  NS_ENSURE_TRUE(mStartRun, NS_ERROR_NULL_POINTER);
   mStartRun->mStartNode = mStartNode;
   mStartRun->mStartOffset = mStartOffset;
   
-  if ( (mStartReason & eBlock) || (mStartReason == eBreak) )
-  {
+  if (mStartReason & WSType::block || mStartReason == WSType::br) {
     // set up mStartRun
-    mStartRun->mType = eLeadingWS;
+    mStartRun->mType = WSType::leadingWS;
     mStartRun->mEndNode = mFirstNBSPNode;
     mStartRun->mEndOffset = mFirstNBSPOffset;
     mStartRun->mLeftType = mStartReason;
-    mStartRun->mRightType = eNormalWS;
+    mStartRun->mRightType = WSType::normalWS;
     
     // set up next run
     WSFragment *normalRun = new WSFragment();
-    NS_ENSURE_TRUE(normalRun, NS_ERROR_NULL_POINTER);
     mStartRun->mRight = normalRun;
-    normalRun->mType = eNormalWS;
+    normalRun->mType = WSType::normalWS;
     normalRun->mStartNode = mFirstNBSPNode;
     normalRun->mStartOffset = mFirstNBSPOffset;
-    normalRun->mLeftType = eLeadingWS;
+    normalRun->mLeftType = WSType::leadingWS;
     normalRun->mLeft = mStartRun;
-    if (mEndReason != eBlock)
-    {
+    if (mEndReason != WSType::block) {
       // then no trailing ws.  this normal run ends the overall ws run.
       normalRun->mRightType = mEndReason;
       normalRun->mEndNode   = mEndNode;
@@ -1057,28 +978,25 @@ nsWSRunObject::GetRuns()
       {
         normalRun->mEndNode = mLastNBSPNode;
         normalRun->mEndOffset = mLastNBSPOffset+1;
-        normalRun->mRightType = eTrailingWS;
+        normalRun->mRightType = WSType::trailingWS;
         
         // set up next run
         WSFragment *lastRun = new WSFragment();
-        NS_ENSURE_TRUE(lastRun, NS_ERROR_NULL_POINTER);
-        lastRun->mType = eTrailingWS;
+        lastRun->mType = WSType::trailingWS;
         lastRun->mStartNode = mLastNBSPNode;
         lastRun->mStartOffset = mLastNBSPOffset+1;
         lastRun->mEndNode = mEndNode;
         lastRun->mEndOffset = mEndOffset;
-        lastRun->mLeftType = eNormalWS;
+        lastRun->mLeftType = WSType::normalWS;
         lastRun->mLeft = normalRun;
         lastRun->mRightType = mEndReason;
         mEndRun = lastRun;
         normalRun->mRight = lastRun;
       }
     }
-  }
-  else // mStartReason is not eBlock or eBreak
-  {
-    // set up mStartRun
-    mStartRun->mType = eNormalWS;
+  } else {
+    // mStartReason is not WSType::block or WSType::br; set up mStartRun
+    mStartRun->mType = WSType::normalWS;
     mStartRun->mEndNode = mLastNBSPNode;
     mStartRun->mEndOffset = mLastNBSPOffset+1;
     mStartRun->mLeftType = mStartReason;
@@ -1098,20 +1016,17 @@ nsWSRunObject::GetRuns()
     {
       // set up next run
       WSFragment *lastRun = new WSFragment();
-      NS_ENSURE_TRUE(lastRun, NS_ERROR_NULL_POINTER);
-      lastRun->mType = eTrailingWS;
+      lastRun->mType = WSType::trailingWS;
       lastRun->mStartNode = mLastNBSPNode;
       lastRun->mStartOffset = mLastNBSPOffset+1;
-      lastRun->mLeftType = eNormalWS;
+      lastRun->mLeftType = WSType::normalWS;
       lastRun->mLeft = mStartRun;
       lastRun->mRightType = mEndReason;
       mEndRun = lastRun;
       mStartRun->mRight = lastRun;
-      mStartRun->mRightType = eTrailingWS;
+      mStartRun->mRightType = WSType::trailingWS;
     }
   }
-  
-  return NS_OK;
 }
 
 void
@@ -1129,11 +1044,10 @@ nsWSRunObject::ClearRuns()
   mEndRun = 0;
 }
 
-nsresult 
-nsWSRunObject::MakeSingleWSRun(PRInt16 aType)
+void
+nsWSRunObject::MakeSingleWSRun(WSType aType)
 {
   mStartRun = new WSFragment();
-  NS_ENSURE_TRUE(mStartRun, NS_ERROR_NULL_POINTER);
 
   mStartRun->mStartNode   = mStartNode;
   mStartRun->mStartOffset = mStartOffset;
@@ -1144,8 +1058,6 @@ nsWSRunObject::MakeSingleWSRun(PRInt16 aType)
   mStartRun->mRightType   = mEndReason;
   
   mEndRun  = mStartRun;
-  
-  return NS_OK;
 }
 
 nsresult 
@@ -1188,7 +1100,7 @@ nsWSRunObject::GetPreviousWSNode(nsIDOMNode *aStartNode,
     if (temp == aBlockParent)
     {
       // we have exhausted nodes in the block parent.  The convention here is to return null.
-      *aPriorNode = nsnull;
+      *aPriorNode = nullptr;
       return NS_OK;
     }
     // we have a parent: look for previous sibling
@@ -1217,14 +1129,14 @@ nsWSRunObject::GetPreviousWSNode(DOMPoint aPoint,
                                  nsCOMPtr<nsIDOMNode> *aPriorNode)
 {
   nsCOMPtr<nsIDOMNode> node;
-  PRInt32 offset;
+  int32_t offset;
   aPoint.GetPoint(node, offset);
   return GetPreviousWSNode(node,offset,aBlockParent,aPriorNode);
 }
 
 nsresult 
 nsWSRunObject::GetPreviousWSNode(nsIDOMNode *aStartNode,
-                                 PRInt16 aOffset, 
+                                 int32_t aOffset,
                                  nsIDOMNode *aBlockParent, 
                                  nsCOMPtr<nsIDOMNode> *aPriorNode)
 {
@@ -1296,7 +1208,7 @@ nsWSRunObject::GetNextWSNode(nsIDOMNode *aStartNode,
     {
       // we have exhausted nodes in the block parent.  The convention
       // here is to return null.
-      *aNextNode = nsnull;
+      *aNextNode = nullptr;
       return NS_OK;
     }
     // we have a parent: look for next sibling
@@ -1325,14 +1237,14 @@ nsWSRunObject::GetNextWSNode(DOMPoint aPoint,
                              nsCOMPtr<nsIDOMNode> *aNextNode)
 {
   nsCOMPtr<nsIDOMNode> node;
-  PRInt32 offset;
+  int32_t offset;
   aPoint.GetPoint(node, offset);
   return GetNextWSNode(node,offset,aBlockParent,aNextNode);
 }
 
 nsresult 
 nsWSRunObject::GetNextWSNode(nsIDOMNode *aStartNode,
-                             PRInt16 aOffset, 
+                             int32_t aOffset,
                              nsIDOMNode *aBlockParent, 
                              nsCOMPtr<nsIDOMNode> *aNextNode)
 {
@@ -1393,27 +1305,23 @@ nsWSRunObject::PrepareToDeleteRangePriv(nsWSRunObject* aEndObject)
   
   // get the runs before and after selection
   WSFragment *beforeRun, *afterRun;
-  res = FindRun(mNode, mOffset, &beforeRun, PR_FALSE);
-  NS_ENSURE_SUCCESS(res, res);
-  res = aEndObject->FindRun(aEndObject->mNode, aEndObject->mOffset, &afterRun, PR_TRUE);
-  NS_ENSURE_SUCCESS(res, res);
+  FindRun(mNode, mOffset, &beforeRun, false);
+  aEndObject->FindRun(aEndObject->mNode, aEndObject->mOffset, &afterRun, true);
   
   // trim after run of any leading ws
-  if (afterRun && (afterRun->mType & eLeadingWS))
-  {
+  if (afterRun && (afterRun->mType & WSType::leadingWS)) {
     res = aEndObject->DeleteChars(aEndObject->mNode, aEndObject->mOffset, afterRun->mEndNode, afterRun->mEndOffset,
                                   eOutsideUserSelectAll);
     NS_ENSURE_SUCCESS(res, res);
   }
   // adjust normal ws in afterRun if needed
-  if (afterRun && (afterRun->mType == eNormalWS) && !aEndObject->mPRE)
-  {
-    if ( (beforeRun && (beforeRun->mType & eLeadingWS)) ||
-         (!beforeRun && ((mStartReason & eBlock) || (mStartReason == eBreak))) )
-    {
+  if (afterRun && afterRun->mType == WSType::normalWS && !aEndObject->mPRE) {
+    if ((beforeRun && (beforeRun->mType & WSType::leadingWS)) ||
+        (!beforeRun && ((mStartReason & WSType::block) ||
+                        mStartReason == WSType::br))) {
       // make sure leading char of following ws is an nbsp, so that it will show up
-      WSPoint point;
-      aEndObject->GetCharAfter(aEndObject->mNode, aEndObject->mOffset, &point);
+      WSPoint point = aEndObject->GetCharAfter(aEndObject->mNode,
+                                               aEndObject->mOffset);
       if (point.mTextNode && nsCRT::IsAsciiSpace(point.mChar))
       {
         res = aEndObject->ConvertToNBSP(point, eOutsideUserSelectAll);
@@ -1422,34 +1330,27 @@ nsWSRunObject::PrepareToDeleteRangePriv(nsWSRunObject* aEndObject)
     }
   }
   // trim before run of any trailing ws
-  if (beforeRun && (beforeRun->mType & eTrailingWS))
-  {
+  if (beforeRun && (beforeRun->mType & WSType::trailingWS)) {
     res = DeleteChars(beforeRun->mStartNode, beforeRun->mStartOffset, mNode, mOffset,
                       eOutsideUserSelectAll);
     NS_ENSURE_SUCCESS(res, res);
-  }
-  else if (beforeRun && (beforeRun->mType == eNormalWS) && !mPRE)
-  {
-    if ( (afterRun && (afterRun->mType & eTrailingWS)) ||
-         (afterRun && (afterRun->mType == eNormalWS))   ||
-         (!afterRun && ((aEndObject->mEndReason & eBlock))) )
-    {
+  } else if (beforeRun && beforeRun->mType == WSType::normalWS && !mPRE) {
+    if ((afterRun && (afterRun->mType & WSType::trailingWS)) ||
+        (afterRun && afterRun->mType == WSType::normalWS) ||
+        (!afterRun && (aEndObject->mEndReason & WSType::block))) {
       // make sure trailing char of starting ws is an nbsp, so that it will show up
-      WSPoint point;
-      GetCharBefore(mNode, mOffset, &point);
+      WSPoint point = GetCharBefore(mNode, mOffset);
       if (point.mTextNode && nsCRT::IsAsciiSpace(point.mChar))
       {
         nsCOMPtr<nsIDOMNode> wsStartNode, wsEndNode;
-        PRInt32 wsStartOffset, wsEndOffset;
-        res = GetAsciiWSBounds(eBoth, mNode, mOffset, 
-                               address_of(wsStartNode), &wsStartOffset, 
-                               address_of(wsEndNode), &wsEndOffset);
-        NS_ENSURE_SUCCESS(res, res);
+        int32_t wsStartOffset, wsEndOffset;
+        GetAsciiWSBounds(eBoth, mNode, mOffset, address_of(wsStartNode),
+                         &wsStartOffset, address_of(wsEndNode), &wsEndOffset);
         point.mTextNode = do_QueryInterface(wsStartNode);
         if (!point.mTextNode->IsNodeOfType(nsINode::eDATA_NODE)) {
           // Not sure if this is needed, but it'll maintain the same
           // functionality
-          point.mTextNode = nsnull;
+          point.mTextNode = nullptr;
         }
         point.mOffset = wsStartOffset;
         res = ConvertToNBSP(point, eOutsideUserSelectAll);
@@ -1470,16 +1371,13 @@ nsWSRunObject::PrepareToSplitAcrossBlocksPriv()
   
   // get the runs before and after selection
   WSFragment *beforeRun, *afterRun;
-  res = FindRun(mNode, mOffset, &beforeRun, PR_FALSE);
-  NS_ENSURE_SUCCESS(res, res);
-  res = FindRun(mNode, mOffset, &afterRun, PR_TRUE);
+  FindRun(mNode, mOffset, &beforeRun, false);
+  FindRun(mNode, mOffset, &afterRun, true);
   
   // adjust normal ws in afterRun if needed
-  if (afterRun && (afterRun->mType == eNormalWS))
-  {
+  if (afterRun && afterRun->mType == WSType::normalWS) {
     // make sure leading char of following ws is an nbsp, so that it will show up
-    WSPoint point;
-    GetCharAfter(mNode, mOffset, &point);
+    WSPoint point = GetCharAfter(mNode, mOffset);
     if (point.mTextNode && nsCRT::IsAsciiSpace(point.mChar))
     {
       res = ConvertToNBSP(point);
@@ -1488,24 +1386,20 @@ nsWSRunObject::PrepareToSplitAcrossBlocksPriv()
   }
 
   // adjust normal ws in beforeRun if needed
-  if (beforeRun && (beforeRun->mType == eNormalWS))
-  {
+  if (beforeRun && beforeRun->mType == WSType::normalWS) {
     // make sure trailing char of starting ws is an nbsp, so that it will show up
-    WSPoint point;
-    GetCharBefore(mNode, mOffset, &point);
+    WSPoint point = GetCharBefore(mNode, mOffset);
     if (point.mTextNode && nsCRT::IsAsciiSpace(point.mChar))
     {
       nsCOMPtr<nsIDOMNode> wsStartNode, wsEndNode;
-      PRInt32 wsStartOffset, wsEndOffset;
-      res = GetAsciiWSBounds(eBoth, mNode, mOffset, 
-                             address_of(wsStartNode), &wsStartOffset, 
-                             address_of(wsEndNode), &wsEndOffset);
-      NS_ENSURE_SUCCESS(res, res);
+      int32_t wsStartOffset, wsEndOffset;
+      GetAsciiWSBounds(eBoth, mNode, mOffset, address_of(wsStartNode),
+                       &wsStartOffset, address_of(wsEndNode), &wsEndOffset);
       point.mTextNode = do_QueryInterface(wsStartNode);
       if (!point.mTextNode->IsNodeOfType(nsINode::eDATA_NODE)) {
         // Not sure if this is needed, but it'll maintain the same
         // functionality
-        point.mTextNode = nsnull;
+        point.mTextNode = nullptr;
       }
       point.mOffset = wsStartOffset;
       res = ConvertToNBSP(point);
@@ -1516,8 +1410,8 @@ nsWSRunObject::PrepareToSplitAcrossBlocksPriv()
 }
 
 nsresult 
-nsWSRunObject::DeleteChars(nsIDOMNode *aStartNode, PRInt32 aStartOffset, 
-                           nsIDOMNode *aEndNode, PRInt32 aEndOffset,
+nsWSRunObject::DeleteChars(nsIDOMNode *aStartNode, int32_t aStartOffset, 
+                           nsIDOMNode *aEndNode, int32_t aEndOffset,
                            AreaRestriction aAR)
 {
   // MOOSE: this routine needs to be modified to preserve the integrity of the
@@ -1542,24 +1436,24 @@ nsWSRunObject::DeleteChars(nsIDOMNode *aStartNode, PRInt32 aStartOffset,
     return NS_OK;  // nothing to delete
   
   nsresult res = NS_OK;
-  PRInt32 idx = mNodeArray.IndexOf(aStartNode);
+  int32_t idx = mNodeArray.IndexOf(aStartNode);
   if (idx==-1) idx = 0; // if our strarting point wasn't one of our ws text nodes,
                         // then just go through them from the beginning.
   nsCOMPtr<nsIDOMNode> node;
   nsCOMPtr<nsIDOMCharacterData> textnode;
-  nsCOMPtr<nsIDOMRange> range;
+  nsRefPtr<nsRange> range;
 
   if (aStartNode == aEndNode)
   {
     textnode = do_QueryInterface(aStartNode);
     if (textnode)
     {
-      return mHTMLEditor->DeleteText(textnode, (PRUint32)aStartOffset, 
-                                     (PRUint32)(aEndOffset-aStartOffset));
+      return mHTMLEditor->DeleteText(textnode, (uint32_t)aStartOffset, 
+                                     (uint32_t)(aEndOffset-aStartOffset));
     }
   }
 
-  PRInt32 count = mNodeArray.Count();
+  int32_t count = mNodeArray.Count();
   while (idx < count)
   {
     node = mNodeArray[idx];
@@ -1568,11 +1462,11 @@ nsWSRunObject::DeleteChars(nsIDOMNode *aStartNode, PRInt32 aStartOffset,
     if (node == aStartNode)
     {
       textnode = do_QueryInterface(node);
-      PRUint32 len;
+      uint32_t len;
       textnode->GetLength(&len);
-      if (PRUint32(aStartOffset)<len)
+      if (uint32_t(aStartOffset)<len)
       {
-        res = mHTMLEditor->DeleteText(textnode, (PRUint32)aStartOffset, len-aStartOffset);
+        res = mHTMLEditor->DeleteText(textnode, (uint32_t)aStartOffset, len-aStartOffset);
         NS_ENSURE_SUCCESS(res, res);
       }
     }
@@ -1581,7 +1475,7 @@ nsWSRunObject::DeleteChars(nsIDOMNode *aStartNode, PRInt32 aStartOffset,
       if (aEndOffset)
       {
         textnode = do_QueryInterface(node);
-        res = mHTMLEditor->DeleteText(textnode, 0, (PRUint32)aEndOffset);
+        res = mHTMLEditor->DeleteText(textnode, 0, (uint32_t)aEndOffset);
         NS_ENSURE_SUCCESS(res, res);
       }
       break;
@@ -1590,16 +1484,15 @@ nsWSRunObject::DeleteChars(nsIDOMNode *aStartNode, PRInt32 aStartOffset,
     {
       if (!range)
       {
-        range = do_CreateInstance("@mozilla.org/content/range;1");
-        NS_ENSURE_TRUE(range, NS_ERROR_OUT_OF_MEMORY);
+        range = new nsRange();
         res = range->SetStart(aStartNode, aStartOffset);
         NS_ENSURE_SUCCESS(res, res);
         res = range->SetEnd(aEndNode, aEndOffset);
         NS_ENSURE_SUCCESS(res, res);
       }
-      PRBool nodeBefore, nodeAfter;
+      bool nodeBefore, nodeAfter;
       nsCOMPtr<nsIContent> content (do_QueryInterface(node));
-      res = mHTMLEditor->sRangeHelper->CompareNodeToRange(content, range, &nodeBefore, &nodeAfter);
+      res = nsRange::CompareNodeToRange(content, range, &nodeBefore, &nodeAfter);
       NS_ENSURE_SUCCESS(res, res);
       if (nodeAfter)
       {
@@ -1619,117 +1512,121 @@ nsWSRunObject::DeleteChars(nsIDOMNode *aStartNode, PRInt32 aStartOffset,
   return res;
 }
 
-nsresult 
-nsWSRunObject::GetCharAfter(nsIDOMNode *aNode, PRInt32 aOffset, WSPoint *outPoint)
+nsWSRunObject::WSPoint
+nsWSRunObject::GetCharAfter(nsIDOMNode *aNode, int32_t aOffset)
 {
-  NS_ENSURE_TRUE(aNode && outPoint, NS_ERROR_NULL_POINTER);
+  MOZ_ASSERT(aNode);
 
-  PRInt32 idx = mNodeArray.IndexOf(aNode);
+  int32_t idx = mNodeArray.IndexOf(aNode);
   if (idx == -1) 
   {
     // use range comparisons to get right ws node
-    return GetWSPointAfter(aNode, aOffset, outPoint);
+    return GetWSPointAfter(aNode, aOffset);
   }
   else
   {
     // use wspoint version of GetCharAfter()
     WSPoint point(aNode,aOffset,0);
-    return GetCharAfter(point, outPoint);
+    return GetCharAfter(point);
   }
-  
-  return NS_ERROR_FAILURE;
 }
 
-nsresult 
-nsWSRunObject::GetCharBefore(nsIDOMNode *aNode, PRInt32 aOffset, WSPoint *outPoint)
+nsWSRunObject::WSPoint
+nsWSRunObject::GetCharBefore(nsIDOMNode *aNode, int32_t aOffset)
 {
-  NS_ENSURE_TRUE(aNode && outPoint, NS_ERROR_NULL_POINTER);
+  MOZ_ASSERT(aNode);
 
-  PRInt32 idx = mNodeArray.IndexOf(aNode);
+  int32_t idx = mNodeArray.IndexOf(aNode);
   if (idx == -1) 
   {
     // use range comparisons to get right ws node
-    return GetWSPointBefore(aNode, aOffset, outPoint);
+    return GetWSPointBefore(aNode, aOffset);
   }
   else
   {
     // use wspoint version of GetCharBefore()
     WSPoint point(aNode,aOffset,0);
-    return GetCharBefore(point, outPoint);
+    return GetCharBefore(point);
   }
-  
-  return NS_ERROR_FAILURE;
 }
 
-nsresult 
-nsWSRunObject::GetCharAfter(WSPoint &aPoint, WSPoint *outPoint)
+nsWSRunObject::WSPoint
+nsWSRunObject::GetCharAfter(const WSPoint &aPoint)
 {
-  NS_ENSURE_TRUE(aPoint.mTextNode && outPoint, NS_ERROR_NULL_POINTER);
+  MOZ_ASSERT(aPoint.mTextNode);
   
-  outPoint->mTextNode = nsnull;
-  outPoint->mOffset = 0;
-  outPoint->mChar = 0;
+  WSPoint outPoint;
+  outPoint.mTextNode = nullptr;
+  outPoint.mOffset = 0;
+  outPoint.mChar = 0;
 
   nsCOMPtr<nsIDOMNode> pointTextNode(do_QueryInterface(aPoint.mTextNode));
-  PRInt32 idx = mNodeArray.IndexOf(pointTextNode);
-  if (idx == -1) return NS_OK;  // can't find point, but it's not an error
-  PRInt32 numNodes = mNodeArray.Count();
-  
-  if (PRUint16(aPoint.mOffset) < aPoint.mTextNode->TextLength())
-  {
-    *outPoint = aPoint;
-    outPoint->mChar = GetCharAt(aPoint.mTextNode, aPoint.mOffset);
+  int32_t idx = mNodeArray.IndexOf(pointTextNode);
+  if (idx == -1) {
+    // can't find point, but it's not an error
+    return outPoint;
   }
-  else if (idx < (PRInt32)(numNodes-1))
+  int32_t numNodes = mNodeArray.Count();
+  
+  if (uint16_t(aPoint.mOffset) < aPoint.mTextNode->TextLength())
   {
+    outPoint = aPoint;
+    outPoint.mChar = GetCharAt(aPoint.mTextNode, aPoint.mOffset);
+    return outPoint;
+  } else if (idx + 1 < (int32_t)numNodes) {
     nsIDOMNode* node = mNodeArray[idx+1];
-    NS_ENSURE_TRUE(node, NS_ERROR_FAILURE);
-    outPoint->mTextNode = do_QueryInterface(node);
-    if (!outPoint->mTextNode->IsNodeOfType(nsINode::eDATA_NODE)) {
+    MOZ_ASSERT(node);
+    outPoint.mTextNode = do_QueryInterface(node);
+    if (!outPoint.mTextNode->IsNodeOfType(nsINode::eDATA_NODE)) {
       // Not sure if this is needed, but it'll maintain the same
       // functionality
-      outPoint->mTextNode = nsnull;
+      outPoint.mTextNode = nullptr;
     }
-    outPoint->mOffset = 0;
-    outPoint->mChar = GetCharAt(outPoint->mTextNode, 0);
+    outPoint.mOffset = 0;
+    outPoint.mChar = GetCharAt(outPoint.mTextNode, 0);
   }
-  return NS_OK;
+  return outPoint;
 }
 
-nsresult 
-nsWSRunObject::GetCharBefore(WSPoint &aPoint, WSPoint *outPoint)
+nsWSRunObject::WSPoint
+nsWSRunObject::GetCharBefore(const WSPoint &aPoint)
 {
-  NS_ENSURE_TRUE(aPoint.mTextNode && outPoint, NS_ERROR_NULL_POINTER);
+  MOZ_ASSERT(aPoint.mTextNode);
   
-  outPoint->mTextNode = nsnull;
-  outPoint->mOffset = 0;
-  outPoint->mChar = 0;
+  WSPoint outPoint;
+  outPoint.mTextNode = nullptr;
+  outPoint.mOffset = 0;
+  outPoint.mChar = 0;
   
   nsCOMPtr<nsIDOMNode> pointTextNode(do_QueryInterface(aPoint.mTextNode));
-  PRInt32 idx = mNodeArray.IndexOf(pointTextNode);
-  if (idx == -1) return NS_OK;  // can't find point, but it's not an error
+  int32_t idx = mNodeArray.IndexOf(pointTextNode);
+  if (idx == -1) {
+    // can't find point, but it's not an error
+    return outPoint;
+  }
   
   if (aPoint.mOffset != 0)
   {
-    *outPoint = aPoint;
-    outPoint->mOffset--;
-    outPoint->mChar = GetCharAt(aPoint.mTextNode, aPoint.mOffset-1);
+    outPoint = aPoint;
+    outPoint.mOffset--;
+    outPoint.mChar = GetCharAt(aPoint.mTextNode, aPoint.mOffset-1);
+    return outPoint;
   }
   else if (idx)
   {
     nsIDOMNode* node = mNodeArray[idx-1];
-    NS_ENSURE_TRUE(node, NS_ERROR_FAILURE);
-    outPoint->mTextNode = do_QueryInterface(node);
+    MOZ_ASSERT(node);
+    outPoint.mTextNode = do_QueryInterface(node);
 
-    PRUint32 len = outPoint->mTextNode->TextLength();
+    uint32_t len = outPoint.mTextNode->TextLength();
 
     if (len)
     {
-      outPoint->mOffset = len-1;
-      outPoint->mChar = GetCharAt(outPoint->mTextNode, len-1);
+      outPoint.mOffset = len-1;
+      outPoint.mChar = GetCharAt(outPoint.mTextNode, len-1);
     }
   }
-  return NS_OK;
+  return outPoint;
 }
 
 nsresult 
@@ -1757,16 +1654,15 @@ nsWSRunObject::ConvertToNBSP(WSPoint aPoint, AreaRestriction aAR)
   // first, insert an nbsp
   nsAutoTxnsConserveSelection dontSpazMySelection(mHTMLEditor);
   nsAutoString nbspStr(nbsp);
-  nsresult res = mHTMLEditor->InsertTextIntoTextNodeImpl(nbspStr, textNode, aPoint.mOffset, PR_TRUE);
+  nsresult res = mHTMLEditor->InsertTextIntoTextNodeImpl(nbspStr, textNode, aPoint.mOffset, true);
   NS_ENSURE_SUCCESS(res, res);
   
   // next, find range of ws it will replace
   nsCOMPtr<nsIDOMNode> startNode, endNode;
-  PRInt32 startOffset=0, endOffset=0;
+  int32_t startOffset=0, endOffset=0;
   
-  res = GetAsciiWSBounds(eAfter, node, aPoint.mOffset+1, address_of(startNode), 
-                         &startOffset, address_of(endNode), &endOffset);
-  NS_ENSURE_SUCCESS(res, res);
+  GetAsciiWSBounds(eAfter, node, aPoint.mOffset+1, address_of(startNode),
+                   &startOffset, address_of(endNode), &endOffset);
   
   // finally, delete that replaced ws, if any
   if (startNode)
@@ -1777,24 +1673,21 @@ nsWSRunObject::ConvertToNBSP(WSPoint aPoint, AreaRestriction aAR)
   return res;
 }
 
-nsresult
-nsWSRunObject::GetAsciiWSBounds(PRInt16 aDir, nsIDOMNode *aNode, PRInt32 aOffset,
-                                nsCOMPtr<nsIDOMNode> *outStartNode, PRInt32 *outStartOffset,
-                                nsCOMPtr<nsIDOMNode> *outEndNode, PRInt32 *outEndOffset)
+void
+nsWSRunObject::GetAsciiWSBounds(int16_t aDir, nsIDOMNode *aNode, int32_t aOffset,
+                                nsCOMPtr<nsIDOMNode> *outStartNode, int32_t *outStartOffset,
+                                nsCOMPtr<nsIDOMNode> *outEndNode, int32_t *outEndOffset)
 {
-  NS_ENSURE_TRUE(aNode && outStartNode && outEndNode, NS_ERROR_NULL_POINTER);
+  MOZ_ASSERT(aNode && outStartNode && outEndNode);
 
   nsCOMPtr<nsIDOMNode> startNode, endNode;
-  PRInt32 startOffset=0, endOffset=0;
-  
-  nsresult res = NS_OK;
+  int32_t startOffset=0, endOffset=0;
   
   if (aDir & eAfter)
   {
-    WSPoint point, tmp;
-    res = GetCharAfter(aNode, aOffset, &point);
-    if (NS_SUCCEEDED(res) && point.mTextNode)
-    {  // we found a text node, at least
+    WSPoint point = GetCharAfter(aNode, aOffset);
+    if (point.mTextNode) {
+      // we found a text node, at least
       endNode = do_QueryInterface(point.mTextNode);
       endOffset = point.mOffset;
       startNode = endNode;
@@ -1806,19 +1699,19 @@ nsWSRunObject::GetAsciiWSBounds(PRInt16 aDir, nsIDOMNode *aNode, PRInt32 aOffset
         endNode = do_QueryInterface(point.mTextNode);
         point.mOffset++;  // endOffset is _after_ ws
         endOffset = point.mOffset;
-        tmp = point;
-        res = GetCharAfter(tmp, &point);
-        if (NS_FAILED(res) || !point.mTextNode) break;
+        point = GetCharAfter(point);
+        if (!point.mTextNode) {
+          break;
+        }
       }
     }
   }
   
   if (aDir & eBefore)
   {
-    WSPoint point, tmp;
-    res = GetCharBefore(aNode, aOffset, &point);
-    if (NS_SUCCEEDED(res) && point.mTextNode)
-    {  // we found a text node, at least
+    WSPoint point = GetCharBefore(aNode, aOffset);
+    if (point.mTextNode) {
+      // we found a text node, at least
       startNode = do_QueryInterface(point.mTextNode);
       startOffset = point.mOffset+1;
       if (!endNode)
@@ -1832,9 +1725,10 @@ nsWSRunObject::GetAsciiWSBounds(PRInt16 aDir, nsIDOMNode *aNode, PRInt32 aOffset
       {
         startNode = do_QueryInterface(point.mTextNode);
         startOffset = point.mOffset;
-        tmp = point;
-        res = GetCharBefore(tmp, &point);
-        if (NS_FAILED(res) || !point.mTextNode) break;
+        point = GetCharBefore(point);
+        if (!point.mTextNode) {
+          break;
+        }
       }
     }
   }  
@@ -1843,99 +1737,99 @@ nsWSRunObject::GetAsciiWSBounds(PRInt16 aDir, nsIDOMNode *aNode, PRInt32 aOffset
   *outStartOffset = startOffset;
   *outEndNode = endNode;
   *outEndOffset = endOffset;
-
-  return NS_OK;
 }
 
-nsresult
-nsWSRunObject::FindRun(nsIDOMNode *aNode, PRInt32 aOffset, WSFragment **outRun, PRBool after)
+void
+nsWSRunObject::FindRun(nsIDOMNode *aNode, int32_t aOffset, WSFragment **outRun, bool after)
 {
+  *outRun = nullptr;
   // given a dompoint, find the ws run that is before or after it, as caller needs
-  NS_ENSURE_TRUE(aNode && outRun, NS_ERROR_NULL_POINTER);
+  MOZ_ASSERT(aNode && outRun);
     
-  nsresult res = NS_OK;
   WSFragment *run = mStartRun;
   while (run)
   {
-    PRInt16 comp = mHTMLEditor->sRangeHelper->ComparePoints(aNode, aOffset, run->mStartNode, run->mStartOffset);
+    int16_t comp = nsContentUtils::ComparePoints(aNode, aOffset, run->mStartNode,
+                                                 run->mStartOffset);
     if (comp <= 0)
     {
       if (after)
       {
         *outRun = run;
-        return res;
       }
       else // before
       {
-        *outRun = nsnull;
-        return res;
+        *outRun = nullptr;
       }
+      return;
     }
-    comp = mHTMLEditor->sRangeHelper->ComparePoints(aNode, aOffset, run->mEndNode, run->mEndOffset);
+    comp = nsContentUtils::ComparePoints(aNode, aOffset,
+                                         run->mEndNode, run->mEndOffset);
     if (comp < 0)
     {
       *outRun = run;
-      return res;
+      return;
     }
     else if (comp == 0)
     {
       if (after)
       {
         *outRun = run->mRight;
-        return res;
       }
       else // before
       {
         *outRun = run;
-        return res;
       }
+      return;
     }
     if (!run->mRight)
     {
       if (after)
       {
-        *outRun = nsnull;
-        return res;
+        *outRun = nullptr;
       }
       else // before
       {
         *outRun = run;
-        return res;
       }
+      return;
     }
     run = run->mRight;
   }
-  return res;
 }
 
 PRUnichar 
-nsWSRunObject::GetCharAt(nsIContent *aTextNode, PRInt32 aOffset)
+nsWSRunObject::GetCharAt(nsIContent *aTextNode, int32_t aOffset)
 {
   // return 0 if we can't get a char, for whatever reason
   NS_ENSURE_TRUE(aTextNode, 0);
 
-  PRUint32 len = aTextNode->TextLength();
-  if (aOffset < 0 || aOffset >= PRUint32(len)) 
+  int32_t len = int32_t(aTextNode->TextLength());
+  if (aOffset < 0 || aOffset >= len)
     return 0;
     
   return aTextNode->GetText()->CharAt(aOffset);
 }
 
-nsresult 
-nsWSRunObject::GetWSPointAfter(nsIDOMNode *aNode, PRInt32 aOffset, WSPoint *outPoint)
+nsWSRunObject::WSPoint
+nsWSRunObject::GetWSPointAfter(nsIDOMNode *aNode, int32_t aOffset)
 {
   // Note: only to be called if aNode is not a ws node.  
   
   // binary search on wsnodes
-  PRInt32 numNodes, firstNum, curNum, lastNum;
+  int32_t numNodes, firstNum, curNum, lastNum;
   numNodes = mNodeArray.Count();
   
-  NS_ENSURE_TRUE(numNodes, NS_OK); // do nothing if there are no nodes to search
+  if (!numNodes) {
+    // do nothing if there are no nodes to search
+    WSPoint outPoint;
+    return outPoint;
+  }
 
   firstNum = 0;
   curNum = numNodes/2;
   lastNum = numNodes;
-  PRInt16 cmp=0;
+  int16_t cmp=0;
   nsCOMPtr<nsIDOMNode>  curNode;
   
   // begin binary search
@@ -1944,7 +1838,7 @@ nsWSRunObject::GetWSPointAfter(nsIDOMNode *aNode, PRInt32 aOffset, WSPoint *outP
   while (curNum != lastNum)
   {
     curNode = mNodeArray[curNum];
-    cmp = mHTMLEditor->sRangeHelper->ComparePoints(aNode, aOffset, curNode, 0);
+    cmp = nsContentUtils::ComparePoints(aNode, aOffset, curNode, 0);
     if (cmp < 0)
       lastNum = curNum;
     else
@@ -1961,30 +1855,34 @@ nsWSRunObject::GetWSPointAfter(nsIDOMNode *aNode, PRInt32 aOffset, WSPoint *outP
     // will do the work for us when we pass it the last index of the last node.
     nsCOMPtr<nsIContent> textNode(do_QueryInterface(mNodeArray[curNum-1]));
     WSPoint point(textNode, textNode->TextLength(), 0);
-    return GetCharAfter(point, outPoint);
+    return GetCharAfter(point);
   } else {
     // The char after the point of interest is the first character of our range.
     nsCOMPtr<nsIContent> textNode(do_QueryInterface(mNodeArray[curNum]));
     WSPoint point(textNode, 0, 0);
-    return GetCharAfter(point, outPoint);
+    return GetCharAfter(point);
   }
 }
 
-nsresult 
-nsWSRunObject::GetWSPointBefore(nsIDOMNode *aNode, PRInt32 aOffset, WSPoint *outPoint)
+nsWSRunObject::WSPoint
+nsWSRunObject::GetWSPointBefore(nsIDOMNode *aNode, int32_t aOffset)
 {
   // Note: only to be called if aNode is not a ws node.  
   
   // binary search on wsnodes
-  PRInt32 numNodes, firstNum, curNum, lastNum;
+  int32_t numNodes, firstNum, curNum, lastNum;
   numNodes = mNodeArray.Count();
   
-  NS_ENSURE_TRUE(numNodes, NS_OK); // do nothing if there are no nodes to search
+  if (!numNodes) {
+    // do nothing if there are no nodes to search
+    WSPoint outPoint;
+    return outPoint;
+  }
   
   firstNum = 0;
   curNum = numNodes/2;
   lastNum = numNodes;
-  PRInt16 cmp=0;
+  int16_t cmp=0;
   nsCOMPtr<nsIDOMNode>  curNode;
   
   // begin binary search
@@ -1993,7 +1891,7 @@ nsWSRunObject::GetWSPointBefore(nsIDOMNode *aNode, PRInt32 aOffset, WSPoint *out
   while (curNum != lastNum)
   {
     curNode = mNodeArray[curNum];
-    cmp = mHTMLEditor->sRangeHelper->ComparePoints(aNode, aOffset, curNode, 0);
+    cmp = nsContentUtils::ComparePoints(aNode, aOffset, curNode, 0);
     if (cmp < 0)
       lastNum = curNum;
     else
@@ -2010,14 +1908,14 @@ nsWSRunObject::GetWSPointBefore(nsIDOMNode *aNode, PRInt32 aOffset, WSPoint *out
     // of the node into GetCharBefore, and it will return the last character.
     nsCOMPtr<nsIContent> textNode(do_QueryInterface(mNodeArray[curNum - 1]));
     WSPoint point(textNode, textNode->TextLength(), 0);
-    return GetCharBefore(point, outPoint);
+    return GetCharBefore(point);
   } else {
     // we can just ask the current node for the point immediately before it,
     // it will handle moving to the previous node (if any) and returning the
     // appropriate character
     nsCOMPtr<nsIContent> textNode(do_QueryInterface(mNodeArray[curNum]));
     WSPoint point(textNode, 0, 0);
-    return GetCharBefore(point, outPoint);
+    return GetCharBefore(point);
   }
 }
 
@@ -2027,37 +1925,43 @@ nsWSRunObject::CheckTrailingNBSPOfRun(WSFragment *aRun)
   // try to change an nbsp to a space, if possible, just to prevent nbsp proliferation. 
   // examine what is before and after the trailing nbsp, if any.
   NS_ENSURE_TRUE(aRun, NS_ERROR_NULL_POINTER);
-  WSPoint thePoint;
-  PRBool leftCheck = PR_FALSE;
-  PRBool spaceNBSP = PR_FALSE;
-  PRBool rightCheck = PR_FALSE;
+  nsresult res;
+  bool leftCheck = false;
+  bool spaceNBSP = false;
+  bool rightCheck = false;
   
   // confirm run is normalWS
-  if (aRun->mType != eNormalWS) return NS_ERROR_FAILURE;
+  if (aRun->mType != WSType::normalWS) {
+    return NS_ERROR_FAILURE;
+  }
   
   // first check for trailing nbsp
-  nsresult res = GetCharBefore(aRun->mEndNode, aRun->mEndOffset, &thePoint);
-  if (NS_SUCCEEDED(res) && thePoint.mTextNode && thePoint.mChar == nbsp)
-  {
+  WSPoint thePoint = GetCharBefore(aRun->mEndNode, aRun->mEndOffset);
+  if (thePoint.mTextNode && thePoint.mChar == nbsp) {
     // now check that what is to the left of it is compatible with replacing nbsp with space
-    WSPoint prevPoint;
-    res = GetCharBefore(thePoint, &prevPoint);
-    if (NS_SUCCEEDED(res) && prevPoint.mTextNode)
-    {
-      if (!nsCRT::IsAsciiSpace(prevPoint.mChar)) leftCheck = PR_TRUE;
-      else spaceNBSP = PR_TRUE;
+    WSPoint prevPoint = GetCharBefore(thePoint);
+    if (prevPoint.mTextNode) {
+      if (!nsCRT::IsAsciiSpace(prevPoint.mChar)) leftCheck = true;
+      else spaceNBSP = true;
+    } else if (aRun->mLeftType == WSType::text) {
+      leftCheck = true;
+    } else if (aRun->mLeftType == WSType::special) {
+      leftCheck = true;
     }
-    else if (aRun->mLeftType == eText)    leftCheck = PR_TRUE;
-    else if (aRun->mLeftType == eSpecial) leftCheck = PR_TRUE;
     if (leftCheck || spaceNBSP)
     {
       // now check that what is to the right of it is compatible with replacing nbsp with space
-      if (aRun->mRightType == eText)    rightCheck = PR_TRUE;
-      if (aRun->mRightType == eSpecial) rightCheck = PR_TRUE;
-      if (aRun->mRightType == eBreak)   rightCheck = PR_TRUE;
-      if ((aRun->mRightType & eBlock) &&
-          IsBlockNode(nsCOMPtr<nsIDOMNode>(GetWSBoundingParent())))
-      {
+      if (aRun->mRightType == WSType::text) {
+        rightCheck = true;
+      }
+      if (aRun->mRightType == WSType::special) {
+        rightCheck = true;
+      }
+      if (aRun->mRightType == WSType::br) {
+        rightCheck = true;
+      }
+      if ((aRun->mRightType & WSType::block) &&
+          IsBlockNode(nsCOMPtr<nsIDOMNode>(GetWSBoundingParent()))) {
         // we are at a block boundary.  Insert a <br>.  Why?  Well, first note that
         // the br will have no visible effect since it is up against a block boundary.
         // |foo<br><p>bar|  renders like |foo<p>bar| and similarly
@@ -2081,11 +1985,9 @@ nsWSRunObject::CheckTrailingNBSPOfRun(WSFragment *aRun)
         NS_ENSURE_SUCCESS(res, res);
 
         // refresh thePoint, prevPoint
-        res = GetCharBefore(aRun->mEndNode, aRun->mEndOffset, &thePoint);
-        NS_ENSURE_SUCCESS(res, res);
-        res = GetCharBefore(thePoint, &prevPoint);
-        NS_ENSURE_SUCCESS(res, res);
-        rightCheck = PR_TRUE;
+        thePoint = GetCharBefore(aRun->mEndNode, aRun->mEndOffset);
+        prevPoint = GetCharBefore(thePoint);
+        rightCheck = true;
       }
     }
     if (leftCheck && rightCheck)
@@ -2096,7 +1998,7 @@ nsWSRunObject::CheckTrailingNBSPOfRun(WSFragment *aRun)
       NS_ENSURE_TRUE(textNode, NS_ERROR_NULL_POINTER);
       nsAutoTxnsConserveSelection dontSpazMySelection(mHTMLEditor);
       nsAutoString spaceStr(PRUnichar(32));
-      res = mHTMLEditor->InsertTextIntoTextNodeImpl(spaceStr, textNode, thePoint.mOffset, PR_TRUE);
+      res = mHTMLEditor->InsertTextIntoTextNodeImpl(spaceStr, textNode, thePoint.mOffset, true);
       NS_ENSURE_SUCCESS(res, res);
   
       // finally, delete that nbsp
@@ -2113,10 +2015,9 @@ nsWSRunObject::CheckTrailingNBSPOfRun(WSFragment *aRun)
       // be split across lines, which looks ugly and is bad for the moose.
       
       nsCOMPtr<nsIDOMNode> startNode, endNode, thenode(do_QueryInterface(prevPoint.mTextNode));
-      PRInt32 startOffset, endOffset;
-      res = GetAsciiWSBounds(eBoth, thenode, prevPoint.mOffset+1, address_of(startNode), 
-                           &startOffset, address_of(endNode), &endOffset);
-      NS_ENSURE_SUCCESS(res, res);
+      int32_t startOffset, endOffset;
+      GetAsciiWSBounds(eBoth, thenode, prevPoint.mOffset+1, address_of(startNode),
+                       &startOffset, address_of(endNode), &endOffset);
       
       //  delete that nbsp
       nsCOMPtr<nsIDOMNode> delNode(do_QueryInterface(thePoint.mTextNode));
@@ -2127,7 +2028,7 @@ nsWSRunObject::CheckTrailingNBSPOfRun(WSFragment *aRun)
       nsAutoTxnsConserveSelection dontSpazMySelection(mHTMLEditor);
       nsAutoString nbspStr(nbsp);
       nsCOMPtr<nsIDOMCharacterData> textNode(do_QueryInterface(startNode));
-      res = mHTMLEditor->InsertTextIntoTextNodeImpl(nbspStr, textNode, startOffset, PR_TRUE);
+      res = mHTMLEditor->InsertTextIntoTextNodeImpl(nbspStr, textNode, startOffset, true);
       NS_ENSURE_SUCCESS(res, res);
     }
   }
@@ -2135,26 +2036,24 @@ nsWSRunObject::CheckTrailingNBSPOfRun(WSFragment *aRun)
 }
 
 nsresult
-nsWSRunObject::CheckTrailingNBSP(WSFragment *aRun, nsIDOMNode *aNode, PRInt32 aOffset)
+nsWSRunObject::CheckTrailingNBSP(WSFragment *aRun, nsIDOMNode *aNode, int32_t aOffset)
 {    
   // try to change an nbsp to a space, if possible, just to prevent nbsp proliferation. 
   // this routine is called when we about to make this point in the ws abut an inserted break
   // or text, so we don't have to worry about what is after it.  What is after it now will 
   // end up after the inserted object.   
   NS_ENSURE_TRUE(aRun && aNode, NS_ERROR_NULL_POINTER);
-  WSPoint thePoint;
-  PRBool canConvert = PR_FALSE;
-  nsresult res = GetCharBefore(aNode, aOffset, &thePoint);
-  if (NS_SUCCEEDED(res) && thePoint.mTextNode && thePoint.mChar == nbsp)
-  {
-    WSPoint prevPoint;
-    res = GetCharBefore(thePoint, &prevPoint);
-    if (NS_SUCCEEDED(res) && prevPoint.mTextNode)
-    {
-      if (!nsCRT::IsAsciiSpace(prevPoint.mChar)) canConvert = PR_TRUE;
+  bool canConvert = false;
+  WSPoint thePoint = GetCharBefore(aNode, aOffset);
+  if (thePoint.mTextNode && thePoint.mChar == nbsp) {
+    WSPoint prevPoint = GetCharBefore(thePoint);
+    if (prevPoint.mTextNode) {
+      if (!nsCRT::IsAsciiSpace(prevPoint.mChar)) canConvert = true;
+    } else if (aRun->mLeftType == WSType::text) {
+      canConvert = true;
+    } else if (aRun->mLeftType == WSType::special) {
+      canConvert = true;
     }
-    else if (aRun->mLeftType == eText)    canConvert = PR_TRUE;
-    else if (aRun->mLeftType == eSpecial) canConvert = PR_TRUE;
   }
   if (canConvert)
   {
@@ -2163,7 +2062,9 @@ nsWSRunObject::CheckTrailingNBSP(WSFragment *aRun, nsIDOMNode *aNode, PRInt32 aO
     NS_ENSURE_TRUE(textNode, NS_ERROR_NULL_POINTER);
     nsAutoTxnsConserveSelection dontSpazMySelection(mHTMLEditor);
     nsAutoString spaceStr(PRUnichar(32));
-    res = mHTMLEditor->InsertTextIntoTextNodeImpl(spaceStr, textNode, thePoint.mOffset, PR_TRUE);
+    nsresult res = mHTMLEditor->InsertTextIntoTextNodeImpl(spaceStr, textNode,
+                                                           thePoint.mOffset,
+                                                           true);
     NS_ENSURE_SUCCESS(res, res);
   
     // finally, delete that nbsp
@@ -2175,27 +2076,27 @@ nsWSRunObject::CheckTrailingNBSP(WSFragment *aRun, nsIDOMNode *aNode, PRInt32 aO
 }
 
 nsresult
-nsWSRunObject::CheckLeadingNBSP(WSFragment *aRun, nsIDOMNode *aNode, PRInt32 aOffset)
+nsWSRunObject::CheckLeadingNBSP(WSFragment *aRun, nsIDOMNode *aNode, int32_t aOffset)
 {    
   // try to change an nbsp to a space, if possible, just to prevent nbsp proliferation    
   // this routine is called when we about to make this point in the ws abut an inserted
   // text, so we don't have to worry about what is before it.  What is before it now will 
   // end up before the inserted text.   
-  WSPoint thePoint;
-  PRBool canConvert = PR_FALSE;
-  nsresult res = GetCharAfter(aNode, aOffset, &thePoint);
-  if (NS_SUCCEEDED(res) && thePoint.mChar == nbsp)
-  {
-    WSPoint nextPoint, tmp=thePoint;
+  bool canConvert = false;
+  WSPoint thePoint = GetCharAfter(aNode, aOffset);
+  if (thePoint.mChar == nbsp) {
+    WSPoint tmp = thePoint;
     tmp.mOffset++; // we want to be after thePoint
-    res = GetCharAfter(tmp, &nextPoint);
-    if (NS_SUCCEEDED(res) && nextPoint.mTextNode)
-    {
-      if (!nsCRT::IsAsciiSpace(nextPoint.mChar)) canConvert = PR_TRUE;
+    WSPoint nextPoint = GetCharAfter(tmp);
+    if (nextPoint.mTextNode) {
+      if (!nsCRT::IsAsciiSpace(nextPoint.mChar)) canConvert = true;
+    } else if (aRun->mRightType == WSType::text) {
+      canConvert = true;
+    } else if (aRun->mRightType == WSType::special) {
+      canConvert = true;
+    } else if (aRun->mRightType == WSType::br) {
+      canConvert = true;
     }
-    else if (aRun->mRightType == eText)    canConvert = PR_TRUE;
-    else if (aRun->mRightType == eSpecial) canConvert = PR_TRUE;
-    else if (aRun->mRightType == eBreak)   canConvert = PR_TRUE;
   }
   if (canConvert)
   {
@@ -2204,7 +2105,9 @@ nsWSRunObject::CheckLeadingNBSP(WSFragment *aRun, nsIDOMNode *aNode, PRInt32 aOf
     NS_ENSURE_TRUE(textNode, NS_ERROR_NULL_POINTER);
     nsAutoTxnsConserveSelection dontSpazMySelection(mHTMLEditor);
     nsAutoString spaceStr(PRUnichar(32));
-    res = mHTMLEditor->InsertTextIntoTextNodeImpl(spaceStr, textNode, thePoint.mOffset, PR_TRUE);
+    nsresult res = mHTMLEditor->InsertTextIntoTextNodeImpl(spaceStr, textNode,
+                                                           thePoint.mOffset,
+                                                           true);
     NS_ENSURE_SUCCESS(res, res);
   
     // finally, delete that nbsp
@@ -2222,10 +2125,10 @@ nsWSRunObject::ScrubBlockBoundaryInner(nsHTMLEditor *aHTMLEd,
                                        BlockBoundary aBoundary)
 {
   NS_ENSURE_TRUE(aBlock && aHTMLEd, NS_ERROR_NULL_POINTER);
-  PRInt32 offset=0;
+  int32_t offset=0;
   if (aBoundary == kBlockEnd)
   {
-    PRUint32 uOffset;
+    uint32_t uOffset;
     aHTMLEd->GetLengthOfDOMNode(*aBlock, uOffset); 
     offset = uOffset;
   }
@@ -2240,8 +2143,7 @@ nsWSRunObject::Scrub()
   WSFragment *run = mStartRun;
   while (run)
   {
-    if (run->mType & (eLeadingWS|eTrailingWS) )
-    {
+    if (run->mType & (WSType::leadingWS | WSType::trailingWS)) {
       nsresult res = DeleteChars(run->mStartNode, run->mStartOffset, run->mEndNode, run->mEndOffset);
       NS_ENSURE_SUCCESS(res, res);
     }
@@ -2249,4 +2151,3 @@ nsWSRunObject::Scrub()
   }
   return NS_OK;
 }
-

@@ -1,41 +1,8 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Firefox Distribution Customizations.
- *
- * The Initial Developer of the Original Code is Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dan Mills <thunder@mozilla.com>
- *   Marco Bonardo <mak77@bonardo.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-EXPORTED_SYMBOLS = [ "DistributionCustomizer" ];
+this.EXPORTED_SYMBOLS = [ "DistributionCustomizer" ];
 
 const Ci = Components.interfaces;
 const Cc = Components.classes;
@@ -45,7 +12,11 @@ const Cu = Components.utils;
 const DISTRIBUTION_CUSTOMIZATION_COMPLETE_TOPIC =
   "distribution-customization-complete";
 
-function DistributionCustomizer() {
+Cu.import("resource://gre/modules/XPCOMUtils.jsm");
+XPCOMUtils.defineLazyModuleGetter(this, "PlacesUtils",
+                                  "resource://gre/modules/PlacesUtils.jsm");
+
+this.DistributionCustomizer = function DistributionCustomizer() {
   let dirSvc = Cc["@mozilla.org/file/directory_service;1"].
                getService(Ci.nsIProperties);
   let iniFile = dirSvc.get("XCurProcD", Ci.nsIFile);
@@ -76,27 +47,6 @@ DistributionCustomizer.prototype = {
     }
     this.__defineGetter__("_locale", function() locale);
     return this._locale;
-  },
-
-  get _bmSvc() {
-    let svc = Cc["@mozilla.org/browser/nav-bookmarks-service;1"].
-              getService(Ci.nsINavBookmarksService);
-    this.__defineGetter__("_bmSvc", function() svc);
-    return this._bmSvc;
-  },
-
-  get _annoSvc() {
-    let svc = Cc["@mozilla.org/browser/annotation-service;1"].
-              getService(Ci.nsIAnnotationService);
-    this.__defineGetter__("_annoSvc", function() svc);
-    return this._annoSvc;
-  },
-
-  get _livemarkSvc() {
-    let svc = Cc["@mozilla.org/browser/livemark-service;2"].
-              getService(Ci.nsILivemarkService);
-    this.__defineGetter__("_livemarkSvc", function() svc);
-    return this._livemarkSvc;
   },
 
   get _prefSvc() {
@@ -167,7 +117,7 @@ DistributionCustomizer.prototype = {
       if (!items[iid])
         continue;
 
-      let index = this._bmSvc.DEFAULT_INDEX;
+      let index = PlacesUtils.bookmarks.DEFAULT_INDEX;
       let newId;
 
       switch (items[iid]["type"]) {
@@ -178,23 +128,25 @@ DistributionCustomizer.prototype = {
         if (iid < defaultItemId)
           index = prependIndex++;
 
-        newId = this._bmSvc.createFolder(parentId, items[iid]["title"], index);
+        newId = PlacesUtils.bookmarks.createFolder(parentId,
+                                                   items[iid]["title"],
+                                                   index);
 
         this._parseBookmarksSection(newId, "BookmarksFolder-" +
                                     items[iid]["folderId"]);
 
         if (items[iid]["description"])
-          this._annoSvc.setItemAnnotation(newId,
-                                          "bookmarkProperties/description",
-                                          items[iid]["description"], 0,
-                                          this._annoSvc.EXPIRE_NEVER);
+          PlacesUtils.annotations.setItemAnnotation(newId,
+                                                    "bookmarkProperties/description",
+                                                    items[iid]["description"], 0,
+                                                    PlacesUtils.annotations.EXPIRE_NEVER);
 
         break;
 
       case "separator":
         if (iid < defaultItemId)
           index = prependIndex++;
-        this._bmSvc.insertSeparator(parentId, index);
+        PlacesUtils.bookmarks.insertSeparator(parentId, index);
         break;
 
       case "livemark":
@@ -202,12 +154,12 @@ DistributionCustomizer.prototype = {
           index = prependIndex++;
 
         // Don't bother updating the livemark contents on creation.
-        newId = this._livemarkSvc.
-          createLivemarkFolderOnly(parentId,
-                                   items[iid]["title"],
-                                   this._makeURI(items[iid]["siteLink"]),
-                                   this._makeURI(items[iid]["feedLink"]),
-                                   index);
+        PlacesUtils.livemarks.addLivemark({ title: items[iid]["title"]
+                                          , parentId: parentId
+                                          , index: index
+                                          , feedURI: this._makeURI(items[iid]["feedLink"])
+                                          , siteURI: this._makeURI(items[iid]["siteLink"])
+                                          });
         break;
 
       case "bookmark":
@@ -215,15 +167,15 @@ DistributionCustomizer.prototype = {
         if (iid < defaultItemId)
           index = prependIndex++;
 
-        newId = this._bmSvc.insertBookmark(parentId,
-                                           this._makeURI(items[iid]["link"]),
-                                           index, items[iid]["title"]);
+        newId = PlacesUtils.bookmarks.insertBookmark(parentId,
+                                                     this._makeURI(items[iid]["link"]),
+                                                     index, items[iid]["title"]);
 
         if (items[iid]["description"])
-          this._annoSvc.setItemAnnotation(newId,
-                                          "bookmarkProperties/description",
-                                          items[iid]["description"], 0,
-                                          this._annoSvc.EXPIRE_NEVER);
+          PlacesUtils.annotations.setItemAnnotation(newId,
+                                                    "bookmarkProperties/description",
+                                                    items[iid]["description"], 0,
+                                                    PlacesUtils.annotations.EXPIRE_NEVER);
 
         break;
       }
@@ -277,10 +229,10 @@ DistributionCustomizer.prototype = {
 
     if (!bmProcessed) {
       if (sections["BookmarksMenu"])
-        this._parseBookmarksSection(this._bmSvc.bookmarksMenuFolder,
+        this._parseBookmarksSection(PlacesUtils.bookmarksMenuFolderId,
                                     "BookmarksMenu");
       if (sections["BookmarksToolbar"])
-        this._parseBookmarksSection(this._bmSvc.toolbarFolder,
+        this._parseBookmarksSection(PlacesUtils.toolbarFolderId,
                                     "BookmarksToolbar");
       this._prefs.setBoolPref(bmProcessedPref, true);
     }

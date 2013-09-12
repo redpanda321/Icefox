@@ -1,39 +1,7 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Structures matching the in-memory representation of typelib structures.
@@ -44,8 +12,11 @@
 #define __xpt_struct_h__
 
 #include "xpt_arena.h"
+#include "mozilla/StandardInteger.h"
 
-PR_BEGIN_EXTERN_C
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*
  * Originally, I was going to have structures that exactly matched the on-disk
@@ -75,10 +46,10 @@ typedef struct XPTAnnotation XPTAnnotation;
  * definitions of this struct, though, and use the same field naming.
  */
 struct nsID {
-    PRUint32 m0;
-    PRUint16 m1;
-    PRUint16 m2;
-    PRUint8  m3[8];
+    uint32_t m0;
+    uint16_t m1;
+    uint16_t m2;
+    uint8_t  m3[8];
 };
 
 typedef struct nsID nsID;
@@ -102,13 +73,13 @@ typedef struct nsID nsID;
  * Every XPCOM typelib file begins with a header.
  */
 struct XPTHeader {
-    PRUint8                     magic[16];
-    PRUint8                     major_version;
-    PRUint8                     minor_version;
-    PRUint16                    num_interfaces;
-    PRUint32                    file_length;
+    uint8_t                     magic[16];
+    uint8_t                     major_version;
+    uint8_t                     minor_version;
+    uint16_t                    num_interfaces;
+    uint32_t                    file_length;
     XPTInterfaceDirectoryEntry  *interface_directory;
-    PRUint32                    data_pool;
+    uint32_t                    data_pool;
     XPTAnnotation               *annotations;
 };
 
@@ -172,9 +143,9 @@ struct XPTHeader {
 
 typedef struct {
     const char* str;
-    PRUint8     major;
-    PRUint8     minor;
-    PRUint16    code;
+    uint8_t     major;
+    uint8_t     minor;
+    uint16_t    code;
 } XPT_TYPELIB_VERSIONS_STRUCT; 
 
 /* Currently accepted list of versions for typelibs */
@@ -184,22 +155,22 @@ typedef struct {
     {"1.2", 1, 2, XPT_VERSION_CURRENT}                                        \
 }
 
-extern XPT_PUBLIC_API(PRUint16)
-XPT_ParseVersionString(const char* str, PRUint8* major, PRUint8* minor);
+extern XPT_PUBLIC_API(uint16_t)
+XPT_ParseVersionString(const char* str, uint8_t* major, uint8_t* minor);
 
 extern XPT_PUBLIC_API(XPTHeader *)
-XPT_NewHeader(XPTArena *arena, PRUint16 num_interfaces, 
-              PRUint8 major_version, PRUint8 minor_version);
+XPT_NewHeader(XPTArena *arena, uint16_t num_interfaces, 
+              uint8_t major_version, uint8_t minor_version);
 
 extern XPT_PUBLIC_API(void)
 XPT_FreeHeader(XPTArena *arena, XPTHeader* aHeader);
 
 /* size of header and annotations */
-extern XPT_PUBLIC_API(PRUint32)
+extern XPT_PUBLIC_API(uint32_t)
 XPT_SizeOfHeader(XPTHeader *header);
 
 /* size of header and annotations and InterfaceDirectoryEntries */
-extern XPT_PUBLIC_API(PRUint32)
+extern XPT_PUBLIC_API(uint32_t)
 XPT_SizeOfHeaderBlock(XPTHeader *header);
 
 /*
@@ -216,7 +187,7 @@ struct XPTInterfaceDirectoryEntry {
 
 #if 0 /* not yet */
     /* not stored on disk */
-    PRUint32                 offset; /* the offset for an ID still to be read */
+    uint32_t                 offset; /* the offset for an ID still to be read */
 #endif
 };
 
@@ -235,12 +206,17 @@ XPT_DestroyInterfaceDirectoryEntry(XPTArena *arena,
  * single XPCOM interface, including all of its methods. 
  */
 struct XPTInterfaceDescriptor {
-    PRUint16                parent_interface;
-    PRUint16                num_methods;
+    /* This field ordering minimizes the size of this struct.
+    *  The fields are serialized on disk in a different order.
+    *  See DoInterfaceDescriptor().
+    */
     XPTMethodDescriptor     *method_descriptors;
-    PRUint16                num_constants;
     XPTConstDescriptor      *const_descriptors;
-    PRUint8                 flags;
+    XPTTypeDescriptor       *additional_types;
+    uint16_t                parent_interface;
+    uint16_t                num_methods;
+    uint16_t                num_constants;
+    uint8_t                 flags;
 
     /* additional_types are used for arrays where we may need multiple
     *  XPTTypeDescriptors for a single XPTMethodDescriptor. Since we still
@@ -258,55 +234,56 @@ struct XPTInterfaceDescriptor {
     *  for that.
     */
 
-    XPTTypeDescriptor       *additional_types;
-    PRUint16                num_additional_types;
+    uint16_t                num_additional_types;
 };
 
 #define XPT_ID_SCRIPTABLE           0x80
 #define XPT_ID_FUNCTION             0x40
-#define XPT_ID_FLAGMASK             0xc0
+#define XPT_ID_BUILTINCLASS         0x20
+#define XPT_ID_FLAGMASK             0xe0
 #define XPT_ID_TAGMASK              (~XPT_ID_FLAGMASK)
 #define XPT_ID_TAG(id)              ((id).flags & XPT_ID_TAGMASK)
 
 #define XPT_ID_IS_SCRIPTABLE(flags) (!!(flags & XPT_ID_SCRIPTABLE))
 #define XPT_ID_IS_FUNCTION(flags) (!!(flags & XPT_ID_FUNCTION))
+#define XPT_ID_IS_BUILTINCLASS(flags) (!!(flags & XPT_ID_BUILTINCLASS))
 
 extern XPT_PUBLIC_API(PRBool)
 XPT_GetInterfaceIndexByName(XPTInterfaceDirectoryEntry *ide_block,
-                            PRUint16 num_interfaces, char *name, 
-                            PRUint16 *indexp);
+                            uint16_t num_interfaces, char *name, 
+                            uint16_t *indexp);
 
 extern XPT_PUBLIC_API(XPTInterfaceDescriptor *)
 XPT_NewInterfaceDescriptor(XPTArena *arena, 
-                           PRUint16 parent_interface, PRUint16 num_methods,
-                           PRUint16 num_constants, PRUint8 flags);
+                           uint16_t parent_interface, uint16_t num_methods,
+                           uint16_t num_constants, uint8_t flags);
 
 extern XPT_PUBLIC_API(void)
 XPT_FreeInterfaceDescriptor(XPTArena *arena, XPTInterfaceDescriptor* id);
 
 extern XPT_PUBLIC_API(PRBool)
 XPT_InterfaceDescriptorAddTypes(XPTArena *arena, XPTInterfaceDescriptor *id, 
-                                PRUint16 num);
+                                uint16_t num);
 
 extern XPT_PUBLIC_API(PRBool)
 XPT_InterfaceDescriptorAddMethods(XPTArena *arena, XPTInterfaceDescriptor *id, 
-                                  PRUint16 num);
+                                  uint16_t num);
 
 extern XPT_PUBLIC_API(PRBool)
 XPT_InterfaceDescriptorAddConsts(XPTArena *arena, XPTInterfaceDescriptor *id, 
-                                 PRUint16 num);
+                                 uint16_t num);
 
 /*
  * This is our special string struct with a length value associated with it,
  * which means that it can contains embedded NULs.
  */
 struct XPTString {
-    PRUint16 length;
+    uint16_t length;
     char   *bytes;
 };
 
 extern XPT_PUBLIC_API(XPTString *)
-XPT_NewString(XPTArena *arena, PRUint16 length, char *bytes);
+XPT_NewString(XPTArena *arena, uint16_t length, char *bytes);
 
 extern XPT_PUBLIC_API(XPTString *)
 XPT_NewStringZ(XPTArena *arena, char *bytes);
@@ -330,19 +307,20 @@ XPT_NewStringZ(XPTArena *arena, char *bytes);
 
 /* why bother with a struct?  - other code relies on this being a struct */
 struct XPTTypeDescriptorPrefix {
-    PRUint8 flags;
+    uint8_t flags;
 };
 
 /* flag bits -- fur and jband were right, I was miserably wrong */
+
+// THESE TWO FLAGS ARE DEPRECATED. DO NOT USE THEM. See bug 692342.
 #define XPT_TDP_POINTER          0x80
-#define XPT_TDP_UNIQUE_POINTER   0x40
 #define XPT_TDP_REFERENCE        0x20
+
 #define XPT_TDP_FLAGMASK         0xe0
 #define XPT_TDP_TAGMASK          (~XPT_TDP_FLAGMASK)
 #define XPT_TDP_TAG(tdp)         ((tdp).flags & XPT_TDP_TAGMASK)
 
 #define XPT_TDP_IS_POINTER(flags)        (flags & XPT_TDP_POINTER)
-#define XPT_TDP_IS_UNIQUE_POINTER(flags) (flags & XPT_TDP_UNIQUE_POINTER)
 #define XPT_TDP_IS_REFERENCE(flags)      (flags & XPT_TDP_REFERENCE)
 
 /* 
@@ -381,11 +359,11 @@ enum XPTTypeDescriptorTags {
 
 struct XPTTypeDescriptor {
     XPTTypeDescriptorPrefix prefix;
-    PRUint8 argnum;                 /* used for iid_is and size_is */
-    PRUint8 argnum2;                /* used for length_is */
+    uint8_t argnum;                 /* used for iid_is and size_is */
+    uint8_t argnum2;                /* used for length_is */
     union {                         
-        PRUint16 iface;             /* used for TD_INTERFACE_TYPE */
-        PRUint16 additional_type;   /* used for TD_ARRAY */
+        uint16_t iface;             /* used for TD_INTERFACE_TYPE */
+        uint16_t additional_type;   /* used for TD_ARRAY */
     } type;
 };
 
@@ -402,34 +380,34 @@ struct XPTTypeDescriptor {
  * The types of the method parameter are restricted to the following subset 
  * of TypeDescriptors: 
  *
- * int8, uint8, int16, uint16, int32, uint32, 
- * int64, uint64, wchar_t, char, string
+ * int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, 
+ * int64_t, uint64_t, wchar_t, char, string
  * 
  * The type (and thus the size) of the value record is determined by the 
  * contents of the associated TypeDescriptor record. For instance, if type 
- * corresponds to int16, then value is a two-byte record consisting of a 
+ * corresponds to int16_t, then value is a two-byte record consisting of a 
  * 16-bit signed integer.  For a ConstDescriptor type of string, the value 
  * record is of type String*, i.e. an offset within the data pool to a 
  * String record containing the constant string.
  */
 union XPTConstValue {
-    PRInt8    i8;
-    PRUint8   ui8; 
-    PRInt16   i16; 
-    PRUint16  ui16;
-    PRInt32   i32; 
-    PRUint32  ui32;
-    PRInt64   i64; 
-    PRUint64  ui64; 
+    int8_t    i8;
+    uint8_t   ui8; 
+    int16_t   i16; 
+    uint16_t  ui16;
+    int32_t   i32; 
+    uint32_t  ui32;
+    int64_t   i64; 
+    uint64_t  ui64; 
     float     flt;
     double    dbl;
     PRBool    bul;
     char      ch; 
-    PRUint16  wch;
+    uint16_t  wch;
     nsID      *iid;
     XPTString *string;
     char      *str;
-    PRUint16  *wstr;
+    uint16_t  *wstr;
 }; /* varies according to type */
 
 struct XPTConstDescriptor {
@@ -443,7 +421,7 @@ struct XPTConstDescriptor {
  * single argument to a method or a method's result.
  */
 struct XPTParamDescriptor {
-    PRUint8           flags;
+    uint8_t           flags;
     XPTTypeDescriptor type;
 };
 
@@ -465,7 +443,7 @@ struct XPTParamDescriptor {
 
 extern XPT_PUBLIC_API(PRBool)
 XPT_FillParamDescriptor(XPTArena *arena, 
-                        XPTParamDescriptor *pd, PRUint8 flags,
+                        XPTParamDescriptor *pd, uint8_t flags,
                         XPTTypeDescriptor *type);
 
 /*
@@ -475,9 +453,9 @@ XPT_FillParamDescriptor(XPTArena *arena,
 struct XPTMethodDescriptor {
     char                *name;
     XPTParamDescriptor  *params;
-    XPTParamDescriptor  *result;
-    PRUint8             flags;
-    PRUint8             num_args;
+    XPTParamDescriptor  result;
+    uint8_t             flags;
+    uint8_t             num_args;
 };
 
 /* flag bits -- jband and fur were right, and I was miserably wrong */
@@ -500,8 +478,8 @@ struct XPTMethodDescriptor {
 
 extern XPT_PUBLIC_API(PRBool)
 XPT_FillMethodDescriptor(XPTArena *arena, 
-                         XPTMethodDescriptor *meth, PRUint8 flags, char *name,
-                         PRUint8 num_args);
+                         XPTMethodDescriptor *meth, uint8_t flags, char *name,
+                         uint8_t num_args);
 
 /*
  * Annotation records are variable-size records used to store secondary 
@@ -524,7 +502,7 @@ XPT_FillMethodDescriptor(XPTArena *arena,
 
 struct XPTAnnotation {
     XPTAnnotation *next;
-    PRUint8       flags;
+    uint8_t       flags;
     /* remaining fields are present in typelib iff XPT_ANN_IS_PRIVATE */
     XPTString     *creator;
     XPTString     *private_data;
@@ -536,9 +514,11 @@ struct XPTAnnotation {
 #define XPT_ANN_IS_PRIVATE(flags)       (flags & XPT_ANN_PRIVATE)
 
 extern XPT_PUBLIC_API(XPTAnnotation *)
-XPT_NewAnnotation(XPTArena *arena, PRUint8 flags, XPTString *creator, 
+XPT_NewAnnotation(XPTArena *arena, uint8_t flags, XPTString *creator, 
                   XPTString *private_data);
 
-PR_END_EXTERN_C
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __xpt_struct_h__ */

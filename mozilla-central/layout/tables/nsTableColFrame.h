@@ -1,45 +1,14 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef nsTableColFrame_h__
 #define nsTableColFrame_h__
 
+#include "mozilla/Attributes.h"
+#include "celldata.h"
 #include "nscore.h"
 #include "nsContainerFrame.h"
-#include "nsTablePainter.h"
 #include "nsTArray.h"
 
 class nsTableCellFrame;
@@ -71,18 +40,18 @@ public:
   friend nsTableColFrame* NS_NewTableColFrame(nsIPresShell* aPresShell,
                                               nsStyleContext*  aContext);
   /** @see nsIFrame::DidSetStyleContext */
-  virtual void DidSetStyleContext(nsStyleContext* aOldStyleContext);
+  virtual void DidSetStyleContext(nsStyleContext* aOldStyleContext) MOZ_OVERRIDE;
   
-  PRInt32 GetColIndex() const;
+  int32_t GetColIndex() const;
   
-  void SetColIndex (PRInt32 aColIndex);
+  void SetColIndex (int32_t aColIndex);
 
   nsTableColFrame* GetNextCol() const;
 
   NS_IMETHOD Reflow(nsPresContext*          aPresContext,
                     nsHTMLReflowMetrics&     aDesiredSize,
                     const nsHTMLReflowState& aReflowState,
-                    nsReflowStatus&          aStatus);
+                    nsReflowStatus&          aStatus) MOZ_OVERRIDE;
 
   /**
    * Table columns never paint anything, nor receive events.
@@ -96,19 +65,19 @@ public:
    *
    * @see nsGkAtoms::tableColFrame
    */
-  virtual nsIAtom* GetType() const;
+  virtual nsIAtom* GetType() const MOZ_OVERRIDE;
   
 #ifdef DEBUG
-  NS_IMETHOD GetFrameName(nsAString& aResult) const;
+  NS_IMETHOD GetFrameName(nsAString& aResult) const MOZ_OVERRIDE;
 #endif
 
-  virtual nsSplittableType GetSplittableType() const;
+  virtual nsSplittableType GetSplittableType() const MOZ_OVERRIDE;
 
   /** return the number of the columns the col represents.  always >= 1 */
-  PRInt32 GetSpan();
+  int32_t GetSpan();
 
   /** convenience method, calls into cellmap */
-  PRInt32 Count() const;
+  int32_t Count() const;
 
   nscoord GetLeftBorderWidth();
   void    SetLeftBorderWidth(BCPixelSize aWidth);
@@ -128,10 +97,10 @@ public:
    * Set full border widths before collapsing with cell borders
    * @param aForSide - side to set; only valid for top, right, and bottom
    */
-  void SetContinuousBCBorderWidth(PRUint8     aForSide,
+  void SetContinuousBCBorderWidth(uint8_t     aForSide,
                                   BCPixelSize aPixelValue);
 #ifdef DEBUG
-  void Dump(PRInt32 aIndent);
+  void Dump(int32_t aIndent);
 #endif
 
   /**
@@ -142,7 +111,7 @@ public:
     mMinCoord = 0;
     mPrefCoord = 0;
     mPrefPercent = 0.0f;
-    mHasSpecifiedCoord = PR_FALSE;
+    mHasSpecifiedCoord = false;
   }
 
   /**
@@ -184,12 +153,12 @@ public:
    * aHasSpecifiedCoord false.
    */
   void AddCoords(nscoord aMinCoord, nscoord aPrefCoord,
-                 PRBool aHasSpecifiedCoord) {
+                 bool aHasSpecifiedCoord) {
     NS_ASSERTION(aMinCoord <= aPrefCoord, "intrinsic widths out of order");
 
     if (aHasSpecifiedCoord && !mHasSpecifiedCoord) {
       mPrefCoord = mMinCoord;
-      mHasSpecifiedCoord = PR_TRUE;
+      mHasSpecifiedCoord = true;
     }
     if (!aHasSpecifiedCoord && mHasSpecifiedCoord) {
       aPrefCoord = aMinCoord; // NOTE: modifying argument
@@ -227,7 +196,7 @@ public:
    * Get whether there were any specified widths contributing to this
    * column.
    */
-  PRBool GetHasSpecifiedCoord() const { return mHasSpecifiedCoord; }
+  bool GetHasSpecifiedCoord() const { return mHasSpecifiedCoord; }
 
   /**
    * Get the largest specified percentage width contributing to this
@@ -240,7 +209,7 @@ public:
    * column-spanning cells.
    */
   void AddSpanCoords(nscoord aSpanMinCoord, nscoord aSpanPrefCoord,
-                     PRBool aSpanHasSpecifiedCoord) {
+                     bool aSpanHasSpecifiedCoord) {
     NS_ASSERTION(aSpanMinCoord <= aSpanPrefCoord,
                  "intrinsic widths out of order");
 
@@ -294,6 +263,10 @@ public:
   nscoord GetFinalWidth() {
     return mFinalWidth;
   }
+  
+  virtual void InvalidateFrame(uint32_t aDisplayItemKey = 0) MOZ_OVERRIDE;
+  virtual void InvalidateFrameWithRect(const nsRect& aRect, uint32_t aDisplayItemKey = 0) MOZ_OVERRIDE;
+  virtual void InvalidateFrameForRemoval() MOZ_OVERRIDE { InvalidateFrameSubtree(); }
 
 protected:
 
@@ -312,10 +285,10 @@ protected:
   // when colspans were present).
   nscoord mFinalWidth;
 
-  // the index of the column with respect to the whole tabble (starting at 0) 
+  // the index of the column with respect to the whole table (starting at 0) 
   // it should never be smaller then the start column index of the parent 
   // colgroup
-  PRUint32 mColIndex:        16;
+  uint32_t mColIndex;
   
   // border width in pixels of the inner half of the border only
   BCPixelSize mLeftBorderWidth;
@@ -324,15 +297,15 @@ protected:
   BCPixelSize mRightContBorderWidth;
   BCPixelSize mBottomContBorderWidth;
 
-  PRPackedBool mHasSpecifiedCoord;
+  bool mHasSpecifiedCoord;
 };
 
-inline PRInt32 nsTableColFrame::GetColIndex() const
+inline int32_t nsTableColFrame::GetColIndex() const
 {
   return mColIndex; 
 }
 
-inline void nsTableColFrame::SetColIndex (PRInt32 aColIndex)
+inline void nsTableColFrame::SetColIndex (int32_t aColIndex)
 { 
   mColIndex = aColIndex; 
 }
@@ -360,7 +333,7 @@ inline void nsTableColFrame::SetRightBorderWidth(BCPixelSize aWidth)
 inline nscoord
 nsTableColFrame::GetContinuousBCBorderWidth(nsMargin& aBorder)
 {
-  PRInt32 aPixelsToTwips = nsPresContext::AppUnitsPerCSSPixel();
+  int32_t aPixelsToTwips = nsPresContext::AppUnitsPerCSSPixel();
   aBorder.top = BC_BORDER_BOTTOM_HALF_COORD(aPixelsToTwips,
                                             mTopContBorderWidth);
   aBorder.right = BC_BORDER_LEFT_HALF_COORD(aPixelsToTwips,

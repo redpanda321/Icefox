@@ -2,14 +2,29 @@ const RELATIVE_DIR = "toolkit/mozapps/extensions/test/xpinstall/";
 
 const TESTROOT = "http://example.com/browser/" + RELATIVE_DIR;
 const TESTROOT2 = "http://example.org/browser/" + RELATIVE_DIR;
-const CHROMEROOT = "chrome://mochikit/content/browser/" + RELATIVE_DIR;
 const XPINSTALL_URL = "chrome://mozapps/content/xpinstall/xpinstallConfirm.xul";
 const PROMPT_URL = "chrome://global/content/commonDialog.xul";
 const ADDONS_URL = "chrome://mozapps/content/extensions/extensions.xul";
 const PREF_LOGGING_ENABLED = "extensions.logging.enabled";
+const PREF_INSTALL_REQUIREBUILTINCERTS = "extensions.install.requireBuiltInCerts";
+const CHROME_NAME = "mochikit";
 
-Components.utils.import("resource://gre/modules/AddonManager.jsm");
-Components.utils.import("resource://gre/modules/Services.jsm");
+function getChromeRoot(path) {
+  if (path === undefined) {
+    return "chrome://" + CHROME_NAME + "/content/browser/" + RELATIVE_DIR
+  }
+  return getRootDirectory(path);
+}
+
+function extractChromeRoot(path) {
+  var chromeRootPath = getChromeRoot(path);
+  var jar = getJar(chromeRootPath);
+  if (jar) {
+    var tmpdir = extractJarToTmp(jar);
+    return "file://" + tmpdir.path + "/";
+  }
+  return chromeRootPath;
+}
 
 /**
  * This is a test harness designed to handle responding to UI during the process
@@ -18,8 +33,15 @@ Components.utils.import("resource://gre/modules/Services.jsm");
  * Before use setup must be called and finish must be called afterwards.
  */
 var Harness = {
-  // If set then the install is expected to be blocked by the whitelist. The
-  // callback should return true to continue with the install anyway.
+  // If set then the callback is called when an install is attempted and
+  // software installation is disabled.
+  installDisabledCallback: null,
+  // If set then the callback is called when an install is attempted and
+  // then canceled.
+  installCancelledCallback: null,
+  // If set then the callback will be called when an install is blocked by the
+  // whitelist. The callback should return true to continue with the install
+  // anyway.
   installBlockedCallback: null,
   // If set will be called in the event of authentication being needed to get
   // the xpi. Should return a 2 element array of username and password, or
@@ -54,39 +76,55 @@ var Harness = {
   installCount: null,
   runningInstalls: null,
 
+  waitingForFinish: false,
+
   // Setup and tear down functions
   setup: function() {
-    waitForExplicitFinish();
-    Services.prefs.setBoolPref(PREF_LOGGING_ENABLED, true);
-    Services.obs.addObserver(this, "addon-install-started", false);
-    Services.obs.addObserver(this, "addon-install-blocked", false);
-    Services.obs.addObserver(this, "addon-install-failed", false);
-    Services.obs.addObserver(this, "addon-install-complete", false);
-    Services.wm.addListener(this);
+    if (!this.waitingForFinish) {
+      waitForExplicitFinish();
+      this.waitingForFinish = true;
 
-    AddonManager.addInstallListener(this);
+      Services.prefs.setBoolPref(PREF_LOGGING_ENABLED, true);
+      Services.obs.addObserver(this, "addon-install-started", false);
+      Services.obs.addObserver(this, "addon-install-disabled", false);
+      Services.obs.addObserver(this, "addon-install-blocked", false);
+      Services.obs.addObserver(this, "addon-install-failed", false);
+      Services.obs.addObserver(this, "addon-install-complete", false);
+
+      AddonManager.addInstallListener(this);
+
+      Services.wm.addListener(this);
+
+      var self = this;
+      registerCleanupFunction(function() {
+        Services.prefs.clearUserPref(PREF_LOGGING_ENABLED);
+        Services.obs.removeObserver(self, "addon-install-started");
+        Services.obs.removeObserver(self, "addon-install-disabled");
+        Services.obs.removeObserver(self, "addon-install-blocked");
+        Services.obs.removeObserver(self, "addon-install-failed");
+        Services.obs.removeObserver(self, "addon-install-complete");
+
+        AddonManager.removeInstallListener(self);
+
+        Services.wm.removeListener(self);
+
+        AddonManager.getAllInstalls(function(aInstalls) {
+          is(aInstalls.length, 0, "Should be no active installs at the end of the test");
+          aInstalls.forEach(function(aInstall) {
+            info("Install for " + aInstall.sourceURI + " is in state " + aInstall.state);
+            aInstall.cancel();
+          });
+        });
+      });
+    }
+
     this.installCount = 0;
     this.pendingCount = 0;
     this.runningInstalls = [];
-
-    var self = this;
-    registerCleanupFunction(function() {
-      Services.prefs.clearUserPref(PREF_LOGGING_ENABLED);
-      Services.obs.removeObserver(self, "addon-install-started");
-      Services.obs.removeObserver(self, "addon-install-blocked");
-      Services.obs.removeObserver(self, "addon-install-failed");
-      Services.obs.removeObserver(self, "addon-install-complete");
-      Services.wm.removeListener(self);
-
-      AddonManager.removeInstallListener(self);
-    });
   },
 
   finish: function() {
-    AddonManager.getAllInstalls(function(installs) {
-      is(installs.length, 0, "Should be no active installs at the end of the test");
-      finish();
-    });
+    finish();
   },
 
   endTest: function() {
@@ -116,17 +154,12 @@ var Harness = {
       self.installsCompletedCallback = null;
       self.runningInstalls = null;
 
-      callback(count);
+      if (callback)
+        callback(count);
     });
   },
 
   // Window open handling
-  windowLoad: function(window) {
-    // Allow any other load handlers to execute
-    var self = this;
-    executeSoon(function() { self.windowReady(window); } );
-  },
-
   windowReady: function(window) {
     if (window.document.location.href == XPINSTALL_URL) {
       if (this.installBlockedCallback)
@@ -137,7 +170,6 @@ var Harness = {
       // to install the items or not. If not the test is over.
       if (this.installConfirmCallback && !this.installConfirmCallback(window)) {
         window.document.documentElement.cancelDialog();
-        this.endTest();
       }
       else {
         // Initially the accept button is disabled on a countdown timer
@@ -147,7 +179,7 @@ var Harness = {
       }
     }
     else if (window.document.location.href == PROMPT_URL) {
-        var promptType = window.gArgs.getProperty("promptType");
+        var promptType = window.args.promptType;
         switch (promptType) {
           case "alert":
           case "alertCheck":
@@ -183,6 +215,28 @@ var Harness = {
 
   // Install blocked handling
 
+  installDisabled: function(installInfo) {
+    ok(!!this.installDisabledCallback, "Installation shouldn't have been disabled");
+    if (this.installDisabledCallback)
+      this.installDisabledCallback(installInfo);
+    this.expectingCancelled = true;
+    installInfo.installs.forEach(function(install) {
+      install.cancel();
+    });
+    this.expectingCancelled = false;
+    this.endTest();
+  },
+
+  installCancelled: function(installInfo) {
+    if (this.expectingCancelled)
+      return;
+
+    ok(!!this.installCancelledCallback, "Installation shouldn't have been cancelled");
+    if (this.installCancelledCallback)
+      this.installCancelledCallback(installInfo);
+    this.endTest();
+  },
+
   installBlocked: function(installInfo) {
     ok(!!this.installBlockedCallback, "Shouldn't have been blocked by the whitelist");
     if (this.installBlockedCallback && this.installBlockedCallback(installInfo)) {
@@ -190,9 +244,11 @@ var Harness = {
       installInfo.install();
     }
     else {
+      this.expectingCancelled = true;
       installInfo.installs.forEach(function(install) {
         install.cancel();
       });
+      this.expectingCancelled = false;
       this.endTest();
     }
   },
@@ -204,12 +260,11 @@ var Harness = {
 
   onOpenWindow: function(window) {
     var domwindow = window.QueryInterface(Components.interfaces.nsIInterfaceRequestor)
-                          .getInterface(Components.interfaces.nsIDOMWindowInternal);
+                          .getInterface(Components.interfaces.nsIDOMWindow);
     var self = this;
-    domwindow.addEventListener("load", function() {
-      domwindow.removeEventListener("load", arguments.callee, false);
-      self.windowLoad(domwindow);
-    }, false);
+    waitForFocus(function() {
+      self.windowReady(domwindow);
+    }, domwindow);
   },
 
   onCloseWindow: function(window) {
@@ -285,6 +340,12 @@ var Harness = {
       is(this.runningInstalls.length, installInfo.installs.length,
          "Should have seen the expected number of installs started");
       break;
+    case "addon-install-disabled":
+      this.installDisabled(installInfo);
+      break;
+    case "addon-install-cancelled":
+      this.installCancelled(installInfo);
+      break;
     case "addon-install-blocked":
       this.installBlocked(installInfo);
       break;
@@ -319,12 +380,7 @@ var Harness = {
     }
   },
 
-  QueryInterface: function(iid) {
-    if (iid.equals(Components.interfaces.nsIObserver) ||
-        iid.equals(Components.interfaces.nsIWindowMediatorListener) ||
-        iid.equals(Components.interfaces.nsISupports))
-      return this;
-
-    throw Components.results.NS_ERROR_NO_INTERFACE;
-  }
+  QueryInterface: XPCOMUtils.generateQI([Ci.nsIObserver,
+                                         Ci.nsIWindowMediatorListener,
+                                         Ci.nsISupports])
 }

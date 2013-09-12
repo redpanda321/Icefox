@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dave Camp <dcamp@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsOfflineCacheUpdate_h__
 #define nsOfflineCacheUpdate_h__
@@ -64,11 +31,13 @@
 #include "nsTArray.h"
 #include "nsWeakReference.h"
 #include "nsICryptoHash.h"
+#include "mozilla/Attributes.h"
 
 class nsOfflineCacheUpdate;
 
 class nsICacheEntryDescriptor;
 class nsIUTF8StringEnumerator;
+class nsILoadContext;
 
 class nsOfflineCacheUpdateItem : public nsIDOMLoadStatus
                                , public nsIStreamListener
@@ -85,32 +54,35 @@ public:
     NS_DECL_NSIINTERFACEREQUESTOR
     NS_DECL_NSICHANNELEVENTSINK
 
-    nsOfflineCacheUpdateItem(nsOfflineCacheUpdate *aUpdate,
-                             nsIURI *aURI,
+    nsOfflineCacheUpdateItem(nsIURI *aURI,
                              nsIURI *aReferrerURI,
+                             nsIApplicationCache *aApplicationCache,
                              nsIApplicationCache *aPreviousApplicationCache,
-                             const nsACString &aClientID,
-                             PRUint32 aType);
+                             uint32_t aType);
     virtual ~nsOfflineCacheUpdateItem();
 
     nsCOMPtr<nsIURI>           mURI;
     nsCOMPtr<nsIURI>           mReferrerURI;
+    nsCOMPtr<nsIApplicationCache> mApplicationCache;
     nsCOMPtr<nsIApplicationCache> mPreviousApplicationCache;
-    nsCString                  mClientID;
     nsCString                  mCacheKey;
-    PRUint32                   mItemType;
+    uint32_t                   mItemType;
 
-    nsresult OpenChannel();
+    nsresult OpenChannel(nsOfflineCacheUpdate *aUpdate);
     nsresult Cancel();
-    nsresult GetRequestSucceeded(PRBool * succeeded);
+    nsresult GetRequestSucceeded(bool * succeeded);
+
+    bool IsInProgress();
+    bool IsScheduled();
+    bool IsCompleted();
 
 private:
-    nsOfflineCacheUpdate*          mUpdate;
+    nsRefPtr<nsOfflineCacheUpdate> mUpdate;
     nsCOMPtr<nsIChannel>           mChannel;
-    PRUint16                       mState;
+    uint16_t                       mState;
 
 protected:
-    PRInt64                        mBytesRead;
+    int64_t                        mBytesRead;
 };
 
 
@@ -120,11 +92,10 @@ public:
     NS_DECL_NSISTREAMLISTENER
     NS_DECL_NSIREQUESTOBSERVER
 
-    nsOfflineManifestItem(nsOfflineCacheUpdate *aUpdate,
-                          nsIURI *aURI,
+    nsOfflineManifestItem(nsIURI *aURI,
                           nsIURI *aReferrerURI,
-                          nsIApplicationCache *aPreviousApplicationCache,
-                          const nsACString &aClientID);
+                          nsIApplicationCache *aApplicationCache,
+                          nsIApplicationCache *aPreviousApplicationCache);
     virtual ~nsOfflineManifestItem();
 
     nsCOMArray<nsIURI> &GetExplicitURIs() { return mExplicitURIs; }
@@ -135,9 +106,9 @@ public:
     nsIArray *GetNamespaces()
         { return mNamespaces.get(); }
 
-    PRBool ParseSucceeded()
+    bool ParseSucceeded()
         { return (mParserState != PARSE_INIT && mParserState != PARSE_ERROR); }
-    PRBool NeedsUpdate() { return mParserState != PARSE_INIT && mNeedsUpdate; }
+    bool NeedsUpdate() { return mParserState != PARSE_INIT && mNeedsUpdate; }
 
     void GetManifestHash(nsCString &aManifestHash)
         { aManifestHash = mManifestHashValue; }
@@ -146,11 +117,11 @@ private:
     static NS_METHOD ReadManifest(nsIInputStream *aInputStream,
                                   void *aClosure,
                                   const char *aFromSegment,
-                                  PRUint32 aOffset,
-                                  PRUint32 aCount,
-                                  PRUint32 *aBytesConsumed);
+                                  uint32_t aOffset,
+                                  uint32_t aCount,
+                                  uint32_t *aBytesConsumed);
 
-    nsresult AddNamespace(PRUint32 namespaceType,
+    nsresult AddNamespace(uint32_t namespaceType,
                           const nsCString &namespaceSpec,
                           const nsCString &data);
 
@@ -164,7 +135,7 @@ private:
      */
     nsresult GetOldManifestContentHash(nsIRequest *aRequest);
     /**
-     * This method setups the mNeedsUpdate to PR_FALSE when hash value
+     * This method setups the mNeedsUpdate to false when hash value
      * of the just downloaded manifest file is the same as stored in cache's 
      * "offline-manifest-hash" meta data. Otherwise stores the new value
      * to this meta data.
@@ -178,6 +149,7 @@ private:
         PARSE_CACHE_ENTRIES,
         PARSE_FALLBACK_ENTRIES,
         PARSE_BYPASS_ENTRIES,
+        PARSE_UNKNOWN_SECTION,
         PARSE_ERROR
     } mParserState;
 
@@ -194,12 +166,12 @@ private:
     // manifest.
     nsCOMPtr<nsIMutableArray> mNamespaces;
 
-    PRBool mNeedsUpdate;
-    PRBool mStrictFileOriginPolicy;
+    bool mNeedsUpdate;
+    bool mStrictFileOriginPolicy;
 
     // manifest hash data
     nsCOMPtr<nsICryptoHash> mManifestHash;
-    PRBool mManifestHashInitialized;
+    bool mManifestHashInitialized;
     nsCString mManifestHashValue;
     nsCString mOldManifestHashValue;
 };
@@ -210,12 +182,16 @@ public:
     virtual nsresult UpdateFinished(nsOfflineCacheUpdate *aUpdate) = 0;
 };
 
-class nsOfflineCacheUpdate : public nsIOfflineCacheUpdate
-                           , public nsOfflineCacheUpdateOwner
+class nsOfflineCacheUpdate MOZ_FINAL : public nsIOfflineCacheUpdate
+                                     , public nsIOfflineCacheUpdateObserver
+                                     , public nsIRunnable
+                                     , public nsOfflineCacheUpdateOwner
 {
 public:
     NS_DECL_ISUPPORTS
     NS_DECL_NSIOFFLINECACHEUPDATE
+    NS_DECL_NSIOFFLINECACHEUPDATEOBSERVER
+    NS_DECL_NSIRUNNABLE
 
     nsOfflineCacheUpdate();
     ~nsOfflineCacheUpdate();
@@ -225,41 +201,46 @@ public:
     nsresult Init();
 
     nsresult Begin();
-    nsresult Cancel();
 
-    void LoadCompleted();
+    void LoadCompleted(nsOfflineCacheUpdateItem *aItem);
     void ManifestCheckCompleted(nsresult aStatus,
                                 const nsCString &aManifestHash);
-    void AddDocument(nsIDOMDocument *aDocument);
+    void StickDocument(nsIURI *aDocumentURI);
 
     void SetOwner(nsOfflineCacheUpdateOwner *aOwner);
 
+    bool IsForGroupID(const nsCSubstring &groupID);
+
     virtual nsresult UpdateFinished(nsOfflineCacheUpdate *aUpdate);
 
+protected:
+    friend class nsOfflineCacheUpdateItem;
+    void OnByteProgress(uint64_t byteIncrement);
+
 private:
-    nsresult HandleManifest(PRBool *aDoUpdate);
-    nsresult AddURI(nsIURI *aURI, PRUint32 aItemType);
+    nsresult InitInternal(nsIURI *aManifestURI);
+    nsresult HandleManifest(bool *aDoUpdate);
+    nsresult AddURI(nsIURI *aURI, uint32_t aItemType);
 
     nsresult ProcessNextURI();
 
     // Adds items from the previous cache witha type matching aType.
     // If namespaceFilter is non-null, only items matching the
     // specified namespaces will be added.
-    nsresult AddExistingItems(PRUint32 aType,
-                              nsTArray<nsCString>* namespaceFilter = nsnull);
-
-    nsresult GatherObservers(nsCOMArray<nsIOfflineCacheUpdateObserver> &aObservers);
-    nsresult NotifyError();
-    nsresult NotifyChecking();
-    nsresult NotifyNoUpdate();
-    nsresult NotifyObsolete();
-    nsresult NotifyDownloading();
-    nsresult NotifyStarted(nsOfflineCacheUpdateItem *aItem);
-    nsresult NotifyCompleted(nsOfflineCacheUpdateItem *aItem);
-    nsresult AssociateDocument(nsIDOMDocument *aDocument,
-                               nsIApplicationCache *aApplicationCache);
+    nsresult AddExistingItems(uint32_t aType,
+                              nsTArray<nsCString>* namespaceFilter = nullptr);
     nsresult ScheduleImplicit();
+    void AssociateDocuments(nsIApplicationCache* cache);
+    bool CheckUpdateAvailability();
+    void NotifyUpdateAvailability(bool updateAvailable);
+
+    void GatherObservers(nsCOMArray<nsIOfflineCacheUpdateObserver> &aObservers);
+    void NotifyState(uint32_t state);
     nsresult Finish();
+    nsresult FinishNoNotify();
+
+    // Find one non-pinned cache group and evict it.
+    nsresult EvictOneNonPinned();
 
     enum {
         STATE_UNINITIALIZED,
@@ -272,17 +253,23 @@ private:
 
     nsOfflineCacheUpdateOwner *mOwner;
 
-    PRPackedBool mAddedItems;
-    PRPackedBool mPartialUpdate;
-    PRPackedBool mSucceeded;
-    PRPackedBool mObsolete;
+    bool mAddedItems;
+    bool mPartialUpdate;
+    bool mOnlyCheckUpdate;
+    bool mSucceeded;
+    bool mObsolete;
 
     nsCString mUpdateDomain;
+    nsCString mGroupID;
     nsCOMPtr<nsIURI> mManifestURI;
-
     nsCOMPtr<nsIURI> mDocumentURI;
+    nsCOMPtr<nsIFile> mCustomProfileDir;
 
-    nsCString mClientID;
+    uint32_t mAppID;
+    bool mInBrowser;
+
+    nsCOMPtr<nsIObserver> mUpdateAvailableObserver;
+
     nsCOMPtr<nsIApplicationCache> mApplicationCache;
     nsCOMPtr<nsIApplicationCache> mPreviousApplicationCache;
 
@@ -291,7 +278,7 @@ private:
     nsRefPtr<nsOfflineManifestItem> mManifestItem;
 
     /* Items being updated */
-    PRInt32 mCurrentItem;
+    uint32_t mItemsInProgress;
     nsTArray<nsRefPtr<nsOfflineCacheUpdateItem> > mItems;
 
     /* Clients watching this update for changes */
@@ -299,19 +286,27 @@ private:
     nsCOMArray<nsIOfflineCacheUpdateObserver> mObservers;
 
     /* Documents that requested this update */
-    nsCOMArray<nsIDOMDocument> mDocuments;
+    nsCOMArray<nsIURI> mDocumentURIs;
 
     /* Reschedule count.  When an update is rescheduled due to
      * mismatched manifests, the reschedule count will be increased. */
-    PRUint32 mRescheduleCount;
+    uint32_t mRescheduleCount;
+
+    /* Whena an entry for a pinned app is retried, retries count is
+     * increaded. */
+    uint32_t mPinnedEntryRetriesCount;
 
     nsRefPtr<nsOfflineCacheUpdate> mImplicitUpdate;
+
+    bool                           mPinned;
+
+    uint64_t                       mByteProgress;
 };
 
-class nsOfflineCacheUpdateService : public nsIOfflineCacheUpdateService
-                                  , public nsIObserver
-                                  , public nsOfflineCacheUpdateOwner
-                                  , public nsSupportsWeakReference
+class nsOfflineCacheUpdateService MOZ_FINAL : public nsIOfflineCacheUpdateService
+                                            , public nsIObserver
+                                            , public nsOfflineCacheUpdateOwner
+                                            , public nsSupportsWeakReference
 {
 public:
     NS_DECL_ISUPPORTS
@@ -323,30 +318,43 @@ public:
 
     nsresult Init();
 
-    nsresult Schedule(nsOfflineCacheUpdate *aUpdate);
+    nsresult ScheduleUpdate(nsOfflineCacheUpdate *aUpdate);
+    nsresult FindUpdate(nsIURI *aManifestURI,
+                        uint32_t aAppID,
+                        bool aInBrowser,
+                        nsOfflineCacheUpdate **aUpdate);
+
     nsresult Schedule(nsIURI *aManifestURI,
                       nsIURI *aDocumentURI,
                       nsIDOMDocument *aDocument,
+                      nsIDOMWindow* aWindow,
+                      nsIFile* aCustomProfileDir,
+                      uint32_t aAppID,
+                      bool aInBrowser,
                       nsIOfflineCacheUpdate **aUpdate);
 
     virtual nsresult UpdateFinished(nsOfflineCacheUpdate *aUpdate);
 
     /**
      * Returns the singleton nsOfflineCacheUpdateService without an addref, or
-     * nsnull if the service couldn't be created.
+     * nullptr if the service couldn't be created.
      */
     static nsOfflineCacheUpdateService *EnsureService();
 
     /** Addrefs and returns the singleton nsOfflineCacheUpdateService. */
     static nsOfflineCacheUpdateService *GetInstance();
 
+    static nsresult OfflineAppPinnedForURI(nsIURI *aDocumentURI,
+                                           nsIPrefBranch *aPrefBranch,
+                                           bool *aPinned);
+
 private:
     nsresult ProcessNextUpdate();
 
     nsTArray<nsRefPtr<nsOfflineCacheUpdate> > mUpdates;
 
-    PRBool mDisabled;
-    PRBool mUpdateRunning;
+    bool mDisabled;
+    bool mUpdateRunning;
 };
 
 #endif

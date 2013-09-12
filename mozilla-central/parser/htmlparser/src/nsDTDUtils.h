@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set ts=2 sw=2 et tw=80: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 /**
@@ -62,6 +30,7 @@
 #include "nsIParserService.h"
 #include "nsReadableUtils.h"
 #include "nsIHTMLContentSink.h"
+#include "nsIFrame.h"
 
 #define IF_HOLD(_ptr) \
  PR_BEGIN_MACRO       \
@@ -121,19 +90,19 @@ public:
                   ~nsEntryStack();
 
   nsTagEntry*     PopEntry();
-  void            PushEntry(nsTagEntry* aEntry, PRBool aRefCntNode = PR_TRUE);
-  void            EnsureCapacityFor(PRInt32 aNewMax, PRInt32 aShiftOffset=0);
-  void            Push(nsCParserNode* aNode,nsEntryStack* aStyleStack=0, PRBool aRefCntNode = PR_TRUE);
+  void            PushEntry(nsTagEntry* aEntry, bool aRefCntNode = true);
+  void            EnsureCapacityFor(int32_t aNewMax, int32_t aShiftOffset=0);
+  void            Push(nsCParserNode* aNode,nsEntryStack* aStyleStack=0, bool aRefCntNode = true);
   void            PushTag(eHTMLTags aTag);
-  void            PushFront(nsCParserNode* aNode,nsEntryStack* aStyleStack=0, PRBool aRefCntNode = PR_TRUE);
+  void            PushFront(nsCParserNode* aNode,nsEntryStack* aStyleStack=0, bool aRefCntNode = true);
   void            Append(nsEntryStack *aStack);
   nsCParserNode*  Pop(void);
-  nsCParserNode*  Remove(PRInt32 anIndex,eHTMLTags aTag);
-  nsCParserNode*  NodeAt(PRInt32 anIndex) const;
+  nsCParserNode*  Remove(int32_t anIndex,eHTMLTags aTag);
+  nsCParserNode*  NodeAt(int32_t anIndex) const;
   eHTMLTags       First() const;
-  eHTMLTags       TagAt(PRInt32 anIndex) const;
-  nsTagEntry*     EntryAt(PRInt32 anIndex) const;
-  eHTMLTags       operator[](PRInt32 anIndex) const;
+  eHTMLTags       TagAt(int32_t anIndex) const;
+  nsTagEntry*     EntryAt(int32_t anIndex) const;
+  eHTMLTags       operator[](int32_t anIndex) const;
   eHTMLTags       Last() const;
   void            Empty(void); 
 
@@ -148,8 +117,8 @@ public:
    * @param   aTag
    * @return  index of tag, or kNotFound if not found
    */
-  inline PRInt32 FirstOf(eHTMLTags aTag) const {
-    PRInt32 index=-1;
+  inline int32_t FirstOf(eHTMLTags aTag) const {
+    int32_t index=-1;
     
     if(0<mCount) {
       while(++index<mCount) {
@@ -168,8 +137,8 @@ public:
    * @param   aTag
    * @return  index of tag, or kNotFound if not found
    */
-  inline PRInt32 LastOf(eHTMLTags aTag) const {
-    PRInt32 index=mCount;
+  inline int32_t LastOf(eHTMLTags aTag) const {
+    int32_t index=mCount;
     while(--index>=0) {
         if(aTag==mEntries[index].mTag) {
           return index; 
@@ -179,8 +148,8 @@ public:
   }
 
   nsTagEntry* mEntries;
-  PRInt32    mCount;
-  PRInt32    mCapacity;
+  int32_t    mCount;
+  int32_t    mCapacity;
 };
 
 
@@ -193,44 +162,44 @@ public:
 class CTableState {
 public:
   CTableState(CTableState *aPreviousState=0) {
-    mHasCaption=PR_FALSE;
-    mHasCols=PR_FALSE;
-    mHasTHead=PR_FALSE;
-    mHasTFoot=PR_FALSE;
-    mHasTBody=PR_FALSE;    
+    mHasCaption=false;
+    mHasCols=false;
+    mHasTHead=false;
+    mHasTFoot=false;
+    mHasTBody=false;    
     mPrevious=aPreviousState;
   }
 
-  PRBool  CanOpenCaption() {
-    PRBool result=!(mHasCaption || mHasCols || mHasTHead || mHasTFoot || mHasTBody);
+  bool    CanOpenCaption() {
+    bool result=!(mHasCaption || mHasCols || mHasTHead || mHasTFoot || mHasTBody);
     return result;
   }
 
-  PRBool  CanOpenCols() {
-    PRBool result=!(mHasCols || mHasTHead || mHasTFoot || mHasTBody);
+  bool    CanOpenCols() {
+    bool result=!(mHasCols || mHasTHead || mHasTFoot || mHasTBody);
     return result;
   }
 
-  PRBool  CanOpenTBody() {
-    PRBool result=!(mHasTBody);
+  bool    CanOpenTBody() {
+    bool result=!(mHasTBody);
     return result;
   }
 
-  PRBool  CanOpenTHead() {
-    PRBool result=!(mHasTHead || mHasTFoot || mHasTBody);
+  bool    CanOpenTHead() {
+    bool result=!(mHasTHead || mHasTFoot || mHasTBody);
     return result;
   }
 
-  PRBool  CanOpenTFoot() {
-    PRBool result=!(mHasTFoot || mHasTBody);
+  bool    CanOpenTFoot() {
+    bool result=!(mHasTFoot || mHasTBody);
     return result;
   }
 
-  PRPackedBool  mHasCaption;
-  PRPackedBool  mHasCols;
-  PRPackedBool  mHasTHead;
-  PRPackedBool  mHasTFoot;
-  PRPackedBool  mHasTBody;
+  bool          mHasCaption;
+  bool          mHasCols;
+  bool          mHasTHead;
+  bool          mHasTFoot;
+  bool          mHasTBody;
   CTableState   *mPrevious;
 };
 
@@ -257,7 +226,7 @@ public:
 
 protected:
   nsFixedSizeAllocator mArenaPool;
-#ifdef  NS_DEBUG
+#ifdef  DEBUG
   int mTotals[eToken_last-1];
 #endif
 };
@@ -279,7 +248,7 @@ public:
   
   nsNodeAllocator();
   ~nsNodeAllocator();
-  nsCParserNode* CreateNode(CToken* aToken=nsnull, nsTokenAllocator* aTokenAllocator=0);
+  nsCParserNode* CreateNode(CToken* aToken=nullptr, nsTokenAllocator* aTokenAllocator=0);
 
   nsFixedSizeAllocator&  GetArenaPool() { return mNodePool; }
 
@@ -288,7 +257,7 @@ public:
 protected:
   nsDeque mSharedNodes;
 #ifdef DEBUG_TRACK_NODES
-  PRInt32 mCount;
+  int32_t mCount;
 #endif
 #endif
 
@@ -307,9 +276,9 @@ public:
                   ~nsDTDContext();
 
   nsTagEntry*     PopEntry();
-  void            PushEntry(nsTagEntry* aEntry, PRBool aRefCntNode = PR_TRUE);
-  void            MoveEntries(nsDTDContext& aDest, PRInt32 aCount);
-  void            Push(nsCParserNode* aNode,nsEntryStack* aStyleStack=0, PRBool aRefCntNode = PR_TRUE);
+  void            PushEntry(nsTagEntry* aEntry, bool aRefCntNode = true);
+  void            MoveEntries(nsDTDContext& aDest, int32_t aCount);
+  void            Push(nsCParserNode* aNode,nsEntryStack* aStyleStack=0, bool aRefCntNode = true);
   void            PushTag(eHTMLTags aTag);
   nsCParserNode*  Pop(nsEntryStack*& aChildStack);
   nsCParserNode*  Pop();
@@ -317,16 +286,16 @@ public:
   eHTMLTags       First(void) const;
   eHTMLTags       Last(void) const;
   nsTagEntry*     LastEntry(void) const;
-  eHTMLTags       TagAt(PRInt32 anIndex) const;
-  eHTMLTags       operator[](PRInt32 anIndex) const {return TagAt(anIndex);}
-  PRBool          HasOpenContainer(eHTMLTags aTag) const;
-  PRInt32         FirstOf(eHTMLTags aTag) const {return mStack.FirstOf(aTag);}
-  PRInt32         LastOf(eHTMLTags aTag) const {return mStack.LastOf(aTag);}
+  eHTMLTags       TagAt(int32_t anIndex) const;
+  eHTMLTags       operator[](int32_t anIndex) const {return TagAt(anIndex);}
+  bool            HasOpenContainer(eHTMLTags aTag) const;
+  int32_t         FirstOf(eHTMLTags aTag) const {return mStack.FirstOf(aTag);}
+  int32_t         LastOf(eHTMLTags aTag) const {return mStack.LastOf(aTag);}
 
   void            Empty(void); 
-  PRInt32         GetCount(void) const {return mStack.mCount;}
-  PRInt32         GetResidualStyleCount(void) {return mResidualStyleCount;}
-  nsEntryStack*   GetStylesAt(PRInt32 anIndex) const;
+  int32_t         GetCount(void) const {return mStack.mCount;}
+  int32_t         GetResidualStyleCount(void) {return mResidualStyleCount;}
+  nsEntryStack*   GetStylesAt(int32_t anIndex) const;
   void            PushStyle(nsCParserNode* aNode);
   void            PushStyles(nsEntryStack *aStyles);
   nsCParserNode*  PopStyle(void);
@@ -339,13 +308,13 @@ public:
   void            SetNodeAllocator(nsNodeAllocator* aNodeAllocator) { mNodeAllocator=aNodeAllocator; }
 
   nsEntryStack    mStack; //this will hold a list of tagentries...
-  PRInt32         mResidualStyleCount;
-  PRInt32         mContextTopIndex;
+  int32_t         mResidualStyleCount;
+  int32_t         mContextTopIndex;
 
   nsTokenAllocator  *mTokenAllocator;
   nsNodeAllocator   *mNodeAllocator;
 
-#ifdef  NS_DEBUG
+#ifdef  DEBUG
   enum { eMaxTags = MAX_REFLOW_DEPTH };
   eHTMLTags       mXTags[eMaxTags];
 #endif
@@ -378,8 +347,8 @@ public:
   
   virtual void          SetString(const nsString &aTheString)=0;
   virtual nsString*     GetString()=0;
-  virtual PRBool        HandleToken(CToken* aToken,nsIDTD* aDTD)=0;
-  virtual PRBool        HandleCapturedTokens(CToken* aToken,nsIDTD* aDTD)=0;
+  virtual bool          HandleToken(CToken* aToken,nsIDTD* aDTD)=0;
+  virtual bool          HandleCapturedTokens(CToken* aToken,nsIDTD* aDTD)=0;
 };
 
 /************************************************************************
@@ -394,7 +363,7 @@ public:
  * @param   aTagSet -- set of tags to be searched
  * @return
  */
-inline PRInt32 IndexOfTagInSet(PRInt32 aTag,const eHTMLTags* aTagSet,PRInt32 aCount)  {
+inline int32_t IndexOfTagInSet(int32_t aTag,const eHTMLTags* aTagSet,int32_t aCount)  {
 
   const eHTMLTags* theEnd=aTagSet+aCount;
   const eHTMLTags* theTag=aTagSet;
@@ -417,42 +386,14 @@ inline PRInt32 IndexOfTagInSet(PRInt32 aTag,const eHTMLTags* aTagSet,PRInt32 aCo
  * @param   aTagSet -- set of tags to be searched
  * @return
  */
-inline PRBool FindTagInSet(PRInt32 aTag,const eHTMLTags *aTagSet,PRInt32 aCount)  {
-  return PRBool(-1<IndexOfTagInSet(aTag,aTagSet,aCount));
+inline bool FindTagInSet(int32_t aTag,const eHTMLTags *aTagSet,int32_t aCount)  {
+  return bool(-1<IndexOfTagInSet(aTag,aTagSet,aCount));
 }
-
-/**************************************************************
-  This defines the topic object used by the observer service.
-  The observerService uses a list of these, 1 per topic when
-  registering tags.
- **************************************************************/
-
-class nsObserverEntry : public nsIObserverEntry {
-public:
-  NS_DECL_ISUPPORTS
-            nsObserverEntry(const nsAString& aString);
-  virtual   ~nsObserverEntry();
-
-  NS_IMETHOD Notify(nsIParserNode* aNode,
-                    nsIParser* aParser,
-                    nsISupports* aDocShell,
-                    const PRUint32 aFlags);
-
-  nsresult   AddObserver(nsIElementObserver* aObserver,eHTMLTags aTag);
-  void       RemoveObserver(nsIElementObserver* aObserver);
-  PRBool     Matches(const nsAString& aTopic);
-
-protected:
-  nsString mTopic;
-  nsCOMArray<nsIElementObserver>* mObservers[NS_HTML_TAG_MAX + 1];
-  friend class nsMatchesTopic;
-};
 
 /*********************************************************************************************/
 
-
 struct TagList {
-  PRUint32 mCount;
+  size_t mCount;
   const eHTMLTags *mTags;
 };
 
@@ -463,11 +404,11 @@ struct TagList {
  * @param   aTagList
  * @return  index of tag, or kNotFound if not found
  */
-inline PRInt32 LastOf(nsDTDContext& aContext, const TagList& aTagList){
+inline int32_t LastOf(nsDTDContext& aContext, const TagList& aTagList){
   int max = aContext.GetCount();
   int index;
   for(index=max-1;index>=0;index--){
-    PRBool result=FindTagInSet(aContext[index],aTagList.mTags,aTagList.mCount);
+    bool result=FindTagInSet(aContext[index],aTagList.mTags,aTagList.mCount);
     if(result) {
       return index;
     }
@@ -483,11 +424,11 @@ inline PRInt32 LastOf(nsDTDContext& aContext, const TagList& aTagList){
  * @param   aTagList
  * @return  index of tag, or kNotFound if not found
  */
-inline PRInt32 FirstOf(nsDTDContext& aContext,PRInt32 aStartOffset,TagList& aTagList){
+inline int32_t FirstOf(nsDTDContext& aContext,int32_t aStartOffset,TagList& aTagList){
   int max = aContext.GetCount();
   int index;
   for(index=aStartOffset;index<max;++index){
-    PRBool result=FindTagInSet(aContext[index],aTagList.mTags,aTagList.mCount);
+    bool result=FindTagInSet(aContext[index],aTagList.mTags,aTagList.mCount);
     if(result) {
       return index;
     }
@@ -502,7 +443,7 @@ inline PRInt32 FirstOf(nsDTDContext& aContext,PRInt32 aStartOffset,TagList& aTag
  * @param   id of tag
  * @return  TRUE of the element's end tag is optional
  */
-inline PRBool HasOptionalEndTag(eHTMLTags aTag) {
+inline bool HasOptionalEndTag(eHTMLTags aTag) {
   static eHTMLTags gHasOptionalEndTags[]={eHTMLTag_body,eHTMLTag_colgroup,eHTMLTag_dd,eHTMLTag_dt,
                                                     eHTMLTag_head,eHTMLTag_li,eHTMLTag_option,
                                                     eHTMLTag_p,eHTMLTag_tbody,eHTMLTag_td,eHTMLTag_tfoot,

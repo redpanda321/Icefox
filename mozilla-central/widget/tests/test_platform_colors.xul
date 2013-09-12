@@ -7,8 +7,6 @@
   xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
 
   <title>Test for Mac platform colors</title>
-  <script type="application/javascript" 
-   src="chrome://mochikit/content/MochiKit/packed.js"></script>
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js" />
 
@@ -44,7 +42,7 @@ var colors = {
   "inactivecaptiontext": ["rgb(69, 69, 69)"],
   "infobackground": ["rgb(255, 255, 199)"],
   "infotext": ["rgb(0, 0, 0)"],
-  "menu": ["rgb(255, 255, 255)", rgb(254, 255, 254)"],
+  "menu": ["rgb(255, 255, 255)", "rgb(254, 255, 254)", "rgb(255, 254, 254)"],
   "menutext": ["rgb(0, 0, 0)"],
   "scrollbar": ["rgb(170, 170, 170)"],
   "threeddarkshadow": ["rgb(220, 220, 220)"],
@@ -70,9 +68,9 @@ var colors = {
   "-moz-hyperlinktext": ["rgb(0, 0, 238)"],
   "-moz-html-cellhighlight": ["rgb(212, 212, 212)"],
   "-moz-html-cellhighlighttext": ["rgb(0, 0, 0)"],
-  "-moz-mac-chrome-active": ["rgb(150, 150, 150)", "rgb(167, 167, 167)"],
-  "-moz-mac-chrome-inactive": ["rgb(202, 202, 202)", "rgb(216, 216, 216)"],
-  "-moz-mac-focusring": ["rgb(83, 144, 210)", "rgb(95, 112, 130)", "rgb(63, 152, 221)", "rgb(108, 126, 141)"],
+  "-moz-mac-chrome-active": ["rgb(150, 150, 150)", "rgb(167, 167, 167)", "rgb(178, 178, 178)"],
+  "-moz-mac-chrome-inactive": ["rgb(202, 202, 202)", "rgb(216, 216, 216)", "rgb(225, 225, 225)"],
+  //"-moz-mac-focusring": ["rgb(83, 144, 210)", "rgb(95, 112, 130)", "rgb(63, 152, 221)", "rgb(108, 126, 141)"],
   "-moz-mac-menuselect": ["rgb(115, 132, 153)", "rgb(127, 127, 127)", "rgb(56, 117, 215)", "rgb(255, 193, 31)", "rgb(243, 70, 72)", "rgb(255, 138, 34)", "rgb(102, 197, 71)", "rgb(140, 78, 184)"],
   "-moz-mac-menushadow": ["rgb(163, 163, 163)"],
   "-moz-mac-menutextdisable": ["rgb(152, 152, 152)", "rgb(136, 136, 136)"],
@@ -84,7 +82,7 @@ var colors = {
   "-moz-menuhovertext": ["rgb(255, 255, 255)", "rgb(255, 254, 254)", "rgb(254, 255, 254)"],
   "-moz-menubartext": ["rgb(0, 0, 0)"],
   //"-moz-menubarhovertext": ["rgb(255, 255, 255)"],
-  "-moz-oddtreerow": ["rgb(236, 242, 254)", "rgb(240, 240, 240)"],
+  "-moz-oddtreerow": ["rgb(236, 242, 254)", "rgb(240, 240, 240)", "rgb(243, 245, 250)", "rgb(243, 246, 250)"],
   "-moz-visitedhyperlinktext": ["rgb(85, 26, 139)"],
   "currentcolor": ["rgb(0, 0, 0)"],
   //"-moz-win-mediatext": ["rgb(255, 255, 255)"],

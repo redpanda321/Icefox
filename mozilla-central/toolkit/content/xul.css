@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 /** this should only contain XUL dialog and document window widget defaults. Defaults for widgets of
     a particular application should be in that application's style sheet.
 	For example style definitions for navigator can be found in navigator.css
@@ -38,7 +42,7 @@
 }
 
 /* hide the content, but don't destroy the frames */
-[collapsed="true"], 
+[collapsed="true"],
 [moz-collapsed="true"] {
   visibility: collapse;
 }
@@ -75,7 +79,7 @@ xbl|children,
 commands, commandset, command,
 broadcasterset, broadcaster, observes,
 keyset, key, toolbarpalette, toolbarset,
-template, rule, conditions, action, 
+template, rule, conditions, action,
 bindings, binding, content, member, triple,
 treechildren, treeitem, treeseparator, treerow, treecell {
   display: none;
@@ -102,7 +106,7 @@ menulist[editable="true"] {
 
 /******** window & page ******/
 
-window, 
+window,
 page {
   overflow: -moz-hidden-unscrollable;
   -moz-box-orient: vertical;
@@ -124,12 +128,6 @@ button {
   -moz-binding: url("chrome://global/content/bindings/button.xml#button");
 }
 
-%ifdef XP_MACOSX
-button[default="true"] {
-  -moz-binding: url("chrome://global/content/bindings/button.xml#button-periodic-redraw");
-}
-%endif
-
 button[type="repeat"] {
   -moz-binding: url("chrome://global/content/bindings/button.xml#button-repeat");
 }
@@ -142,7 +140,7 @@ button[type="menu-button"] {
   -moz-binding: url("chrome://global/content/bindings/button.xml#menu-button");
 }
 
-%ifdef MOZ_WIDGET_GTK2
+%ifdef MOZ_WIDGET_GTK
 /********* detection of system setting to use icons in buttons ***********/
 button[label]:not([label=""]) > .button-box > .button-icon:not(:-moz-system-metric(images-in-buttons)),
 button[label]:not([label=""]) > .button-box > .box-inherit > .button-icon:not(:-moz-system-metric(images-in-buttons)) {
@@ -195,16 +193,20 @@ iframe {
 notificationbox {
   -moz-binding: url("chrome://global/content/bindings/notification.xml#notificationbox");
   -moz-box-orient: vertical;
-  overflow-y: hidden;
+}
+
+.notificationbox-stack {
+  overflow: -moz-hidden-unscrollable;
 }
 
 notification {
   -moz-binding: url("chrome://global/content/bindings/notification.xml#notification");
+  transition: margin-top 300ms, opacity 300ms;
 }
 
 /*********** popup notification ************/
 popupnotification {
-  -moz-binding: url("chrome://global/content/bindings/notification.xml#popup-notification")
+  -moz-binding: url("chrome://global/content/bindings/notification.xml#popup-notification");
 }
 
 .popup-notification-menubutton:not([label]) {
@@ -253,22 +255,22 @@ caption {
 
 /******* toolbar *******/
 
-toolbox { 
+toolbox {
   -moz-binding: url("chrome://global/content/bindings/toolbar.xml#toolbox");
   -moz-box-orient: vertical;
 }
-  
+
 toolbar {
   -moz-binding: url("chrome://global/content/bindings/toolbar.xml#toolbar");
 }
 
-toolbox[customizing="true"] > toolbar[customizable="true"][collapsed="true"] {
+toolbar[customizing="true"][collapsed="true"] {
   /* Some apps, e.g. Firefox, use 'collapsed' to hide toolbars.
      Override it while customizing. */
   visibility: visible;
 }
 
-toolbox[customizing="true"] > toolbar[customizable="true"][hidden="true"] {
+toolbar[customizing="true"][hidden="true"] {
   /* Some apps, e.g. SeaMonkey, use 'hidden' to hide toolbars.
      Override it while customizing. */
   display: -moz-box;
@@ -279,16 +281,13 @@ toolbar[type="menubar"] {
   min-height: 0 !important;
   border: 0 !important;
 }
-%endif
-
-%ifdef XP_WIN
+%else
 toolbar[type="menubar"][autohide="true"] {
   -moz-binding: url("chrome://global/content/bindings/toolbar.xml#toolbar-menubar-autohide");
   overflow: hidden;
 }
 
-toolbar[type="menubar"][autohide="true"][inactive="true"]:not([customizable="true"]),
-toolbox:not([customizing="true"]) > toolbar[type="menubar"][autohide="true"][inactive="true"][customizable="true"] {
+toolbar[type="menubar"][autohide="true"][inactive="true"]:not([customizing="true"]) {
   min-height: 0 !important;
   height: 0 !important;
   -moz-appearance: none !important;
@@ -337,7 +336,7 @@ menubar > menu.menu-iconic {
 menu {
   -moz-binding: url("chrome://global/content/bindings/menu.xml#menu");
 }
-  
+
 menu.menu-iconic {
   -moz-binding: url("chrome://global/content/bindings/menu.xml#menu-iconic");
 }
@@ -369,14 +368,14 @@ menuitem.menuitem-non-iconic {
   -moz-binding: url("chrome://global/content/bindings/menu.xml#menubutton-item");
 }
 
-%ifdef MOZ_WIDGET_GTK2
+%ifdef MOZ_WIDGET_GTK
 /********* detection of system setting to use icons in menus ***********/
 @media not all and (-moz-images-in-menus) {
-  menuitem:not([type]):not(.menuitem-with-favicon) > .menu-iconic-left {
+  .menu-iconic-left {
     visibility: hidden;
   }
-  menu > .menu-iconic-left {
-    visibility: hidden;
+  :-moz-any(menuitem[type], .menuitem-with-favicon) > .menu-iconic-left {
+    visibility: visible;
   }
 }
 %endif
@@ -389,7 +388,7 @@ menuseparator {
 
 /********* popup & menupopup ***********/
 
-/* <popup> is deprecated.  Only <menupopup> and <tooltip> are still valid. */ 
+/* <popup> is deprecated.  Only <menupopup> and <tooltip> are still valid. */
 
 popup,
 menupopup {
@@ -418,6 +417,10 @@ tooltip {
   margin-top: 21px;
 }
 
+panel[type="arrow"] {
+  -moz-binding: url("chrome://global/content/bindings/popup.xml#arrowpanel");
+}
+
 %ifdef XP_MACOSX
 .statusbar-resizerpanel {
   display: none;
@@ -434,7 +437,7 @@ grid {
   display: -moz-grid;
 }
 
-rows, 
+rows,
 columns {
   display: -moz-grid-group;
 }
@@ -653,7 +656,7 @@ tab {
   -moz-box-pack: center;
 }
 
-tab[selected="true"] {
+tab[selected="true"]:not([ignorefocus="true"]) {
   -moz-user-focus: normal;
 }
 
@@ -793,6 +796,8 @@ panel[type="autocomplete-richlistbox"] {
   -moz-binding: url("chrome://global/content/bindings/autocomplete.xml#autocomplete-rich-result-popup");
 }
 
+/* FIXME: bug 616258 */
+
 .autocomplete-tree {
   -moz-binding: url("chrome://global/content/bindings/autocomplete.xml#autocomplete-tree");
   -moz-user-focus: ignore;
@@ -830,6 +835,15 @@ panel[type="autocomplete-richlistbox"] {
   -moz-binding: url("chrome://global/content/bindings/autocomplete.xml#history-dropmarker");
 }
 
+.ac-ellipsis-after {
+  visibility: hidden;
+}
+
+.ac-url-text[type~="action"],
+.ac-action-text:not([type~="action"]) {
+  visibility: collapse;
+}
+
 %endif
 
 
@@ -840,7 +854,7 @@ popup[type="autocomplete"][hidden="true"] {
   visibility: hidden;
 }
 
-/* The following rule is here to fix bug 96899 (and now 117952).  
+/* The following rule is here to fix bug 96899 (and now 117952).
    Somehow trees create a situation
    in which a popupset flows itself as if its popup child is directly within it
    instead of the placeholder child that should actually be inside the popupset.
@@ -892,6 +906,8 @@ dropmarker {
 
 resizer {
   -moz-binding: url("chrome://global/content/bindings/resizer.xml#resizer");
+  position: relative;
+  z-index: 2147483647;
 }
 
 /********** splitter **********/
@@ -1077,12 +1093,12 @@ wizardpage {
 
 prefwindow,
 prefwindow:root /* override :root from above */ {
-  -moz-binding: url("chrome://global/content/bindings/preferences.xml#prefwindow");  
+  -moz-binding: url("chrome://global/content/bindings/preferences.xml#prefwindow");
   -moz-box-orient: vertical;
 }
 
 prefpane {
-  -moz-binding: url("chrome://global/content/bindings/preferences.xml#prefpane");  
+  -moz-binding: url("chrome://global/content/bindings/preferences.xml#prefpane");
   -moz-box-orient: vertical;
 }
 
@@ -1109,12 +1125,12 @@ preferences {
 }
 
 preference {
-  -moz-binding: url("chrome://global/content/bindings/preferences.xml#preference");  
+  -moz-binding: url("chrome://global/content/bindings/preferences.xml#preference");
   visibility: collapse;
 }
 
 radio[pane] {
-  -moz-binding: url("chrome://global/content/bindings/preferences.xml#panebutton") !important; 
+  -moz-binding: url("chrome://global/content/bindings/preferences.xml#panebutton") !important;
   -moz-box-orient: vertical;
   -moz-box-align: center;
 }
@@ -1179,4 +1195,11 @@ findbar {
 /*********** filefield ************/
 filefield {
   -moz-binding: url("chrome://global/content/bindings/filefield.xml#filefield");
+}
+
+/*********** tabmodalprompt ************/
+tabmodalprompt {
+  -moz-binding: url("chrome://global/content/tabprompts.xml#tabmodalprompt");
+  overflow: hidden;
+  text-shadow: none;
 }

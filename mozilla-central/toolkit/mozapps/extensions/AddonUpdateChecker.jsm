@@ -1,51 +1,19 @@
-/*
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is the Extension Manager.
-#
-# The Initial Developer of the Original Code is
-# the Mozilla Foundation.
-# Portions created by the Initial Developer are Copyright (C) 2009
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Dave Townsend <dtownsend@oxymoronical.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
-*/
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  * The AddonUpdateChecker is responsible for retrieving the update information
  * from an add-on's remote update manifest.
  */
 
+"use strict";
+
 const Cc = Components.classes;
 const Ci = Components.interfaces;
+const Cu = Components.utils;
 
-var EXPORTED_SYMBOLS = [ "AddonUpdateChecker" ];
+this.EXPORTED_SYMBOLS = [ "AddonUpdateChecker" ];
 
 const TIMEOUT               = 2 * 60 * 1000;
 const PREFIX_NS_RDF         = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
@@ -56,21 +24,35 @@ const PREFIX_THEME          = "urn:mozilla:theme:";
 const TOOLKIT_ID            = "toolkit@mozilla.org"
 const XMLURI_PARSE_ERROR    = "http://www.mozilla.org/newlayout/xml/parsererror.xml"
 
+const PREF_UPDATE_REQUIREBUILTINCERTS = "extensions.update.requireBuiltInCerts";
+
 Components.utils.import("resource://gre/modules/Services.jsm");
-// shared code for suppressing bad cert dialogs
-Components.utils.import("resource://gre/modules/CertUtils.jsm");
+Components.utils.import("resource://gre/modules/XPCOMUtils.jsm");
+
+XPCOMUtils.defineLazyModuleGetter(this, "AddonManager",
+                                  "resource://gre/modules/AddonManager.jsm");
+XPCOMUtils.defineLazyModuleGetter(this, "AddonRepository",
+                                  "resource://gre/modules/AddonRepository.jsm");
+
+// Shared code for suppressing bad cert dialogs.
+XPCOMUtils.defineLazyGetter(this, "CertUtils", function certUtilsLazyGetter() {
+  let certUtils = {};
+  Components.utils.import("resource://gre/modules/CertUtils.jsm", certUtils);
+  return certUtils;
+});
 
 var gRDF = Cc["@mozilla.org/rdf/rdf-service;1"].
            getService(Ci.nsIRDFService);
 
 ["LOG", "WARN", "ERROR"].forEach(function(aName) {
-  this.__defineGetter__(aName, function() {
+  this.__defineGetter__(aName, function logFuncGetter() {
     Components.utils.import("resource://gre/modules/AddonLogging.jsm");
 
     LogManager.getLogger("addons.updates", this);
     return this[aName];
   });
 }, this);
+
 
 /**
  * A serialisation method for RDF data that produces an identical string
@@ -175,7 +157,7 @@ RDFSerializer.prototype = {
                      target.Value + "</em:" + prop + ">\n");
         }
         else {
-          throw new Error("Cannot serialize unknown literal type");
+          throw Components.Exception("Cannot serialize unknown literal type");
         }
       }
     }
@@ -202,7 +184,7 @@ RDFSerializer.prototype = {
   serializeResource: function RDFS_serializeResource(aDs, aResource, aIndent) {
     if (this.resources.indexOf(aResource) != -1 ) {
       // We cannot output multiple references to the same resource.
-      throw new Error("Cannot serialize multiple references to " + aResource.Value);
+      throw Components.Exception("Cannot serialize multiple references to " + aResource.Value);
     }
     if (aIndent === undefined)
       aIndent = "";
@@ -243,8 +225,6 @@ RDFSerializer.prototype = {
  *
  * @param  aId
  *         The ID of the add-on being checked for updates
- * @param  aType
- *         The type of the add-on being checked for updates
  * @param  aUpdateKey
  *         An optional update key for the add-on
  * @param  aRequest
@@ -252,7 +232,7 @@ RDFSerializer.prototype = {
  * @return an array of update objects
  * @throws if the update manifest is invalid in any way
  */
-function parseRDFManifest(aId, aType, aUpdateKey, aRequest) {
+function parseRDFManifest(aId, aUpdateKey, aRequest) {
   function EM_R(aProp) {
     return gRDF.GetResource(PREFIX_NS_EM + aProp);
   }
@@ -274,7 +254,7 @@ function parseRDFManifest(aId, aType, aUpdateKey, aRequest) {
   function getRequiredProperty(aDs, aSource, aProperty) {
     let value = getProperty(aDs, aSource, aProperty);
     if (!value)
-      throw new Error("Update manifest is missing a required " + aProperty + " property.");
+      throw Components.Exception("Update manifest is missing a required " + aProperty + " property.");
     return value;
   }
 
@@ -284,33 +264,28 @@ function parseRDFManifest(aId, aType, aUpdateKey, aRequest) {
            createInstance(Ci.nsIRDFDataSource);
   rdfParser.parseString(ds, aRequest.channel.URI, aRequest.responseText);
 
-  switch (aType) {
-  case "extension":
-    var item = PREFIX_EXTENSION + aId;
-    break;
-  case "theme":
-    item = PREFIX_THEME + aId;
-    break;
-  default:
-    item = PREFIX_ITEM + aId;
-    break;
-  }
-
-  let extensionRes  = gRDF.GetResource(item);
+  // Differentiating between add-on types is deprecated
+  let extensionRes = gRDF.GetResource(PREFIX_EXTENSION + aId);
+  let themeRes = gRDF.GetResource(PREFIX_THEME + aId);
+  let itemRes = gRDF.GetResource(PREFIX_ITEM + aId);
+  let addonRes = ds.ArcLabelsOut(extensionRes).hasMoreElements() ? extensionRes
+               : ds.ArcLabelsOut(themeRes).hasMoreElements() ? themeRes
+               : itemRes;
 
   // If we have an update key then the update manifest must be signed
   if (aUpdateKey) {
-    let signature = getProperty(ds, extensionRes, "signature");
+    let signature = getProperty(ds, addonRes, "signature");
     if (!signature)
-      throw new Error("Update manifest for " + aId + " does not contain a required signature");
+      throw Components.Exception("Update manifest for " + aId + " does not contain a required signature");
     let serializer = new RDFSerializer();
     let updateString = null;
 
     try {
-      updateString = serializer.serializeResource(ds, extensionRes);
+      updateString = serializer.serializeResource(ds, addonRes);
     }
     catch (e) {
-      throw new Error("Failed to generate signed string for " + aId + ". Serializer threw " + e);
+      throw Components.Exception("Failed to generate signed string for " + aId + ". Serializer threw " + e,
+                                 e.result);
     }
 
     let result = false;
@@ -321,30 +296,30 @@ function parseRDFManifest(aId, aType, aUpdateKey, aRequest) {
       result = verifier.verifyData(updateString, signature, aUpdateKey);
     }
     catch (e) {
-      throw new Error("The signature or updateKey for " + aId + " is malformed");
+      throw Components.Exception("The signature or updateKey for " + aId + " is malformed." +
+                                 "Verifier threw " + e, e.result);
     }
 
     if (!result)
-      throw new Error("The signature for " + aId + " was not created by the add-on's updateKey");
+      throw Components.Exception("The signature for " + aId + " was not created by the add-on's updateKey");
   }
 
-  let updates = ds.GetTarget(extensionRes, EM_R("updates"), true);
+  let updates = ds.GetTarget(addonRes, EM_R("updates"), true);
 
-  if (!updates || !(updates instanceof Ci.nsIRDFResource))
-    throw new Error("Missing updates property for " + extensionRes.Value);
+  // A missing updates property doesn't count as a failure, just as no avialable
+  // update information
+  if (!updates) {
+    WARN("Update manifest for " + aId + " did not contain an updates property");
+    return [];
+  }
+
+  if (!(updates instanceof Ci.nsIRDFResource))
+    throw Components.Exception("Missing updates property for " + addonRes.Value);
 
   let cu = Cc["@mozilla.org/rdf/container-utils;1"].
            getService(Ci.nsIRDFContainerUtils);
   if (!cu.IsContainer(ds, updates))
-    throw new Error("Updates property was not an RDF container");
-
-  let checkSecurity = true;
-
-  try {
-    checkSecurity = Services.prefs.getBoolPref("extensions.checkUpdateSecurity");
-  }
-  catch (e) {
-  }
+    throw Components.Exception("Updates property was not an RDF container");
 
   let results = [];
   let ctr = Cc["@mozilla.org/rdf/container;1"].
@@ -377,14 +352,16 @@ function parseRDFManifest(aId, aType, aUpdateKey, aRequest) {
       }
 
       let result = {
+        id: aId,
         version: version,
         updateURL: getProperty(ds, targetApp, "updateLink"),
         updateHash: getProperty(ds, targetApp, "updateHash"),
         updateInfoURL: getProperty(ds, targetApp, "updateInfoURL"),
+        strictCompatibility: getProperty(ds, targetApp, "strictCompatibility") == "true",
         targetApplications: [appEntry]
       };
 
-      if (result.updateURL && checkSecurity &&
+      if (result.updateURL && AddonManager.checkUpdateSecurity &&
           result.updateURL.substring(0, 6) != "https:" &&
           (!result.updateHash || result.updateHash.substring(0, 3) != "sha")) {
         WARN("updateLink " + result.updateURL + " is not secure and is not verified" +
@@ -404,8 +381,6 @@ function parseRDFManifest(aId, aType, aUpdateKey, aRequest) {
  *
  * @param  aId
  *         The ID of the add-on being checked for updates
- * @param  aType
- *         The type of add-on being checked for updates
  * @param  aUpdateKey
  *         An optional update key for the add-on
  * @param  aUrl
@@ -413,9 +388,8 @@ function parseRDFManifest(aId, aType, aUpdateKey, aRequest) {
  * @param  aObserver
  *         An observer to pass results to
  */
-function UpdateParser(aId, aType, aUpdateKey, aUrl, aObserver) {
+function UpdateParser(aId, aUpdateKey, aUrl, aObserver) {
   this.id = aId;
-  this.type = aType;
   this.updateKey = aUpdateKey;
   this.observer = aObserver;
 
@@ -423,22 +397,33 @@ function UpdateParser(aId, aType, aUpdateKey, aUrl, aObserver) {
                createInstance(Ci.nsITimer);
   this.timer.initWithCallback(this, TIMEOUT, Ci.nsITimer.TYPE_ONE_SHOT);
 
+  let requireBuiltIn = true;
+  try {
+    requireBuiltIn = Services.prefs.getBoolPref(PREF_UPDATE_REQUIREBUILTINCERTS);
+  }
+  catch (e) {
+  }
+
   LOG("Requesting " + aUrl);
-  this.request = Cc["@mozilla.org/xmlextras/xmlhttprequest;1"].
-                 createInstance(Ci.nsIXMLHttpRequest);
-  this.request.open("GET", aUrl, true);
-  this.request.channel.notificationCallbacks = new BadCertHandler();
-  this.request.channel.loadFlags |= Ci.nsIRequest.LOAD_BYPASS_CACHE;
-  this.request.overrideMimeType("text/xml");
-  var self = this;
-  this.request.onload = function(event) { self.onLoad() };
-  this.request.onerror = function(event) { self.onError() };
-  this.request.send(null);
+  try {
+    this.request = Cc["@mozilla.org/xmlextras/xmlhttprequest;1"].
+                   createInstance(Ci.nsIXMLHttpRequest);
+    this.request.open("GET", aUrl, true);
+    this.request.channel.notificationCallbacks = new CertUtils.BadCertHandler(!requireBuiltIn);
+    this.request.channel.loadFlags |= Ci.nsIRequest.LOAD_BYPASS_CACHE;
+    this.request.overrideMimeType("text/xml");
+    var self = this;
+    this.request.addEventListener("load", function loadEventListener(event) { self.onLoad() }, false);
+    this.request.addEventListener("error", function errorEventListener(event) { self.onError() }, false);
+    this.request.send(null);
+  }
+  catch (e) {
+    ERROR("Failed to request update manifest", e);
+  }
 }
 
 UpdateParser.prototype = {
   id: null,
-  type: null,
   updateKey: null,
   observer: null,
   request: null,
@@ -453,8 +438,15 @@ UpdateParser.prototype = {
     let request = this.request;
     this.request = null;
 
+    let requireBuiltIn = true;
     try {
-      checkCert(request.channel);
+      requireBuiltIn = Services.prefs.getBoolPref(PREF_UPDATE_REQUIREBUILTINCERTS);
+    }
+    catch (e) {
+    }
+
+    try {
+      CertUtils.checkCert(request.channel, !requireBuiltIn);
     }
     catch (e) {
       this.notifyError(AddonUpdateChecker.ERROR_DOWNLOAD_ERROR);
@@ -486,7 +478,7 @@ UpdateParser.prototype = {
       let results = null;
 
       try {
-        results = parseRDFManifest(this.id, this.type, this.updateKey, request);
+        results = parseRDFManifest(this.id, this.updateKey, request);
       }
       catch (e) {
         WARN(e);
@@ -510,7 +502,7 @@ UpdateParser.prototype = {
     this.timer = null;
 
     if (!Components.isSuccessCode(this.request.status)) {
-      WARN("Request failed: " + request.status);
+      WARN("Request failed: " + this.request.status);
     }
     else if (this.request.channel instanceof Ci.nsIHttpChannel) {
       try {
@@ -563,25 +555,44 @@ UpdateParser.prototype = {
  *         The application version to use
  * @param  aPlatformVersion
  *         The platform version to use
+ * @param  aIgnoreMaxVersion
+ *         Ignore maxVersion when testing if an update matches. Optional.
+ * @param  aIgnoreStrictCompat
+ *         Ignore strictCompatibility when testing if an update matches. Optional.
+ * @param  aCompatOverrides
+ *         AddonCompatibilityOverride objects to match against. Optional.
  * @return true if the update is compatible with the application/platform
  */
-function matchesVersions(aUpdate, aAppVersion, aPlatformVersion) {
+function matchesVersions(aUpdate, aAppVersion, aPlatformVersion,
+                         aIgnoreMaxVersion, aIgnoreStrictCompat,
+                         aCompatOverrides) {
+  if (aCompatOverrides) {
+    let override = AddonRepository.findMatchingCompatOverride(aUpdate.version,
+                                                              aCompatOverrides,
+                                                              aAppVersion,
+                                                              aPlatformVersion);
+    if (override && override.type == "incompatible")
+      return false;
+  }
+
+  if (aUpdate.strictCompatibility && !aIgnoreStrictCompat)
+    aIgnoreMaxVersion = false;
+
   let result = false;
-  for (let i = 0; i < aUpdate.targetApplications.length; i++) {
-    let app = aUpdate.targetApplications[i];
+  for (let app of aUpdate.targetApplications) {
     if (app.id == Services.appinfo.ID) {
       return (Services.vc.compare(aAppVersion, app.minVersion) >= 0) &&
-             (Services.vc.compare(aAppVersion, app.maxVersion) <= 0);
+             (aIgnoreMaxVersion || (Services.vc.compare(aAppVersion, app.maxVersion) <= 0));
     }
     if (app.id == TOOLKIT_ID) {
       result = (Services.vc.compare(aPlatformVersion, app.minVersion) >= 0) &&
-               (Services.vc.compare(aPlatformVersion, app.maxVersion) <= 0);
+               (aIgnoreMaxVersion || (Services.vc.compare(aPlatformVersion, app.maxVersion) <= 0));
     }
   }
   return result;
 }
 
-var AddonUpdateChecker = {
+this.AddonUpdateChecker = {
   // These must be kept in sync with AddonManager
   // The update check timed out
   ERROR_TIMEOUT: -1,
@@ -609,28 +620,35 @@ var AddonUpdateChecker = {
    *         The version of the application or null to use the current version
    * @param  aPlatformVersion
    *         The version of the platform or null to use the current version
+   * @param  aIgnoreMaxVersion
+   *         Ignore maxVersion when testing if an update matches. Optional.
+   * @param  aIgnoreStrictCompat
+   *         Ignore strictCompatibility when testing if an update matches. Optional.
    * @return an update object if one matches or null if not
    */
   getCompatibilityUpdate: function AUC_getCompatibilityUpdate(aUpdates, aVersion,
                                                               aIgnoreCompatibility,
                                                               aAppVersion,
-                                                              aPlatformVersion) {
+                                                              aPlatformVersion,
+                                                              aIgnoreMaxVersion,
+                                                              aIgnoreStrictCompat) {
     if (!aAppVersion)
       aAppVersion = Services.appinfo.version;
     if (!aPlatformVersion)
       aPlatformVersion = Services.appinfo.platformVersion;
 
-    for (let i = 0; i < aUpdates.length; i++) {
-      if (Services.vc.compare(aUpdates[i].version, aVersion) == 0) {
+    for (let update of aUpdates) {
+      if (Services.vc.compare(update.version, aVersion) == 0) {
         if (aIgnoreCompatibility) {
-          for (let j = 0; j < aUpdates[i].targetApplications.length; j++) {
-            let id = aUpdates[i].targetApplications[j].id;
+          for (let targetApp of update.targetApplications) {
+            let id = targetApp.id;
             if (id == Services.appinfo.ID || id == TOOLKIT_ID)
-              return aUpdates[i];
+              return update;
           }
         }
-        else if (matchesVersions(aUpdates[i], aAppVersion, aPlatformVersion)) {
-          return aUpdates[i];
+        else if (matchesVersions(update, aAppVersion, aPlatformVersion,
+                                 aIgnoreMaxVersion, aIgnoreStrictCompat)) {
+          return update;
         }
       }
     }
@@ -646,23 +664,42 @@ var AddonUpdateChecker = {
    *         The version of the application or null to use the current version
    * @param  aPlatformVersion
    *         The version of the platform or null to use the current version
+   * @param  aIgnoreMaxVersion
+   *         When determining compatible updates, ignore maxVersion. Optional.
+   * @param  aIgnoreStrictCompat
+   *         When determining compatible updates, ignore strictCompatibility. Optional.
+   * @param  aCompatOverrides
+   *         Array of AddonCompatibilityOverride to take into account. Optional.
    * @return an update object if one matches or null if not
    */
   getNewestCompatibleUpdate: function AUC_getNewestCompatibleUpdate(aUpdates,
                                                                     aAppVersion,
-                                                                    aPlatformVersion) {
+                                                                    aPlatformVersion,
+                                                                    aIgnoreMaxVersion,
+                                                                    aIgnoreStrictCompat,
+                                                                    aCompatOverrides) {
     if (!aAppVersion)
       aAppVersion = Services.appinfo.version;
     if (!aPlatformVersion)
       aPlatformVersion = Services.appinfo.platformVersion;
 
+    let blocklist = Cc["@mozilla.org/extensions/blocklist;1"].
+                    getService(Ci.nsIBlocklistService);
+
     let newest = null;
-    for (let i = 0; i < aUpdates.length; i++) {
-      if (!aUpdates[i].updateURL)
+    for (let update of aUpdates) {
+      if (!update.updateURL)
         continue;
-      if ((newest == null || (Services.vc.compare(newest.version, aUpdates[i].version) < 0)) &&
-          matchesVersions(aUpdates[i], aAppVersion, aPlatformVersion))
-        newest = aUpdates[i];
+      let state = blocklist.getAddonBlocklistState(update.id, update.version,
+                                                   aAppVersion, aPlatformVersion);
+      if (state != Ci.nsIBlocklistService.STATE_NOT_BLOCKED)
+        continue;
+      if ((newest == null || (Services.vc.compare(newest.version, update.version) < 0)) &&
+          matchesVersions(update, aAppVersion, aPlatformVersion,
+                          aIgnoreMaxVersion, aIgnoreStrictCompat,
+                          aCompatOverrides)) {
+        newest = update;
+      }
     }
     return newest;
   },
@@ -672,8 +709,6 @@ var AddonUpdateChecker = {
    *
    * @param  aId
    *         The ID of the add-on being checked for updates
-   * @param  aType
-   *         The type of add-on being checked for updates
    * @param  aUpdateKey
    *         An optional update key for the add-on
    * @param  aUrl
@@ -681,8 +716,8 @@ var AddonUpdateChecker = {
    * @param  aObserver
    *         An observer to notify of results
    */
-  checkForUpdates: function AUC_checkForUpdates(aId, aType, aUpdateKey, aUrl,
+  checkForUpdates: function AUC_checkForUpdates(aId, aUpdateKey, aUrl,
                                                 aObserver) {
-    new UpdateParser(aId, aType, aUpdateKey, aUrl, aObserver);
+    new UpdateParser(aId, aUpdateKey, aUrl, aObserver);
   }
 };

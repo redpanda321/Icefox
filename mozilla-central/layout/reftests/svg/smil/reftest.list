@@ -14,6 +14,9 @@
 #   - Some more "anim-retarget" tests, with attributeType being changed/cleared.
 #     (after we've got support for SVG/SMIL animation of CSS properties)
 
+# animateMotion tests
+include motion/reftest.list
+
 # animation sort-order tests
 include sort/reftest.list
 
@@ -55,6 +58,8 @@ include event/reftest.list
 
 # General tests
 == anim-discrete-values-1.svg      anim-standard-ref.svg
+== anim-discrete-values-2.svg      anim-standard-ref.svg
+== anim-discrete-values-3.svg      anim-standard-ref.svg
 == anim-discrete-replace-sum-1.svg anim-standard-ref.svg
 == anim-discrete-sum-none-1.svg    anim-standard-ref.svg
 == anim-discrete-sum-sum-1.svg     anim-standard-ref.svg
@@ -64,6 +69,11 @@ include event/reftest.list
 == anim-discrete-to-3.svg          anim-standard-ref.svg
 == anim-discrete-to-4.svg          anim-standard-ref.svg
 
+== anim-indefinite-to-1.svg        anim-standard-ref.svg
+== anim-indefinite-to-2.svg        anim-standard-ref.svg
+== anim-indefinite-to-3.svg        anim-standard-ref.svg
+== anim-indefinite-to-4.svg        anim-standard-ref.svg
+
 fails == anim-fillcolor-1.svg      anim-standard-ref.svg # bug 436296
 == anim-fillopacity-1none.svg anim-standard-ref.svg
 == anim-fillopacity-1css.svg  anim-standard-ref.svg
@@ -71,6 +81,7 @@ fails == anim-fillcolor-1.svg      anim-standard-ref.svg # bug 436296
 
 == anim-height-done-1a.svg anim-standard-ref.svg
 == anim-height-done-1b.svg anim-standard-ref.svg
+== anim-height-done-2.svg lime.svg
 == anim-height-interp-1.svg anim-height-interp-1-ref.svg
 == anim-height-interp-2.svg anim-height-interp-2-ref.svg
 == anim-height-interp-3.svg anim-height-interp-3-ref.svg
@@ -78,20 +89,45 @@ fails == anim-fillcolor-1.svg      anim-standard-ref.svg # bug 436296
 == anim-height-interp-5.svg anim-height-interp-5-ref.svg
 == anim-height-interp-6.svg anim-height-interp-6-ref.svg
 
+# check conditional processing
+== anim-conditions-01.svg lime.svg
+== anim-conditions-02.svg lime.svg
+
 # animate some <length> attributes:
 == anim-filter-primitive-size-01.svg lime.svg
 == anim-filter-size-01.svg lime.svg
+== anim-length-reset-01.svg lime.svg
+== anim-nonpixel-length-reset-01.svg lime.svg
+== anim-use-length-01.svg lime.svg
+== anim-use-length-02.svg lime.svg
 
 # animate some <number> attributes:
+== anim-feComponentTransfer-01.svg lime.svg
+== anim-feDistantLight-01.svg anim-feDistantLight-01-ref.svg
 == anim-feOffset-01.svg lime.svg
+== anim-feSpotLight-01.svg anim-feSpotLight-01-ref.svg
 == anim-offset-01.svg lime.svg
 == anim-pathLength-01.svg anim-pathLength-01-ref.svg
+
+# animate some <number-optional-number> attributes:
+== anim-feGaussianBlur-01.svg lime.svg
 
 # animate some <integer> attributes:
 == anim-feTurbulence-numOctaves-01.svg anim-feTurbulence-numOctaves-01-ref.svg
 
+# animate some <integer-optional-integer> attributes:
+== anim-filter-filterRes-01.svg lime.svg
+
 # animate some <angle> attributes:
 == anim-marker-orient-01.svg lime.svg
+== anim-marker-orient-02.svg lime.svg
+
+#animate points list:
+== anim-polygon-points-01.svg anim-polygon-points-01-ref.svg
+== anim-polyline-points-01.svg anim-polyline-points-01-ref.svg
+
+# animate path data:
+fuzzy-if(/^Windows\x20NT\x205\.1/.test(http.oscpu),2,1) fuzzy-if(cocoaWidget&&layersGPUAccelerated,1,13) == anim-path-d-01.svg anim-path-d-01-ref.svg # Bug 726400
 
 # animate some enumeration attributes:
 == anim-feComposite-operator-01.svg lime.svg
@@ -103,10 +139,34 @@ fails == anim-fillcolor-1.svg      anim-standard-ref.svg # bug 436296
 # animate some viewBox attributes
 == anim-svg-viewBox-01.svg lime.svg
 == anim-svg-viewBox-02.svg lime.svg
+== anim-view-01.svg#view lime.svg
 
 # animate some preserveAspectRatio attributes
 == anim-feImage-preserveAspectRatio-01.svg lime.svg
 == anim-svg-preserveAspectRatio-01.svg lime.svg
+
+# animate some string attributes:
+== anim-filter-href-01.svg lime.svg
+== anim-gradient-href-01.svg lime.svg
+== anim-image-href-01.svg lime.svg
+== anim-pattern-href-01.svg lime.svg
+== anim-use-href-01.svg lime.svg
+
+# animate the class attribute
+== anim-class-01.svg lime.svg
+== anim-class-02.svg lime.svg
+== anim-class-03.svg lime.svg
+== anim-class-04.svg anim-class-04-ref.svg
+
+# animate with some paint server values
+== anim-paintserver-1.svg anim-paintserver-1-ref.svg
+
+# animate where the base value is non-interpolatable but will be replaced anyway
+== anim-fill-overpaintserver-1.svg lime.svg
+== anim-fill-overpaintserver-2.svg lime.svg
+
+# animate where we fallback from 'additive' animation to non-additive
+== anim-additive-fallback-1.svg anim-standard-ref.svg
 
 == anim-remove-1.svg anim-standard-ref.svg
 == anim-remove-2.svg anim-standard-ref.svg
@@ -117,6 +177,7 @@ fails == anim-fillcolor-1.svg      anim-standard-ref.svg # bug 436296
 == anim-remove-7.svg anim-standard-ref.svg
 == anim-remove-8css.svg anim-standard-ref.svg
 == anim-remove-8xml.svg anim-standard-ref.svg
+== anim-remove-9.svg anim-standard-ref.svg
 == anim-retarget-1.svg anim-standard-ref.svg
 == anim-retarget-2.svg anim-standard-ref.svg
 == anim-retarget-3.svg anim-standard-ref.svg
@@ -138,6 +199,9 @@ fails == anim-strokecolor-1.svg anim-standard-ref.svg # bug 436296
 == anim-targethref-7.svg anim-standard-ref.svg
 == anim-targethref-8.svg anim-standard-ref.svg
 == anim-targethref-9.svg anim-standard-ref.svg
+
+random-if(/^Windows\x20NT\x205\.1/.test(http.oscpu)) == anim-text-rotate-01.svg anim-text-rotate-01-ref.svg # Bug 645104 for random failure on WinXP
+== anim-feFuncR-tableValues-01.svg anim-feFuncR-tableValues-01-ref.svg
 
 random == anim-text-x-y-dx-dy-01.svg anim-text-x-y-dx-dy-01-ref.svg # bug 579588
 
@@ -162,12 +226,20 @@ random == anim-text-x-y-dx-dy-01.svg anim-text-x-y-dx-dy-01-ref.svg # bug 579588
 == anim-y-interp-5.svg anim-y-interp-5-ref.svg
 == anim-y-interp-6.svg anim-y-interp-6-ref.svg
 
+# Test we don't rely on HasAttr to see if an attribute has been set
+== anim-rect-rxry-1.svg anim-rect-rxry-1-ref.svg
+== anim-pattern-attr-presence-01.svg anim-pattern-attr-presence-01-ref.svg
+fails == anim-pattern-attr-presence-02.svg anim-pattern-attr-presence-02-ref.svg
+# ^ bug 621651
+fuzzy-if(cocoaWidget&&layersGPUAccelerated,1,2) == anim-gradient-attr-presence-01.svg anim-gradient-attr-presence-01-ref.svg
+
 == api-sanity-1.svg lime.svg
 
 == freeze-applied-late-1.svg anim-standard-ref.svg
 == freeze-applied-late-2.svg anim-standard-ref.svg
 == freeze-applied-late-3.svg anim-standard-ref.svg
 == freeze-applied-late-4.svg anim-standard-ref.svg
+== frozen-to-anim-1.svg lime.svg
 
 == inactivate-with-active-unchanged-1.svg anim-standard-ref.svg
 == inactivate-with-active-unchanged-2.svg anim-standard-ref.svg

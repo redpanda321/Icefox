@@ -1,42 +1,8 @@
 /* -*- Mode: Java; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Bug 378079 unit test code.
- *
- * The Initial Developer of the Original Code is POTI Inc.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Matt Crocker <matt@songbirdnest.com>
- *   Seth Spitzer <sspitzer@mozilla.org>
- *   Edward Lee <edward.lee@engineering.uiuc.edu>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  * Test for bug 395739 to make sure the feedback to the search results in those
@@ -52,87 +18,45 @@
  * learning.
  */
 
-Components.utils.import("resource://gre/modules/XPCOMUtils.jsm");
-
-// Get services
-let histsvc = Cc["@mozilla.org/browser/nav-history-service;1"].
-              getService(Ci.nsINavHistoryService);
-let bhist = histsvc.QueryInterface(Ci.nsIBrowserHistory);
-let bsvc = Cc["@mozilla.org/browser/nav-bookmarks-service;1"].
-           getService(Ci.nsINavBookmarksService);
-let tsvc = Cc["@mozilla.org/browser/tagging-service;1"].
-           getService(Ci.nsITaggingService);
-let obs = Cc["@mozilla.org/observer-service;1"].
-          getService(Ci.nsIObserverService);
-let prefs = Cc["@mozilla.org/preferences-service;1"].
-            getService(Ci.nsIPrefBranch);
-
-
-const PLACES_AUTOCOMPLETE_FEEDBACK_UPDATED_TOPIC = "places-autocomplete-feedback-updated";
-
 function AutoCompleteInput(aSearches) {
   this.searches = aSearches;
 }
 AutoCompleteInput.prototype = {
   constructor: AutoCompleteInput,
 
-  searches: null,
+  get minResultsForPopup() 0,
+  get timeout() 10,
+  get searchParam() "",
+  get textValue() "",
+  get disableAutoComplete() false,
+  get completeDefaultIndex() false,
 
-  minResultsForPopup: 0,
-  timeout: 10,
-  searchParam: "",
-  textValue: "",
-  disableAutoComplete: false,
-  completeDefaultIndex: false,
+  get searchCount() this.searches.length,
+  getSearchAt: function (aIndex) this.searches[aIndex],
 
-  get searchCount() {
-    return this.searches.length;
-  },
-
-  getSearchAt: function(aIndex) {
-    return this.searches[aIndex];
-  },
-
+  onSearchBegin: function () {},
   onSearchComplete: function() {},
 
-  popupOpen: false,
-
+  get popupOpen() false,
   popup: {
-    setSelectedIndex: function(aIndex) {},
-    invalidate: function() {},
-
-    // nsISupports implementation
-    QueryInterface: function(iid) {
-      if (iid.equals(Ci.nsISupports) ||
-          iid.equals(Ci.nsIAutoCompletePopup))
-        return this;
-
-      throw Components.results.NS_ERROR_NO_INTERFACE;
-    }
+    set selectedIndex(aIndex) aIndex,
+    invalidate: function () {},
+    QueryInterface: XPCOMUtils.generateQI([Ci.nsIAutoCompletePopup])
   },
 
-  onSearchBegin: function() {},
-
-  // nsISupports implementation
-  QueryInterface: function(iid) {
-    if (iid.equals(Ci.nsISupports) ||
-        iid.equals(Ci.nsIAutoCompleteInput))
-      return this;
-
-    throw Components.results.NS_ERROR_NO_INTERFACE;
-  }
+  QueryInterface: XPCOMUtils.generateQI([Ci.nsIAutoCompleteInput])
 }
 
 /**
- * Checks that autocomplete results are ordered correctly
+ * Checks that autocomplete results are ordered correctly.
  */
 function ensure_results(expected, searchTerm)
 {
-  let controller = Components.classes["@mozilla.org/autocomplete/controller;1"].
-                   getService(Components.interfaces.nsIAutoCompleteController);
+  let controller = Cc["@mozilla.org/autocomplete/controller;1"].
+                   getService(Ci.nsIAutoCompleteController);
 
   // Make an AutoCompleteInput that uses our searches
-  // and confirms results on search complete
+  // and confirms results on search complete.
   let input = new AutoCompleteInput(["history"]);
 
   controller.input = input;
@@ -147,57 +71,69 @@ function ensure_results(expected, searchTerm)
       do_check_eq(controller.getStyleAt(i), expected[i].style);
     }
 
-    next_test();
+    deferEnsureResults.resolve();
   };
 
   controller.startSearch(searchTerm);
 }
 
 /**
- * Bump up the rank for an uri
+ * Asynchronous task that bumps up the rank for an uri.
  */
-function setCountRank(aURI, aCount, aRank, aSearch, aBookmark)
+function task_setCountRank(aURI, aCount, aRank, aSearch, aBookmark)
 {
-  // Bump up the visit count for the uri
-  for (let i = 0; i < aCount; i++)
-    histsvc.addVisit(aURI, d1, null, histsvc.TRANSITION_TYPED, false, 0);
+  // Bump up the visit count for the uri.
+  let visits = [];
+  for (let i = 0; i < aCount; i++) {
+    visits.push({ uri: aURI, visitDate: d1, transition: TRANSITION_TYPED });
+  }
+  yield promiseAddVisits(visits);
 
-  // Make a nsIAutoCompleteController and friends for instrumentation feedback
+  // Make a nsIAutoCompleteController and friends for instrumentation feedback.
   let thing = {
     QueryInterface: XPCOMUtils.generateQI([Ci.nsIAutoCompleteInput,
                                            Ci.nsIAutoCompletePopup,
                                            Ci.nsIAutoCompleteController]),
-    get popup() { return thing; },
-    get controller() { return thing; },
+    get popup() thing,
+    get controller() thing,
     popupOpen: true,
     selectedIndex: 0,
     getValueAt: function() aURI.spec,
     searchString: aSearch
   };
 
-  // Bump up the instrumentation feedback
+  // Bump up the instrumentation feedback.
   for (let i = 0; i < aRank; i++) {
-    obs.notifyObservers(thing, "autocomplete-will-enter-text", null);
+    Services.obs.notifyObservers(thing, "autocomplete-will-enter-text", null);
   }
 
   // If this is supposed to be a bookmark, add it.
   if (aBookmark) {
-    bsvc.insertBookmark(bsvc.unfiledBookmarksFolder, aURI, bsvc.DEFAULT_INDEX,
-                        "test_book");
+    PlacesUtils.bookmarks.insertBookmark(PlacesUtils.unfiledBookmarksFolderId,
+                                         aURI,
+                                         PlacesUtils.bookmarks.DEFAULT_INDEX,
+                                         "test_book");
 
     // And add the tag if we need to.
-    if (aBookmark == "tag")
-      tsvc.tagURI(aURI, "test_tag");
+    if (aBookmark == "tag") {
+      PlacesUtils.tagging.tagURI(aURI, ["test_tag"]);
+    }
   }
 }
 
 /**
- * Decay the adaptive entries by sending the daily idle topic
+ * Decay the adaptive entries by sending the daily idle topic.
  */
 function doAdaptiveDecay()
 {
-  for (let i = 0; i < 10; i++)
-    obs.notifyObservers(null, "idle-daily", null);
+  PlacesUtils.history.runInBatchMode({
+    runBatched: function() {
+      for (let i = 0; i < 10; i++) {
+        PlacesUtils.history.QueryInterface(Ci.nsIObserver)
+                           .observe(null, "idle-daily", null);
+      }
+    }
+  }, this);
 }
 
 let uri1 = uri("http://site.tld/1");
@@ -219,13 +155,12 @@ let observer = {
   runCount: -1,
   observe: function(aSubject, aTopic, aData)
   {
-    if (PLACES_AUTOCOMPLETE_FEEDBACK_UPDATED_TOPIC == aTopic &&
-        !(--this.runCount)) {
-      ensure_results(this.results, this.search);
-    }
+    if (--this.runCount > 0)
+      return;
+    ensure_results(this.results, this.search);
   }
 };
-obs.addObserver(observer, PLACES_AUTOCOMPLETE_FEEDBACK_UPDATED_TOPIC, false);
+Services.obs.addObserver(observer, PlacesUtils.TOPIC_FEEDBACK_UPDATED, false);
 
 /**
  * Make the result object for a given URI that will be passed to ensure_results.
@@ -238,7 +173,7 @@ function makeResult(aURI) {
 }
 
 let tests = [
-  // Test things without a search term
+  // Test things without a search term.
   function() {
     print("Test 0 same count, diff rank, same term; no search");
     observer.results = [
@@ -247,8 +182,8 @@ let tests = [
     ];
     observer.search = s0;
     observer.runCount = c1 + c2;
-    setCountRank(uri1, c1, c1, s2);
-    setCountRank(uri2, c1, c2, s2);
+    yield task_setCountRank(uri1, c1, c1, s2);
+    yield task_setCountRank(uri2, c1, c2, s2);
   },
   function() {
     print("Test 1 same count, diff rank, same term; no search");
@@ -258,8 +193,8 @@ let tests = [
     ];
     observer.search = s0;
     observer.runCount = c1 + c2;
-    setCountRank(uri1, c1, c2, s2);
-    setCountRank(uri2, c1, c1, s2);
+    yield task_setCountRank(uri1, c1, c2, s2);
+    yield task_setCountRank(uri2, c1, c1, s2);
   },
   function() {
     print("Test 2 diff count, same rank, same term; no search");
@@ -269,8 +204,8 @@ let tests = [
     ];
     observer.search = s0;
     observer.runCount = c1 + c1;
-    setCountRank(uri1, c1, c1, s2);
-    setCountRank(uri2, c2, c1, s2);
+    yield task_setCountRank(uri1, c1, c1, s2);
+    yield task_setCountRank(uri2, c2, c1, s2);
   },
   function() {
     print("Test 3 diff count, same rank, same term; no search");
@@ -280,11 +215,11 @@ let tests = [
     ];
     observer.search = s0;
     observer.runCount = c1 + c1;
-    setCountRank(uri1, c2, c1, s2);
-    setCountRank(uri2, c1, c1, s2);
+    yield task_setCountRank(uri1, c2, c1, s2);
+    yield task_setCountRank(uri2, c1, c1, s2);
   },
 
-  // Test things with a search term (exact match one, partial other)
+  // Test things with a search term (exact match one, partial other).
   function() {
     print("Test 4 same count, same rank, diff term; one exact/one partial search");
     observer.results = [
@@ -293,8 +228,8 @@ let tests = [
     ];
     observer.search = s1;
     observer.runCount = c1 + c1;
-    setCountRank(uri1, c1, c1, s1);
-    setCountRank(uri2, c1, c1, s2);
+    yield task_setCountRank(uri1, c1, c1, s1);
+    yield task_setCountRank(uri2, c1, c1, s2);
   },
   function() {
     print("Test 5 same count, same rank, diff term; one exact/one partial search");
@@ -304,11 +239,11 @@ let tests = [
     ];
     observer.search = s1;
     observer.runCount = c1 + c1;
-    setCountRank(uri1, c1, c1, s2);
-    setCountRank(uri2, c1, c1, s1);
+    yield task_setCountRank(uri1, c1, c1, s2);
+    yield task_setCountRank(uri2, c1, c1, s1);
   },
 
-  // Test things with a search term (exact match both)
+  // Test things with a search term (exact match both).
   function() {
     print("Test 6 same count, diff rank, same term; both exact search");
     observer.results = [
@@ -317,8 +252,8 @@ let tests = [
     ];
     observer.search = s1;
     observer.runCount = c1 + c2;
-    setCountRank(uri1, c1, c1, s1);
-    setCountRank(uri2, c1, c2, s1);
+    yield task_setCountRank(uri1, c1, c1, s1);
+    yield task_setCountRank(uri2, c1, c2, s1);
   },
   function() {
     print("Test 7 same count, diff rank, same term; both exact search");
@@ -328,11 +263,11 @@ let tests = [
     ];
     observer.search = s1;
     observer.runCount = c1 + c2;
-    setCountRank(uri1, c1, c2, s1);
-    setCountRank(uri2, c1, c1, s1);
+    yield task_setCountRank(uri1, c1, c2, s1);
+    yield task_setCountRank(uri2, c1, c1, s1);
   },
 
-  // Test things with a search term (partial match both)
+  // Test things with a search term (partial match both).
   function() {
     print("Test 8 same count, diff rank, same term; both partial search");
     observer.results = [
@@ -341,8 +276,8 @@ let tests = [
     ];
     observer.search = s1;
     observer.runCount = c1 + c2;
-    setCountRank(uri1, c1, c1, s2);
-    setCountRank(uri2, c1, c2, s2);
+    yield task_setCountRank(uri1, c1, c1, s2);
+    yield task_setCountRank(uri2, c1, c2, s2);
   },
   function() {
     print("Test 9 same count, diff rank, same term; both partial search");
@@ -352,8 +287,8 @@ let tests = [
     ];
     observer.search = s1;
     observer.runCount = c1 + c2;
-    setCountRank(uri1, c1, c2, s2);
-    setCountRank(uri2, c1, c1, s2);
+    yield task_setCountRank(uri1, c1, c2, s2);
+    yield task_setCountRank(uri2, c1, c1, s2);
   },
   function() {
     print("Test 10 same count, same rank, same term, decay first; exact match");
@@ -363,9 +298,9 @@ let tests = [
     ];
     observer.search = s1;
     observer.runCount = c1 + c1;
-    setCountRank(uri1, c1, c1, s1);
+    yield task_setCountRank(uri1, c1, c1, s1);
     doAdaptiveDecay();
-    setCountRank(uri2, c1, c1, s1);
+    yield task_setCountRank(uri2, c1, c1, s1);
   },
   function() {
     print("Test 11 same count, same rank, same term, decay second; exact match");
@@ -375,59 +310,67 @@ let tests = [
     ];
     observer.search = s1;
     observer.runCount = c1 + c1;
-    setCountRank(uri2, c1, c1, s1);
+    yield task_setCountRank(uri2, c1, c1, s1);
     doAdaptiveDecay();
-    setCountRank(uri1, c1, c1, s1);
+    yield task_setCountRank(uri1, c1, c1, s1);
   },
   // Test that bookmarks or tags are hidden if the preferences are set right.
   function() {
     print("Test 12 same count, diff rank, same term; no search; history only");
-    prefs.setIntPref("browser.urlbar.matchBehavior",
-                     Ci.mozIPlacesAutoComplete.BEHAVIOR_HISTORY);
+    Services.prefs.setIntPref("browser.urlbar.matchBehavior",
+                              Ci.mozIPlacesAutoComplete.BEHAVIOR_HISTORY);
     observer.results = [
       makeResult(uri1),
       makeResult(uri2),
     ];
     observer.search = s0;
     observer.runCount = c1 + c2;
-    setCountRank(uri1, c1, c1, s2, "bookmark");
-    setCountRank(uri2, c1, c2, s2);
+    yield task_setCountRank(uri1, c1, c1, s2, "bookmark");
+    yield task_setCountRank(uri2, c1, c2, s2);
   },
   function() {
     print("Test 13 same count, diff rank, same term; no search; history only with tag");
-    prefs.setIntPref("browser.urlbar.matchBehavior",
-                     Ci.mozIPlacesAutoComplete.BEHAVIOR_HISTORY);
+    Services.prefs.setIntPref("browser.urlbar.matchBehavior",
+                              Ci.mozIPlacesAutoComplete.BEHAVIOR_HISTORY);
     observer.results = [
       makeResult(uri1),
       makeResult(uri2),
     ];
     observer.search = s0;
     observer.runCount = c1 + c2;
-    setCountRank(uri1, c1, c1, s2, "tag");
-    setCountRank(uri2, c1, c2, s2);
+    yield task_setCountRank(uri1, c1, c1, s2, "tag");
+    yield task_setCountRank(uri2, c1, c2, s2);
   },
 ];
 
 /**
- * Test adaptive autocomplete
+ * This deferred object contains a promise that is resolved when the
+ * ensure_results function has finished its execution.
  */
-function run_test() {
-  do_test_pending();
-  next_test();
+let deferEnsureResults;
+
+/**
+ * Test adaptive autocomplete.
+ */
+function run_test()
+{
+  run_next_test();
 }
 
-function next_test() {
-  if (tests.length) {
+add_task(function test_adaptive()
+{
+  for (let [, test] in Iterator(tests)) {
     // Cleanup.
-    bsvc.removeFolderChildren(bsvc.unfiledBookmarksFolder);
-    bsvc.removeFolderChildren(bsvc.tagsFolder);
+    PlacesUtils.bookmarks.removeFolderChildren(PlacesUtils.unfiledBookmarksFolderId);
+    PlacesUtils.bookmarks.removeFolderChildren(PlacesUtils.tagsFolderId);
     observer.runCount = -1;
 
-    let test = tests.shift();
-    waitForClearHistory(test);
+    yield promiseClearHistory();
+
+    deferEnsureResults = Promise.defer();
+    yield test();
+    yield deferEnsureResults.promise;
   }
-  else {
-    obs.removeObserver(observer, PLACES_AUTOCOMPLETE_FEEDBACK_UPDATED_TOPIC);
-    do_test_finished();
-  }
-}
+
+  Services.obs.removeObserver(observer, PlacesUtils.TOPIC_FEEDBACK_UPDATED);
+});

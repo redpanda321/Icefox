@@ -87,12 +87,12 @@ compareQueries: function(fragments)
   for (var i = 0; i < fragments.length; i++) {
     expectedQueries.push(this.getHash(fragments[i]).slice(0, 4));
   }
+  do_check_eq(this.queries.length, expectedQueries.length);
   expectedQueries.sort();
   this.queries.sort();
   for (var i = 0; i < this.queries.length; i++) {
     do_check_eq(this.queries[i], expectedQueries[i]);
   }
-  do_check_eq(this.queries.length, expectedQueries.length);
 }
 };
 
@@ -195,6 +195,98 @@ function testPartialAddsWithConflicts() {
   };
 
   doTest([update], assertions);
+}
+
+// Test whether the fragmenting code does not cause duplicated completions
+function testFragments() {
+  var addUrls = [ "foo.com/a/b/c", "foo.net/", "foo.com/c/" ];
+  var update = buildPhishingUpdate(
+        [
+          { "chunkNum" : 1,
+            "urls" : addUrls
+          }],
+    4);
+
+
+  var completer = installCompleter('test-phish-simple', [[1, addUrls]], []);
+
+  var assertions = {
+    "tableData" : "test-phish-simple;a:1",
+    "urlsExist" : addUrls,
+    "completerQueried" : [completer, addUrls]
+  };
+
+
+  doTest([update], assertions);
+}
+
+// Test http://code.google.com/p/google-safe-browsing/wiki/Protocolv2Spec
+// section 6.2 example 1
+function testSpecFragments() {
+  var probeUrls = [ "a.b.c/1/2.html?param=1" ];
+
+  var addUrls = [ "a.b.c/1/2.html",
+                  "a.b.c/",
+                  "a.b.c/1/",
+                  "b.c/1/2.html?param=1",
+                  "b.c/1/2.html",
+                  "b.c/",
+                  "b.c/1/",
+                  "a.b.c/1/2.html?param=1" ];
+
+  var update = buildPhishingUpdate(
+        [
+          { "chunkNum" : 1,
+            "urls" : addUrls
+          }],
+    4);
+
+
+  var completer = installCompleter('test-phish-simple', [[1, addUrls]], []);
+
+  var assertions = {
+    "tableData" : "test-phish-simple;a:1",
+    "urlsExist" : probeUrls,
+    "completerQueried" : [completer, addUrls]
+  };
+
+  doTest([update], assertions);
+
+}
+
+// Test http://code.google.com/p/google-safe-browsing/wiki/Protocolv2Spec
+// section 6.2 example 2
+function testMoreSpecFragments() {
+  var probeUrls = [ "a.b.c.d.e.f.g/1.html" ];
+
+  var addUrls = [ "a.b.c.d.e.f.g/1.html",
+                  "a.b.c.d.e.f.g/",
+                  "c.d.e.f.g/1.html",
+                  "c.d.e.f.g/",
+                  "d.e.f.g/1.html",
+                  "d.e.f.g/",
+                  "e.f.g/1.html",
+                  "e.f.g/",
+                  "f.g/1.html",
+                  "f.g/" ];
+
+  var update = buildPhishingUpdate(
+        [
+          { "chunkNum" : 1,
+            "urls" : addUrls
+          }],
+    4);
+
+  var completer = installCompleter('test-phish-simple', [[1, addUrls]], []);
+
+  var assertions = {
+    "tableData" : "test-phish-simple;a:1",
+    "urlsExist" : probeUrls,
+    "completerQueried" : [completer, addUrls]
+  };
+
+  doTest([update], assertions);
+
 }
 
 function testFalsePositives() {
@@ -329,15 +421,23 @@ function testInvalidHashSize()
           }],
         12); // only 4 and 32 are legal hash sizes
 
+  var addUrls2 = [ "zaz.com/a", "xyz.com/b" ];
+  var update2 = buildPhishingUpdate(
+        [
+          { "chunkNum" : 2,
+            "urls" : addUrls2
+          }],
+        4);
+
   var completer = installCompleter('test-phish-simple', [[1, addUrls]], []);
 
   var assertions = {
-    "tableData" : "",
+    "tableData" : "test-phish-simple;a:2",
     "urlsDontExist" : addUrls
   };
 
   // A successful update will trigger an error
-  doUpdateTest([update], assertions, updateError, runNextTest);
+  doUpdateTest([update2, update], assertions, updateError, runNextTest);
 }
 
 function testWrongTable()
@@ -361,7 +461,8 @@ function testWrongTable()
     "tableData" : "test-phish-simple;a:1",
     // The urls were added as phishing urls, but the completer is claiming
     // that they are malware urls, and we trust the completer in this case.
-    "malwareUrlsExist" : addUrls,
+    // The result will be discarded, so we can only check for non-existence.
+    "urlsDontExist" : addUrls,
     // Make sure the completer was actually queried.
     "completerQueried" : [completer, addUrls]
   };
@@ -370,57 +471,14 @@ function testWrongTable()
                function() {
                  // Give the dbservice a chance to (not) cache the result.
                  var timer = new Timer(3000, function() {
-                     // The dbservice shouldn't have cached this result,
-                     // so this completer should be queried.
-                     var newCompleter = installCompleter('test-malware-simple', [[1, addUrls]], []);
-
-                     // The above installCompleter installs the
-                     // completer for test-malware-simple, we want it
-                     // to be used for test-phish-simple too.
-                     dbservice.setHashCompleter("test-phish-simple",
+                     // The miss earlier will have caused a miss to be cached.
+                     // Resetting the completer does not count as an update,
+                     // so we will not be probed again.
+                     var newCompleter = installCompleter('test-malware-simple', [[1, addUrls]], []);                     dbservice.setHashCompleter("test-phish-simple",
                                                 newCompleter);
 
-
                      var assertions = {
-                       "malwareUrlsExist" : addUrls,
-                       "completerQueried" : [newCompleter, addUrls]
-                     };
-                     checkAssertions(assertions, runNextTest);
-                   });
-               }, updateError);
-}
-
-function testWrongChunk()
-{
-  var addUrls = [ "foo.com/a" ];
-  var update = buildPhishingUpdate(
-        [
-          { "chunkNum" : 1,
-            "urls" : addUrls
-          }],
-        4);
-  var completer = installCompleter('test-phish-simple',
-                                   [[2, // wrong chunk number
-                                     addUrls]], []);
-
-  var assertions = {
-    "tableData" : "test-phish-simple;a:1",
-    "urlsExist" : addUrls,
-    // Make sure the completer was actually queried.
-    "completerQueried" : [completer, addUrls]
-  };
-
-  doUpdateTest([update], assertions,
-               function() {
-                 // Give the dbservice a chance to (not) cache the result.
-                 var timer = new Timer(3000, function() {
-                     // The dbservice shouldn't have cached this result,
-                     // so this completer should be queried.
-                     var newCompleter = installCompleter('test-phish-simple', [[2, addUrls]], []);
-
-                     var assertions = {
-                       "urlsExist" : addUrls,
-                       "completerQueried" : [newCompleter, addUrls]
+                       "urlsDontExist" : addUrls
                      };
                      checkAssertions(assertions, runNextTest);
                    });
@@ -508,6 +566,86 @@ function testCachedResultsWithExpire() {
     });
 }
 
+function testCachedResultsUpdate()
+{
+  var existUrls = ["foo.com/a"];
+  setupCachedResults(existUrls, function() {
+    // This is called after setupCachedResults().  Verify that
+    // checking the url again does not cause a completer request.
+
+    // install a new completer, this one should never be queried.
+    var newCompleter = installCompleter('test-phish-simple', [[1, []]], []);
+
+    var assertions = {
+      "urlsExist" : existUrls,
+      "completerQueried" : [newCompleter, []]
+    };
+
+    var addUrls = ["foobar.org/a"];
+
+    var update2 = buildPhishingUpdate(
+        [
+          { "chunkNum" : 2,
+            "urls" : addUrls
+          }],
+        4);
+
+    checkAssertions(assertions, function () {
+      // Apply the update. The cached completes should be gone.
+      doStreamUpdate(update2, function() {
+        // Now the completer gets queried again.
+        var newCompleter2 = installCompleter('test-phish-simple', [[1, existUrls]], []);
+        var assertions2 = {
+          "tableData" : "test-phish-simple;a:1-2",
+          "urlsExist" : existUrls,
+          "completerQueried" : [newCompleter2, existUrls]
+        };
+        checkAssertions(assertions2, runNextTest);
+      }, updateError);
+    });
+  });
+}
+
+function testCachedResultsFailure()
+{
+  var existUrls = ["foo.com/a"];
+  setupCachedResults(existUrls, function() {
+    // This is called after setupCachedResults().  Verify that
+    // checking the url again does not cause a completer request.
+
+    // install a new completer, this one should never be queried.
+    var newCompleter = installCompleter('test-phish-simple', [[1, []]], []);
+
+    var assertions = {
+      "urlsExist" : existUrls,
+      "completerQueried" : [newCompleter, []]
+    };
+
+    var addUrls = ["foobar.org/a"];
+
+    var update2 = buildPhishingUpdate(
+        [
+          { "chunkNum" : 2,
+            "urls" : addUrls
+          }],
+        4);
+
+    checkAssertions(assertions, function() {
+      // Apply the update. The cached completes should be gone.
+      doErrorUpdate("test-phish-simple,test-malware-simple", function() {
+        // Now the completer gets queried again.
+        var newCompleter2 = installCompleter('test-phish-simple', [[1, existUrls]], []);
+        var assertions2 = {
+          "tableData" : "test-phish-simple;a:1",
+          "urlsExist" : existUrls,
+          "completerQueried" : [newCompleter2, existUrls]
+        };
+        checkAssertions(assertions2, runNextTest);
+      }, updateError);
+    });
+  });
+}
+
 function setupUncachedResults(addUrls, part2)
 {
   var update = buildPhishingUpdate(
@@ -558,7 +696,9 @@ function testErrorList()
           { "chunkNum" : 1,
             "urls" : addUrls
           }],
-    32);
+    4);
+  // The update failure should will kill the completes, so the above
+  // must be a prefix to get any hit at all past the update failure.
 
   var completer = installCompleter('test-phish-simple', [[1, addUrls]], []);
 
@@ -603,7 +743,7 @@ function testStaleList()
   };
 
   // Consider a match stale after one second.
-  prefBranch.setIntPref("urlclassifier.confirm-age", 1);
+  prefBranch.setIntPref("urlclassifier.max-complete-age", 1);
 
   // Apply the update.
   doStreamUpdate(update, function() {
@@ -612,7 +752,7 @@ function testStaleList()
       new Timer(3000, function() {
           // Now the lists should be marked stale.  Check assertions.
           checkAssertions(assertions, function() {
-              prefBranch.setIntPref("urlclassifier.confirm-age", 2700);
+              prefBranch.setIntPref("urlclassifier.max-complete-age", 2700);
               runNextTest();
             });
         }, updateError);
@@ -643,7 +783,7 @@ function testStaleListEmpty()
   };
 
   // Consider a match stale after one second.
-  prefBranch.setIntPref("urlclassifier.confirm-age", 1);
+  prefBranch.setIntPref("urlclassifier.max-complete-age", 1);
 
   // Apply the update.
   doStreamUpdate(update, function() {
@@ -652,7 +792,7 @@ function testStaleListEmpty()
       new Timer(3000, function() {
           // Now the lists should be marked stale.  Check assertions.
           checkAssertions(assertions, function() {
-              prefBranch.setIntPref("urlclassifier.confirm-age", 2700);
+              prefBranch.setIntPref("urlclassifier.max-complete-age", 2700);
               runNextTest();
             });
         }, updateError);
@@ -671,7 +811,9 @@ function testErrorListIndependent()
           { "chunkNum" : 1,
             "urls" : phishUrls
           }],
-    32);
+    4);
+  // These have to persist past the update failure, so they must be prefixes,
+  // not completes.
 
   update += buildMalwareUpdate(
         [
@@ -708,6 +850,9 @@ function run_test()
   runTests([
       testPartialAdds,
       testPartialAddsWithConflicts,
+      testFragments,
+      testSpecFragments,
+      testMoreSpecFragments,
       testFalsePositives,
       testEmptyCompleter,
       testCompleterFailure,
@@ -715,15 +860,16 @@ function run_test()
       testMixedSizesDifferentDomains,
       testInvalidHashSize,
       testWrongTable,
-      testWrongChunk,
       testCachedResults,
       testCachedResultsWithSub,
       testCachedResultsWithExpire,
+      testCachedResultsUpdate,
+      testCachedResultsFailure,
       testUncachedResults,
       testStaleList,
       testStaleListEmpty,
       testErrorList,
-      testErrorListIndependent,
+      testErrorListIndependent
   ]);
 }
 

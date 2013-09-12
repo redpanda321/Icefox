@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=386782
 -->
 <head>
   <title>Test for Bug 386782</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
@@ -33,7 +32,7 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=386782
         // <html><body contentEditable="true"><p>contentEditable</p></body></html>
         url: 'data:text/html;charset=utf-8,<html><body contentEditable="true"><p>contentEditable</p></body></html>',
         name: 'contentEditableNavigate',
-        expectedBodyBeforeEdit: '<br><p>contentEditable</p>',
+        expectedBodyBeforeEdit: '<p>contentEditable</p>',
         expectedBodyAfterEdit:  'EDITED <br><p>contentEditable</p>',
         expectedBodyAfterSecondEdit: 'EDITED TWICE <br><p>contentEditable</p>',
       }
@@ -61,20 +60,12 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=386782
     }
 
     function beginTest() {
-      netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
       gTest.window.document.body.focus();
 
       // WARNING: If the following test fails, give the setTimeout() in the onload()
       // a bit longer; the doc hasn't had enough time to setup its editor.
       is(gTest.window.document.body.innerHTML, gTest.expectedBodyBeforeEdit, "Is doc setup yet");
-      
-      sendChar('E', gTest.window.document.body);
-      sendChar('D', gTest.window.document.body);
-      sendChar('I', gTest.window.document.body);
-      sendChar('T', gTest.window.document.body);
-      sendChar('E', gTest.window.document.body);
-      sendChar('D', gTest.window.document.body);
-      sendChar(' ', gTest.window.document.body);
+      sendString('EDITED ', gTest.window);
       is(gTest.window.document.body.innerHTML, gTest.expectedBodyAfterEdit, "Editing failed.");
 
       gTest.window.location = 'data:text/html;charset=utf-8,SomeOtherDocument';
@@ -82,7 +73,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=386782
     }
     
     function goBack() {
-      netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
       gTest.window.history.back();
       setTimeout(function() {
         SimpleTest.waitForFocus(checkStillEditable, gTest.window);
@@ -90,7 +80,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=386782
     }
 
     function checkStillEditable() {
-      netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
 
       // Check that the contents are correct.
       is(gTest.window.document.body.innerHTML, gTest.expectedBodyAfterEdit, "Edited contents still correct?");
@@ -104,12 +93,7 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=386782
             
       // Check that we can still edit the page.
       gTest.window.document.body.focus();
-      sendChar('T', gTest.window.document.body);
-      sendChar('W', gTest.window.document.body);
-      sendChar('I', gTest.window.document.body);
-      sendChar('C', gTest.window.document.body);
-      sendChar('E', gTest.window.document.body);
-      sendChar(' ', gTest.window.document.body);
+      sendString('TWICE ', gTest.window);
       is(gTest.window.document.body.innerHTML, gTest.expectedBodyAfterSecondEdit, "Can we still edit?");
       
       gTest.window.close();

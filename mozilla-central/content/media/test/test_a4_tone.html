@@ -1,12 +1,14 @@
 <!DOCTYPE HTML>
 <html>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/.  -->
 <!--
 https://bugzilla.mozilla.org/show_bug.cgi?id=490705
 -->
 
 <head>
   <title>Media test: simple audioAvalailable event checks</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -14,7 +16,7 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=490705
 <a target="_blank" href="https://bugzilla.mozilla.org/show_bug.cgi?id=490705">Mozilla Bug 490705</a>
 
 <!-- mute audio, since there is no need to hear the sound for these tests -->
-<audio id='a1' onerror="event.stopPropagation();" controls></audio>
+<audio id='a1' controls></audio>
 
 <pre id="test">
 <script class="testbody" type="text/javascript">
@@ -178,7 +180,7 @@ function audioAvailable(event) {
   spectrumMaxs.push({ value: maxValue, index: maxIndex, time: (currentSampleOffset / testFileSampleRate) });
 
   if( (typeof event.time !== "number") ||
-      (Math.abs(event.time - currentSampleOffset / testFileSampleRate) > 0.01) ) {
+      (Math.abs(event.time - currentSampleOffset / testFileSampleRate) >= 0.001) ) {
     isTimePropertyValid = false;
   }
 

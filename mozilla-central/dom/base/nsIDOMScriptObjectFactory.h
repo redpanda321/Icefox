@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsIDOMScriptObjectFactory_h__
 #define nsIDOMScriptObjectFactory_h__
@@ -41,14 +9,14 @@
 #include "nsISupports.h"
 #include "nsIDOMClassInfo.h"
 #include "nsStringGlue.h"
+#include "nsIScriptRuntime.h"
 
-#define NS_IDOM_SCRIPT_OBJECT_FACTORY_IID   \
-{ 0x8c0eb687, 0xa859, 0x4a62, \
- { 0x99, 0x82, 0xea, 0xbf, 0x9e, 0xf5, 0x59, 0x5f } }
+#define NS_IDOM_SCRIPT_OBJECT_FACTORY_IID \
+{ 0x2a50e17c, 0x46ff, 0x4150, \
+  { 0xbb, 0x46, 0xd8, 0x07, 0xb3, 0x36, 0xde, 0xab } }
 
 class nsIScriptContext;
 class nsIScriptGlobalObject;
-class nsIScriptRuntime;
 class nsIDOMEventListener;
 
 typedef nsXPCClassInfo* (*nsDOMClassInfoExternalConstructorFnc)
@@ -57,27 +25,6 @@ typedef nsXPCClassInfo* (*nsDOMClassInfoExternalConstructorFnc)
 class nsIDOMScriptObjectFactory : public nsISupports {
 public:  
   NS_DECLARE_STATIC_IID_ACCESSOR(NS_IDOM_SCRIPT_OBJECT_FACTORY_IID)
-
-  // Get a script language given its "name" (ie, the mime-type)
-  // Note that to fetch javascript from this function, you must currently
-  // use the name "application/javascript" (but also note that all existing
-  // callers of this function optimize the detection of JS, so do not
-  // ask this function for JS)
-  NS_IMETHOD GetScriptRuntime(const nsAString &aLanguageName,
-                              nsIScriptRuntime **aLanguage) = 0;
-
-  // Get a script language given its nsIProgrammingLanguage ID.
-  NS_IMETHOD GetScriptRuntimeByID(PRUint32 aScriptTypeID, 
-                                  nsIScriptRuntime **aLanguage) = 0;
-
-  // Get the ID for a language given its name - but like GetScriptRuntime,
-  // only "application/javascript" is currently supported for JS.
-  NS_IMETHOD GetIDForScriptType(const nsAString &aLanguageName,
-                                PRUint32 *aScriptTypeID) = 0;
-
-  NS_IMETHOD NewScriptGlobalObject(PRBool aIsChrome,
-                                   PRBool aIsModalContentWindow,
-                                   nsIScriptGlobalObject **aGlobal) = 0;
 
   NS_IMETHOD_(nsISupports *) GetClassInfoInstance(nsDOMClassInfoID aID) = 0;
   NS_IMETHOD_(nsISupports *) GetExternalClassInfoInstance(const nsAString& aName) = 0;
@@ -91,9 +38,17 @@ public:
                                   nsDOMClassInfoExternalConstructorFnc aConstructorFptr,
                                   const nsIID *aProtoChainInterface,
                                   const nsIID **aInterfaces,
-                                  PRUint32 aScriptableFlags,
-                                  PRBool aHasClassInterface,
+                                  uint32_t aScriptableFlags,
+                                  bool aHasClassInterface,
                                   const nsCID *aConstructorCID) = 0;
+
+  nsIScriptRuntime* GetJSRuntime()
+  {
+    return mJSRuntime;
+  }
+
+protected:
+  nsCOMPtr<nsIScriptRuntime> mJSRuntime;
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsIDOMScriptObjectFactory,

@@ -7,7 +7,7 @@
 #include "nsServiceManagerUtils.h"
 
 static void
-print_field(const char *label, char *str, PRInt32 len)
+print_field(const char *label, char *str, int32_t len)
 {
     char c = str[len];
     str[len] = '\0';
@@ -25,14 +25,14 @@ print_field(const char *label, char *str, PRInt32 len)
     PR_END_MACRO
 
 static void
-parse_authority(nsIURLParser *urlParser, char *auth, PRInt32 authLen)
+parse_authority(nsIURLParser *urlParser, char *auth, int32_t authLen)
 {
     PRINT_FIELD(auth);
 
-    PRUint32 usernamePos, passwordPos;
-    PRInt32 usernameLen, passwordLen;
-    PRUint32 hostnamePos;
-    PRInt32 hostnameLen, port;
+    uint32_t usernamePos, passwordPos;
+    int32_t usernameLen, passwordLen;
+    uint32_t hostnamePos;
+    int32_t hostnameLen, port;
 
     urlParser->ParseAuthority(auth, authLen,
                               &usernamePos, &usernameLen,
@@ -48,12 +48,12 @@ parse_authority(nsIURLParser *urlParser, char *auth, PRInt32 authLen)
 }
 
 static void
-parse_file_path(nsIURLParser *urlParser, char *filepath, PRInt32 filepathLen)
+parse_file_path(nsIURLParser *urlParser, char *filepath, int32_t filepathLen)
 {
     PRINT_FIELD(filepath);
 
-    PRUint32 dirPos, basePos, extPos;
-    PRInt32 dirLen, baseLen, extLen;
+    uint32_t dirPos, basePos, extPos;
+    int32_t dirLen, baseLen, extLen;
 
     urlParser->ParseFilePath(filepath, filepathLen,
                              &dirPos, &dirLen,
@@ -66,22 +66,20 @@ parse_file_path(nsIURLParser *urlParser, char *filepath, PRInt32 filepathLen)
 }
 
 static void
-parse_path(nsIURLParser *urlParser, char *path, PRInt32 pathLen)
+parse_path(nsIURLParser *urlParser, char *path, int32_t pathLen)
 {
     PRINT_FIELD(path);
 
-    PRUint32 filePos, paramPos, queryPos, refPos;
-    PRInt32 fileLen, paramLen, queryLen, refLen;
+    uint32_t filePos, queryPos, refPos;
+    int32_t fileLen, queryLen, refLen;
 
     urlParser->ParsePath(path, pathLen,
                          &filePos, &fileLen,
-                         &paramPos, &paramLen,
                          &queryPos, &queryLen,
                          &refPos, &refLen);
 
     if (fileLen != -1)
         parse_file_path(urlParser, path + filePos, fileLen);
-    PRINT_SUBFIELD(path, param);
     PRINT_SUBFIELD(path, query);
     PRINT_SUBFIELD(path, ref);
 }
@@ -116,8 +114,8 @@ main(int argc, char **argv)
         printf("have urlParser @%p\n", static_cast<void*>(urlParser.get()));
 
         char *spec = argv[1];
-        PRUint32 schemePos, authPos, pathPos;
-        PRInt32 schemeLen, authLen, pathLen;
+        uint32_t schemePos, authPos, pathPos;
+        int32_t schemeLen, authLen, pathLen;
 
         urlParser->ParseURL(spec, -1,
                             &schemePos, &schemeLen,

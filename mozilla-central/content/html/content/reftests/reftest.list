@@ -1,3 +1,6 @@
+# autofocus attribute (we can't test with mochitests)
+include autofocus/reftest.list
+
 == 41464-1a.html 41464-1-ref.html
 == 41464-1b.html 41464-1-ref.html
 == 52019-1.html 52019-1-ref.html
@@ -13,6 +16,14 @@
 == 560059-video-dimensions.html 560059-video-dimensions-ref.html
 == 573322-quirks.html 573322-quirks-ref.html
 == 573322-no-quirks.html 573322-no-quirks-ref.html
+== 596455-1a.html 596455-ref-1.html
+== 596455-1b.html 596455-ref-1.html
+== 596455-2a.html 596455-ref-2.html
+== 596455-2b.html 596455-ref-2.html
+== 610935.html 610935-ref.html
+== 649134-1.html 649134-ref.html
+skip-if(Android) == 649134-2.html 649134-2-ref.html
+
 == hidden-1a.html hidden-1-ref.html
 == hidden-1b.html hidden-1-ref.html
 == hidden-1c.html hidden-1-ref.html

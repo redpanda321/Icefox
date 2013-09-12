@@ -1,51 +1,20 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  * vim: sw=2 ts=2 et lcs=trail\:.,tab\:>~ :
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is storage test code.
- *
- * The Initial Developer of the Original Code is the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Andrew Sutherland <asutherland@asutherland.org> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "storage_test_harness.h"
 #include "prthread.h"
 #include "nsIEventTarget.h"
+#include "nsIInterfaceRequestorUtils.h"
 
 #include "sqlite3.h"
 
-#include "mozilla/Monitor.h"
+#include "mozilla/ReentrantMonitor.h"
 
-using mozilla::Monitor;
-using mozilla::MonitorAutoEnter;
+using mozilla::ReentrantMonitor;
+using mozilla::ReentrantMonitorAutoEnter;
 
 /**
  * Verify that mozIStorageAsyncStatement's life-cycle never triggers a mutex on
@@ -139,7 +108,7 @@ class ThreadWedger : public nsRunnable
 {
 public:
   ThreadWedger(nsIEventTarget *aTarget)
-  : mMonitor("thread wedger")
+  : mReentrantMonitor("thread wedger")
   , unwedged(false)
   {
     aTarget->Dispatch(this, aTarget->NS_DISPATCH_NORMAL);
@@ -147,7 +116,7 @@ public:
 
   NS_IMETHOD Run()
   {
-    MonitorAutoEnter automon(mMonitor);
+    ReentrantMonitorAutoEnter automon(mReentrantMonitor);
 
     if (!unwedged)
       automon.Wait();
@@ -157,45 +126,18 @@ public:
 
   void unwedge()
   {
-    MonitorAutoEnter automon(mMonitor);
+    ReentrantMonitorAutoEnter automon(mReentrantMonitor);
     unwedged = true;
     automon.Notify();
   }
 
 private:
-  Monitor mMonitor;
+  ReentrantMonitor mReentrantMonitor;
   bool unwedged;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Async Helpers
-
-/**
- * Execute an async statement, blocking the main thread until we get the
- * callback completion notification.
- */
-void
-blocking_async_execute(mozIStorageBaseStatement *stmt)
-{
-  nsRefPtr<AsyncStatementSpinner> spinner(new AsyncStatementSpinner());
-
-  nsCOMPtr<mozIStoragePendingStatement> pendy;
-  (void)stmt->ExecuteAsync(spinner, getter_AddRefs(pendy));
-  spinner->SpinUntilCompleted();
-}
-
-/**
- * Invoke AsyncClose on the given connection, blocking the main thread until we
- * get the completion notification.
- */
-void
-blocking_async_close(mozIStorageConnection *db)
-{
-  nsRefPtr<AsyncStatementSpinner> spinner(new AsyncStatementSpinner());
-
-  db->AsyncClose(spinner);
-  spinner->SpinUntilCompleted();
-}
 
 /**
  * A horrible hack to figure out what the connection's async thread is.  By
@@ -221,6 +163,14 @@ get_conn_async_thread(mozIStorageConnection *db)
   nsCOMPtr<nsIThread> asyncThread;
   threadMan->GetThreadFromPRThread(last_non_watched_thread,
                                    getter_AddRefs(asyncThread));
+
+  // Additionally, check that the thread we get as the background thread is the
+  // same one as the one we report from getInterface.
+  nsCOMPtr<nsIEventTarget> target = do_GetInterface(db);
+  nsCOMPtr<nsIThread> allegedAsyncThread = do_QueryInterface(target);
+  PRThread *allegedPRThread;
+  (void)allegedAsyncThread->GetPRThread(&allegedPRThread);
+  do_check_eq(allegedPRThread, last_non_watched_thread);
   return asyncThread.forget();
 }
 
@@ -231,6 +181,7 @@ get_conn_async_thread(mozIStorageConnection *db)
 void
 test_TrueAsyncStatement()
 {
+  // (only the first test needs to call this)
   hook_sqlite_mutex();
 
   nsCOMPtr<mozIStorageConnection> db(getMemoryDatabase());
@@ -253,7 +204,7 @@ test_TrueAsyncStatement()
     NS_LITERAL_CSTRING("INSERT INTO test (id) VALUES (?)"),
     getter_AddRefs(stmt)
   );
-  stmt->BindInt32Parameter(0, 1);
+  stmt->BindInt32ByIndex(0, 1);
   blocking_async_execute(stmt);
   stmt->Finalize();
   do_check_false(mutex_used_on_watched_thread);
@@ -269,9 +220,9 @@ test_TrueAsyncStatement()
   paramsArray->NewBindingParams(getter_AddRefs(params));
   params->BindInt32ByName(NS_LITERAL_CSTRING("id"), 2);
   paramsArray->AddParams(params);
-  params = nsnull;
+  params = nullptr;
   stmt->BindParameters(paramsArray);
-  paramsArray = nsnull;
+  paramsArray = nullptr;
   blocking_async_execute(stmt);
   stmt->Finalize();
   do_check_false(mutex_used_on_watched_thread);
@@ -342,7 +293,7 @@ test_AsyncCancellation()
 
   // -- verify that neither statement constructed their tables
   nsresult rv;
-  PRBool exists;
+  bool exists;
   rv = db->TableExists(NS_LITERAL_CSTRING("asyncTable"), &exists);
   do_check_true(rv == NS_OK);
   do_check_false(exists);
@@ -356,10 +307,46 @@ test_AsyncCancellation()
   blocking_async_close(db);
 }
 
+/**
+ * Test that the destructor for an asynchronous statement which has a
+ *  sqlite3_stmt will dispatch that statement to the async thread for
+ *  finalization rather than trying to finalize it on the main thread
+ *  (and thereby running afoul of our mutex use detector).
+ */
+void test_AsyncDestructorFinalizesOnAsyncThread()
+{
+  // test_TrueAsyncStatement called hook_sqlite_mutex() for us
+
+  nsCOMPtr<mozIStorageConnection> db(getMemoryDatabase());
+  watch_for_mutex_use_on_this_thread();
+
+  // -- create an async statement
+  nsCOMPtr<mozIStorageAsyncStatement> stmt;
+  db->CreateAsyncStatement(
+    NS_LITERAL_CSTRING("CREATE TABLE test (id INTEGER PRIMARY KEY)"),
+    getter_AddRefs(stmt)
+  );
+
+  // -- execute it so it gets a sqlite3_stmt that needs to be finalized
+  blocking_async_execute(stmt);
+  do_check_false(mutex_used_on_watched_thread);
+
+  // -- forget our reference
+  stmt = nullptr;
+
+  // -- verify the mutex was not touched
+  do_check_false(mutex_used_on_watched_thread);
+
+  // -- make sure the statement actually gets finalized / cleanup
+  // the close will assert if we failed to finalize!
+  blocking_async_close(db);
+}
+
 void (*gTests[])(void) = {
   // this test must be first because it hooks the mutex mechanics
   test_TrueAsyncStatement,
   test_AsyncCancellation,
+  test_AsyncDestructorFinalizesOnAsyncThread
 };
 
 const char *file = __FILE__;

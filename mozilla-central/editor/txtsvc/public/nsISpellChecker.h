@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsISpellChecker_h__
 #define nsISpellChecker_h__
@@ -44,9 +12,9 @@
 #define NS_SPELLCHECKER_CONTRACTID "@mozilla.org/spellchecker;1"
 
 #define NS_ISPELLCHECKER_IID                    \
-{ /* E75AC48C-E948-452E-8DB3-30FEE29FE3D2 */    \
-0xe75ac48c, 0xe948, 0x452e, \
-  { 0x8d, 0xb3, 0x30, 0xfe, 0xe2, 0x9f, 0xe3, 0xd2 } }
+{ /* 27bff957-b486-40ae-9f5d-af0cdd211868 */    \
+0x27bff957, 0xb486, 0x40ae, \
+  { 0x9f, 0x5d, 0xaf, 0x0c, 0xdd, 0x21, 0x18, 0x68 } }
 
 class nsITextServicesDocument;
 class nsString;
@@ -65,7 +33,7 @@ public:
    * @param aFromStartOfDoc If true, start check from beginning of document,
    * if false, start check from current cursor position.
    */
-  NS_IMETHOD SetDocument(nsITextServicesDocument *aDoc, PRBool aFromStartofDoc) = 0;
+  NS_IMETHOD SetDocument(nsITextServicesDocument *aDoc, bool aFromStartofDoc) = 0;
 
   /**
    * Selects (hilites) the next misspelled word in the document.
@@ -83,7 +51,7 @@ public:
    * suggested replacements for the misspelled word. The array will be empty
    * if there aren't any suggestions.
    */
-  NS_IMETHOD CheckWord(const nsAString &aWord, PRBool *aIsMisspelled, nsTArray<nsString> *aSuggestions) = 0;
+  NS_IMETHOD CheckWord(const nsAString &aWord, bool *aIsMisspelled, nsTArray<nsString> *aSuggestions) = 0;
 
   /**
    * Replaces the old word with the specified new word.
@@ -93,7 +61,7 @@ public:
    * word, in the document, with new word when it is true. If
    * false, it will replace the 1st occurrence only!
    */
-  NS_IMETHOD Replace(const nsAString &aOldWord, const nsAString &aNewWord, PRBool aAllOccurrences) = 0;
+  NS_IMETHOD Replace(const nsAString &aOldWord, const nsAString &aNewWord, bool aAllOccurrences) = 0;
 
   /**
    * Ignores all occurrences of the specified word in the document.
@@ -142,9 +110,16 @@ public:
   /**
    * Tells the spellchecker to use a specific dictionary.
    * @param aDictionary a string that is in the list returned
-   * by GetDictionaryList().
+   * by GetDictionaryList() or an empty string. If aDictionary is 
+   * empty string, spellchecker will be disabled.
    */
   NS_IMETHOD SetCurrentDictionary(const nsAString &aDictionary) = 0;
+
+  /**
+   * Call this on any change in installed dictionaries to ensure that the spell
+   * checker is not using a current dictionary which is no longer available.
+   */
+  NS_IMETHOD CheckCurrentDictionary() = 0;
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsISpellChecker, NS_ISPELLCHECKER_IID)

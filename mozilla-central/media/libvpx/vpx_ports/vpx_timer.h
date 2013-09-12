@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license 
+ *  Use of this source code is governed by a BSD-style license
  *  that can be found in the LICENSE file in the root of the source
  *  tree. An additional intellectual property rights grant can be found
- *  in the file PATENTS.  All contributing project authors may 
+ *  in the file PATENTS.  All contributing project authors may
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
@@ -12,7 +12,9 @@
 #ifndef VPX_TIMER_H
 #define VPX_TIMER_H
 
-#if defined(_MSC_VER)
+#if CONFIG_OS_SUPPORT
+
+#if defined(_WIN32)
 /*
  * Win32 specific includes
  */
@@ -43,7 +45,7 @@
 
 struct vpx_usec_timer
 {
-#if defined(_MSC_VER)
+#if defined(_WIN32)
     LARGE_INTEGER  begin, end;
 #else
     struct timeval begin, end;
@@ -51,10 +53,10 @@ struct vpx_usec_timer
 };
 
 
-static INLINE void
+static void
 vpx_usec_timer_start(struct vpx_usec_timer *t)
 {
-#if defined(_MSC_VER)
+#if defined(_WIN32)
     QueryPerformanceCounter(&t->begin);
 #else
     gettimeofday(&t->begin, NULL);
@@ -62,10 +64,10 @@ vpx_usec_timer_start(struct vpx_usec_timer *t)
 }
 
 
-static INLINE void
+static void
 vpx_usec_timer_mark(struct vpx_usec_timer *t)
 {
-#if defined(_MSC_VER)
+#if defined(_WIN32)
     QueryPerformanceCounter(&t->end);
 #else
     gettimeofday(&t->end, NULL);
@@ -73,10 +75,10 @@ vpx_usec_timer_mark(struct vpx_usec_timer *t)
 }
 
 
-static INLINE long
+static long
 vpx_usec_timer_elapsed(struct vpx_usec_timer *t)
 {
-#if defined(_MSC_VER)
+#if defined(_WIN32)
     LARGE_INTEGER freq, diff;
 
     diff.QuadPart = t->end.QuadPart - t->begin.QuadPart;
@@ -93,5 +95,27 @@ vpx_usec_timer_elapsed(struct vpx_usec_timer *t)
 #endif
 }
 
+#else /* CONFIG_OS_SUPPORT = 0*/
+
+/* Empty timer functions if CONFIG_OS_SUPPORT = 0 */
+#ifndef timersub
+#define timersub(a, b, result)
+#endif
+
+struct vpx_usec_timer
+{
+    void *dummy;
+};
+
+static void
+vpx_usec_timer_start(struct vpx_usec_timer *t) { }
+
+static void
+vpx_usec_timer_mark(struct vpx_usec_timer *t) { }
+
+static long
+vpx_usec_timer_elapsed(struct vpx_usec_timer *t) { return 0; }
+
+#endif /* CONFIG_OS_SUPPORT */
 
 #endif

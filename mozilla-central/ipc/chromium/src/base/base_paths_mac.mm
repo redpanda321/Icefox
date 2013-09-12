@@ -4,7 +4,12 @@
 
 #include "base/base_paths_mac.h"
 
+#ifdef XP_MACOSX
 #import <Cocoa/Cocoa.h>
+#else
+#import <Foundation/NSBundle.h>
+#import <Foundation/NSPathUtilities.h>
+#endif
 
 #include "base/file_path.h"
 #include "base/file_util.h"

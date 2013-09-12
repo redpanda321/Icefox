@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Toolkit Crash Reporter
- *
- * The Initial Developer of the Original Code is
- * Ted Mielczarek <ted.mielczarek@gmail.com>
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Ted Mielczarek <ted.mielczarek@gmail.com>
- *   Dave Camp <dcamp@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifdef WIN32_LEAN_AND_MEAN
 #undef WIN32_LEAN_AND_MEAN
@@ -145,7 +111,7 @@ static void DoInitCommonControls()
   ic.dwICC = ICC_PROGRESS_CLASS;
   InitCommonControlsEx(&ic);
   // also get the rich edit control
-  LoadLibrary(L"riched20.dll");
+  LoadLibrary(L"Msftedit.dll");
 }
 
 static bool GetBoolValue(HKEY hRegKey, LPCTSTR valueName, DWORD* value)
@@ -447,7 +413,8 @@ static void EndCrashReporterDialog(HWND hwndDlg, int code)
 {
   // Save the current values to the registry
   wchar_t email[MAX_EMAIL_LENGTH];
-  GetDlgItemText(hwndDlg, IDC_EMAILTEXT, email, sizeof(email));
+  GetDlgItemTextW(hwndDlg, IDC_EMAILTEXT, email,
+                  sizeof(email) / sizeof(email[0]));
   SetStringKey(gCrashReporterKey.c_str(), EMAIL_VALUE, email);
 
   SetBoolKey(gCrashReporterKey.c_str(), INCLUDE_URL_VALUE,
@@ -590,7 +557,8 @@ static void UpdateEmail(HWND hwndDlg)
 {
   if (IsDlgButtonChecked(hwndDlg, IDC_EMAILMECHECK)) {
     wchar_t email[MAX_EMAIL_LENGTH];
-    GetDlgItemText(hwndDlg, IDC_EMAILTEXT, email, sizeof(email));
+    GetDlgItemTextW(hwndDlg, IDC_EMAILTEXT, email,
+                    sizeof(email) / sizeof(email[0]));
     gQueryParameters[L"Email"] = email;
     if (IsDlgButtonChecked(hwndDlg, IDC_SUBMITREPORTCHECK))
       EnableWindow(GetDlgItem(hwndDlg, IDC_EMAILTEXT), true);
@@ -603,7 +571,8 @@ static void UpdateEmail(HWND hwndDlg)
 static void UpdateComment(HWND hwndDlg)
 {
   wchar_t comment[MAX_COMMENT_LENGTH + 1];
-  GetDlgItemText(hwndDlg, IDC_COMMENTTEXT, comment, sizeof(comment));
+  GetDlgItemTextW(hwndDlg, IDC_COMMENTTEXT, comment,
+                  sizeof(comment) / sizeof(comment[0]));
   if (wcslen(comment) > 0)
     gQueryParameters[L"Comments"] = comment;
   else
@@ -1064,6 +1033,7 @@ static BOOL CALLBACK CrashReporterDialogProc(HWND hwndDlg, UINT message,
     description += Str(ST_CRASHREPORTERDESCRIPTION);
     SetDlgItemText(hwndDlg, IDC_DESCRIPTIONTEXT, description.c_str());
 
+
     // Make the title bold.
     CHARFORMAT fmt = { 0, };
     fmt.cbSize = sizeof(fmt);
@@ -1074,9 +1044,12 @@ static BOOL CALLBACK CrashReporterDialogProc(HWND hwndDlg, UINT message,
     SendDlgItemMessage(hwndDlg, IDC_DESCRIPTIONTEXT, EM_SETCHARFORMAT,
                        SCF_SELECTION, (LPARAM)&fmt);
     SendDlgItemMessage(hwndDlg, IDC_DESCRIPTIONTEXT, EM_SETSEL, 0, 0);
-
+    // Force redraw.
     SendDlgItemMessage(hwndDlg, IDC_DESCRIPTIONTEXT,
                        EM_SETTARGETDEVICE, (WPARAM)NULL, 0);
+    // Force resize.
+    SendDlgItemMessage(hwndDlg, IDC_DESCRIPTIONTEXT,
+                       EM_REQUESTRESIZE, 0, 0);
 
     // if no URL was given, hide the URL checkbox
     if (gQueryParameters.find(L"URL") == gQueryParameters.end()) {

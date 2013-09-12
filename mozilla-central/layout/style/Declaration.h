@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Daniel Glazman <glazman@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * representation of a declaration block (or style attribute) in a CSS
@@ -43,6 +10,8 @@
 
 #ifndef mozilla_css_Declaration_h
 #define mozilla_css_Declaration_h
+
+#include "mozilla/Attributes.h"
 
 // This header is in EXPORTS because it's used in several places in content/,
 // but it's not really a public interface.
@@ -90,16 +59,20 @@ public:
 
   void RemoveProperty(nsCSSProperty aProperty);
 
+  bool HasProperty(nsCSSProperty aProperty) const;
+
   void GetValue(nsCSSProperty aProperty, nsAString& aValue) const;
 
-  PRBool HasImportantData() const { return mImportantData != nsnull; }
-  PRBool GetValueIsImportant(nsCSSProperty aProperty) const;
-  PRBool GetValueIsImportant(const nsAString& aProperty) const;
+  bool HasImportantData() const { return mImportantData != nullptr; }
+  bool GetValueIsImportant(nsCSSProperty aProperty) const;
+  bool GetValueIsImportant(const nsAString& aProperty) const;
 
-  PRUint32 Count() const {
+  uint32_t Count() const {
     return mOrder.Length();
   }
-  void GetNthProperty(PRUint32 aIndex, nsAString& aReturn) const;
+
+  // Returns whether we actually had a property at aIndex
+  bool GetNthProperty(uint32_t aIndex, nsAString& aReturn) const;
 
   void ToString(nsAString& aString) const;
 
@@ -114,6 +87,7 @@ public:
   /**
    * Transfer all of the state from |aExpandedData| into this declaration.
    * After calling, |aExpandedData| should be in its initial state.
+   * Callers must make sure mOrder is updated as necessary.
    */
   void CompressFrom(nsCSSExpandedDataBlock *aExpandedData) {
     NS_ABORT_IF_FALSE(!mData, "oops");
@@ -156,28 +130,28 @@ public:
    * Attempt to replace the value for |aProperty| stored in this
    * declaration with the matching value from |aFromBlock|.
    * This method may only be called on a mutable declaration.
-   * It will fail (returning PR_FALSE) if |aProperty| is shorthand,
+   * It will fail (returning false) if |aProperty| is shorthand,
    * is not already in this declaration, or does not have the indicated
-   * importance level.  If it returns PR_TRUE, it erases the value in
-   * |aFromBlock|.  |aChanged| is set to PR_TRUE if the declaration
-   * changed as a result of the call, and to PR_FALSE otherwise.
+   * importance level.  If it returns true, it erases the value in
+   * |aFromBlock|.  |aChanged| is set to true if the declaration
+   * changed as a result of the call, and to false otherwise.
    */
-  PRBool TryReplaceValue(nsCSSProperty aProperty, PRBool aIsImportant,
+  bool TryReplaceValue(nsCSSProperty aProperty, bool aIsImportant,
                          nsCSSExpandedDataBlock& aFromBlock,
-                         PRBool* aChanged)
+                         bool* aChanged)
   {
     AssertMutable();
     NS_ABORT_IF_FALSE(mData, "called while expanded");
 
     if (nsCSSProps::IsShorthand(aProperty)) {
-      *aChanged = PR_FALSE;
-      return PR_FALSE;
+      *aChanged = false;
+      return false;
     }
     nsCSSCompressedDataBlock *block = aIsImportant ? mImportantData : mData;
     // mImportantData might be null
     if (!block) {
-      *aChanged = PR_FALSE;
-      return PR_FALSE;
+      *aChanged = false;
+      return false;
     }
 
 #ifdef DEBUG
@@ -191,7 +165,7 @@ public:
     return block->TryReplaceValue(aProperty, aFromBlock, aChanged);
   }
 
-  PRBool HasNonImportantValueFor(nsCSSProperty aProperty) const {
+  bool HasNonImportantValueFor(nsCSSProperty aProperty) const {
     NS_ABORT_IF_FALSE(!nsCSSProps::IsShorthand(aProperty), "must be longhand");
     return !!mData->ValueFor(aProperty);
   }
@@ -219,7 +193,7 @@ public:
    * Mark this declaration as unmodifiable.  It's 'const' so it can
    * be called from ToString.
    */
-  void SetImmutable() const { mImmutable = PR_TRUE; }
+  void SetImmutable() const { mImmutable = true; }
 
   /**
    * Clear the data, in preparation for its replacement with entirely
@@ -227,33 +201,36 @@ public:
    */
   void ClearData() {
     AssertMutable();
-    mData = nsnull;
-    mImportantData = nsnull;
+    mData = nullptr;
+    mImportantData = nullptr;
     mOrder.Clear();
   }
 
 #ifdef DEBUG
-  void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
+  void List(FILE* out = stdout, int32_t aIndent = 0) const;
 #endif
 
 private:
-  // Not implemented, and not supported.
-  Declaration& operator=(const Declaration& aCopy);
-  PRBool operator==(const Declaration& aCopy) const;
+  Declaration& operator=(const Declaration& aCopy) MOZ_DELETE;
+  bool operator==(const Declaration& aCopy) const MOZ_DELETE;
 
-  static void AppendImportanceToString(PRBool aIsImportant, nsAString& aString);
+  static void AppendImportanceToString(bool aIsImportant, nsAString& aString);
   // return whether there was a value in |aValue| (i.e., it had a non-null unit)
-  PRBool AppendValueToString(nsCSSProperty aProperty, nsAString& aResult) const;
+  bool AppendValueToString(nsCSSProperty aProperty, nsAString& aResult) const;
   // Helper for ToString with strange semantics regarding aValue.
   void AppendPropertyAndValueToString(nsCSSProperty aProperty,
                                       nsAutoString& aValue,
                                       nsAString& aResult) const;
 
-  nsCSSProperty OrderValueAt(PRUint32 aValue) const {
+public:
+  nsCSSProperty OrderValueAt(uint32_t aValue) const {
     return nsCSSProperty(mOrder.ElementAt(aValue));
   }
 
-  nsAutoTArray<PRUint8, 8> mOrder;
+  size_t SizeOfIncludingThis(nsMallocSizeOfFun aMallocSizeOf) const;
+
+private:
+  nsAutoTArray<uint8_t, 8> mOrder;
 
   // never null, except while expanded, or before the first call to
   // InitializeEmpty or CompressFrom.
@@ -264,7 +241,7 @@ private:
 
   // set by style rules when |RuleMatched| is called;
   // also by ToString (hence the 'mutable').
-  mutable PRPackedBool mImmutable;
+  mutable bool mImmutable;
 };
 
 } // namespace css

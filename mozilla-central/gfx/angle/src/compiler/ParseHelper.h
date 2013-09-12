@@ -6,9 +6,12 @@
 #ifndef _PARSER_HELPER_INCLUDED_
 #define _PARSER_HELPER_INCLUDED_
 
+#include "compiler/Diagnostics.h"
+#include "compiler/DirectiveHandler.h"
+#include "compiler/localintermediate.h"
+#include "compiler/preprocessor/new/Preprocessor.h"
 #include "compiler/ShHandle.h"
 #include "compiler/SymbolTable.h"
-#include "compiler/localintermediate.h"
 
 struct TMatrixFields {
     bool wholeRow;
@@ -17,52 +20,64 @@ struct TMatrixFields {
     int col;
 };
 
-typedef enum {
-    EBhRequire,
-    EBhEnable,
-    EBhWarn,
-    EBhDisable
-} TBehavior;
-
-struct TPragma {
-    TPragma(bool o, bool d) : optimize(o), debug(d) { }
-    bool optimize;
-    bool debug;
-    TPragmaTable pragmaTable;
-};
-
 //
 // The following are extra variables needed during parsing, grouped together so
 // they can be passed to the parser without needing a global.
 //
 struct TParseContext {
-    TParseContext(TSymbolTable& symt, TIntermediate& interm, EShLanguage l, EShSpec s, TInfoSink& is) :
-            intermediate(interm), symbolTable(symt), infoSink(is), language(l), spec(s), treeRoot(0),
-            recoveredFromError(false), numErrors(0), lexAfterType(false), loopNestingLevel(0),
-            inTypeParen(false), contextPragma(true, false) {  }
+    TParseContext(TSymbolTable& symt, TExtensionBehavior& ext, TIntermediate& interm, ShShaderType type, ShShaderSpec spec, int options, bool checksPrecErrors, const char* sourcePath, TInfoSink& is) :
+            intermediate(interm),
+            symbolTable(symt),
+            shaderType(type),
+            shaderSpec(spec),
+            compileOptions(options),
+            sourcePath(sourcePath),
+            treeRoot(0),
+            lexAfterType(false),
+            loopNestingLevel(0),
+            structNestingLevel(0),
+            inTypeParen(false),
+            currentFunctionType(NULL),
+            functionReturnsValue(false),
+            checksPrecisionErrors(checksPrecErrors),
+            diagnostics(is),
+            directiveHandler(ext, diagnostics),
+            preprocessor(&diagnostics, &directiveHandler),
+            scanner(NULL) {  }
     TIntermediate& intermediate; // to hold and build a parse tree
     TSymbolTable& symbolTable;   // symbol table that goes with the language currently being parsed
-    TInfoSink& infoSink;
-    EShLanguage language;        // vertex or fragment language (future: pack or unpack)
-    EShSpec spec;                // The language specification compiler conforms to - GLES2 or WebGL.
+    ShShaderType shaderType;              // vertex or fragment language (future: pack or unpack)
+    ShShaderSpec shaderSpec;              // The language specification compiler conforms to - GLES2 or WebGL.
+    int compileOptions;
+    const char* sourcePath;      // Path of source file or NULL.
     TIntermNode* treeRoot;       // root of parse tree being created
-    bool recoveredFromError;     // true if a parse error has occurred, but we continue to parse
-    int numErrors;
     bool lexAfterType;           // true if we've recognized a type, so can only be looking for an identifier
     int loopNestingLevel;        // 0 if outside all loops
+    int structNestingLevel;      // incremented while parsing a struct declaration
     bool inTypeParen;            // true if in parentheses, looking only for an identifier
     const TType* currentFunctionType;  // the return type of the function that's currently being parsed
     bool functionReturnsValue;   // true if a non-void function has a return
-    TMap<TString, TBehavior> extensionBehavior;
-    void initializeExtensionBehavior();
+    bool checksPrecisionErrors;  // true if an error will be generated when a variable is declared without precision, explicit or implicit.
+    TString HashErrMsg;
+    bool AfterEOF;
+    TDiagnostics diagnostics;
+    TDirectiveHandler directiveHandler;
+    pp::Preprocessor preprocessor;
+    void* scanner;
 
-    void error(TSourceLoc, const char *szReason, const char *szToken,
-               const char *szExtraInfoFormat, ...);
-    bool reservedErrorCheck(int line, const TString& identifier);
+    int numErrors() const { return diagnostics.numErrors(); }
+    TInfoSink& infoSink() { return diagnostics.infoSink(); }
+    void error(TSourceLoc loc, const char *reason, const char* token,
+               const char* extraInfo="");
+    void warning(TSourceLoc loc, const char* reason, const char* token,
+                 const char* extraInfo="");
+    void trace(const char* str);
     void recover();
 
     bool parseVectorFields(const TString&, int vecSize, TVectorFields&, int line);
     bool parseMatrixFields(const TString&, int matSize, TMatrixFields&, int line);
+
+    bool reservedErrorCheck(int line, const TString& identifier);
     void assignError(int line, const char* op, TString left, TString right);
     void unaryOpError(int line, const char* op, TString operand);
     void binaryOpError(int line, const char* op, TString left, TString right);
@@ -82,15 +97,25 @@ struct TParseContext {
     bool samplerErrorCheck(int line, const TPublicType& pType, const char* reason);
     bool structQualifierErrorCheck(int line, const TPublicType& pType);
     bool parameterSamplerErrorCheck(int line, TQualifier qualifier, const TType& type);
-    bool containsSampler(TType& type);
     bool nonInitConstErrorCheck(int line, TString& identifier, TPublicType& type);
-    bool nonInitErrorCheck(int line, TString& identifier, TPublicType& type);
+    bool nonInitErrorCheck(int line, TString& identifier, TPublicType& type, TVariable*& variable);
     bool paramErrorCheck(int line, TQualifier qualifier, TQualifier paramQualifier, TType* type);
-    bool extensionErrorCheck(int line, const char*);
+    bool extensionErrorCheck(int line, const TString&);
+
+    const TExtensionBehavior& extensionBehavior() const { return directiveHandler.extensionBehavior(); }
+    bool supportsExtension(const char* extension);
+    void handleExtensionDirective(int line, const char* extName, const char* behavior);
+
+    const TPragma& pragma() const { return directiveHandler.pragma(); }
+    void handlePragmaDirective(int line, const char* name, const char* value);
+
+    bool containsSampler(TType& type);
+    bool areAllChildConst(TIntermAggregate* aggrNode);
     const TFunction* findFunction(int line, TFunction* pfnCall, bool *builtIn = 0);
     bool executeInitializer(TSourceLoc line, TString& identifier, TPublicType& pType,
                             TIntermTyped* initializer, TIntermNode*& intermNode, TVariable* variable = 0);
-    bool areAllChildConst(TIntermAggregate* aggrNode);
+    bool arraySetMaxSize(TIntermSymbol*, TType*, int, bool, TSourceLoc);
+
     TIntermTyped* addConstructor(TIntermNode*, const TType*, TOperator, TFunction*, TSourceLoc);
     TIntermTyped* foldConstConstructor(TIntermAggregate* aggrNode, const TType& type);
     TIntermTyped* constructStruct(TIntermNode*, TType*, int, TSourceLoc, bool subset);
@@ -99,25 +124,17 @@ struct TParseContext {
     TIntermTyped* addConstMatrixNode(int , TIntermTyped*, TSourceLoc);
     TIntermTyped* addConstArrayNode(int index, TIntermTyped* node, TSourceLoc line);
     TIntermTyped* addConstStruct(TString& , TIntermTyped*, TSourceLoc);
-    bool arraySetMaxSize(TIntermSymbol*, TType*, int, bool, TSourceLoc);
-    struct TPragma contextPragma;
-    TString HashErrMsg;
-    bool AfterEOF;
+
+    // Performs an error check for embedded struct declarations.
+    // Returns true if an error was raised due to the declaration of
+    // this struct.
+    bool enterStructDeclaration(TSourceLoc line, const TString& identifier);
+    void exitStructDeclaration();
+
+    bool structNestingErrorCheck(TSourceLoc line, const TType& fieldType);
 };
 
-int PaParseStrings(char* argv[], int strLen[], int argc, TParseContext&);
-void PaReservedWord();
-int PaIdentOrType(TString& id, TParseContext&, TSymbol*&);
-int PaParseComment(int &lineno, TParseContext&);
-void setInitialState();
-
-typedef TParseContext* TParseContextPointer;
-extern TParseContextPointer& GetGlobalParseContext();
-#define GlobalParseContext GetGlobalParseContext()
-
-typedef struct TThreadParseContextRec
-{
-    TParseContext *lpGlobalParseContext;
-} TThreadParseContext;
+int PaParseStrings(int count, const char* const string[], const int length[],
+                   TParseContext* context);
 
 #endif // _PARSER_HELPER_INCLUDED_

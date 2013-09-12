@@ -1,33 +1,18 @@
-/* -*- Mode: asm; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
- * Version: MPL 1.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corp, Inc.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Stuart Parmenter <pavlov@netscape.com>
- *   Chris Waterson   <waterson@netscape.com>
- *   Thiemo Seufer    <seufer@csv.ica.uni-stuttgart.de>
- */
+/* -*- Mode: asm; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* This code is for MIPS using the O32 ABI. */
 
+#ifdef ANDROID
+#include <asm/regdef.h>
+#include <asm/asm.h>
+#include <machine/asm.h>
+#else
 #include <sys/regdef.h>
 #include <sys/asm.h>
+#endif
 
 # NARGSAVE is the argument space in the callers frame, including extra
 # 'shadowed' space for the argument registers. The minimum of 4
@@ -49,7 +34,6 @@
 
 	.text
 
-#if defined(__GXX_ABI_VERSION) && __GXX_ABI_VERSION >= 100 /* G++ V3 ABI */
 #define STUB_ENTRY(x)						\
 	.if x < 10;						\
 	.globl	_ZN14nsXPTCStubBase5Stub ##x ##Ev;		\
@@ -78,16 +62,6 @@ _ZN14nsXPTCStubBase7Stub ##x ##Ev:;				\
 	.else;							\
 	.err;							\
 	.endif
-#else /* not G++ V3 ABI */
-#define STUB_ENTRY(x)						\
-	.globl	Stub ##x ##__14nsXPTCStubBase;			\
-	.type	Stub ##x ##__14nsXPTCStubBase,@function;	\
-	.aent	Stub ##x ##__14nsXPTCStubBase,0;		\
-Stub ##x ##__14nsXPTCStubBase:;					\
-	SETUP_GP;						\
-	li	t0,x;						\
-	b	sharedstub
-#endif /* G++ V3 ABI */
 
 # SENTINEL_ENTRY is handled in the cpp file.
 #define SENTINEL_ENTRY(x)

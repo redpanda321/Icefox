@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2007 Henri Sivonen
- * Copyright (c) 2008-2009 Mozilla Foundation
+ * Copyright (c) 2008-2011 Mozilla Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a 
  * copy of this software and associated documentation files (the "Software"), 
@@ -28,23 +28,18 @@
 
 #define nsHtml5HtmlAttributes_cpp__
 
-#include "prtypes.h"
 #include "nsIAtom.h"
 #include "nsHtml5AtomTable.h"
 #include "nsString.h"
 #include "nsINameSpaceManager.h"
 #include "nsIContent.h"
-#include "nsIDocument.h"
 #include "nsTraceRefcnt.h"
 #include "jArray.h"
-#include "nsHtml5DocumentMode.h"
 #include "nsHtml5ArrayCopy.h"
-#include "nsHtml5NamedCharacters.h"
-#include "nsHtml5NamedCharactersAccel.h"
+#include "nsAHtml5TreeBuilderState.h"
 #include "nsHtml5Atoms.h"
 #include "nsHtml5ByteReadable.h"
 #include "nsIUnicodeDecoder.h"
-#include "nsAHtml5TreeBuilderState.h"
 #include "nsHtml5Macros.h"
 
 #include "nsHtml5Tokenizer.h"
@@ -59,12 +54,13 @@
 
 #include "nsHtml5HtmlAttributes.h"
 
+nsHtml5HtmlAttributes* nsHtml5HtmlAttributes::EMPTY_ATTRIBUTES = nullptr;
 
-nsHtml5HtmlAttributes::nsHtml5HtmlAttributes(PRInt32 mode)
+nsHtml5HtmlAttributes::nsHtml5HtmlAttributes(int32_t mode)
   : mode(mode),
     length(0),
-    names(jArray<nsHtml5AttributeName*,PRInt32>(5)),
-    values(jArray<nsString*,PRInt32>(5))
+    names(jArray<nsHtml5AttributeName*,int32_t>::newJArray(5)),
+    values(jArray<nsString*,int32_t>::newJArray(5))
 {
   MOZ_COUNT_CTOR(nsHtml5HtmlAttributes);
 }
@@ -74,14 +70,12 @@ nsHtml5HtmlAttributes::~nsHtml5HtmlAttributes()
 {
   MOZ_COUNT_DTOR(nsHtml5HtmlAttributes);
   clear(0);
-  names.release();
-  values.release();
 }
 
-PRInt32 
+int32_t 
 nsHtml5HtmlAttributes::getIndex(nsHtml5AttributeName* name)
 {
-  for (PRInt32 i = 0; i < length; i++) {
+  for (int32_t i = 0; i < length; i++) {
     if (names[i] == name) {
       return i;
     }
@@ -89,85 +83,68 @@ nsHtml5HtmlAttributes::getIndex(nsHtml5AttributeName* name)
   return -1;
 }
 
-PRInt32 
+nsString* 
+nsHtml5HtmlAttributes::getValue(nsHtml5AttributeName* name)
+{
+  int32_t index = getIndex(name);
+  if (index == -1) {
+    return nullptr;
+  } else {
+    return getValueNoBoundsCheck(index);
+  }
+}
+
+int32_t 
 nsHtml5HtmlAttributes::getLength()
 {
   return length;
 }
 
 nsIAtom* 
-nsHtml5HtmlAttributes::getLocalName(PRInt32 index)
+nsHtml5HtmlAttributes::getLocalNameNoBoundsCheck(int32_t index)
 {
-  if (index < length && index >= 0) {
-    return names[index]->getLocal(mode);
-  } else {
-    return nsnull;
-  }
+  MOZ_ASSERT(index < length && index >= 0, "Index out of bounds");
+  return names[index]->getLocal(mode);
 }
 
-nsHtml5AttributeName* 
-nsHtml5HtmlAttributes::getAttributeName(PRInt32 index)
+int32_t 
+nsHtml5HtmlAttributes::getURINoBoundsCheck(int32_t index)
 {
-  if (index < length && index >= 0) {
-    return names[index];
-  } else {
-    return nsnull;
-  }
-}
-
-PRInt32 
-nsHtml5HtmlAttributes::getURI(PRInt32 index)
-{
-  if (index < length && index >= 0) {
-    return names[index]->getUri(mode);
-  } else {
-    return nsnull;
-  }
+  MOZ_ASSERT(index < length && index >= 0, "Index out of bounds");
+  return names[index]->getUri(mode);
 }
 
 nsIAtom* 
-nsHtml5HtmlAttributes::getPrefix(PRInt32 index)
+nsHtml5HtmlAttributes::getPrefixNoBoundsCheck(int32_t index)
 {
-  if (index < length && index >= 0) {
-    return names[index]->getPrefix(mode);
-  } else {
-    return nsnull;
-  }
+  MOZ_ASSERT(index < length && index >= 0, "Index out of bounds");
+  return names[index]->getPrefix(mode);
 }
 
 nsString* 
-nsHtml5HtmlAttributes::getValue(PRInt32 index)
+nsHtml5HtmlAttributes::getValueNoBoundsCheck(int32_t index)
 {
-  if (index < length && index >= 0) {
-    return values[index];
-  } else {
-    return nsnull;
-  }
+  MOZ_ASSERT(index < length && index >= 0, "Index out of bounds");
+  return values[index];
 }
 
-nsString* 
-nsHtml5HtmlAttributes::getValue(nsHtml5AttributeName* name)
+nsHtml5AttributeName* 
+nsHtml5HtmlAttributes::getAttributeNameNoBoundsCheck(int32_t index)
 {
-  PRInt32 index = getIndex(name);
-  if (index == -1) {
-    return nsnull;
-  } else {
-    return getValue(index);
-  }
+  MOZ_ASSERT(index < length && index >= 0, "Index out of bounds");
+  return names[index];
 }
 
 void 
 nsHtml5HtmlAttributes::addAttribute(nsHtml5AttributeName* name, nsString* value)
 {
   if (names.length == length) {
-    PRInt32 newLen = length << 1;
-    jArray<nsHtml5AttributeName*,PRInt32> newNames = jArray<nsHtml5AttributeName*,PRInt32>(newLen);
+    int32_t newLen = length << 1;
+    jArray<nsHtml5AttributeName*,int32_t> newNames = jArray<nsHtml5AttributeName*,int32_t>::newJArray(newLen);
     nsHtml5ArrayCopy::arraycopy(names, newNames, names.length);
-    names.release();
     names = newNames;
-    jArray<nsString*,PRInt32> newValues = jArray<nsString*,PRInt32>(newLen);
+    jArray<nsString*,int32_t> newValues = jArray<nsString*,int32_t>::newJArray(newLen);
     nsHtml5ArrayCopy::arraycopy(values, newValues, values.length);
-    values.release();
     values = newValues;
   }
   names[length] = name;
@@ -176,20 +153,20 @@ nsHtml5HtmlAttributes::addAttribute(nsHtml5AttributeName* name, nsString* value)
 }
 
 void 
-nsHtml5HtmlAttributes::clear(PRInt32 m)
+nsHtml5HtmlAttributes::clear(int32_t m)
 {
-  for (PRInt32 i = 0; i < length; i++) {
+  for (int32_t i = 0; i < length; i++) {
     names[i]->release();
-    names[i] = nsnull;
+    names[i] = nullptr;
     nsHtml5Portability::releaseString(values[i]);
-    values[i] = nsnull;
+    values[i] = nullptr;
   }
   length = 0;
   mode = m;
 }
 
 void 
-nsHtml5HtmlAttributes::releaseValue(PRInt32 i)
+nsHtml5HtmlAttributes::releaseValue(int32_t i)
 {
   nsHtml5Portability::releaseString(values[i]);
 }
@@ -197,22 +174,22 @@ nsHtml5HtmlAttributes::releaseValue(PRInt32 i)
 void 
 nsHtml5HtmlAttributes::clearWithoutReleasingContents()
 {
-  for (PRInt32 i = 0; i < length; i++) {
-    names[i] = nsnull;
-    values[i] = nsnull;
+  for (int32_t i = 0; i < length; i++) {
+    names[i] = nullptr;
+    values[i] = nullptr;
   }
   length = 0;
 }
 
-PRBool 
+bool 
 nsHtml5HtmlAttributes::contains(nsHtml5AttributeName* name)
 {
-  for (PRInt32 i = 0; i < length; i++) {
+  for (int32_t i = 0; i < length; i++) {
     if (name->equalsAnother(names[i])) {
-      return PR_TRUE;
+      return true;
     }
   }
-  return PR_FALSE;
+  return false;
 }
 
 void 
@@ -230,12 +207,38 @@ nsHtml5HtmlAttributes::adjustForSvg()
 nsHtml5HtmlAttributes* 
 nsHtml5HtmlAttributes::cloneAttributes(nsHtml5AtomTable* interner)
 {
-
+  MOZ_ASSERT((!length) || !mode || mode == 3);
   nsHtml5HtmlAttributes* clone = new nsHtml5HtmlAttributes(0);
-  for (PRInt32 i = 0; i < length; i++) {
+  for (int32_t i = 0; i < length; i++) {
     clone->addAttribute(names[i]->cloneAttributeName(interner), nsHtml5Portability::newStringFromString(values[i]));
   }
   return clone;
+}
+
+bool 
+nsHtml5HtmlAttributes::equalsAnother(nsHtml5HtmlAttributes* other)
+{
+  MOZ_ASSERT(!mode || mode == 3, "Trying to compare attributes in foreign content.");
+  int32_t otherLength = other->getLength();
+  if (length != otherLength) {
+    return false;
+  }
+  for (int32_t i = 0; i < length; i++) {
+    bool found = false;
+    nsIAtom* ownLocal = names[i]->getLocal(NS_HTML5ATTRIBUTE_NAME_HTML);
+    for (int32_t j = 0; j < otherLength; j++) {
+      if (ownLocal == other->names[j]->getLocal(NS_HTML5ATTRIBUTE_NAME_HTML)) {
+        found = true;
+        if (!nsHtml5Portability::stringEqualsString(values[i], other->values[j])) {
+          return false;
+        }
+      }
+    }
+    if (!found) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void

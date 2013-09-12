@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /* vim:set ts=4 sts=4 sw=4 et cin: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsFTPChannel.h"
 #include "nsFtpConnectionThread.h"  // defines nsFtpState
@@ -44,23 +12,23 @@
 #include "nsThreadUtils.h"
 #include "nsNetUtil.h"
 #include "nsMimeTypes.h"
-#include "nsIProxyObjectManager.h"
 #include "nsReadableUtils.h"
 #include "nsIPrefService.h"
 #include "nsIPrefBranch.h"
 #include "nsIStreamConverterService.h"
 #include "nsISocketTransport.h"
 #include "nsURLHelper.h"
+#include "mozilla/Attributes.h"
 
 #if defined(PR_LOGGING)
 extern PRLogModuleInfo* gFTPLog;
 #endif /* PR_LOGGING */
 
 ////////////// this needs to move to nspr
-static inline PRUint32
+static inline uint32_t
 PRTimeToSeconds(PRTime t_usec)
 {
-    return PRUint32(t_usec / PR_USEC_PER_SEC);
+    return uint32_t(t_usec / PR_USEC_PER_SEC);
 }
 
 #define NowInSeconds() PRTimeToSeconds(PR_Now())
@@ -89,7 +57,7 @@ NS_IMPL_ISUPPORTS_INHERITED4(nsFtpChannel,
 NS_IMETHODIMP
 nsFtpChannel::SetUploadStream(nsIInputStream *stream,
                               const nsACString &contentType,
-                              PRInt32 contentLength)
+                              int64_t contentLength)
 {
     NS_ENSURE_TRUE(!IsPending(), NS_ERROR_IN_PROGRESS);
 
@@ -112,7 +80,7 @@ nsFtpChannel::GetUploadStream(nsIInputStream **stream)
 //-----------------------------------------------------------------------------
 
 NS_IMETHODIMP
-nsFtpChannel::ResumeAt(PRUint64 aStartPos, const nsACString& aEntityID)
+nsFtpChannel::ResumeAt(uint64_t aStartPos, const nsACString& aEntityID)
 {
     NS_ENSURE_TRUE(!IsPending(), NS_ERROR_IN_PROGRESS);
     mEntityID = aEntityID;
@@ -143,7 +111,7 @@ nsFtpChannel::GetProxyInfo(nsIProxyInfo** aProxyInfo)
 //-----------------------------------------------------------------------------
 
 nsresult
-nsFtpChannel::OpenContentStream(PRBool async, nsIInputStream **result,
+nsFtpChannel::OpenContentStream(bool async, nsIInputStream **result,
                                 nsIChannel** channel)
 {
     if (!async)
@@ -164,22 +132,78 @@ nsFtpChannel::OpenContentStream(PRBool async, nsIInputStream **result,
     return NS_OK;
 }
 
-PRBool
+bool
 nsFtpChannel::GetStatusArg(nsresult status, nsString &statusArg)
 {
-    nsCAutoString host;
+    nsAutoCString host;
     URI()->GetHost(host);
     CopyUTF8toUTF16(host, statusArg);
-    return PR_TRUE;
+    return true;
 }
 
 void
 nsFtpChannel::OnCallbacksChanged()
 {
-    mFTPEventSink = nsnull;
+    mFTPEventSink = nullptr;
 }
 
 //-----------------------------------------------------------------------------
+
+namespace {
+
+class FTPEventSinkProxy MOZ_FINAL : public nsIFTPEventSink
+{
+public:
+    FTPEventSinkProxy(nsIFTPEventSink* aTarget)
+        : mTarget(aTarget)
+        , mTargetThread(do_GetCurrentThread())
+    { }
+        
+    NS_DECL_ISUPPORTS
+    NS_DECL_NSIFTPEVENTSINK
+
+    class OnFTPControlLogRunnable : public nsRunnable
+    {
+    public:
+        OnFTPControlLogRunnable(nsIFTPEventSink* aTarget,
+                                bool aServer,
+                                const char* aMessage)
+            : mTarget(aTarget)
+            , mServer(aServer)
+            , mMessage(aMessage)
+        { }
+
+        NS_DECL_NSIRUNNABLE
+
+    private:
+        nsCOMPtr<nsIFTPEventSink> mTarget;
+        bool mServer;
+        nsCString mMessage;
+    };
+
+private:
+    nsCOMPtr<nsIFTPEventSink> mTarget;
+    nsCOMPtr<nsIThread> mTargetThread;
+};
+
+NS_IMPL_THREADSAFE_ISUPPORTS1(FTPEventSinkProxy, nsIFTPEventSink)
+
+NS_IMETHODIMP
+FTPEventSinkProxy::OnFTPControlLog(bool aServer, const char* aMsg)
+{
+    nsRefPtr<OnFTPControlLogRunnable> r =
+        new OnFTPControlLogRunnable(mTarget, aServer, aMsg);
+    return mTargetThread->Dispatch(r, NS_DISPATCH_NORMAL);
+}
+
+NS_IMETHODIMP
+FTPEventSinkProxy::OnFTPControlLogRunnable::Run()
+{
+    mTarget->OnFTPControlLog(mServer, mMessage.get());
+    return NS_OK;
+}
+
+} // anonymous namespace
 
 void
 nsFtpChannel::GetFTPEventSink(nsCOMPtr<nsIFTPEventSink> &aResult)
@@ -188,11 +212,7 @@ nsFtpChannel::GetFTPEventSink(nsCOMPtr<nsIFTPEventSink> &aResult)
         nsCOMPtr<nsIFTPEventSink> ftpSink;
         GetCallback(ftpSink);
         if (ftpSink) {
-            NS_GetProxyForObject(NS_PROXY_TO_CURRENT_THREAD,
-                                 NS_GET_IID(nsIFTPEventSink),
-                                 ftpSink,
-                                 NS_PROXY_ASYNC | NS_PROXY_ALWAYS,
-                                 getter_AddRefs(mFTPEventSink));
+            mFTPEventSink = new FTPEventSinkProxy(ftpSink);
         }
     }
     aResult = mFTPEventSink;

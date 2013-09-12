@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 //
 // Eric Vaughan
@@ -62,7 +30,7 @@ NS_NewScrollbarFrame (nsIPresShell* aPresShell, nsStyleContext* aContext)
 NS_IMPL_FRAMEARENA_HELPERS(nsScrollbarFrame)
 
 NS_QUERYFRAME_HEAD(nsScrollbarFrame)
-  NS_QUERYFRAME_ENTRY(nsIScrollbarFrame)
+  NS_QUERYFRAME_ENTRY(nsScrollbarFrame)
 NS_QUERYFRAME_TAIL_INHERITING(nsBoxFrame)
 
 NS_IMETHODIMP
@@ -102,14 +70,6 @@ nsScrollbarFrame::Reflow(nsPresContext*          aPresContext,
   return NS_OK;
 }
 
-/* virtual */ PRBool
-nsScrollbarFrame::IsContainingBlock() const
-{
-  // Return true so that the nsHTMLReflowState code is happy with us
-  // being a reflow root.
-  return PR_TRUE;
-}
-
 nsIAtom*
 nsScrollbarFrame::GetType() const
 {
@@ -117,9 +77,9 @@ nsScrollbarFrame::GetType() const
 }
 
 NS_IMETHODIMP
-nsScrollbarFrame::AttributeChanged(PRInt32 aNameSpaceID,
+nsScrollbarFrame::AttributeChanged(int32_t aNameSpaceID,
                                    nsIAtom* aAttribute,
-                                   PRInt32 aModType)
+                                   int32_t aModType)
 {
   nsresult rv = nsBoxFrame::AttributeChanged(aNameSpaceID, aAttribute,
                                              aModType);
@@ -129,11 +89,7 @@ nsScrollbarFrame::AttributeChanged(PRInt32 aNameSpaceID,
   if (aAttribute != nsGkAtoms::curpos)
     return rv;
 
-  nsIFrame* parent = GetParent();
-  if (!parent)
-    return rv;
-
-  nsIScrollableFrame* scrollable = do_QueryFrame(parent);
+  nsIScrollableFrame* scrollable = do_QueryFrame(GetParent());
   if (!scrollable)
     return rv;
 
@@ -153,7 +109,7 @@ NS_IMETHODIMP
 nsScrollbarFrame::HandleMultiplePress(nsPresContext* aPresContext, 
                                       nsGUIEvent*     aEvent,
                                       nsEventStatus*  aEventStatus,
-                                      PRBool aControlHeld)
+                                      bool aControlHeld)
 {
   return NS_OK;
 }
@@ -184,18 +140,14 @@ nsIScrollbarMediator*
 nsScrollbarFrame::GetScrollbarMediator()
 {
   if (!mScrollbarMediator)
-    return nsnull;
+    return nullptr;
   nsIFrame* f = mScrollbarMediator->GetPrimaryFrame();
-  if (!f)
-    return nsnull;
 
   // check if the frame is a scroll frame. If so, get the scrollable frame
   // inside it.
   nsIScrollableFrame* scrollFrame = do_QueryFrame(f);
   if (scrollFrame) {
     f = scrollFrame->GetScrolledFrame();
-    if (!f)
-      return nsnull;
   }
 
   nsIScrollbarMediator* sbm = do_QueryFrame(f);

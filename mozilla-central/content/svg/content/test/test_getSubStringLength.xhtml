@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=420243
 -->
 <head>
   <title>Test for Bug 420243</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -35,6 +34,9 @@ function runTests(text, charWidth)
     }
     catch (e)
     {
+      is(e.name, "IndexSizeError",
+         "expected an index error for " +
+         "text.getSubStringLength(" + charnum + "," + nchars + ")");
       is(e.code, DOMException.INDEX_SIZE_ERR,
          "expected an index error for " +
          "text.getSubStringLength(" + charnum + "," + nchars + ")");

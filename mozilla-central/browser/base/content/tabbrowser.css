@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 .tabbrowser-tabbox {
   -moz-binding: url("chrome://browser/content/tabbrowser.xml#tabbrowser-tabbox");
 }
@@ -11,16 +15,51 @@
   display: none;
 }
 
-.tabbrowser-tabs:not([closebuttons="noclose"]):not([closebuttons="closeatend"]) > .tabbrowser-tab[selected="true"]:not([pinned]) > .tab-close-button,
-.tabbrowser-tabs[closebuttons="alltabs"] > .tabbrowser-tab:not([pinned]) > .tab-close-button {
+.tabbrowser-tabs[closebuttons="activetab"] > * > * > * > .tab-close-button:not([pinned])[selected="true"],
+.tabbrowser-tabs[closebuttons="alltabs"] > * > * > * > .tab-close-button:not([pinned]) {
   display: -moz-box;
 }
 
+.tab-label[pinned] {
+  width: 0;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.tab-stack {
+  vertical-align: top; /* for pinned tabs */
+}
+
 tabpanels {
-  background-color: white;
+  background-color: transparent;
 }
 
 .tab-drop-indicator {
   position: relative;
-  z-index: 1;
+  z-index: 2;
+}
+
+.tab-throbber:not([busy]),
+.tab-throbber[busy] + .tab-icon-image {
+  display: none;
+}
+
+.closing-tabs-spacer {
+  pointer-events: none;
+}
+
+.tabbrowser-tabs:not(:hover) > .tabbrowser-arrowscrollbox > .closing-tabs-spacer {
+  transition: width .15s ease-out;
+}
+
+/**
+ * Optimization for tabs that are restored lazily. We can save a good amount of
+ * memory that to-be-restored tabs would otherwise consume simply by setting
+ * their browsers to 'display: none' as that will prevent them from having to
+ * create a presentation and the like.
+ */
+browser[pending] {
+  display: none;
 }

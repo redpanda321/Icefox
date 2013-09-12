@@ -1,42 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Geolocation.
- *
- * The Initial Developer of the Original Code is Mozilla Foundation
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Martin McNickle <mmcnickle@gmail.com>
- *
- * Based on static_geolocation_provider.js by:
- *  Doug Turner <dougt@meer.net>
- *
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 Components.utils.import("resource://gre/modules/XPCOMUtils.jsm");
 
@@ -68,21 +32,12 @@ function GeoPositionCoordsObject(latitude, longitude, altitude, accuracy, altitu
 
 GeoPositionCoordsObject.prototype = {
 
-  QueryInterface: XPCOMUtils.generateQI([Ci.nsIDOMGeoPositionCoords, Ci.nsIClassInfo]),
+  QueryInterface: XPCOMUtils.generateQI([Ci.nsIDOMGeoPositionCoords]),
   
   // Class Info is required to be able to pass objects back into the DOM.
-  getInterfaces: function(countRef) {
-    var interfaces = [Ci.nsIDOMGeoPositionCoords, Ci.nsIClassInfo, Ci.nsISupports];
-    countRef.value = interfaces.length;
-    return interfaces;
-  },
-  
-  getHelperForLanguage: function(language) null,
-  contractID: null,
-  classDescription: "Geoposition Coordinate Object",
-  classID: null,
-  implementationLanguage: Ci.nsIProgrammingLanguage.JAVASCRIPT,
-  flags: Ci.nsIClassInfo.DOM_OBJECT,
+  classInfo: XPCOMUtils.generateCI({interfaces: [Ci.nsIDOMGeoPositionCoords],
+                                    flags: Ci.nsIClassInfo.DOM_OBJECT,
+                                    classDescription: "Geoposition Coordinate Object"}),
 
   latitude: null,
   longitude: null,
@@ -101,21 +56,12 @@ function GeoPositionObject(latitude, longitude, altitude, accuracy, altitudeAccu
 
 GeoPositionObject.prototype = {
 
-  QueryInterface: XPCOMUtils.generateQI([Ci.nsIDOMGeoPosition, Ci.nsIClassInfo]),
+  QueryInterface: XPCOMUtils.generateQI([Ci.nsIDOMGeoPosition]),
 
   // Class Info is required to be able to pass objects back into the DOM.
-  getInterfaces: function(countRef) {
-    var interfaces = [Ci.nsIDOMGeoPosition, Ci.nsIClassInfo, Ci.nsISupports];
-    countRef.value = interfaces.length;
-    return interfaces;
-  },
-
-  getHelperForLanguage: function(language) null,
-  contractID: null,
-  classDescription: "Geoposition Object",
-  classID: null,
-  implementationLanguage: Ci.nsIProgrammingLanguage.JAVASCRIPT,
-  flags: Ci.nsIClassInfo.DOM_OBJECT,
+  classInfo: XPCOMUtils.generateCI({interfaces: [Ci.nsIDOMGeoPosition],
+                                    flags: Ci.nsIClassInfo.DOM_OBJECT,
+                                    classDescription: "Geoposition Object"}),
 
   coords: null,
   timestamp: null,
@@ -175,18 +121,14 @@ GPSDProvider.prototype = {
     this.transport.close(Components.results.NS_OK);
   },
   
-  watch: function(c) {
+  watch: function(c, isPrivate) {
     LOG("watch called\n");    
+    try {
+        // Go into "watcher" mode
+        var mode = '?WATCH={"enable":true,"json":true}';
+        this.outputStream.write(mode, mode.length);
+    } catch (e) { return; }
 
-    // Turn GPSD buffer on, results in smoother data points which I think we want.
-    // Required due to the way that different data arrives in different NMEA sentences.
-    var bufferOption = "J=1\n";
-    this.outputStream.write(bufferOption, bufferOption.length);
-
-    // Go into "watcher" mode
-    var mode = "w\n";
-    this.outputStream.write(mode, mode.length);
-    
     var dataListener = {
       onStartRequest: function(request, context) {},
       onStopRequest: function(request, context, status) {},
@@ -195,54 +137,57 @@ GPSDProvider.prototype = {
         var sInputStream = Cc["@mozilla.org/scriptableinputstream;1"].createInstance(Ci.nsIScriptableInputStream);
         sInputStream.init(inputStream);
 
-        var s = sInputStream.read(count);
+        var responseSentence = sInputStream.read(count);
         
-        var response = s.split('=');
+        var response = null; 
+        try {
+          response = JSON.parse(responseSentence);
+          } catch (e) { return; }
         
-        var header = response[0];
-        var info = response[1];
-        
-        // is this location information?
-        if (header != 'GPSD,O') {
-          // don't do anything
+        // is the right kind of sentence?
+        if (response.class != 'TPV') {
+          //don't do anything
           return;
         }
-        
+
         // is there a fix?
-        if (info == '?') {
+        if (response.mode == '1') {
           // don't do anything
           return;
         }
-    
-        // get the info from the string
-        var fields = info.split(' ');
         
-        // we'll only use RMC data as it seems to make sense
-        if (fields[0] != 'RMC') {
-          return;
-        }
-
-        LOG("Got info: " + info);
-
-        for (var i = 0; i < fields.length; i++) {
-          if (fields[i] == '?') {
-            fields[i] = null;
-          }
-        }
+        LOG("Got info: " + responseSentence);
+ 
+        // The API requires these values, if one is missing
+        // we return without updating the position.
+        if (response.time && response.lat && response.lon
+            && response.epx && response.epy) {
+        var timestamp = response.time; // UTC
+        var latitude = response.lat; // degrees
+        var longitude = response.lon; // degrees
+        var horizontalError = Math.max(response.epx,response.epy); } // meters 
+        else { return; }
         
-        var timestamp = fields[1]; // UTC
-        var timeError = fields[2]; // seconds
-        var latitude = fields[3]; // degrees
-        var longitude = fields[4]; // degrees
-        var altitude = fields[5]; // meters
-        var horizontalError = fields[6]; // meters
-        var verticalError = fields[7]; // meters
-        var course = fields[8]; // degrees;
-        var speed = fields[9]; // meters/sec maybe knots depending on GPSD version TODO: figure this out
+        // Altitude is optional, but if it's present, so must be vertical precision.
+        var altitude = null;
+        var verticalError = null; 
+        if (response.alt && response.epv) {
+          altitude = response.alt; // meters
+          verticalError = response.epv; // meters
+        } 
+
+        var speed = null;
+        if (response.speed) { var speed = response.speed; } // meters/sec
+         
+        var course = null;
+        if (response.track) { var course = response.track; } // degrees
         
         var geoPos = new GeoPositionObject(latitude, longitude, altitude, horizontalError, verticalError, course, speed, timestamp);
         
         c.update(geoPos);
+        LOG("Position updated:" + timestamp + "," + latitude + "," + longitude + ","
+             + horizontalError + "," + altitude + "," + verticalError + "," + course 
+             + "," + speed);
     
       }
       
@@ -256,4 +201,4 @@ GPSDProvider.prototype = {
   
 };
 
-var NSGetFactory = XPCOMUtils.generateNSGetFactory([GPSDProvider]);
+this.NSGetFactory = XPCOMUtils.generateNSGetFactory([GPSDProvider]);

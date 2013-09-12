@@ -1,43 +1,11 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set ts=2 et sw=2 tw=80: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Nokia.
- *
- * The Initial Developer of the Original Code is Nokia Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- * Jeremias Bosch <jeremias.bosch@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsMaemoNetworkManager.h"
-#include "mozilla/Monitor.h"
+#include "mozilla/ReentrantMonitor.h"
 
 #include <dbus/dbus.h>
 #include <dbus/dbus-glib-lowlevel.h>
@@ -65,12 +33,12 @@ enum InternalState
 };
 
 static InternalState gInternalState = InternalState_Invalid;
-static ConIcConnection* gConnection = nsnull;
-static PRBool gConnectionCallbackInvoked = PR_FALSE;
+static ConIcConnection* gConnection = nullptr;
+static bool gConnectionCallbackInvoked = false;
 
 using namespace mozilla;
 
-static Monitor* gMonitor = nsnull;
+static ReentrantMonitor* gReentrantMonitor = nullptr;
 
 static void NotifyNetworkLinkObservers()
 {
@@ -88,31 +56,31 @@ connection_event_callback(ConIcConnection *aConnection,
 {
   ConIcConnectionStatus status = con_ic_connection_event_get_status(aEvent);
   {
-    MonitorAutoEnter mon(*gMonitor);
+    ReentrantMonitorAutoEnter mon(*gReentrantMonitor);
 
     // When we are not connected, we are always disconnected.
     gInternalState = (CON_IC_STATUS_CONNECTED == status ?
                      InternalState_Connected : InternalState_Disconnected);
 
-    gConnectionCallbackInvoked = PR_TRUE;
+    gConnectionCallbackInvoked = true;
     mon.Notify();
   }
 
   NotifyNetworkLinkObservers();
 }
 
-PRBool
+bool
 nsMaemoNetworkManager::OpenConnectionSync()
 {
   if (NS_IsMainThread() || !gConnection)
-    return PR_FALSE;
+    return false;
 
   // protect gInternalState.  This also allows us
   // to block and wait in this method on this thread
   // until our callback on the main thread.
-  MonitorAutoEnter mon(*gMonitor);
+  ReentrantMonitorAutoEnter mon(*gReentrantMonitor);
 
-  gConnectionCallbackInvoked = PR_FALSE;
+  gConnectionCallbackInvoked = false;
 
   if (!con_ic_connection_connect(gConnection,
                                  CON_IC_CONNECT_FLAG_NONE))
@@ -123,9 +91,9 @@ nsMaemoNetworkManager::OpenConnectionSync()
     mon.Wait();
 
   if (gInternalState == InternalState_Connected)
-    return PR_TRUE;
+    return true;
 
-  return PR_FALSE;
+  return false;
 }
 
 void
@@ -135,27 +103,27 @@ nsMaemoNetworkManager::CloseConnection()
     con_ic_connection_disconnect(gConnection);
 }
 
-PRBool
+bool
 nsMaemoNetworkManager::IsConnected()
 {
   return gInternalState == InternalState_Connected;
 }
 
-PRBool
+bool
 nsMaemoNetworkManager::GetLinkStatusKnown()
 {
   return gInternalState != InternalState_Invalid;
 }
 
-PRBool
+bool
 nsMaemoNetworkManager::Startup()
 {
   if (gConnection)
-    return PR_TRUE;
+    return true;
 
-  gMonitor = new Monitor("MaemoAutodialer");
-  if (!gMonitor)
-    return PR_FALSE;
+  gReentrantMonitor = new ReentrantMonitor("MaemoAutodialer");
+  if (!gReentrantMonitor)
+    return false;
 
   DBusError error;
   dbus_error_init(&error);
@@ -163,42 +131,42 @@ nsMaemoNetworkManager::Startup()
   DBusConnection* dbusConnection = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
   NS_ASSERTION(dbusConnection, "Error when connecting to the session bus");
 
-  dbus_connection_setup_with_g_main(dbusConnection, nsnull);
+  dbus_connection_setup_with_g_main(dbusConnection, nullptr);
 
   // grab a connection:
   gConnection = con_ic_connection_new();
   NS_ASSERTION(gConnection, "Error when creating connection");
   if (!gConnection) {
-    delete gMonitor;
-    gMonitor = nsnull;
-    return PR_FALSE;
+    delete gReentrantMonitor;
+    gReentrantMonitor = nullptr;
+    return false;
   }
 
   g_signal_connect(G_OBJECT(gConnection),
                    "connection-event",
                    G_CALLBACK(connection_event_callback),
-                   nsnull);
+                   nullptr);
   
   g_object_set(G_OBJECT(gConnection),
                "automatic-connection-events",
-               PR_TRUE,
-               nsnull);
-  return PR_TRUE;
+               true,
+               nullptr);
+  return true;
 }
 
 void
 nsMaemoNetworkManager::Shutdown()
 {
-  gConnection = nsnull;
+  gConnection = nullptr;
 
-  if (gMonitor) {
+  if (gReentrantMonitor) {
     // notify anyone waiting
-    MonitorAutoEnter mon(*gMonitor);
+    ReentrantMonitorAutoEnter mon(*gReentrantMonitor);
     gInternalState = InternalState_Invalid;    
     mon.Notify();
   }
   
-  // We are leaking the gMonitor because a race condition could occur. We need
+  // We are leaking the gReentrantMonitor because a race condition could occur. We need
   // a notification after xpcom-shutdown-threads so we can safely delete the monitor
 }
 

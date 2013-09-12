@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape Portable Runtime (NSPR).
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * This file is used by not only Linux but also other glibc systems
@@ -83,6 +51,8 @@
 #define _PR_SI_ARCHITECTURE "sh"
 #elif defined(__avr32__)
 #define _PR_SI_ARCHITECTURE "avr32"
+#elif defined(__m32r__)
+#define _PR_SI_ARCHITECTURE "m32r"
 #else
 #error "Unknown CPU architecture"
 #endif
@@ -216,7 +186,18 @@ extern PRInt32 _PR_ppc_AtomicSet(PRInt32 *val, PRInt32 newval);
 })
 #endif
 
-#if defined(__arm__) && defined(_PR_ARM_KUSER)
+#if defined(__arm__)
+#if defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4)
+/* Use GCC built-in functions */
+#define _PR_HAVE_ATOMIC_OPS
+#define _MD_INIT_ATOMIC()
+
+#define _MD_ATOMIC_INCREMENT(ptr) __sync_add_and_fetch(ptr, 1)
+#define _MD_ATOMIC_DECREMENT(ptr) __sync_sub_and_fetch(ptr, 1)
+#define _MD_ATOMIC_SET(ptr, nv) __sync_lock_test_and_set(ptr, nv)
+#define _MD_ATOMIC_ADD(ptr, i) __sync_add_and_fetch(ptr, i)
+
+#elif defined(_PR_ARM_KUSER)
 #define _PR_HAVE_ATOMIC_OPS
 #define _MD_INIT_ATOMIC()
 
@@ -259,21 +240,24 @@ static inline PRInt32 _MD_ATOMIC_SET(PRInt32 *ptr, PRInt32 nv)
     return ov;
 }
 #endif
+#endif /* __arm__ */
 
 #define USE_SETJMP
-#if defined(__GLIBC__) && __GLIBC__ >= 2
+#if (defined(__GLIBC__) && __GLIBC__ >= 2) || defined(ANDROID)
 #define _PR_POLL_AVAILABLE
 #endif
 #undef _PR_USE_POLL
 #define _PR_STAT_HAS_ONLY_ST_ATIME
 #if defined(__alpha) || defined(__ia64__)
 #define _PR_HAVE_LARGE_OFF_T
-#elif (__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 1)
+#elif (__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 1) \
+    || defined(ANDROID)
 #define _PR_HAVE_OFF64_T
 #else
 #define _PR_NO_LARGE_FILES
 #endif
-#if (__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 1)
+#if (__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 1) \
+    || defined(ANDROID)
 #define _PR_INET6
 #define _PR_HAVE_INET_NTOP
 #define _PR_HAVE_GETHOSTBYNAME2
@@ -284,6 +268,7 @@ static inline PRInt32 _MD_ATOMIC_SET(PRInt32 *ptr, PRInt32 nv)
 #define _PR_HAVE_SYSV_SEMAPHORES
 #define PR_HAVE_SYSV_NAMED_SHARED_MEMORY
 #endif
+/* Android has gethostbyname_r but not gethostbyaddr_r or gethostbyname2_r. */
 #if (__GLIBC__ >= 2) && defined(_PR_PTHREADS)
 #define _PR_HAVE_GETHOST_R
 #define _PR_HAVE_GETHOST_R_INT
@@ -455,6 +440,18 @@ extern void _MD_CleanupBeforeExit(void);
 #define _MD_SP_TYPE __ptr_t
 #else
 #error "SH/Linux pre-glibc2 not supported yet"
+#endif /* defined(__GLIBC__) && __GLIBC__ >= 2 */
+
+#elif defined(__m32r__)
+/* Linux/M32R */
+#if defined(__GLIBC__) && __GLIBC__ >= 2
+#define _MD_GET_SP(_t) (_t)->md.context[0].__jmpbuf[0].__regs[JB_SP]
+#define _MD_SET_FP(_t, val) ((_t)->md.context[0].__jmpbuf[0].__regs[JB_FP] = (val))
+#define _MD_GET_SP_PTR(_t) &(_MD_GET_SP(_t))
+#define _MD_GET_FP_PTR(_t) (&(_t)->md.context[0].__jmpbuf[0].__regs[JB_FP])
+#define _MD_SP_TYPE __ptr_t
+#else
+#error "Linux/M32R pre-glibc2 not supported yet"
 #endif /* defined(__GLIBC__) && __GLIBC__ >= 2 */
 
 #else
@@ -629,13 +626,10 @@ extern void _MD_YIELD(void);
 #endif /* ! _PR_PTHREADS */
 
 extern void _MD_EarlyInit(void);
-extern PRIntervalTime _PR_UNIX_GetInterval(void);
-extern PRIntervalTime _PR_UNIX_TicksPerSecond(void);
 
 #define _MD_EARLY_INIT                  _MD_EarlyInit
 #define _MD_FINAL_INIT                  _PR_UnixInit
-#define _MD_GET_INTERVAL                _PR_UNIX_GetInterval
-#define _MD_INTERVAL_PER_SEC            _PR_UNIX_TicksPerSecond
+#define HAVE_CLOCK_MONOTONIC
 
 /*
  * We wrapped the select() call.  _MD_SELECT refers to the built-in,

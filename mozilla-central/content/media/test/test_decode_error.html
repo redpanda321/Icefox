@@ -2,7 +2,6 @@
 <html>
 <head>
   <title>Media test: unknown/invalid formats raise decode error</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
   <script type="text/javascript" src="use_large_cache.js"></script>
@@ -17,7 +16,6 @@ function startTest(test, token) {
   var v = document.createElement("video");
   manager.started(token);
   v.addEventListener("error", function (event) {
-    event.stopPropagation();
     var el = event.currentTarget;
     is(event.type, "error", "Expected event of type 'error'");
     ok(el.error, "Element 'error' attr expected to have a value");
@@ -43,8 +41,7 @@ function startTest(test, token) {
     ok(false, "Unexpected ended event");
   }, false);
 
-  v.src = test.name;
-  v.load();
+  v.src = test.name; // implicitly starts a load.
 }
 
 manager.runTests(gDecodeErrorTests, startTest);

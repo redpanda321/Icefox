@@ -1,45 +1,13 @@
-/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* vim:expandtab:shiftwidth=4:tabstop=4:
- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Sun Microsystems, Inc.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Bolian Yin (bolian.yin@sun.com)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+/* vim: set ts=2 et sw=2 tw=80: */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsIURI.h"
 #include "nsMaiHyperlink.h"
+
+using namespace mozilla::a11y;
 
 /* MaiAtkHyperlink */
 
@@ -93,7 +61,7 @@ static gint getAnchorCountCB(AtkHyperlink *aLink);
 G_END_DECLS
 
 static gpointer parent_class = NULL;
-static nsIAccessibleHyperLink *
+static Accessible*
 get_accessible_hyperlink(AtkHyperlink *aHyperlink);
 
 GType
@@ -122,37 +90,36 @@ mai_atk_hyperlink_get_type(void)
     return type;
 }
 
-MaiHyperlink::MaiHyperlink(nsIAccessibleHyperLink *aAcc):
-    mHyperlink(aAcc),
-    mMaiAtkHyperlink(nsnull)
+MaiHyperlink::MaiHyperlink(Accessible* aHyperLink) :
+    mHyperlink(aHyperLink),
+    mMaiAtkHyperlink(nullptr)
 {
 }
 
 MaiHyperlink::~MaiHyperlink()
 {
     if (mMaiAtkHyperlink) {
-        MAI_ATK_HYPERLINK(mMaiAtkHyperlink)->maiHyperlink = nsnull;
+        MAI_ATK_HYPERLINK(mMaiAtkHyperlink)->maiHyperlink = nullptr;
         g_object_unref(mMaiAtkHyperlink);
     }
 }
 
-AtkHyperlink *
+AtkHyperlink*
 MaiHyperlink::GetAtkHyperlink(void)
 {
-    NS_ENSURE_TRUE(mHyperlink, nsnull);
+  NS_ENSURE_TRUE(mHyperlink, nullptr);
 
-    if (mMaiAtkHyperlink)
-        return mMaiAtkHyperlink;
+  if (mMaiAtkHyperlink)
+    return mMaiAtkHyperlink;
 
-    nsCOMPtr<nsIAccessibleHyperLink> accessIf(do_QueryInterface(mHyperlink));
-    if (!accessIf)
-        return nsnull;
+  if (!mHyperlink->IsLink())
+    return nullptr;
 
     mMaiAtkHyperlink =
         reinterpret_cast<AtkHyperlink *>
                         (g_object_new(mai_atk_hyperlink_get_type(), NULL));
     NS_ASSERTION(mMaiAtkHyperlink, "OUT OF MEMORY");
-    NS_ENSURE_TRUE(mMaiAtkHyperlink, nsnull);
+    NS_ENSURE_TRUE(mMaiAtkHyperlink, nullptr);
 
     /* be sure to initialize it with "this" */
     MaiHyperlink::Initialize(mMaiAtkHyperlink, this);
@@ -204,7 +171,7 @@ finalizeCB(GObject *aObj)
         return;
 
     MaiAtkHyperlink *maiAtkHyperlink = MAI_ATK_HYPERLINK(aObj);
-    maiAtkHyperlink->maiHyperlink = nsnull;
+    maiAtkHyperlink->maiHyperlink = nullptr;
 
     /* call parent finalize function */
     if (G_OBJECT_CLASS (parent_class)->finalize)
@@ -214,17 +181,16 @@ finalizeCB(GObject *aObj)
 gchar *
 getUriCB(AtkHyperlink *aLink, gint aLinkIndex)
 {
-    nsIAccessibleHyperLink *accHyperlink = get_accessible_hyperlink(aLink);
-    NS_ENSURE_TRUE(accHyperlink, nsnull);
+    Accessible* hyperlink = get_accessible_hyperlink(aLink);
+    NS_ENSURE_TRUE(hyperlink, nullptr);
 
-    MaiAtkHyperlink *maiAtkHyperlink = MAI_ATK_HYPERLINK(aLink);
+    nsCOMPtr<nsIURI> uri = hyperlink->AnchorURIAt(aLinkIndex);
+    if (!uri)
+        return nullptr;
 
-    nsCOMPtr<nsIURI> uri;
-    nsresult rv = accHyperlink->GetURI(aLinkIndex,getter_AddRefs(uri));
-    if (NS_FAILED(rv) || !uri)
-        return nsnull;
-    nsCAutoString cautoStr;
-    rv = uri->GetSpec(cautoStr);
+    nsAutoCString cautoStr;
+    nsresult rv = uri->GetSpec(cautoStr);
+    NS_ENSURE_SUCCESS(rv, nullptr);
 
     return g_strdup(cautoStr.get());
 }
@@ -232,14 +198,13 @@ getUriCB(AtkHyperlink *aLink, gint aLinkIndex)
 AtkObject *
 getObjectCB(AtkHyperlink *aLink, gint aLinkIndex)
 {
-    nsIAccessibleHyperLink *accHyperlink = get_accessible_hyperlink(aLink);
-    NS_ENSURE_TRUE(accHyperlink, nsnull);
+    Accessible* hyperlink = get_accessible_hyperlink(aLink);
+    NS_ENSURE_TRUE(hyperlink, nullptr);
 
-    nsCOMPtr<nsIAccessible> accObj;
-    accHyperlink->GetAnchor(aLinkIndex, getter_AddRefs(accObj));
-    NS_ENSURE_TRUE(accObj, nsnull);
+    Accessible* anchor = hyperlink->AnchorAt(aLinkIndex);
+    NS_ENSURE_TRUE(anchor, nullptr);
 
-    AtkObject *atkObj = nsAccessibleWrap::GetAtkObject(accObj);
+    AtkObject* atkObj = AccessibleWrap::GetAtkObject(anchor);
     //no need to add ref it, because it is "get" not "ref"
     return atkObj;
 }
@@ -247,58 +212,48 @@ getObjectCB(AtkHyperlink *aLink, gint aLinkIndex)
 gint
 getEndIndexCB(AtkHyperlink *aLink)
 {
-    nsIAccessibleHyperLink *accHyperlink = get_accessible_hyperlink(aLink);
-    NS_ENSURE_TRUE(accHyperlink, -1);
+    Accessible* hyperlink = get_accessible_hyperlink(aLink);
+    NS_ENSURE_TRUE(hyperlink, -1);
 
-    PRInt32 endIndex = -1;
-    nsresult rv = accHyperlink->GetEndIndex(&endIndex);
-
-    return (NS_FAILED(rv)) ? -1 : static_cast<gint>(endIndex);
+    return static_cast<gint>(hyperlink->EndOffset());
 }
 
 gint
 getStartIndexCB(AtkHyperlink *aLink)
 {
-    nsIAccessibleHyperLink *accHyperlink = get_accessible_hyperlink(aLink);
-    NS_ENSURE_TRUE(accHyperlink, -1);
+    Accessible* hyperlink = get_accessible_hyperlink(aLink);
+    NS_ENSURE_TRUE(hyperlink, -1);
 
-    PRInt32 startIndex = -1;
-    nsresult rv = accHyperlink->GetStartIndex(&startIndex);
-
-    return (NS_FAILED(rv)) ? -1 : static_cast<gint>(startIndex);
+    return static_cast<gint>(hyperlink->StartOffset());
 }
 
 gboolean
 isValidCB(AtkHyperlink *aLink)
 {
-    nsIAccessibleHyperLink *accHyperlink = get_accessible_hyperlink(aLink);
-    NS_ENSURE_TRUE(accHyperlink, FALSE);
+    Accessible* hyperlink = get_accessible_hyperlink(aLink);
+    NS_ENSURE_TRUE(hyperlink, FALSE);
 
-    PRBool isValid = PR_FALSE;
-    nsresult rv = accHyperlink->GetValid(&isValid);
-    return (NS_FAILED(rv)) ? FALSE : static_cast<gboolean>(isValid);
+    return static_cast<gboolean>(hyperlink->IsLinkValid());
 }
 
 gint
 getAnchorCountCB(AtkHyperlink *aLink)
 {
-    nsIAccessibleHyperLink *accHyperlink = get_accessible_hyperlink(aLink);
-    NS_ENSURE_TRUE(accHyperlink, -1);
+    Accessible* hyperlink = get_accessible_hyperlink(aLink);
+    NS_ENSURE_TRUE(hyperlink, -1);
 
-    PRInt32 count = -1;
-    nsresult rv = accHyperlink->GetAnchorCount(&count);
-    return (NS_FAILED(rv)) ? -1 : static_cast<gint>(count);
+    return static_cast<gint>(hyperlink->AnchorCount());
 }
 
 // Check if aHyperlink is a valid MaiHyperlink, and return the
-// nsIAccessibleHyperLink related.
-nsIAccessibleHyperLink *
+// HyperLinkAccessible related.
+Accessible*
 get_accessible_hyperlink(AtkHyperlink *aHyperlink)
 {
-    NS_ENSURE_TRUE(MAI_IS_ATK_HYPERLINK(aHyperlink), nsnull);
+    NS_ENSURE_TRUE(MAI_IS_ATK_HYPERLINK(aHyperlink), nullptr);
     MaiHyperlink * maiHyperlink =
         MAI_ATK_HYPERLINK(aHyperlink)->maiHyperlink;
-    NS_ENSURE_TRUE(maiHyperlink != nsnull, nsnull);
-    NS_ENSURE_TRUE(maiHyperlink->GetAtkHyperlink() == aHyperlink, nsnull);
+    NS_ENSURE_TRUE(maiHyperlink != nullptr, nullptr);
+    NS_ENSURE_TRUE(maiHyperlink->GetAtkHyperlink() == aHyperlink, nullptr);
     return maiHyperlink->GetAccHyperlink();
 }

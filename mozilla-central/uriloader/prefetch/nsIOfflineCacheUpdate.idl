@@ -1,114 +1,52 @@
 /* -*- mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dave Camp <dcamp@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsISupports.idl"
 
 interface nsIURI;
+interface nsIDOMWindow;
 interface nsIDOMNode;
 interface nsIDOMDocument;
 interface nsIDOMLoadStatus;
 interface nsIOfflineCacheUpdate;
 interface nsIPrincipal;
 interface nsIPrefBranch;
+interface nsIApplicationCache;
+interface nsIFile;
+interface nsIObserver;
 
-[scriptable, uuid(a28abeaf-a0b4-4440-b2fe-bc78249710ea)]
+[scriptable, uuid(47360d57-8ef4-4a5d-8865-1a27a739ad1a)]
 interface nsIOfflineCacheUpdateObserver : nsISupports {
-  /**
-   * There was an error updating the cache.
-   *
-   * @param aUpdate
-   *        The nsIOfflineCacheUpdate being processed.
-   */
-  void error(in nsIOfflineCacheUpdate aUpdate);
+  const unsigned long STATE_ERROR = 1;
+  const unsigned long STATE_CHECKING = 2;
+  const unsigned long STATE_NOUPDATE = 3;
+  const unsigned long STATE_OBSOLETE = 4;
+  const unsigned long STATE_DOWNLOADING = 5;
+  const unsigned long STATE_ITEMSTARTED = 6;
+  const unsigned long STATE_ITEMCOMPLETED = 7;
+  const unsigned long STATE_ITEMPROGRESS = 8;
+  const unsigned long STATE_FINISHED = 10;
 
   /**
-   * The manifest is being checked for updates
+   * aUpdate has changed its state.
    *
    * @param aUpdate
    *        The nsIOfflineCacheUpdate being processed.
+   * @param event
+   *        See enumeration above
    */
-  void checking(in nsIOfflineCacheUpdate aUpdate);
+  void updateStateChanged(in nsIOfflineCacheUpdate aUpdate, in uint32_t state);
 
   /**
-   * No update was necessary.
+   * Informs the observer about an application being available to associate.
    *
-   * @param aUpdate
-   *        The nsIOfflineCacheUpdate being processed.
+   * @param applicationCache
+   *        The application cache instance that has been created or found by the 
+   *        update to associate with
    */
-  void noUpdate(in nsIOfflineCacheUpdate aUpdate);
-
-  /**
-   * The cache group is now obsolete.
-   *
-   * @param aUpdate
-   *        The nsIOfflineCacheUpdate being processed.
-   */
-  void obsolete(in nsIOfflineCacheUpdate aUpdate);
-
-  /**
-   * Starting to download resources
-   *
-   * @param aUpdate
-   *        The nsIOfflineCacheUpdate being processed.
-   */
-  void downloading(in nsIOfflineCacheUpdate aUpdate);
-
-  /**
-   * An item has started downloading.
-   *
-   * @param aUpdate
-   *        The nsIOfflineCacheUpdate being processed.
-   * @param aItem
-   *        load status for the item that is being downloaded.
-   */
-  void itemStarted(in nsIOfflineCacheUpdate aUpdate,
-                   in nsIDOMLoadStatus aItem);
-
-  /**
-   * An item has finished loading.
-   *
-   * @param aUpdate
-   *        The nsIOfflineCacheUpdate being processed.
-   * @param aItem
-   *         load status for the item that completed.
-   */
-  void itemCompleted(in nsIOfflineCacheUpdate aUpdate,
-                     in nsIDOMLoadStatus aItem);
+  void applicationCacheAvailable(in nsIApplicationCache applicationCache);
 };
 
 /**
@@ -125,7 +63,7 @@ interface nsIOfflineCacheUpdateObserver : nsISupports {
  * load its items one by one, sending itemCompleted() to any registered
  * observers.
  */
-[scriptable, uuid(877261bb-b952-4d27-847e-859bdd47c0ec)]
+[scriptable, uuid(a4503a53-6ab8-4b50-b01e-1c4f393fc980)]
 interface nsIOfflineCacheUpdate : nsISupports {
   /**
    * Fetch the status of the running update.  This will return a value
@@ -169,7 +107,10 @@ interface nsIOfflineCacheUpdate : nsISupports {
    * @param aDocumentURI
    *        The page that is requesting the update.
    */
-  void init(in nsIURI aManifestURI, in nsIURI aDocumentURI);
+  void init(in nsIURI aManifestURI, in nsIURI aDocumentURI, in nsIDOMDocument aDocument,
+            [optional] in nsIFile aCustomProfileDir,
+            [optional] in unsigned long aAppId,
+            [optional] in boolean aInBrowser);
 
   /**
    * Initialize the update for partial processing. 
@@ -187,6 +128,29 @@ interface nsIOfflineCacheUpdate : nsISupports {
   void initPartial(in nsIURI aManifestURI, in ACString aClientID, in nsIURI aDocumentURI);
 
   /**
+   * Initialize the update to only check whether there is an update
+   * to the manifest available (if it has actually changed on the server).
+   *
+   * @param aManifestURI
+   *        The manifest URI of the related cache.
+   * @param aAppID
+   *        Local ID of an app (optional) to check the cache update for.
+   * @param aInBrowser
+   *        Whether to check for a cache populated from browser element.
+   * @param aObserver
+   *        nsIObserver implementation that receives the result.
+   *        When aTopic == "offline-cache-update-available" there is an update to
+   *        to download. Update of the app cache will lead to a new version
+   *        download.
+   *        When aTopic == "offline-cache-update-unavailable" then there is no
+   *        update available (the manifest has not changed on the server).
+   */
+  void initForUpdateCheck(in nsIURI aManifestURI,
+                          in unsigned long aAppID,
+                          in boolean aInBrowser,
+                          in nsIObserver aObserver);
+
+  /**
    * Add a dynamic URI to the offline cache as part of the update.
    *
    * @param aURI
@@ -199,12 +163,6 @@ interface nsIOfflineCacheUpdate : nsISupports {
    * event will be sent to the observer service.
    */
   void schedule();
-
-  /**
-   * Access to the list of items in the update.
-   */
-  readonly attribute unsigned long count;
-  nsIDOMLoadStatus item(in unsigned long index);
 
   /**
    * Observe loads that are added to the update.
@@ -225,9 +183,21 @@ interface nsIOfflineCacheUpdate : nsISupports {
    *        the observer to remove.
    */
   void removeObserver(in nsIOfflineCacheUpdateObserver aObserver);
+
+  /**
+   * Cancel the update when still in progress. This stops all running resource
+   * downloads and discards the downloaded cache version. Throws when update
+   * has already finished and made the new cache version active.
+   */
+  void cancel();
+
+  /**
+   * Return the number of bytes downloaded so far
+   */
+  readonly attribute uint64_t byteProgress;
 };
 
-[scriptable, uuid(6fd2030f-7b00-4102-a0e3-d73078821eb1)]
+[scriptable, uuid(cf362a31-4166-4994-8443-b68704ecdcc0)]
 interface nsIOfflineCacheUpdateService : nsISupports {
     /**
      * Constants for the offline-app permission.
@@ -254,7 +224,28 @@ interface nsIOfflineCacheUpdateService : nsISupports {
      * Otherwise a new update will be scheduled.
      */
     nsIOfflineCacheUpdate scheduleUpdate(in nsIURI aManifestURI,
-                                         in nsIURI aDocumentURI);
+                                         in nsIURI aDocumentURI,
+                                         in nsIDOMWindow aWindow);
+
+    /**
+     * Schedule a cache update for a given offline manifest and let the data
+     * be stored to a custom profile directory.  There is no coalescing of
+     * manifests by manifest URL.
+     */
+    nsIOfflineCacheUpdate scheduleCustomProfileUpdate(in nsIURI aManifestURI,
+                                                      in nsIURI aDocumentURI,
+                                                      in nsIFile aProfileDir);
+
+    /**
+     * Schedule a cache update for a given offline manifest using app cache
+     * bound to the given appID+inBrowser flag.  If an existing update is
+     * scheduled or running, that update will be returned. Otherwise a new
+     * update will be scheduled.
+     */
+    nsIOfflineCacheUpdate scheduleAppUpdate(in nsIURI aManifestURI,
+                                            in nsIURI aDocumentURI,
+                                            in unsigned long aAppID,
+                                            in boolean aInBrowser);
 
     /**
      * Schedule a cache update for a manifest when the document finishes
@@ -263,6 +254,22 @@ interface nsIOfflineCacheUpdateService : nsISupports {
     void scheduleOnDocumentStop(in nsIURI aManifestURI,
                                 in nsIURI aDocumentURI,
                                 in nsIDOMDocument aDocument);
+
+    /**
+     * Schedule a check to see if an update is available.
+     *
+     * This will not update or make any changes to the appcache.
+     * It only notifies the observer to indicate whether the manifest has
+     * changed on the server (or not): a changed manifest means that an
+     * update is available.
+     *
+     * For arguments see nsIOfflineCacheUpdate.initForUpdateCheck() method
+     * description.
+     */
+    void checkForUpdate(in nsIURI aManifestURI,
+                        in unsigned long aAppID,
+                        in boolean aInBrowser,
+                        in nsIObserver aObserver);
 
     /**
      * Checks whether a principal should have access to the offline
@@ -290,5 +297,3 @@ interface nsIOfflineCacheUpdateService : nsISupports {
     boolean offlineAppAllowedForURI(in nsIURI aURI,
                                     in nsIPrefBranch aPrefBranch);
 };
-
-

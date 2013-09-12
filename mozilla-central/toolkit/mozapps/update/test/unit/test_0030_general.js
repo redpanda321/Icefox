@@ -1,49 +1,28 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Application Update Service.
- *
- * The Initial Developer of the Original Code is
- * Robert Strong <robert.bugzilla@gmail.com>.
- *
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Mozilla Foundation <http://www.mozilla.org/>. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK *****
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
 /* General MAR File Download Tests */
 
+const INC_CONTRACT_ID = "@mozilla.org/network/incremental-download;1";
+AUS_Cu.import("resource://gre/modules/FileUtils.jsm");
+AUS_Cu.import("resource://gre/modules/Services.jsm");
+AUS_Cu.import("resource://gre/modules/XPCOMUtils.jsm")
+
 var gNextRunFunc;
 var gStatusResult;
 var gExpectedStatusResult;
+var gIncrementalDownloadClassID, gIncOldFactory;
+
+// gIncrementalDownloadErrorType is used to loop through each of the connection
+// error types in the Mock incremental downloader.
+var gIncrementalDownloadErrorType = 0;
 
 function run_test() {
   do_test_pending();
+  do_register_cleanup(end_test);
+  Services.prefs.setBoolPref(PREF_APP_UPDATE_STAGE_ENABLED, false);
   removeUpdateDirsAndFiles();
   setUpdateURLOverride();
   // The mock XMLHttpRequest is MUCH faster
@@ -51,11 +30,16 @@ function run_test() {
   standardInit();
   // The HTTP server is only used for the mar file downloads which is slow
   start_httpserver(URL_PATH);
-  do_timeout(0, run_test_pt1);
+  do_execute_soon(run_test_pt1);
+}
+
+// The HttpServer must be stopped before calling do_test_finished
+function finish_test() {
+  stop_httpserver(do_test_finished);
 }
 
 function end_test() {
-  stop_httpserver(do_test_finished);
+  cleanupMockIncrementalDownload();
   cleanUp();
 }
 
@@ -72,7 +56,7 @@ function callHandleEvent() {
   catch(e) {
   }
   var e = { target: gXHR };
-  gXHR.onload.handleEvent(e);
+  gXHR.onload(e);
 }
 
 // Helper function for testing mar downloads that have the correct size
@@ -84,7 +68,7 @@ function run_test_helper_pt1(aMsg, aExpectedStatusResult, aNextRunFunc) {
   gCheckFunc = check_test_helper_pt1_1;
   gNextRunFunc = aNextRunFunc;
   gExpectedStatusResult = aExpectedStatusResult;
-  dump("Testing: " + aMsg + "\n");
+  logTestInfo(aMsg, Components.stack.caller);
   gUpdateChecker.checkForUpdates(updateCheckListener, true);
 }
 
@@ -104,94 +88,81 @@ function check_test_helper_pt1_2() {
   gNextRunFunc();
 }
 
-function setResponseBody(aHashFunction, aHashValue) {
-  var patches = getRemotePatchString(null, null, aHashFunction, aHashValue);
+function setResponseBody(aHashFunction, aHashValue, aSize) {
+  var patches = getRemotePatchString(null, null,
+                                     aHashFunction, aHashValue, aSize);
   var updates = getRemoteUpdateString(patches);
   gResponseBody = getRemoteUpdatesXMLString(updates);
 }
 
 // mar download with a valid MD5 hash
 function run_test_pt1() {
-  setResponseBody("MD5", "6232cd43a1c77e30191c53a329a3f99d");
-  run_test_helper_pt1("run_test_pt1 - mar download with a valid MD5 hash",
+  setResponseBody("MD5", MD5_HASH_SIMPLE_MAR);
+  run_test_helper_pt1("mar download with a valid MD5 hash",
                       AUS_Cr.NS_OK, run_test_pt2);
 }
 
 // mar download with an invalid MD5 hash
 function run_test_pt2() {
-  setResponseBody("MD5", "6232cd43a1c77e30191c53a329a3f99e");
-  run_test_helper_pt1("run_test_pt2 - mar download with an invalid MD5 hash",
-                      AUS_Cr.NS_ERROR_UNEXPECTED, run_test_pt3);
+  setResponseBody("MD5", MD5_HASH_SIMPLE_MAR + "0");
+  run_test_helper_pt1("mar download with an invalid MD5 hash",
+                      AUS_Cr.NS_ERROR_CORRUPTED_CONTENT, run_test_pt3);
 }
 
 // mar download with a valid SHA1 hash
 function run_test_pt3() {
-  setResponseBody("SHA1", "63A739284A1A73ECB515176B1A9D85B987E789CE");
-  run_test_helper_pt1("run_test_pt3 - mar download with a valid SHA1 hash",
+  setResponseBody("SHA1", SHA1_HASH_SIMPLE_MAR);
+  run_test_helper_pt1("mar download with a valid SHA1 hash",
                       AUS_Cr.NS_OK, run_test_pt4);
 }
 
 // mar download with an invalid SHA1 hash
 function run_test_pt4() {
-  setResponseBody("SHA1", "63A739284A1A73ECB515176B1A9D85B987E789CD");
-  run_test_helper_pt1("run_test_pt4 - mar download with an invalid SHA1 hash",
-                      AUS_Cr.NS_ERROR_UNEXPECTED, run_test_pt5);
+  setResponseBody("SHA1", SHA1_HASH_SIMPLE_MAR + "0");
+  run_test_helper_pt1("mar download with an invalid SHA1 hash",
+                      AUS_Cr.NS_ERROR_CORRUPTED_CONTENT, run_test_pt5);
 }
 
 // mar download with a valid SHA256 hash
 function run_test_pt5() {
-  var hashValue = "a8d9189f3978afd90dc7cd72e887ef22474c178e8314f23df2f779c881" +
-                  "b872e2";
-  setResponseBody("SHA256", hashValue);
-  run_test_helper_pt1("run_test_pt5 - mar download with a valid SHA256 hash",
+  setResponseBody("SHA256", SHA256_HASH_SIMPLE_MAR);
+  run_test_helper_pt1("mar download with a valid SHA256 hash",
                       AUS_Cr.NS_OK, run_test_pt6);
 }
 
 // mar download with an invalid SHA256 hash
 function run_test_pt6() {
-  var hashValue = "a8d9189f3978afd90dc7cd72e887ef22474c178e8314f23df2f779c881" +
-                  "b872e1";
-  setResponseBody("SHA256", hashValue);
-  run_test_helper_pt1("run_test_pt6 - mar download with an invalid SHA256 hash",
-                      AUS_Cr.NS_ERROR_UNEXPECTED, run_test_pt7);
+  setResponseBody("SHA256", SHA256_HASH_SIMPLE_MAR + "0");
+  run_test_helper_pt1("mar download with an invalid SHA256 hash",
+                      AUS_Cr.NS_ERROR_CORRUPTED_CONTENT, run_test_pt7);
 }
 
 // mar download with a valid SHA384 hash
 function run_test_pt7() {
-  var hashValue = "802c64f6caa6c356f7a5f8d9a008c08c54fe915c3ec7cf9e215c3bccc9" +
-                  "e195c78b2669840d7b1d46ff3c1dfa751d72e1";
-  setResponseBody("SHA384", hashValue);
-  run_test_helper_pt1("run_test_pt7 - mar download with a valid SHA384 hash",
+  setResponseBody("SHA384", SHA384_HASH_SIMPLE_MAR);
+  run_test_helper_pt1("mar download with a valid SHA384 hash",
                       AUS_Cr.NS_OK, run_test_pt8);
 }
 
 // mar download with an invalid SHA384 hash
 function run_test_pt8() {
-  var hashValue = "802c64f6caa6c356f7a5f8d9a008c08c54fe915c3ec7cf9e215c3bccc9" +
-                  "e195c78b2669840d7b1d46ff3c1dfa751d72e2";
-  setResponseBody("SHA384", hashValue);
-  run_test_helper_pt1("run_test_pt8 - mar download with an invalid SHA384 hash",
-                      AUS_Cr.NS_ERROR_UNEXPECTED, run_test_pt9);
+  setResponseBody("SHA384", SHA384_HASH_SIMPLE_MAR + "0");
+  run_test_helper_pt1("mar download with an invalid SHA384 hash",
+                      AUS_Cr.NS_ERROR_CORRUPTED_CONTENT, run_test_pt9);
 }
 
 // mar download with a valid SHA512 hash
 function run_test_pt9() {
-  var hashValue = "1d2307e309587ddd04299423b34762639ce6af3ee17cfdaa8fdd4e66b5" +
-                  "a61bfb6555b6e40a82604908d6d68d3e42f318f82e22b6f5e1118b4222" +
-                  "e3417a2fa2d0";
-  setResponseBody("SHA512", hashValue);
-  run_test_helper_pt1("run_test_pt9 - mar download with a valid SHA512 hash",
+  setResponseBody("SHA512", SHA512_HASH_SIMPLE_MAR);
+  run_test_helper_pt1("mar download with a valid SHA512 hash",
                       AUS_Cr.NS_OK, run_test_pt10);
 }
 
 // mar download with an invalid SHA384 hash
 function run_test_pt10() {
-  var hashValue = "1d2307e309587ddd04299423b34762639ce6af3ee17cfdaa8fdd4e66b5" +
-                  "a61bfb6555b6e40a82604908d6d68d3e42f318f82e22b6f5e1118b4222" +
-                  "e3417a2fa2d1";
-  setResponseBody("SHA512", hashValue);
-  run_test_helper_pt1("run_test_pt10 - mar download with an invalid SHA512 hash",
-                      AUS_Cr.NS_ERROR_UNEXPECTED, run_test_pt11);
+  setResponseBody("SHA512", SHA512_HASH_SIMPLE_MAR + "0");
+  run_test_helper_pt1("mar download with an invalid SHA512 hash",
+                      AUS_Cr.NS_ERROR_CORRUPTED_CONTENT, run_test_pt11);
 }
 
 // mar download with the mar not found
@@ -199,28 +170,216 @@ function run_test_pt11() {
   var patches = getRemotePatchString(null, URL_HOST + URL_PATH + "/missing.mar");
   var updates = getRemoteUpdateString(patches);
   gResponseBody = getRemoteUpdatesXMLString(updates);
-  run_test_helper_pt1("run_test_pt11 - mar download with the mar not found",
-                      AUS_Cr.NS_ERROR_UNEXPECTED, end_test);
+  run_test_helper_pt1("mar download with the mar not found",
+                      AUS_Cr.NS_ERROR_UNEXPECTED, run_test_pt12);
+}
+
+// mar download with a valid MD5 hash but invalid file size
+function run_test_pt12() {
+  const arbitraryFileSize = 1024000;
+  setResponseBody("MD5", MD5_HASH_SIMPLE_MAR ,arbitraryFileSize);
+  run_test_helper_pt1("mar download with a valid MD5 hash but invalid file size",
+                      AUS_Cr.NS_ERROR_UNEXPECTED, run_test_pt13);
+}
+
+var newFactory = {
+  createInstance: function(aOuter, aIID) {
+    if (aOuter)
+      throw Components.results.NS_ERROR_NO_AGGREGATION;
+    return new IncrementalDownload().QueryInterface(aIID);
+  },
+  lockFactory: function(aLock) {
+    throw Components.results.NS_ERROR_NOT_IMPLEMENTED;
+  },
+  QueryInterface: XPCOMUtils.generateQI([AUS_Ci.nsIFactory])
+};
+
+function initMockIncrementalDownload() {
+  var registrar = AUS_Cm.QueryInterface(AUS_Ci.nsIComponentRegistrar);
+  gIncrementalDownloadClassID = registrar.contractIDToCID(INC_CONTRACT_ID);
+  gIncOldFactory = AUS_Cm.getClassObject(AUS_Cc[INC_CONTRACT_ID],
+                                     AUS_Ci.nsIFactory);
+  registrar.unregisterFactory(gIncrementalDownloadClassID, gIncOldFactory);
+  var components = [IncrementalDownload];
+  registrar.registerFactory(gIncrementalDownloadClassID, "",
+                            INC_CONTRACT_ID, newFactory);
+  gIncOldFactory = AUS_Cm.getClassObject(AUS_Cc[INC_CONTRACT_ID],
+                                     AUS_Ci.nsIFactory);
+}
+
+function cleanupMockIncrementalDownload() {
+  if (gIncOldFactory) {
+    var registrar = AUS_Cm.QueryInterface(AUS_Ci.nsIComponentRegistrar);
+    registrar.unregisterFactory(gIncrementalDownloadClassID, newFactory);
+    registrar.registerFactory(gIncrementalDownloadClassID, "",
+                              INC_CONTRACT_ID, gIncOldFactory);
+  }
+  gIncOldFactory = null;
+}
+
+/* This Mock incremental downloader is used to verify that connection
+ * interrupts work correctly in updater code.  The implementation of
+ * the mock incremental downloader is very simple, it simply copies
+ * the file to the destination location.
+*/
+
+function IncrementalDownload() {
+  this.wrappedJSObject = this;
+}
+
+IncrementalDownload.prototype = {
+  QueryInterface: XPCOMUtils.generateQI([AUS_Ci.nsIIncrementalDownload]),
+
+  /* nsIIncrementalDownload */
+  init: function(uri, file, chunkSize, intervalInSeconds) {
+    this._destination = file;
+    this._URI = uri;
+    this._finalURI = uri;
+  },
+
+  start: function(observer, ctxt) {
+    var tm = Components.classes["@mozilla.org/thread-manager;1"].
+                        getService(AUS_Ci.nsIThreadManager);
+    // Do the actual operation async to give a chance for observers
+    // to add themselves.
+    tm.mainThread.dispatch(function() {
+        this._observer = observer.QueryInterface(AUS_Ci.nsIRequestObserver);
+        this._ctxt = ctxt;
+        this._observer.onStartRequest(this, this.ctxt);
+        let mar = do_get_file("data/" + FILE_SIMPLE_MAR);
+        mar.copyTo(this._destination.parent, this._destination.leafName);
+        var status = AUS_Cr.NS_OK
+        switch (gIncrementalDownloadErrorType++) {
+          case 0:
+            status = AUS_Cr.NS_ERROR_NET_RESET;
+          break;
+          case 1:
+            status = AUS_Cr.NS_ERROR_CONNECTION_REFUSED;
+          break;
+          case 2:
+            status = AUS_Cr.NS_ERROR_NET_RESET;
+          break;
+          case 3:
+            status = AUS_Cr.NS_OK;
+            break;
+          case 4:
+            status = AUS_Cr.NS_ERROR_OFFLINE;
+            // After we report offline, we want to eventually show offline
+            // status being changed to online.
+            var tm = Components.classes["@mozilla.org/thread-manager;1"].
+                                getService(AUS_Ci.nsIThreadManager);
+            tm.mainThread.dispatch(function() {
+              Services.obs.notifyObservers(gAUS,
+                                           "network:offline-status-changed",
+                                           "online");
+            }, AUS_Ci.nsIThread.DISPATCH_NORMAL);
+          break;
+        }
+        this._observer.onStopRequest(this, this._ctxt, status);
+      }.bind(this), AUS_Ci.nsIThread.DISPATCH_NORMAL);
+  },
+
+  get URI() {
+    return this._URI;
+  },
+
+  get currentSize() {
+    throw AUS_Cr.NS_ERROR_NOT_IMPLEMENTED;
+  },
+
+  get destination() {
+    return this._destination;
+  },
+
+  get finalURI() {
+    return this._finalURI;
+  },
+
+  get totalSize() {
+    throw AUS_Cr.NS_ERROR_NOT_IMPLEMENTED;
+  },
+
+  /* nsIRequest */
+  cancel: function(aStatus) {
+    throw AUS_Cr.NS_ERROR_NOT_IMPLEMENTED;
+  },
+  suspend: function() {
+    throw AUS_Cr.NS_ERROR_NOT_IMPLEMENTED;
+  },
+  isPending: function() {
+    throw AUS_Cr.NS_ERROR_NOT_IMPLEMENTED;
+  },
+  _loadFlags: 0,
+  get loadFlags() {
+    return this._loadFlags;
+  },
+  set loadFlags(val) {
+    this._loadFlags = val;
+  },
+
+  _loadGroup: null,
+  get loadGroup() {
+    return this._loadGroup;
+  },
+  set loadGroup(val) {
+    this._loadGroup = val;
+  },
+
+  _name: "",
+  get name() {
+    return this._name;
+  },
+
+  _status: 0,
+  get status() {
+    return this._status;
+  }
+}
+
+// Test disconnecting during an update
+function run_test_pt13() {
+  initMockIncrementalDownload();
+  setResponseBody("MD5", MD5_HASH_SIMPLE_MAR);
+  run_test_helper_pt1("mar download with connection interruption",
+                      AUS_Cr.NS_OK, run_test_pt14);
+}
+
+// Test disconnecting during an update
+function run_test_pt14() {
+  gIncrementalDownloadErrorType = 0;
+  Services.prefs.setIntPref(PREF_APP_UPDATE_SOCKET_ERRORS, 2);
+  Services.prefs.setIntPref(PREF_APP_UPDATE_RETRY_TIMEOUT, 0);
+  setResponseBody("MD5", MD5_HASH_SIMPLE_MAR);
+  run_test_helper_pt1("mar download with connection interruption without recovery",
+                      AUS_Cr.NS_ERROR_NET_RESET, run_test_pt15);
+}
+
+// Test entering offline mode while downloading
+function run_test_pt15() {
+  gIncrementalDownloadErrorType = 4;
+  setResponseBody("MD5", MD5_HASH_SIMPLE_MAR);
+  run_test_helper_pt1("mar download with offline mode",
+                      AUS_Cr.NS_OK, finish_test);
 }
 
 /* Update download listener - nsIRequestObserver */
 const downloadListener = {
-  onStartRequest: function(request, context) {
+  onStartRequest: function DL_onStartRequest(request, context) {
   },
 
-  onProgress: function(request, context, progress, maxProgress) {
+  onProgress: function DL_onProgress(request, context, progress, maxProgress) {
   },
 
-  onStatus: function(request, context, status, statusText) {
+  onStatus: function DL_onStatus(request, context, status, statusText) {
   },
 
-  onStopRequest: function(request, context, status) {
+  onStopRequest: function DL_onStopRequest(request, context, status) {
     gStatusResult = status;
     // Use a timeout to allow the request to complete
-    do_timeout(0, gCheckFunc);
+    do_execute_soon(gCheckFunc);
   },
 
-  QueryInterface: function(iid) {
+  QueryInterface: function DL_QueryInterface(iid) {
     if (!iid.equals(AUS_Ci.nsIRequestObserver) &&
         !iid.equals(AUS_Ci.nsIProgressEventSink) &&
         !iid.equals(AUS_Ci.nsISupports))

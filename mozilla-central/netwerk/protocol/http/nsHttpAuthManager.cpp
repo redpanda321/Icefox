@@ -1,45 +1,14 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is Sun Microsystem.
- * Portions created by Sun Microsystem are Copyright (C) 2003 by
- * Sun Microsystem. All Rights Reserved.
- *    
- * Contributor(s):
- *   Louie Zhao <louie.zhao@sun.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsHttpHandler.h"
 #include "nsHttpChannel.h"
 #include "nsHttpAuthManager.h"
 #include "nsReadableUtils.h"
 #include "nsNetUtil.h"
+#include "nsIPrincipal.h"
 
 NS_IMPL_ISUPPORTS1(nsHttpAuthManager, nsIHttpAuthManager)
 
@@ -67,8 +36,10 @@ nsresult nsHttpAuthManager::Init()
     NS_ENSURE_TRUE(gHttpHandler, NS_ERROR_UNEXPECTED);
   }
 	
-  mAuthCache = gHttpHandler->AuthCache();
+  mAuthCache = gHttpHandler->AuthCache(false);
+  mPrivateAuthCache = gHttpHandler->AuthCache(true);
   NS_ENSURE_TRUE(mAuthCache, NS_ERROR_FAILURE);
+  NS_ENSURE_TRUE(mPrivateAuthCache, NS_ERROR_FAILURE);
   return NS_OK;
 }
 
@@ -79,27 +50,39 @@ nsHttpAuthManager::~nsHttpAuthManager()
 NS_IMETHODIMP
 nsHttpAuthManager::GetAuthIdentity(const nsACString & aScheme,
                                    const nsACString & aHost,
-                                   PRInt32 aPort,
+                                   int32_t aPort,
                                    const nsACString & aAuthType,
                                    const nsACString & aRealm,
                                    const nsACString & aPath,
                                    nsAString & aUserDomain,
                                    nsAString & aUserName,
-                                   nsAString & aUserPassword)
+                                   nsAString & aUserPassword,
+                                   bool aIsPrivate,
+                                   nsIPrincipal* aPrincipal)
 {
-  nsHttpAuthEntry * entry = nsnull;
+  nsHttpAuthCache* auth_cache = aIsPrivate ? mPrivateAuthCache : mAuthCache;
+  nsHttpAuthEntry * entry = nullptr;
   nsresult rv;
+  uint32_t appId = NECKO_NO_APP_ID;
+  bool inBrowserElement = false;
+  if (aPrincipal) {
+    appId = aPrincipal->GetAppId();
+    inBrowserElement = aPrincipal->GetIsInBrowserElement();
+  }
+
   if (!aPath.IsEmpty())
-    rv = mAuthCache->GetAuthEntryForPath(PromiseFlatCString(aScheme).get(),
+    rv = auth_cache->GetAuthEntryForPath(PromiseFlatCString(aScheme).get(),
                                          PromiseFlatCString(aHost).get(),
                                          aPort,
                                          PromiseFlatCString(aPath).get(),
+                                         appId, inBrowserElement,
                                          &entry);
   else
-    rv = mAuthCache->GetAuthEntryForDomain(PromiseFlatCString(aScheme).get(),
+    rv = auth_cache->GetAuthEntryForDomain(PromiseFlatCString(aScheme).get(),
                                            PromiseFlatCString(aHost).get(),
                                            aPort,
                                            PromiseFlatCString(aRealm).get(),
+                                           appId, inBrowserElement,
                                            &entry);
 
   if (NS_FAILED(rv))
@@ -116,31 +99,48 @@ nsHttpAuthManager::GetAuthIdentity(const nsACString & aScheme,
 NS_IMETHODIMP
 nsHttpAuthManager::SetAuthIdentity(const nsACString & aScheme,
                                    const nsACString & aHost,
-                                   PRInt32 aPort,
+                                   int32_t aPort,
                                    const nsACString & aAuthType,
                                    const nsACString & aRealm,
                                    const nsACString & aPath,
                                    const nsAString & aUserDomain,
                                    const nsAString & aUserName,
-                                   const nsAString & aUserPassword)
+                                   const nsAString & aUserPassword,
+                                   bool aIsPrivate,
+                                   nsIPrincipal* aPrincipal)
 {
   nsHttpAuthIdentity ident(PromiseFlatString(aUserDomain).get(),
                            PromiseFlatString(aUserName).get(),
                            PromiseFlatString(aUserPassword).get());
 
-  return mAuthCache->SetAuthEntry(PromiseFlatCString(aScheme).get(),
+  uint32_t appId = NECKO_NO_APP_ID;
+  bool inBrowserElement = false;
+  if (aPrincipal) {
+    appId = aPrincipal->GetAppId();
+    inBrowserElement = aPrincipal->GetIsInBrowserElement();
+  }
+
+  nsHttpAuthCache* auth_cache = aIsPrivate ? mPrivateAuthCache : mAuthCache;
+  return auth_cache->SetAuthEntry(PromiseFlatCString(aScheme).get(),
                                   PromiseFlatCString(aHost).get(),
                                   aPort,
                                   PromiseFlatCString(aPath).get(),
                                   PromiseFlatCString(aRealm).get(),
-                                  nsnull,  // credentials
-                                  nsnull,  // challenge
+                                  nullptr,  // credentials
+                                  nullptr,  // challenge
+                                  appId, inBrowserElement,
                                   &ident,
-                                  nsnull); // metadata
+                                  nullptr); // metadata
 }
 
 NS_IMETHODIMP
 nsHttpAuthManager::ClearAll()
 {
-  return mAuthCache->ClearAll();
+  nsresult rv = mAuthCache->ClearAll();
+  nsresult rv2 = mPrivateAuthCache->ClearAll();
+  if (NS_FAILED(rv))
+    return rv;
+  if (NS_FAILED(rv2))
+    return rv2;
+  return NS_OK;
 }

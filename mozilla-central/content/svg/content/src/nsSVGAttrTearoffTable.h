@@ -1,40 +1,14 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SVG project.
- *
- * Contributor(s):
- *   Brian Birtles <birtles@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef NS_SVGATTRTEAROFFTABLE_H_
 #define NS_SVGATTRTEAROFFTABLE_H_
 
 #include "nsDataHashtable.h"
+#include "nsDebug.h"
+#include "nsHashKeys.h"
 
 /**
  * Global hashmap to associate internal SVG data types (e.g. nsSVGLength2) with
@@ -72,10 +46,14 @@ TearoffType*
 nsSVGAttrTearoffTable<SimpleType, TearoffType>::GetTearoff(SimpleType* aSimple)
 {
   if (!mTable.IsInitialized())
-    return nsnull;
+    return nullptr;
 
-  TearoffType *tearoff = nsnull;
-  PRBool found = mTable.Get(aSimple, &tearoff);
+  TearoffType *tearoff = nullptr;
+
+#ifdef DEBUG
+  bool found =
+#endif
+    mTable.Get(aSimple, &tearoff);
   NS_ABORT_IF_FALSE(!found || tearoff,
       "NULL pointer stored in attribute tear-off map");
 
@@ -93,13 +71,12 @@ nsSVGAttrTearoffTable<SimpleType, TearoffType>::AddTearoff(SimpleType* aSimple,
 
   // We shouldn't be adding a tear-off if there already is one. If that happens,
   // something is wrong.
-  if (mTable.Get(aSimple, nsnull)) {
-    NS_ABORT_IF_FALSE(PR_FALSE, "There is already a tear-off for this object.");
+  if (mTable.Get(aSimple, nullptr)) {
+    NS_ABORT_IF_FALSE(false, "There is already a tear-off for this object.");
     return;
   }
 
-  PRBool result = mTable.Put(aSimple, aTearoff);
-  NS_ABORT_IF_FALSE(result, "Out of memory.");
+  mTable.Put(aSimple, aTearoff);
 }
 
 template<class SimpleType, class TearoffType>

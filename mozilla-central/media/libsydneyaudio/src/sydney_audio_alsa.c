@@ -1,42 +1,13 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Initial Developer of the Original Code is
- * CSIRO
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s): Michael Martin
- *                 Chris Double (chris.double@double.co.nz)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** *
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 #include <pthread.h>
 #include <stdlib.h>
 #include <alsa/asoundlib.h>
 #include "sydney_audio.h"
+
+#define ALSA_PA_PLUGIN "ALSA <-> PulseAudio PCM I/O Plugin"
 
 /* ALSA implementation based heavily on sydney_audio_mac.c */
 
@@ -45,10 +16,15 @@ pthread_mutex_t sa_alsa_mutex = PTHREAD_MUTEX_INITIALIZER;
 struct sa_stream {
   snd_pcm_t*        output_unit;
   int64_t           bytes_written;
+  int64_t           last_position;
 
   /* audio format info */
   unsigned int      rate;
   unsigned int      n_channels;
+
+  /* work around bug 573924 */
+  int               pulseaudio;
+  int               resumed;
 };
 
 /*
@@ -107,8 +83,11 @@ sa_stream_create_pcm(
 
   s->output_unit  = NULL;
   s->bytes_written = 0;
+  s->last_position = 0;
   s->rate         = rate;
   s->n_channels   = n_channels;
+  s->pulseaudio   = 0;
+  s->resumed      = 0;
 
   *_s = s;
   return SA_SUCCESS;
@@ -117,6 +96,13 @@ sa_stream_create_pcm(
 
 int
 sa_stream_open(sa_stream_t *s) {
+  snd_output_t* out;
+  char* buf;
+  size_t bufsz;
+  snd_pcm_hw_params_t* hwparams;
+  snd_pcm_sw_params_t* swparams;
+  int dir;
+  snd_pcm_uframes_t period;
 
   if (s == NULL) {
     return SA_ERROR_NO_INIT;
@@ -148,14 +134,46 @@ sa_stream_open(sa_stream_t *s) {
                          s->n_channels,
                          s->rate,
                          1,
-                         250000) < 0) {
+                         500000) < 0) {
     snd_pcm_close(s->output_unit);
     s->output_unit = NULL;
     pthread_mutex_unlock(&sa_alsa_mutex);
     return SA_ERROR_NOT_SUPPORTED;
   }
   
+  /* ugly alsa-pulse plugin detection */
+  snd_output_buffer_open(&out);
+  snd_pcm_dump(s->output_unit, out);
+  bufsz = snd_output_buffer_string(out, &buf);
+  s->pulseaudio = bufsz >= strlen(ALSA_PA_PLUGIN) &&
+                  strncmp(buf, ALSA_PA_PLUGIN, strlen(ALSA_PA_PLUGIN)) == 0;
+  snd_output_close(out);
+
+  snd_pcm_hw_params_alloca(&hwparams);
+  snd_pcm_hw_params_current(s->output_unit, hwparams);
+  snd_pcm_hw_params_get_period_size(hwparams, &period, &dir);
+
   pthread_mutex_unlock(&sa_alsa_mutex);
+
+  return SA_SUCCESS;
+}
+
+
+int
+sa_stream_get_min_write(sa_stream_t *s, size_t *size) {
+  int r;
+  snd_pcm_uframes_t threshold;
+  snd_pcm_sw_params_t* swparams;
+  if (s == NULL || s->output_unit == NULL) {
+    return SA_ERROR_NO_INIT;
+  }
+  snd_pcm_sw_params_alloca(&swparams);
+  snd_pcm_sw_params_current(s->output_unit, swparams);
+  r = snd_pcm_sw_params_get_start_threshold(swparams, &threshold);
+  if (r < 0) {
+    return SA_ERROR_NO_INIT;
+  }
+  *size = snd_pcm_frames_to_bytes(s->output_unit, threshold);
 
   return SA_SUCCESS;
 }
@@ -192,7 +210,7 @@ sa_stream_destroy(sa_stream_t *s) {
 
 int
 sa_stream_write(sa_stream_t *s, const void *data, size_t nbytes) {
-  snd_pcm_sframes_t frames, nframes;
+  snd_pcm_sframes_t frames, nframes, avail;
 
   if (s == NULL || s->output_unit == NULL) {
     return SA_ERROR_NO_INIT;
@@ -202,21 +220,29 @@ sa_stream_write(sa_stream_t *s, const void *data, size_t nbytes) {
   }
 
   nframes = snd_pcm_bytes_to_frames(s->output_unit, nbytes);
-
   while(nframes>0) {
-    frames = snd_pcm_writei(s->output_unit, data, nframes);
+    if (s->resumed) {
+      avail = snd_pcm_avail_update(s->output_unit);
+      frames = snd_pcm_writei(s->output_unit, data, nframes > avail ? avail : nframes);
+      avail = snd_pcm_avail_update(s->output_unit);
+      s->resumed = avail != 0;
+    } else {
+      avail = snd_pcm_avail_update(s->output_unit);
+      avail = avail < 64 ? 64 : avail;
+      frames = snd_pcm_writei(s->output_unit, data, nframes > avail ? avail : nframes);
+    }
     if (frames < 0) {
       int r = snd_pcm_recover(s->output_unit, frames, 1);
       if (r < 0) {
         return SA_ERROR_SYSTEM;
       }
     } else {
+      size_t bytes = snd_pcm_frames_to_bytes(s->output_unit, frames);
       nframes -= frames;
-      data = ((unsigned char *)data) + snd_pcm_frames_to_bytes(s->output_unit, frames);
+      data = ((unsigned char *)data) + bytes;
+      s->bytes_written += bytes;
     }
   }
-
-  s->bytes_written += nbytes;
 
   return SA_SUCCESS;
 }
@@ -254,7 +280,6 @@ sa_stream_get_write_size(sa_stream_t *s, size_t *size) {
 
 int
 sa_stream_get_position(sa_stream_t *s, sa_position_t position, int64_t *pos) {
-  snd_pcm_state_t state;
   snd_pcm_sframes_t delay;
   
   if (s == NULL || s->output_unit == NULL) {
@@ -265,20 +290,13 @@ sa_stream_get_position(sa_stream_t *s, sa_position_t position, int64_t *pos) {
     return SA_ERROR_NOT_SUPPORTED;
   }
 
-  state = snd_pcm_state(s->output_unit);
-  if (state == SND_PCM_STATE_XRUN) {
-    if (snd_pcm_recover(s->output_unit, -EPIPE, 1) < 0) {
-      return SA_ERROR_SYSTEM;
-    }
-    state = snd_pcm_state(s->output_unit);
+  if (snd_pcm_state(s->output_unit) != SND_PCM_STATE_RUNNING) {
+    *pos = s->last_position;
+    return SA_SUCCESS;
   }
 
-  if (state == SND_PCM_STATE_RUNNING) {
-    if (snd_pcm_delay(s->output_unit, &delay) != 0) {
-      return SA_ERROR_SYSTEM;
-    }
-  } else {
-    delay = 0;
+  if (snd_pcm_delay(s->output_unit, &delay) != 0) {
+    return SA_ERROR_SYSTEM;
   }
 
   /* delay means audio is 'x' frames behind what we've written. We need to
@@ -292,6 +310,7 @@ sa_stream_get_position(sa_stream_t *s, sa_position_t position, int64_t *pos) {
   } else {
     *pos = 0;
   }
+  s->last_position = *pos;
 
   return SA_SUCCESS;
 }
@@ -318,6 +337,10 @@ sa_stream_resume(sa_stream_t *s) {
     return SA_ERROR_NO_INIT;
   }
 
+  if (s->pulseaudio) {
+    s->resumed = 1;
+  }
+
   if (snd_pcm_pause(s->output_unit, 0) != 0)
     return SA_ERROR_NOT_SUPPORTED;
   return SA_SUCCESS;
@@ -330,6 +353,24 @@ sa_stream_drain(sa_stream_t *s)
   if (s == NULL || s->output_unit == NULL) {
     return SA_ERROR_NO_INIT;
   }
+
+  if (snd_pcm_state(s->output_unit) == SND_PCM_STATE_PREPARED) {
+    size_t min_samples = 0;
+    size_t min_bytes = 0;
+    void *buf;
+
+    if (sa_stream_get_min_write(s, &min_samples) < 0)
+      return SA_ERROR_SYSTEM;
+    min_bytes = snd_pcm_frames_to_bytes(s->output_unit, min_samples);    
+
+    buf = malloc(min_bytes);
+    if (!buf)
+      return SA_ERROR_SYSTEM;
+    memset(buf, 0, min_bytes);
+    sa_stream_write(s, buf, min_bytes);
+    free(buf);
+  }
+
   if (snd_pcm_state(s->output_unit) != SND_PCM_STATE_RUNNING) {
     return SA_ERROR_INVALID;
   }
@@ -502,6 +543,7 @@ UNSUPPORTED(int sa_stream_write_ni(sa_stream_t *s, unsigned int channel, const v
 UNSUPPORTED(int sa_stream_pwrite(sa_stream_t *s, const void *data, size_t nbytes, int64_t offset, sa_seek_t whence))
 UNSUPPORTED(int sa_stream_pwrite_ni(sa_stream_t *s, unsigned int channel, const void *data, size_t nbytes, int64_t offset, sa_seek_t whence))
 UNSUPPORTED(int sa_stream_get_read_size(sa_stream_t *s, size_t *size))
+UNSUPPORTED(int sa_stream_set_stream_type(sa_stream_t *s, const sa_stream_type_t stream_type))
 
 const char *sa_strerror(int code) { return NULL; }
 

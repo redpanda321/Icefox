@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  * vim: sw=2 ts=2 et lcs=trail\:.,tab\:>~ :
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Oracle Corporation code.
- *
- * The Initial Developer of the Original Code is
- *  Oracle Corporation
- * Portions created by the Initial Developer are Copyright (C) 2004
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Vladimir Vukicevic <vladimir.vukicevic@oracle.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsError.h"
 #include "nsMemory.h"
@@ -50,7 +17,7 @@ namespace storage {
 ////////////////////////////////////////////////////////////////////////////////
 //// ArgValueArray
 
-ArgValueArray::ArgValueArray(PRInt32 aArgc,
+ArgValueArray::ArgValueArray(int32_t aArgc,
                              sqlite3_value **aArgv)
 : mArgc(aArgc)
 , mArgv(aArgv)
@@ -66,15 +33,15 @@ NS_IMPL_ISUPPORTS1(
 //// mozIStorageValueArray
 
 NS_IMETHODIMP
-ArgValueArray::GetNumEntries(PRUint32 *_size)
+ArgValueArray::GetNumEntries(uint32_t *_size)
 {
   *_size = mArgc;
   return NS_OK;
 }
 
 NS_IMETHODIMP
-ArgValueArray::GetTypeOfIndex(PRUint32 aIndex,
-                              PRInt32 *_type)
+ArgValueArray::GetTypeOfIndex(uint32_t aIndex,
+                              int32_t *_type)
 {
   ENSURE_INDEX_VALUE(aIndex, mArgc);
 
@@ -103,8 +70,8 @@ ArgValueArray::GetTypeOfIndex(PRUint32 aIndex,
 }
 
 NS_IMETHODIMP
-ArgValueArray::GetInt32(PRUint32 aIndex,
-                        PRInt32 *_value)
+ArgValueArray::GetInt32(uint32_t aIndex,
+                        int32_t *_value)
 {
   ENSURE_INDEX_VALUE(aIndex, mArgc);
 
@@ -113,8 +80,8 @@ ArgValueArray::GetInt32(PRUint32 aIndex,
 }
 
 NS_IMETHODIMP
-ArgValueArray::GetInt64(PRUint32 aIndex,
-                        PRInt64 *_value)
+ArgValueArray::GetInt64(uint32_t aIndex,
+                        int64_t *_value)
 {
   ENSURE_INDEX_VALUE(aIndex, mArgc);
 
@@ -123,7 +90,7 @@ ArgValueArray::GetInt64(PRUint32 aIndex,
 }
 
 NS_IMETHODIMP
-ArgValueArray::GetDouble(PRUint32 aIndex,
+ArgValueArray::GetDouble(uint32_t aIndex,
                          double *_value)
 {
   ENSURE_INDEX_VALUE(aIndex, mArgc);
@@ -133,7 +100,7 @@ ArgValueArray::GetDouble(PRUint32 aIndex,
 }
 
 NS_IMETHODIMP
-ArgValueArray::GetUTF8String(PRUint32 aIndex,
+ArgValueArray::GetUTF8String(uint32_t aIndex,
                              nsACString &_value)
 {
   ENSURE_INDEX_VALUE(aIndex, mArgc);
@@ -142,7 +109,7 @@ ArgValueArray::GetUTF8String(PRUint32 aIndex,
     // NULL columns should have IsVoid set to distinguish them from an empty
     // string.
     _value.Truncate(0);
-    _value.SetIsVoid(PR_TRUE);
+    _value.SetIsVoid(true);
   }
   else {
     _value.Assign(reinterpret_cast<const char *>(::sqlite3_value_text(mArgv[aIndex])),
@@ -152,7 +119,7 @@ ArgValueArray::GetUTF8String(PRUint32 aIndex,
 }
 
 NS_IMETHODIMP
-ArgValueArray::GetString(PRUint32 aIndex,
+ArgValueArray::GetString(uint32_t aIndex,
                          nsAString &_value)
 {
   ENSURE_INDEX_VALUE(aIndex, mArgc);
@@ -161,7 +128,7 @@ ArgValueArray::GetString(PRUint32 aIndex,
     // NULL columns should have IsVoid set to distinguish them from an empty
     // string.
     _value.Truncate(0);
-    _value.SetIsVoid(PR_TRUE);
+    _value.SetIsVoid(true);
   } else {
     _value.Assign(static_cast<const PRUnichar *>(::sqlite3_value_text16(mArgv[aIndex])),
                   ::sqlite3_value_bytes16(mArgv[aIndex]) / 2);
@@ -170,9 +137,9 @@ ArgValueArray::GetString(PRUint32 aIndex,
 }
 
 NS_IMETHODIMP
-ArgValueArray::GetBlob(PRUint32 aIndex,
-                       PRUint32 *_size,
-                       PRUint8 **_blob)
+ArgValueArray::GetBlob(uint32_t aIndex,
+                       uint32_t *_size,
+                       uint8_t **_blob)
 {
   ENSURE_INDEX_VALUE(aIndex, mArgc);
 
@@ -180,17 +147,17 @@ ArgValueArray::GetBlob(PRUint32 aIndex,
   void *blob = nsMemory::Clone(::sqlite3_value_blob(mArgv[aIndex]), size);
   NS_ENSURE_TRUE(blob, NS_ERROR_OUT_OF_MEMORY);
 
-  *_blob = static_cast<PRUint8 *>(blob);
+  *_blob = static_cast<uint8_t *>(blob);
   *_size = size;
   return NS_OK;
 }
 
 NS_IMETHODIMP
-ArgValueArray::GetIsNull(PRUint32 aIndex,
-                         PRBool *_isNull)
+ArgValueArray::GetIsNull(uint32_t aIndex,
+                         bool *_isNull)
 {
   // GetTypeOfIndex will check aIndex for us, so we don't have to.
-  PRInt32 type;
+  int32_t type;
   nsresult rv = GetTypeOfIndex(aIndex, &type);
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -199,8 +166,8 @@ ArgValueArray::GetIsNull(PRUint32 aIndex,
 }
 
 NS_IMETHODIMP
-ArgValueArray::GetSharedUTF8String(PRUint32 aIndex,
-                                   PRUint32 *_length,
+ArgValueArray::GetSharedUTF8String(uint32_t aIndex,
+                                   uint32_t *_length,
                                    const char **_string)
 {
   if (_length)
@@ -211,8 +178,8 @@ ArgValueArray::GetSharedUTF8String(PRUint32 aIndex,
 }
 
 NS_IMETHODIMP
-ArgValueArray::GetSharedString(PRUint32 aIndex,
-                               PRUint32 *_length,
+ArgValueArray::GetSharedString(uint32_t aIndex,
+                               uint32_t *_length,
                                const PRUnichar **_string)
 {
   if (_length)
@@ -223,12 +190,12 @@ ArgValueArray::GetSharedString(PRUint32 aIndex,
 }
 
 NS_IMETHODIMP
-ArgValueArray::GetSharedBlob(PRUint32 aIndex,
-                             PRUint32 *_size,
-                             const PRUint8 **_blob)
+ArgValueArray::GetSharedBlob(uint32_t aIndex,
+                             uint32_t *_size,
+                             const uint8_t **_blob)
 {
   *_size = ::sqlite3_value_bytes(mArgv[aIndex]);
-  *_blob = static_cast<const PRUint8 *>(::sqlite3_value_blob(mArgv[aIndex]));
+  *_blob = static_cast<const uint8_t *>(::sqlite3_value_blob(mArgv[aIndex]));
   return NS_OK;
 }
 

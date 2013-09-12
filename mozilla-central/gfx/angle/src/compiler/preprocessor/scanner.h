@@ -1,8 +1,3 @@
-//
-// Copyright (c) 2002-2010 The ANGLE Project Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-//
 /****************************************************************************\
 Copyright (c) 2002, NVIDIA Corporation.
 
@@ -53,9 +48,7 @@ NVIDIA HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #if !defined(__SCANNER_H)
 #define __SCANNER_H 1
 
-#define MAX_SYMBOL_NAME_LEN 128
-#define MAX_STRING_LEN 512
-
+#include "compiler/preprocessor/length_limits.h"
 #include "compiler/preprocessor/parser.h"
 
 // Not really atom table stuff but needed first...
@@ -63,8 +56,6 @@ NVIDIA HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 typedef struct SourceLoc_Rec {
     unsigned short file, line;
 } SourceLoc;
-
-int yyparse (void);
 
 int yylex_CPP(char* buf, int maxSize);
 
@@ -78,9 +69,9 @@ typedef struct InputSrc {
 } InputSrc;
 
 int InitScanner(CPPStruct *cpp);   // Intialise the cpp scanner. 
-int ScanFromString(char *);      // Start scanning the input from the string mentioned.
+int InitScannerInput(CPPStruct *cpp, int count, const char* const string[], const int length[]);
 int check_EOF(int);              // check if we hit a EOF abruptly 
-void CPPErrorToInfoLog(char *);   // sticking the msg,line into the Shader's.Info.log
+void CPPErrorToInfoLog(const char *);   // sticking the msg,line into the Shader's.Info.log
 void SetLineNumber(int);
 void SetStringNumber(int);
 void IncLineNumber(void);

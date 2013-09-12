@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SMIL module.
- *
- * The Initial Developer of the Original Code is the Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Daniel Holbert <dholbert@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsSMILCompositor.h"
 #include "nsSMILCSSProperty.h"
@@ -41,7 +9,7 @@
 #include "nsHashKeys.h"
 
 // PLDHashEntryHdr methods
-PRBool
+bool
 nsSMILCompositor::KeyEquals(KeyTypePointer aKey) const
 {
   return aKey && aKey->Equals(mKey);
@@ -105,13 +73,12 @@ nsSMILCompositor::ComposeAttribute()
 
   // THIRD: Step backwards through animation functions to find out
   // which ones we actually care about.
-  PRUint32 firstFuncToCompose = GetFirstFuncToAffectSandwich();
+  uint32_t firstFuncToCompose = GetFirstFuncToAffectSandwich();
 
   // FOURTH: Get & cache base value
-  nsSMILValue sandwichResultValue = smilAttr->GetBaseValue();
-  if (sandwichResultValue.IsNull()) {
-    NS_WARNING("nsISMILAttr::GetBaseValue failed");
-    return;
+  nsSMILValue sandwichResultValue;
+  if (!mAnimationFunctions[firstFuncToCompose]->WillReplace()) {
+    sandwichResultValue = smilAttr->GetBaseValue();
   }
   UpdateCachedBaseValue(sandwichResultValue);
 
@@ -120,9 +87,13 @@ nsSMILCompositor::ComposeAttribute()
   }
 
   // FIFTH: Compose animation functions
-  PRUint32 length = mAnimationFunctions.Length();
-  for (PRUint32 i = firstFuncToCompose; i < length; ++i) {
+  uint32_t length = mAnimationFunctions.Length();
+  for (uint32_t i = firstFuncToCompose; i < length; ++i) {
     mAnimationFunctions[i]->ComposeResult(*smilAttr, sandwichResultValue);
+  }
+  if (sandwichResultValue.IsNull()) {
+    smilAttr->ClearAnimValue();
+    return;
   }
 
   // SIXTH: Set the animated value to the final composited result.
@@ -153,30 +124,47 @@ nsSMILCompositor::CreateSMILAttr()
 {
   if (mKey.mIsCSS) {
     nsCSSProperty propId =
-      nsCSSProps::LookupProperty(nsDependentAtomString(mKey.mAttributeName));
+      nsCSSProps::LookupProperty(nsDependentAtomString(mKey.mAttributeName),
+                                 nsCSSProps::eEnabled);
     if (nsSMILCSSProperty::IsPropertyAnimatable(propId)) {
       return new nsSMILCSSProperty(propId, mKey.mElement.get());
     }
   } else {
-    return mKey.mElement->GetAnimatedAttr(mKey.mAttributeName);
+    return mKey.mElement->GetAnimatedAttr(mKey.mAttributeNamespaceID,
+                                          mKey.mAttributeName);
   }
-  return nsnull;
+  return nullptr;
 }
 
-PRUint32
+uint32_t
 nsSMILCompositor::GetFirstFuncToAffectSandwich()
 {
-  PRUint32 i;
+  uint32_t i;
   for (i = mAnimationFunctions.Length(); i > 0; --i) {
     nsSMILAnimationFunction* curAnimFunc = mAnimationFunctions[i-1];
-    if (curAnimFunc->UpdateCachedTarget(mKey) ||
-        (!mForceCompositing && curAnimFunc->HasChanged())) {
-      mForceCompositing = PR_TRUE;
-    }
+    // In the following, the lack of short-circuit behavior of |= means that we
+    // will ALWAYS run UpdateCachedTarget (even if mForceCompositing is true)
+    // but only call HasChanged and WasSkippedInPrevSample if necessary.  This
+    // is important since we need UpdateCachedTarget to run in order to detect
+    // changes to the target in subsequent samples.
+    mForceCompositing |=
+      curAnimFunc->UpdateCachedTarget(mKey) ||
+      curAnimFunc->HasChanged() ||
+      curAnimFunc->WasSkippedInPrevSample();
 
     if (curAnimFunc->WillReplace()) {
       --i;
       break;
+    }
+  }
+  // Mark remaining animation functions as having been skipped so if we later
+  // use them we'll know to force compositing.
+  // Note that we only really need to do this if something has changed
+  // (otherwise we would have set the flag on a previous sample) and if
+  // something has changed mForceCompositing will be true.
+  if (mForceCompositing) {
+    for (uint32_t j = i; j > 0; --j) {
+      mAnimationFunctions[j-1]->SetWasSkipped();
     }
   }
   return i;
@@ -189,10 +177,10 @@ nsSMILCompositor::UpdateCachedBaseValue(const nsSMILValue& aBaseValue)
     // We don't have last sample's base value cached. Assume it's changed.
     mCachedBaseValue = new nsSMILValue(aBaseValue);
     NS_WARN_IF_FALSE(mCachedBaseValue, "failed to cache base value (OOM?)");
-    mForceCompositing = PR_TRUE;
+    mForceCompositing = true;
   } else if (*mCachedBaseValue != aBaseValue) {
     // Base value has changed since last sample.
     *mCachedBaseValue = aBaseValue;
-    mForceCompositing = PR_TRUE;
+    mForceCompositing = true;
   }
 }

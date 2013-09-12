@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Geolocation.
- *
- * The Initial Developer of the Original Code is Mozilla Corporation
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Oleg Romashin <romaxa@gmail.com>  (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include <stdio.h>
 #include <math.h>
@@ -41,11 +9,11 @@
 #include "MaemoLocationProvider.h"
 #include "nsIClassInfo.h"
 #include "nsDOMClassInfoID.h"
-#include "nsIDOMClassInfo.h"
-#include "nsIPrefService.h"
-#include "nsIPrefBranch.h"
 #include "nsIServiceManager.h"
 #include "nsServiceManagerUtils.h"
+#include "mozilla/Preferences.h"
+
+using namespace mozilla;
 
 NS_IMPL_ISUPPORTS2(MaemoLocationProvider, nsIGeolocationProvider, nsITimerCallback)
 
@@ -54,16 +22,16 @@ MaemoLocationProvider::MaemoLocationProvider() :
   mControlError(0),
   mDeviceDisconnected(0),
   mControlStopped(0),
-  mHasSeenLocation(PR_FALSE),
-  mHasGPS(PR_TRUE),
-  mGPSControl(nsnull),
-  mGPSDevice(nsnull),
-  mIgnoreMinorChanges(PR_FALSE),
+  mHasSeenLocation(false),
+  mHasGPS(true),
+  mGPSControl(nullptr),
+  mGPSDevice(nullptr),
+  mIgnoreMinorChanges(false),
   mPrevLat(0.0),
   mPrevLong(0.0),
-  mIgnoreBigHErr(PR_TRUE),
+  mIgnoreBigHErr(true),
   mMaxHErr(1000),
-  mIgnoreBigVErr(PR_TRUE),
+  mIgnoreBigVErr(true),
   mMaxVErr(100)
 {
 }
@@ -99,7 +67,7 @@ void MaemoLocationProvider::LocationChanged(LocationGPSDevice* device, void* sel
     return;
 
   MaemoLocationProvider* provider = static_cast<MaemoLocationProvider*>(self);
-  NS_ENSURE_TRUE(provider, );
+  NS_ENSURE_TRUE_VOID(provider);
   provider->LocationUpdate(device);
 }
 
@@ -193,31 +161,31 @@ NS_IMETHODIMP MaemoLocationProvider::Startup()
 {
   nsresult rv(NS_OK);
 
-  nsCOMPtr<nsIPrefBranch> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
-  if (!prefs)
-    return NS_ERROR_FAILURE;
-
   rv = StartControl();
   NS_ENSURE_SUCCESS(rv, rv);
 
   rv = StartDevice();
   NS_ENSURE_SUCCESS(rv, rv);
 
-  prefs->GetBoolPref("geo.herror.ignore.big", &mIgnoreBigHErr);
+  mIgnoreBigHErr =
+    Preferences::GetBool("geo.herror.ignore.big", mIgnoreBigHErr);
 
-  if (mIgnoreBigHErr)
-    prefs->GetIntPref("geo.herror.max.value", &mMaxHErr);
+  if (mIgnoreBigHErr) {
+    mMaxHErr = Preferences::GetInt("geo.herror.max.value", mMaxHErr);
+  }
 
-  prefs->GetBoolPref("geo.verror.ignore.big", &mIgnoreBigVErr);
+  mIgnoreBigVErr =
+    Preferences::GetBool("geo.verror.ignore.big", mIgnoreBigVErr);
 
-  if (mIgnoreBigVErr)
-    prefs->GetIntPref("geo.verror.max.value", &mMaxVErr);
+  if (mIgnoreBigVErr) {
+    mMaxVErr = Preferences::GetInt("geo.verror.max.value", mMaxVErr);
+  }
 
   if (mUpdateTimer)
     return NS_OK;
 
-  PRInt32 update = 0; //0 second no timer created
-  prefs->GetIntPref("geo.default.update", &update);
+  // 0 second no timer created
+  int32_t update = Preferences::GetInt("geo.default.update", 0);
 
   if (!update)
     return NS_OK;
@@ -253,17 +221,17 @@ NS_IMETHODIMP MaemoLocationProvider::Shutdown()
   g_signal_handler_disconnect(mGPSDevice, mControlError);
   g_signal_handler_disconnect(mGPSDevice, mControlStopped);
 
-  mHasSeenLocation = PR_FALSE;
-  mCallback = nsnull;
+  mHasSeenLocation = false;
+  mCallback = nullptr;
 
   if (mGPSControl) {
     location_gpsd_control_stop(mGPSControl);
     g_object_unref(mGPSControl);
-    mGPSControl = nsnull;
+    mGPSControl = nullptr;
   }
   if (mGPSDevice) {
     g_object_unref(mGPSDevice);
-    mGPSDevice = nsnull;
+    mGPSDevice = nullptr;
   }
 
   return NS_OK;
@@ -271,8 +239,13 @@ NS_IMETHODIMP MaemoLocationProvider::Shutdown()
 
 void MaemoLocationProvider::Update(nsIDOMGeoPosition* aPosition)
 {
-  mHasSeenLocation = PR_TRUE;
+  mHasSeenLocation = true;
   if (mCallback)
     mCallback->Update(aPosition);
 }
 
+NS_IMETHODIMP
+MaemoLocationProvider::SetHighAccuracy(bool)
+{
+  return NS_OK;
+}

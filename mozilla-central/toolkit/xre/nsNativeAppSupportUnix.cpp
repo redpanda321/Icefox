@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Unix Native App Support.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Michael Wu <flamingice@sourmilk.net>    (original author)
- *   Michael Ventnor <m.ventnor@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsNativeAppSupportBase.h"
 #include "nsCOMPtr.h"
@@ -52,7 +18,6 @@
 #include "nsDirectoryServiceDefs.h"
 #include "nsICommandLineRunner.h"
 #include "nsIWindowMediator.h"
-#include "nsIDOMWindowInternal.h"
 #include "nsPIDOMWindow.h"
 #include "nsIDocShell.h"
 #include "nsIBaseWindow.h"
@@ -71,7 +36,7 @@
 #include <X11/Xatom.h>
 #endif
 
-#ifdef MOZ_PLATFORM_MAEMO
+#if (MOZ_PLATFORM_MAEMO == 5)
 struct DBusMessage;  /* libosso.h references internals of dbus */
 
 #include <dbus/dbus.h>
@@ -139,10 +104,10 @@ gboolean save_yourself_cb(GnomeClient *client, gint phase,
     return TRUE; // OOM
 
   // Notify observers to save the session state
-  didSaveSession->SetData(PR_FALSE);
-  obsServ->NotifyObservers(didSaveSession, "session-save", nsnull);
+  didSaveSession->SetData(false);
+  obsServ->NotifyObservers(didSaveSession, "session-save", nullptr);
 
-  PRBool status;
+  bool status;
   didSaveSession->GetData(&status);
 
   // If there was no session saved and the save_yourself request is
@@ -151,10 +116,10 @@ gboolean save_yourself_cb(GnomeClient *client, gint phase,
     nsCOMPtr<nsISupportsPRBool> cancelQuit =
       do_CreateInstance(NS_SUPPORTS_PRBOOL_CONTRACTID);
 
-    cancelQuit->SetData(PR_FALSE);
-    obsServ->NotifyObservers(cancelQuit, "quit-application-requested", nsnull);
+    cancelQuit->SetData(false);
+    obsServ->NotifyObservers(cancelQuit, "quit-application-requested", nullptr);
 
-    PRBool abortQuit;
+    bool abortQuit;
     cancelQuit->GetData(&abortQuit);
   }
 
@@ -173,12 +138,12 @@ void die_cb(GnomeClient *client, gpointer user_data)
 class nsNativeAppSupportUnix : public nsNativeAppSupportBase
 {
 public:
-  NS_IMETHOD Start(PRBool* aRetVal);
-  NS_IMETHOD Stop(PRBool *aResult);
+  NS_IMETHOD Start(bool* aRetVal);
+  NS_IMETHOD Stop(bool *aResult);
   NS_IMETHOD Enable();
 
 private:
-#ifdef MOZ_PLATFORM_MAEMO
+#if (MOZ_PLATFORM_MAEMO == 5)
   osso_context_t *m_osso_context;    
   /* A note about why we need to have m_hw_state:
      the osso hardware callback does not tell us what changed, just
@@ -189,9 +154,9 @@ private:
 #endif
 };
 
-#ifdef MOZ_PLATFORM_MAEMO
+#if (MOZ_PLATFORM_MAEMO == 5)
 static nsresult
-GetMostRecentWindow(const PRUnichar* aType, nsIDOMWindowInternal** aWindow)
+GetMostRecentWindow(const PRUnichar* aType, nsIDOMWindow** aWindow)
 {
   nsCOMPtr<nsIWindowMediator> wm = do_GetService("@mozilla.org/appshell/window-mediator;1");
   if (wm)
@@ -219,10 +184,10 @@ WidgetForDOMWindow(nsISupports *aWindow)
 }
 
 static void
-OssoSetWindowOrientation(PRBool aPortrait)
+OssoSetWindowOrientation(bool aPortrait)
 {
   // If we locked the screen, ignore any orientation changes
-  PRBool lockScreen = PR_FALSE;
+  bool lockScreen = false;
   nsCOMPtr<nsIPrefBranch> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
   if (prefs)
     prefs->GetBoolPref("toolkit.screen.lock", &lockScreen);
@@ -234,7 +199,7 @@ OssoSetWindowOrientation(PRBool aPortrait)
   // depending on the current rotation
   // NOTE: We only update the most recent top-level window so this is only
   //       suitable for apps with only one window.
-  nsCOMPtr<nsIDOMWindowInternal> window;
+  nsCOMPtr<nsIDOMWindow> window;
   GetMostRecentWindow(EmptyString().get(), getter_AddRefs(window));
   GtkWidget* widget = WidgetForDOMWindow(window);
   if (widget && widget->window) {
@@ -259,24 +224,24 @@ OssoSetWindowOrientation(PRBool aPortrait)
   }
 }
 
-static PRBool OssoIsScreenOn(osso_context_t* ctx)
+static bool OssoIsScreenOn(osso_context_t* ctx)
 {
   osso_return_t rv;
   osso_rpc_t ret;
-  PRBool result = PR_FALSE;
+  bool result = false;
 
   rv = osso_rpc_run_system(ctx, MCE_SERVICE, MCE_REQUEST_PATH, MCE_REQUEST_IF,
                            "get_display_status", &ret, DBUS_TYPE_INVALID);
   if (rv == OSSO_OK) {
       if (strcmp(ret.value.s, "on") == 0)
-          result = PR_TRUE;
+          result = true;
 
       osso_rpc_free_val(&ret);
   }
   return result;
 }
 
-static void OssoRequestAccelerometer(osso_context_t *ctx, PRBool aEnabled)
+static void OssoRequestAccelerometer(osso_context_t *ctx, bool aEnabled)
 {
   osso_return_t rv;
   osso_rpc_t ret;
@@ -305,11 +270,11 @@ static void OssoDisplayCallback(osso_display_state_t state, gpointer data)
   osso_context_t* context = (osso_context_t*) data;
 
   if (state == OSSO_DISPLAY_ON) {
-      os->NotifyObservers(nsnull, "system-display-on", nsnull);
-      OssoRequestAccelerometer(context, PR_TRUE);
+      os->NotifyObservers(nullptr, "system-display-on", nullptr);
+      OssoRequestAccelerometer(context, true);
   } else {
-      os->NotifyObservers(nsnull, "system-display-dimmed-or-off", nsnull);
-      OssoRequestAccelerometer(context, PR_FALSE);
+      os->NotifyObservers(nullptr, "system-display-dimmed-or-off", nullptr);
+      OssoRequestAccelerometer(context, false);
   }
 }
 
@@ -330,7 +295,7 @@ static void OssoHardwareCallback(osso_hw_state_t *state, gpointer data)
   if (state->memory_low_ind && !ourState->memory_low_ind) {
     nsCOMPtr<nsIObserverService> os = mozilla::services::GetObserverService();
     if (os)
-      os->NotifyObservers(nsnull, "memory-pressure", NS_LITERAL_STRING("low-memory").get());
+      os->NotifyObservers(nullptr, "memory-pressure", NS_LITERAL_STRING("low-memory").get());
   }
   
   if (state->system_inactivity_ind != ourState->system_inactivity_ind) {
@@ -339,9 +304,9 @@ static void OssoHardwareCallback(osso_hw_state_t *state, gpointer data)
         return;
  
       if (state->system_inactivity_ind)
-          os->NotifyObservers(nsnull, "system-idle", nsnull);
+          os->NotifyObservers(nullptr, "system-idle", nullptr);
       else
-          os->NotifyObservers(nsnull, "system-active", nsnull);
+          os->NotifyObservers(nullptr, "system-active", nullptr);
   }
 
   memcpy(ourState, state, sizeof(osso_hw_state_t));
@@ -355,7 +320,7 @@ OssoDbusCallback(const gchar *interface, const gchar *method,
 
   // The "top_application" method just wants us to focus the top-most window.
   if (!strcmp("top_application", method)) {
-    nsCOMPtr<nsIDOMWindowInternal> window;
+    nsCOMPtr<nsIDOMWindow> window;
     GetMostRecentWindow(NS_LITERAL_STRING("").get(), getter_AddRefs(window));
     if (window)
       window->Focus();
@@ -430,10 +395,11 @@ OssoModeControlCallback(DBusConnection *con, DBusMessage *msg, gpointer data)
 #endif
 
 NS_IMETHODIMP
-nsNativeAppSupportUnix::Start(PRBool *aRetVal)
+nsNativeAppSupportUnix::Start(bool *aRetVal)
 {
   NS_ASSERTION(gAppData, "gAppData must not be null.");
 
+#if (MOZ_WIDGET_GTK == 2)
   if (gtk_major_version < MIN_GTK_MAJOR_VERSION ||
       (gtk_major_version == MIN_GTK_MAJOR_VERSION && gtk_minor_version < MIN_GTK_MINOR_VERSION)) {
     GtkWidget* versionErrDialog = gtk_message_dialog_new(NULL,
@@ -450,8 +416,9 @@ nsNativeAppSupportUnix::Start(PRBool *aRetVal)
     gtk_widget_destroy(versionErrDialog);
     exit(0);
   }
+#endif
 
-#ifdef MOZ_PLATFORM_MAEMO
+#if (MOZ_PLATFORM_MAEMO == 5)
   /* zero state out. */
   memset(&m_hw_state, 0, sizeof(osso_hw_state_t));
 
@@ -464,7 +431,7 @@ nsNativeAppSupportUnix::Start(PRBool *aRetVal)
      defined in your desktop file.  If it doesn't, the OSSO
      system will happily kill your process.
   */
-  nsCAutoString applicationName;
+  nsAutoCString applicationName;
   if (gAppData->vendor) {
       applicationName.Append(gAppData->vendor);
       applicationName.Append(".");
@@ -474,27 +441,27 @@ nsNativeAppSupportUnix::Start(PRBool *aRetVal)
 
   m_osso_context = osso_initialize(applicationName.get(), 
                                    gAppData->version ? gAppData->version : "1.0",
-                                   PR_TRUE,
-                                   nsnull);
+                                   true,
+                                   nullptr);
 
   /* Check that initilialization was ok */
-  if (m_osso_context == nsnull) {
+  if (m_osso_context == nullptr) {
       return NS_ERROR_FAILURE;
   }
 
-  osso_hw_set_event_cb(m_osso_context, nsnull, OssoHardwareCallback, &m_hw_state);
+  osso_hw_set_event_cb(m_osso_context, nullptr, OssoHardwareCallback, &m_hw_state);
   osso_hw_set_display_event_cb(m_osso_context, OssoDisplayCallback, m_osso_context);
-  osso_rpc_set_default_cb_f(m_osso_context, OssoDbusCallback, nsnull);
+  osso_rpc_set_default_cb_f(m_osso_context, OssoDbusCallback, nullptr);
 
   // Setup an MCE callback to monitor orientation
   DBusConnection *connnection = (DBusConnection*)osso_get_sys_dbus_connection(m_osso_context);
-  dbus_bus_add_match(connnection, MCE_MATCH_RULE, nsnull);
-  dbus_connection_add_filter(connnection, OssoModeControlCallback, nsnull, nsnull);
+  dbus_bus_add_match(connnection, MCE_MATCH_RULE, nullptr);
+  dbus_connection_add_filter(connnection, OssoModeControlCallback, nullptr, nullptr);
 #endif
 
-  *aRetVal = PR_TRUE;
+  *aRetVal = true;
 
-#ifdef MOZ_X11
+#if defined(MOZ_X11) && (MOZ_WIDGET_GTK == 2)
 
   PRLibrary *gnomeuiLib = PR_LoadLibrary("libgnomeui-2.so.0");
   if (!gnomeuiLib)
@@ -517,7 +484,7 @@ nsNativeAppSupportUnix::Start(PRBool *aRetVal)
     return NS_OK;
   }
 
-#endif /* MOZ_X11 */
+#endif /* MOZ_X11 && (MOZ_WIDGET_GTK == 2) */
 
 #ifdef ACCESSIBILITY
   // We will load gail, atk-bridge by ourself later
@@ -528,11 +495,11 @@ nsNativeAppSupportUnix::Start(PRBool *aRetVal)
   setenv(accEnv, "0", 1);
 #endif
 
-#ifdef MOZ_X11
+#if defined(MOZ_X11) && (MOZ_WIDGET_GTK == 2)
   if (!gnome_program_get()) {
     gnome_program_init("Gecko", "1.0", libgnomeui_module_info_get(), gArgc, gArgv, NULL);
   }
-#endif /* MOZ_X11 */
+#endif /* MOZ_X11 && (MOZ_WIDGET_GTK == 2) */
 
 #ifdef ACCESSIBILITY
   if (accOldValue) { 
@@ -546,7 +513,8 @@ nsNativeAppSupportUnix::Start(PRBool *aRetVal)
   // gnome_program_init causes atexit handlers to be registered. Strange
   // crashes will occur if these libraries are unloaded.
 
-#ifdef MOZ_X11
+  // TODO GTK3 - see Bug 694570 - Stop using libgnome and libgnomeui on Linux
+#if defined(MOZ_X11) && (MOZ_WIDGET_GTK == 2)
   gnome_client_set_restart_command = (_gnome_client_set_restart_command_fn)
     PR_FindFunctionSymbol(gnomeuiLib, "gnome_client_set_restart_command");
 
@@ -560,7 +528,7 @@ nsNativeAppSupportUnix::Start(PRBool *aRetVal)
   // Set the correct/requested restart command in any case.
 
   // Is there a request to suppress default binary launcher?
-  nsCAutoString path;
+  nsAutoCString path;
   char* argv1 = getenv("MOZ_APP_LAUNCHER");
 
   if(!argv1) {
@@ -569,12 +537,12 @@ nsNativeAppSupportUnix::Start(PRBool *aRetVal)
     nsCOMPtr<nsIFile> executablePath;
     nsresult rv;
 
-    PRBool dummy;
+    bool dummy;
     rv = gDirServiceProvider->GetFile(XRE_EXECUTABLE_FILE, &dummy, getter_AddRefs(executablePath));
 
     if (NS_SUCCEEDED(rv)) {
       // Strip off the -bin suffix to get the shell script we should run; this is what Breakpad does
-      nsCAutoString leafName;
+      nsAutoCString leafName;
       rv = executablePath->GetNativeLeafName(leafName);
       if (NS_SUCCEEDED(rv) && StringEndsWith(leafName, NS_LITERAL_CSTRING("-bin"))) {
         leafName.SetLength(leafName.Length() - strlen("-bin"));
@@ -589,30 +557,30 @@ nsNativeAppSupportUnix::Start(PRBool *aRetVal)
   if (argv1) {
     gnome_client_set_restart_command(client, 1, &argv1);
   }
-#endif /* MOZ_X11 */
+#endif /* MOZ_X11 && (MOZ_WIDGET_GTK == 2) */
 
   return NS_OK;
 }
 
 NS_IMETHODIMP
-nsNativeAppSupportUnix::Stop(PRBool *aResult)
+nsNativeAppSupportUnix::Stop(bool *aResult)
 {
   NS_ENSURE_ARG(aResult);
-  *aResult = PR_TRUE;
+  *aResult = true;
 
-#ifdef MOZ_PLATFORM_MAEMO
+#if (MOZ_PLATFORM_MAEMO == 5)
   if (m_osso_context) {
     // Disable the accelerometer when closing
-    OssoRequestAccelerometer(m_osso_context, PR_FALSE);
+    OssoRequestAccelerometer(m_osso_context, false);
 
     // Remove the MCE callback filter
     DBusConnection *connnection = (DBusConnection*)osso_get_sys_dbus_connection(m_osso_context);
-    dbus_connection_remove_filter(connnection, OssoModeControlCallback, nsnull);
+    dbus_connection_remove_filter(connnection, OssoModeControlCallback, nullptr);
 
-    osso_hw_unset_event_cb(m_osso_context, nsnull);
-    osso_rpc_unset_default_cb_f(m_osso_context, OssoDbusCallback, nsnull);
+    osso_hw_unset_event_cb(m_osso_context, nullptr);
+    osso_rpc_unset_default_cb_f(m_osso_context, OssoDbusCallback, nullptr);
     osso_deinitialize(m_osso_context);
-    m_osso_context = nsnull;
+    m_osso_context = nullptr;
   }
 #endif
   return NS_OK;
@@ -621,10 +589,10 @@ nsNativeAppSupportUnix::Stop(PRBool *aResult)
 NS_IMETHODIMP
 nsNativeAppSupportUnix::Enable()
 {
-#ifdef MOZ_PLATFORM_MAEMO
+#if (MOZ_PLATFORM_MAEMO == 5)
   // Enable the accelerometer for orientation support
   if (OssoIsScreenOn(m_osso_context))
-      OssoRequestAccelerometer(m_osso_context, PR_TRUE);
+      OssoRequestAccelerometer(m_osso_context, true);
 #endif
   return NS_OK;
 }

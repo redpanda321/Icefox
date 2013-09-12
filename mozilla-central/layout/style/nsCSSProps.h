@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Mats Palmgren <mats.palmgren@bredband.net>
- *   Jonathon Jongsma <jonathon.jongsma@collabora.co.uk>, Collabora Ltd.
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * methods for dealing with CSS properties and tables of the keyword
@@ -88,6 +54,59 @@
 // nsCSSProps::OtherNameFor to get the other property.
 #define CSS_PROPERTY_REPORT_OTHER_NAME            (1<<7)
 
+// This property allows calc() between lengths and percentages and
+// stores such calc() expressions in its style structs (typically in an
+// nsStyleCoord, although this is not the case for 'background-position'
+// and 'background-size').
+#define CSS_PROPERTY_STORES_CALC                  (1<<8)
+
+// Define what mechanism the CSS parser uses for parsing the property.
+// See CSSParserImpl::ParseProperty(nsCSSProperty).  Don't use 0 so that
+// we can verify that every property sets one of the values.
+//
+// CSS_PROPERTY_PARSE_FUNCTION must be used for shorthand properties,
+// since it's the only mechanism that allows appending values for
+// separate properties.  Longhand properties that require custom parsing
+// functions should prefer using CSS_PROPERTY_PARSE_VALUE (or
+// CSS_PROPERTY_PARSE_VALUE_LIST) and
+// CSS_PROPERTY_VALUE_PARSER_FUNCTION, though a number of existing
+// longhand properties use CSS_PROPERTY_PARSE_FUNCTION instead.
+#define CSS_PROPERTY_PARSE_PROPERTY_MASK          (7<<9)
+#define CSS_PROPERTY_PARSE_INACCESSIBLE           (1<<9)
+#define CSS_PROPERTY_PARSE_FUNCTION               (2<<9)
+#define CSS_PROPERTY_PARSE_VALUE                  (3<<9)
+#define CSS_PROPERTY_PARSE_VALUE_LIST             (4<<9)
+
+// See CSSParserImpl::ParseSingleValueProperty and comment above
+// CSS_PROPERTY_PARSE_FUNCTION (which is different).
+#define CSS_PROPERTY_VALUE_PARSER_FUNCTION        (1<<12)
+MOZ_STATIC_ASSERT((CSS_PROPERTY_PARSE_PROPERTY_MASK &
+                   CSS_PROPERTY_VALUE_PARSER_FUNCTION) == 0,
+                  "didn't leave enough room for the parse property constants");
+
+#define CSS_PROPERTY_VALUE_RESTRICTION_MASK       (3<<13)
+// The parser (in particular, CSSParserImpl::ParseSingleValueProperty)
+// should enforce that the value of this property must be 0 or larger.
+#define CSS_PROPERTY_VALUE_NONNEGATIVE            (1<<13)
+// The parser (in particular, CSSParserImpl::ParseSingleValueProperty)
+// should enforce that the value of this property must be 1 or larger.
+#define CSS_PROPERTY_VALUE_AT_LEAST_ONE           (2<<13)
+
+// Does this property suppor the hashless hex color quirk in quirks mode?
+#define CSS_PROPERTY_HASHLESS_COLOR_QUIRK         (1<<15)
+
+// Does this property suppor the unitless length quirk in quirks mode?
+#define CSS_PROPERTY_UNITLESS_LENGTH_QUIRK        (1<<16)
+
+// Is this property (which must be a shorthand) really an alias?
+#define CSS_PROPERTY_IS_ALIAS                     (1<<17)
+
+// Does the property apply to ::-moz-placeholder?
+#define CSS_PROPERTY_APPLIES_TO_PLACEHOLDER       (1<<18)
+
+// This property is allowed in an @page rule.
+#define CSS_PROPERTY_APPLIES_TO_PAGE_RULE         (1<<19)
+
 /**
  * Types of animatable values.
  */
@@ -116,7 +135,7 @@ enum nsStyleAnimType {
   // nscoord values
   eStyleAnimType_nscoord,
 
-  // enumerated values (stored in a PRUint8)
+  // enumerated values (stored in a uint8_t)
   // In order for a property to use this unit, _all_ of its enumerated values
   // must be listed in its keyword table, so that any enumerated value can be
   // converted into a string via a nsCSSValue of type eCSSUnit_Enumerated.
@@ -144,10 +163,16 @@ public:
   static void ReleaseTable(void);
 
   // Given a property string, return the enum value
-  static nsCSSProperty LookupProperty(const nsAString& aProperty);
-  static nsCSSProperty LookupProperty(const nsACString& aProperty);
+  enum EnabledState {
+    eEnabled,
+    eAny
+  };
+  static nsCSSProperty LookupProperty(const nsAString& aProperty,
+                                      EnabledState aEnabled);
+  static nsCSSProperty LookupProperty(const nsACString& aProperty,
+                                      EnabledState aEnabled);
 
-  static inline PRBool IsShorthand(nsCSSProperty aProperty) {
+  static inline bool IsShorthand(nsCSSProperty aProperty) {
     NS_ABORT_IF_FALSE(0 <= aProperty && aProperty < eCSSProperty_COUNT,
                  "out of range");
     return (aProperty >= eCSSProperty_COUNT_no_shorthands);
@@ -169,36 +194,69 @@ public:
   // Given a CSS Property and a Property Enum Value
   // Return back a const nsString& representation of the 
   // value. Return back nullstr if no value is found
-  static const nsAFlatCString& LookupPropertyValue(nsCSSProperty aProperty, PRInt32 aValue);
+  static const nsAFlatCString& LookupPropertyValue(nsCSSProperty aProperty, int32_t aValue);
 
   // Get a color name for a predefined color value like buttonhighlight or activeborder
   // Sets the aStr param to the name of the propertyID
-  static PRBool GetColorName(PRInt32 aPropID, nsCString &aStr);
+  static bool GetColorName(int32_t aPropID, nsCString &aStr);
+
+  // Returns the index of |aKeyword| in |aTable|, if it exists there;
+  // otherwise, returns -1.
+  // NOTE: Generally, clients should call FindKeyword() instead of this method.
+  static int32_t FindIndexOfKeyword(nsCSSKeyword aKeyword, const int32_t aTable[]);
 
   // Find |aKeyword| in |aTable|, if found set |aValue| to its corresponding value.
-  // If not found, return PR_FALSE and do not set |aValue|.
-  static PRBool FindKeyword(nsCSSKeyword aKeyword, const PRInt32 aTable[], PRInt32& aValue);
+  // If not found, return false and do not set |aValue|.
+  static bool FindKeyword(nsCSSKeyword aKeyword, const int32_t aTable[], int32_t& aValue);
   // Return the first keyword in |aTable| that has the corresponding value |aValue|.
   // Return |eCSSKeyword_UNKNOWN| if not found.
-  static nsCSSKeyword ValueToKeywordEnum(PRInt32 aValue, const PRInt32 aTable[]);
+  static nsCSSKeyword ValueToKeywordEnum(int32_t aValue, const int32_t aTable[]);
   // Ditto but as a string, return "" when not found.
-  static const nsAFlatCString& ValueToKeyword(PRInt32 aValue, const PRInt32 aTable[]);
+  static const nsAFlatCString& ValueToKeyword(int32_t aValue, const int32_t aTable[]);
 
   static const nsStyleStructID kSIDTable[eCSSProperty_COUNT_no_shorthands];
-  static const PRInt32* const  kKeywordTableTable[eCSSProperty_COUNT_no_shorthands];
+  static const int32_t* const  kKeywordTableTable[eCSSProperty_COUNT_no_shorthands];
   static const nsStyleAnimType kAnimTypeTable[eCSSProperty_COUNT_no_shorthands];
   static const ptrdiff_t
     kStyleStructOffsetTable[eCSSProperty_COUNT_no_shorthands];
 
 private:
-  static const PRUint32        kFlagsTable[eCSSProperty_COUNT];
+  static const uint32_t        kFlagsTable[eCSSProperty_COUNT];
 
 public:
-  static inline PRBool PropHasFlags(nsCSSProperty aProperty, PRUint32 aFlags)
+  static inline bool PropHasFlags(nsCSSProperty aProperty, uint32_t aFlags)
   {
     NS_ABORT_IF_FALSE(0 <= aProperty && aProperty < eCSSProperty_COUNT,
                       "out of range");
     return (nsCSSProps::kFlagsTable[aProperty] & aFlags) == aFlags;
+  }
+
+  static inline uint32_t PropertyParseType(nsCSSProperty aProperty)
+  {
+    NS_ABORT_IF_FALSE(0 <= aProperty && aProperty < eCSSProperty_COUNT,
+                      "out of range");
+    return nsCSSProps::kFlagsTable[aProperty] &
+           CSS_PROPERTY_PARSE_PROPERTY_MASK;
+  }
+
+  static inline uint32_t ValueRestrictions(nsCSSProperty aProperty)
+  {
+    NS_ABORT_IF_FALSE(0 <= aProperty && aProperty < eCSSProperty_COUNT,
+                      "out of range");
+    return nsCSSProps::kFlagsTable[aProperty] &
+           CSS_PROPERTY_VALUE_RESTRICTION_MASK;
+  }
+
+private:
+  // Lives in nsCSSParser.cpp for the macros it depends on.
+  static const uint32_t kParserVariantTable[eCSSProperty_COUNT_no_shorthands];
+
+public:
+  static inline uint32_t ParserVariant(nsCSSProperty aProperty) {
+    NS_ABORT_IF_FALSE(0 <= aProperty &&
+                      aProperty < eCSSProperty_COUNT_no_shorthands,
+                      "out of range");
+    return nsCSSProps::kParserVariantTable[aProperty];
   }
 
 private:
@@ -235,7 +293,42 @@ private:
   // single allocation, and is the one pointer that should be |free|d).
   static nsCSSProperty *gShorthandsContainingTable[eCSSProperty_COUNT_no_shorthands];
   static nsCSSProperty* gShorthandsContainingPool;
-  static PRBool BuildShorthandsContainingTable();
+  static bool BuildShorthandsContainingTable();
+
+private:
+  static const size_t gPropertyCountInStruct[nsStyleStructID_Length];
+  static const size_t gPropertyIndexInStruct[eCSSProperty_COUNT_no_shorthands];
+public:
+  /**
+   * Return the number of properties that must be cascaded when
+   * nsRuleNode builds the nsStyle* for aSID.
+   */
+  static size_t PropertyCountInStruct(nsStyleStructID aSID) {
+    NS_ABORT_IF_FALSE(0 <= aSID && aSID < nsStyleStructID_Length,
+                      "out of range");
+    return gPropertyCountInStruct[aSID];
+  }
+  /**
+   * Return an index for aProperty that is unique within its SID and in
+   * the range 0 <= index < PropertyCountInStruct(aSID).
+   */
+  static size_t PropertyIndexInStruct(nsCSSProperty aProperty) {
+    NS_ABORT_IF_FALSE(0 <= aProperty &&
+                         aProperty < eCSSProperty_COUNT_no_shorthands,
+                      "out of range");
+    return gPropertyIndexInStruct[aProperty];
+  }
+
+private:
+  static bool gPropertyEnabled[eCSSProperty_COUNT];
+
+public:
+
+  static bool IsEnabled(nsCSSProperty aProperty) {
+    NS_ABORT_IF_FALSE(0 <= aProperty && aProperty < eCSSProperty_COUNT,
+                      "out of range");
+    return gPropertyEnabled[aProperty];
+  }
 
 public:
 
@@ -244,93 +337,123 @@ public:
        *iter_ != eCSSProperty_UNKNOWN; ++iter_)
 
   // Keyword/Enum value tables
-  static const PRInt32 kAppearanceKTable[];
-  static const PRInt32 kAzimuthKTable[];
-  static const PRInt32 kBackgroundAttachmentKTable[];
-  static const PRInt32 kBackgroundInlinePolicyKTable[];
-  static const PRInt32 kBackgroundOriginKTable[];
-  static const PRInt32 kBackgroundPositionKTable[];
-  static const PRInt32 kBackgroundRepeatKTable[];
-  static const PRInt32 kBackgroundSizeKTable[];
-  static const PRInt32 kBorderCollapseKTable[];
-  static const PRInt32 kBorderColorKTable[];
-  static const PRInt32 kBorderImageKTable[];
-  static const PRInt32 kBorderStyleKTable[];
-  static const PRInt32 kBorderWidthKTable[];
-  static const PRInt32 kBoxAlignKTable[];
-  static const PRInt32 kBoxDirectionKTable[];
-  static const PRInt32 kBoxOrientKTable[];
-  static const PRInt32 kBoxPackKTable[];
-  static const PRInt32 kDominantBaselineKTable[];
-  static const PRInt32 kFillRuleKTable[];
-  static const PRInt32 kImageRenderingKTable[];
-  static const PRInt32 kShapeRenderingKTable[];
-  static const PRInt32 kStrokeLinecapKTable[];
-  static const PRInt32 kStrokeLinejoinKTable[];
-  static const PRInt32 kTextAnchorKTable[];
-  static const PRInt32 kTextRenderingKTable[];
-  static const PRInt32 kColorInterpolationKTable[];
-  static const PRInt32 kBoxPropSourceKTable[];
-  static const PRInt32 kBoxShadowTypeKTable[];
-  static const PRInt32 kBoxSizingKTable[];
-  static const PRInt32 kCaptionSideKTable[];
-  static const PRInt32 kClearKTable[];
-  static const PRInt32 kColorKTable[];
-  static const PRInt32 kContentKTable[];
-  static const PRInt32 kCursorKTable[];
-  static const PRInt32 kDirectionKTable[];
-  static const PRInt32 kDisplayKTable[];
-  static const PRInt32 kElevationKTable[];
-  static const PRInt32 kEmptyCellsKTable[];
-  static const PRInt32 kFloatKTable[];
-  static const PRInt32 kFloatEdgeKTable[];
-  static const PRInt32 kFontKTable[];
-  static const PRInt32 kFontSizeKTable[];
-  static const PRInt32 kFontStretchKTable[];
-  static const PRInt32 kFontStyleKTable[];
-  static const PRInt32 kFontVariantKTable[];
-  static const PRInt32 kFontWeightKTable[];
-  static const PRInt32 kIMEModeKTable[];
-  static const PRInt32 kLineHeightKTable[];
-  static const PRInt32 kListStylePositionKTable[];
-  static const PRInt32 kListStyleKTable[];
-  static const PRInt32 kOutlineStyleKTable[];
-  static const PRInt32 kOutlineColorKTable[];
-  static const PRInt32 kOverflowKTable[];
-  static const PRInt32 kOverflowSubKTable[];
-  static const PRInt32 kPageBreakKTable[];
-  static const PRInt32 kPageBreakInsideKTable[];
-  static const PRInt32 kPageMarksKTable[];
-  static const PRInt32 kPageSizeKTable[];
-  static const PRInt32 kPitchKTable[];
-  static const PRInt32 kPointerEventsKTable[];
-  static const PRInt32 kPositionKTable[];
-  static const PRInt32 kRadialGradientShapeKTable[];
-  static const PRInt32 kRadialGradientSizeKTable[];
-  static const PRInt32 kResizeKTable[];
-  static const PRInt32 kSpeakKTable[];
-  static const PRInt32 kSpeakHeaderKTable[];
-  static const PRInt32 kSpeakNumeralKTable[];
-  static const PRInt32 kSpeakPunctuationKTable[];
-  static const PRInt32 kSpeechRateKTable[];
-  static const PRInt32 kStackSizingKTable[];
-  static const PRInt32 kTableLayoutKTable[];
-  static const PRInt32 kTextAlignKTable[];
-  static const PRInt32 kTextDecorationKTable[];
-  static const PRInt32 kTextTransformKTable[];
-  static const PRInt32 kTransitionTimingFunctionKTable[];
-  static const PRInt32 kUnicodeBidiKTable[];
-  static const PRInt32 kUserFocusKTable[];
-  static const PRInt32 kUserInputKTable[];
-  static const PRInt32 kUserModifyKTable[];
-  static const PRInt32 kUserSelectKTable[];
-  static const PRInt32 kVerticalAlignKTable[];
-  static const PRInt32 kVisibilityKTable[];
-  static const PRInt32 kVolumeKTable[];
-  static const PRInt32 kWhitespaceKTable[];
-  static const PRInt32 kWidthKTable[]; // also min-width, max-width
-  static const PRInt32 kWindowShadowKTable[];
-  static const PRInt32 kWordwrapKTable[];
+  static const int32_t kAnimationDirectionKTable[];
+  static const int32_t kAnimationFillModeKTable[];
+  static const int32_t kAnimationIterationCountKTable[];
+  static const int32_t kAnimationPlayStateKTable[];
+  static const int32_t kAnimationTimingFunctionKTable[];
+  static const int32_t kAppearanceKTable[];
+  static const int32_t kAzimuthKTable[];
+  static const int32_t kBackfaceVisibilityKTable[];
+  static const int32_t kTransformStyleKTable[];
+  static const int32_t kBackgroundAttachmentKTable[];
+  static const int32_t kBackgroundInlinePolicyKTable[];
+  static const int32_t kBackgroundOriginKTable[];
+  static const int32_t kBackgroundPositionKTable[];
+  static const int32_t kBackgroundRepeatKTable[];
+  static const int32_t kBackgroundRepeatPartKTable[];
+  static const int32_t kBackgroundSizeKTable[];
+  static const int32_t kBorderCollapseKTable[];
+  static const int32_t kBorderColorKTable[];
+  static const int32_t kBorderImageRepeatKTable[];
+  static const int32_t kBorderImageSliceKTable[];
+  static const int32_t kBorderStyleKTable[];
+  static const int32_t kBorderWidthKTable[];
+  static const int32_t kBoxAlignKTable[];
+  static const int32_t kBoxDirectionKTable[];
+  static const int32_t kBoxOrientKTable[];
+  static const int32_t kBoxPackKTable[];
+  static const int32_t kDominantBaselineKTable[];
+  static const int32_t kFillRuleKTable[];
+  static const int32_t kImageRenderingKTable[];
+  static const int32_t kShapeRenderingKTable[];
+  static const int32_t kStrokeLinecapKTable[];
+  static const int32_t kStrokeLinejoinKTable[];
+  static const int32_t kStrokeObjectValueKTable[];
+  static const int32_t kVectorEffectKTable[];
+  static const int32_t kTextAnchorKTable[];
+  static const int32_t kTextRenderingKTable[];
+  static const int32_t kColorInterpolationKTable[];
+  static const int32_t kColumnFillKTable[];
+  static const int32_t kBoxPropSourceKTable[];
+  static const int32_t kBoxShadowTypeKTable[];
+  static const int32_t kBoxSizingKTable[];
+  static const int32_t kCaptionSideKTable[];
+  static const int32_t kClearKTable[];
+  static const int32_t kColorKTable[];
+  static const int32_t kContentKTable[];
+  static const int32_t kCursorKTable[];
+  static const int32_t kDirectionKTable[];
+  // Not const because we modify its entries when CSS prefs change.
+  static int32_t kDisplayKTable[];
+  static const int32_t kElevationKTable[];
+  static const int32_t kEmptyCellsKTable[];
+#ifdef MOZ_FLEXBOX
+  static const int32_t kAlignItemsKTable[];
+  static const int32_t kAlignSelfKTable[];
+  static const int32_t kFlexDirectionKTable[];
+  static const int32_t kJustifyContentKTable[];
+#endif // MOZ_FLEXBOX
+  static const int32_t kFloatKTable[];
+  static const int32_t kFloatEdgeKTable[];
+  static const int32_t kFontKTable[];
+  static const int32_t kFontSizeKTable[];
+  static const int32_t kFontStretchKTable[];
+  static const int32_t kFontStyleKTable[];
+  static const int32_t kFontVariantKTable[];
+  static const int32_t kFontWeightKTable[];
+  static const int32_t kIMEModeKTable[];
+  static const int32_t kLineHeightKTable[];
+  static const int32_t kListStylePositionKTable[];
+  static const int32_t kListStyleKTable[];
+  static const int32_t kMaskTypeKTable[];
+  static const int32_t kObjectOpacityKTable[];
+  static const int32_t kObjectPatternKTable[];
+  static const int32_t kOrientKTable[];
+  static const int32_t kOutlineStyleKTable[];
+  static const int32_t kOutlineColorKTable[];
+  static const int32_t kOverflowKTable[];
+  static const int32_t kOverflowSubKTable[];
+  static const int32_t kPageBreakKTable[];
+  static const int32_t kPageBreakInsideKTable[];
+  static const int32_t kPageMarksKTable[];
+  static const int32_t kPageSizeKTable[];
+  static const int32_t kPitchKTable[];
+  static const int32_t kPointerEventsKTable[];
+  static const int32_t kPositionKTable[];
+  static const int32_t kRadialGradientShapeKTable[];
+  static const int32_t kRadialGradientSizeKTable[];
+  static const int32_t kRadialGradientLegacySizeKTable[];
+  static const int32_t kResizeKTable[];
+  static const int32_t kSpeakKTable[];
+  static const int32_t kSpeakHeaderKTable[];
+  static const int32_t kSpeakNumeralKTable[];
+  static const int32_t kSpeakPunctuationKTable[];
+  static const int32_t kSpeechRateKTable[];
+  static const int32_t kStackSizingKTable[];
+  static const int32_t kTableLayoutKTable[];
+  static const int32_t kTextAlignKTable[];
+  static const int32_t kTextAlignLastKTable[];
+  static const int32_t kTextBlinkKTable[];
+  static const int32_t kTextDecorationLineKTable[];
+  static const int32_t kTextDecorationStyleKTable[];
+  static const int32_t kTextOverflowKTable[];
+  static const int32_t kTextTransformKTable[];
+  static const int32_t kTransitionTimingFunctionKTable[];
+  static const int32_t kUnicodeBidiKTable[];
+  static const int32_t kUserFocusKTable[];
+  static const int32_t kUserInputKTable[];
+  static const int32_t kUserModifyKTable[];
+  static const int32_t kUserSelectKTable[];
+  static const int32_t kVerticalAlignKTable[];
+  static const int32_t kVisibilityKTable[];
+  static const int32_t kVolumeKTable[];
+  static const int32_t kWhitespaceKTable[];
+  static const int32_t kWidthKTable[]; // also min-width, max-width
+  static const int32_t kWindowShadowKTable[];
+  static const int32_t kWordBreakKTable[];
+  static const int32_t kWordWrapKTable[];
+  static const int32_t kHyphensKTable[];
 };
 
 #endif /* nsCSSProps_h___ */

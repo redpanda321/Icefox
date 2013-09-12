@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Bradley Baetz <bbaetz@student.usyd.edu.au>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef __nsFtpState__h_
 #define __nsFtpState__h_
@@ -43,7 +10,6 @@
 #include "nsFTPChannel.h"
 #include "nsBaseContentStream.h"
 
-#include "nsInt64.h"
 #include "nsIThread.h"
 #include "nsIRunnable.h"
 #include "nsISocketTransportService.h"
@@ -60,7 +26,6 @@
 #include "nsCOMPtr.h"
 #include "nsIAsyncInputStream.h"
 #include "nsIOutputStream.h"
-#include "nsAutoLock.h"
 #include "nsAutoPtr.h"
 #include "nsIPrompt.h"
 #include "nsITransport.h"
@@ -70,6 +35,7 @@
 
 #include "nsICacheEntryDescriptor.h"
 #include "nsICacheListener.h"
+#include "nsIProtocolProxyCallback.h"
 
 // ftp server types
 #define FTP_GENERIC_TYPE     0
@@ -112,6 +78,7 @@ typedef enum _FTP_STATE {
 typedef enum _FTP_ACTION {GET, PUT} FTP_ACTION;
 
 class nsFtpChannel;
+class nsICancelable;
 
 // The nsFtpState object is the content stream for the channel.  It implements
 // nsIInputStreamCallback, so it can read data from the control connection.  It
@@ -123,22 +90,25 @@ class nsFtpState : public nsBaseContentStream,
                    public nsITransportEventSink,
                    public nsICacheListener,
                    public nsIRequestObserver,
-                   public nsFtpControlConnectionListener {
+                   public nsFtpControlConnectionListener,
+                   public nsIProtocolProxyCallback
+{
 public:
     NS_DECL_ISUPPORTS_INHERITED
     NS_DECL_NSIINPUTSTREAMCALLBACK
     NS_DECL_NSITRANSPORTEVENTSINK
     NS_DECL_NSICACHELISTENER
     NS_DECL_NSIREQUESTOBSERVER
+    NS_DECL_NSIPROTOCOLPROXYCALLBACK
 
     // Override input stream methods:
     NS_IMETHOD CloseWithStatus(nsresult status);
-    NS_IMETHOD Available(PRUint32 *result);
+    NS_IMETHOD Available(uint64_t *result);
     NS_IMETHOD ReadSegments(nsWriteSegmentFun fun, void *closure,
-                            PRUint32 count, PRUint32 *result);
+                            uint32_t count, uint32_t *result);
 
     // nsFtpControlConnectionListener methods:
-    virtual void OnControlDataAvailable(const char *data, PRUint32 dataLen);
+    virtual void OnControlDataAvailable(const char *data, uint32_t dataLen);
     virtual void OnControlError(nsresult status);
 
     nsFtpState();
@@ -205,13 +175,13 @@ private:
      * the nsFtpState's OnCacheEntryAvailable method will be called once the
      * cache entry is available or if an error occurs.
      */
-    PRBool CheckCache();
+    bool CheckCache();
 
     /**
      * This method returns true if the data for this URL can be read from the
      * cache.  This method assumes that mCacheEntry is non-null.
      */
-    PRBool CanReadCacheEntry();
+    bool CanReadCacheEntry();
 
     /**
      * This method causes the cache entry to be read.  Data from the cache
@@ -219,7 +189,7 @@ private:
      * if successfully reading from the cache.  This method assumes that
      * mCacheEntry is non-null and opened with read access.
      */
-    PRBool ReadCacheEntry();
+    bool ReadCacheEntry();
 
     /**
      * This method configures mDataStream with an asynchronous input stream to
@@ -242,16 +212,16 @@ private:
         // ****** state machine vars
     FTP_STATE           mState;             // the current state
     FTP_STATE           mNextState;         // the next state
-    PRPackedBool        mKeepRunning;       // thread event loop boolean
-    PRInt32             mResponseCode;      // the last command response code
+    bool                mKeepRunning;       // thread event loop boolean
+    int32_t             mResponseCode;      // the last command response code
     nsCString           mResponseMsg;       // the last command response text
 
         // ****** channel/transport/stream vars 
     nsRefPtr<nsFtpControlConnection> mControlConnection;       // cacheable control connection (owns mCPipe)
-    PRPackedBool                    mReceivedControlData;  
-    PRPackedBool                    mTryingCachedControl;     // retrying the password
-    PRPackedBool                    mRETRFailed;              // Did we already try a RETR and it failed?
-    PRUint64                        mFileSize;
+    bool                            mReceivedControlData;  
+    bool                            mTryingCachedControl;     // retrying the password
+    bool                            mRETRFailed;              // Did we already try a RETR and it failed?
+    uint64_t                        mFileSize;
     nsCString                       mModTime;
 
         // ****** consumer vars
@@ -259,21 +229,22 @@ private:
     nsCOMPtr<nsIProxyInfo>          mProxyInfo;
 
         // ****** connection cache vars
-    PRInt32             mServerType;    // What kind of server are we talking to
+    int32_t             mServerType;    // What kind of server are we talking to
 
         // ****** protocol interpretation related state vars
     nsString            mUsername;      // username
     nsString            mPassword;      // password
     FTP_ACTION          mAction;        // the higher level action (GET/PUT)
-    PRPackedBool        mAnonymous;     // try connecting anonymous (default)
-    PRPackedBool        mRetryPass;     // retrying the password
-    PRPackedBool        mStorReplyReceived; // FALSE if waiting for STOR
+    bool                mAnonymous;     // try connecting anonymous (default)
+    bool                mRetryPass;     // retrying the password
+    bool                mStorReplyReceived; // FALSE if waiting for STOR
                                             // completion status from server
     nsresult            mInternalError; // represents internal state errors
-    PRPackedBool        mReconnectAndLoginAgain;
+    bool                mReconnectAndLoginAgain;
+    bool                mCacheConnection;
 
         // ****** URI vars
-    PRInt32                mPort;       // the port to connect to
+    int32_t                mPort;       // the port to connect to
     nsString               mFilename;   // url filename (if any)
     nsCString              mPath;       // the url's path
     nsCString              mPwd;        // login Path
@@ -282,10 +253,10 @@ private:
     nsCOMPtr<nsITransport>        mDataTransport;
     nsCOMPtr<nsIAsyncInputStream> mDataStream;
     nsCOMPtr<nsIRequest>    mUploadRequest;
-    PRPackedBool            mAddressChecked;
-    PRPackedBool            mServerIsIPv6;
+    bool                    mAddressChecked;
+    bool                    mServerIsIPv6;
     
-    static PRUint32         mSessionStartTime;
+    static uint32_t         mSessionStartTime;
 
     PRNetAddr               mServerAddress;
 
@@ -294,9 +265,12 @@ private:
     nsCString               mControlReadCarryOverBuf;
 
     nsCOMPtr<nsICacheEntryDescriptor> mCacheEntry;
-    PRPackedBool            mDoomCache;
+    bool                    mDoomCache;
     
     nsCString mSuppliedEntityID;
+
+    nsCOMPtr<nsICancelable>  mProxyRequest;
+    bool                     mDeferredCallbackPending;
 };
 
 #endif //__nsFtpState__h_

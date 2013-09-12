@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is TransforMiiX XSLT processor code.
- *
- * The Initial Developer of the Original Code is
- * The MITRE Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Keith Visco <kvisco@ziplink.net> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "txList.h"
 
@@ -60,61 +27,15 @@ txList::~txList() {
     clear();
 } //-- ~txList
 
-nsresult txList::insert(int index, void* objPtr)
-{
-    if (index >= itemCount) {
-        return insertBefore(objPtr, 0);
-    }
-    // add inside the list
-    ListItem* nextItem = firstItem;
-    for (int i = 0; i < index; i++)
-        nextItem = nextItem->nextItem;
-    return insertBefore(objPtr, nextItem);
-} //-- insert
-
 nsresult txList::add(void* objPtr)
 {
     return insertBefore(objPtr, 0);
 } //-- add
 
 /**
- * Returns the object located at the given index. This may
- * be slow or fast depending on the implementation.
- * Note:
- * Currently this list is implemented via a linked list, so
- * this method will be slow (unless the list only has a couple
- * members) as it will need traverse the links each time
- * @return the object located at the given index
-**/
-void* txList::get(int index) {
-
-    if (index < 0 || index >= itemCount)
-        return 0;
-
-    int c = 0;
-    ListItem* item = firstItem;
-    while ((c != index) && item) {
-        item = item->nextItem;
-        ++c;
-    }
-
-    if (item)
-        return item->objPtr;
-    return 0;
-} //-- get(int)
-
-txList::ListItem* txList::getFirstItem() {
-    return firstItem;
-} //-- getFirstItem
-
-txList::ListItem* txList::getLastItem() {
-    return lastItem;
-} //-- getLastItem
-
-/**
  * Returns the number of items in this txList
 **/
-PRInt32 List::getLength() {
+int32_t List::getLength() {
    return itemCount;
 } //-- getLength
 
@@ -179,20 +100,6 @@ nsresult txList::insertBefore(void* objPtr, ListItem* refItem)
     return NS_OK;
 } //-- insertBefore
 
-void* txList::remove(void* objPtr) {
-   ListItem* item = firstItem;
-   while (item) {
-      if (item->objPtr == objPtr) {
-         remove(item);
-         delete item;
-         return objPtr;
-      }
-      item = item->nextItem;
-   }
-   // not in list
-   return 0;
-} //-- remove
-
 txList::ListItem* txList::remove(ListItem* item) {
 
     if (!item)
@@ -243,7 +150,7 @@ void txList::clear()
 txListIterator::txListIterator(txList* list) {
    this->list   = list;
    currentItem  = 0;
-   atEndOfList  = MB_FALSE;
+   atEndOfList  = false;
 } //-- txListIterator
 
 /**
@@ -276,11 +183,11 @@ nsresult txListIterator::addBefore(void* objPtr)
 
 /**
  * Returns true if a successful call to the next() method can be made
- * @return MB_TRUE if a successful call to the next() method can be made,
- * otherwise MB_FALSE
+ * @return true if a successful call to the next() method can be made,
+ * otherwise false
 **/
-MBool txListIterator::hasNext() {
-    MBool hasNext = MB_FALSE;
+bool txListIterator::hasNext() {
+    bool hasNext = false;
     if (currentItem)
         hasNext = (currentItem->nextItem != 0);
     else if (!atEndOfList)
@@ -288,21 +195,6 @@ MBool txListIterator::hasNext() {
 
     return hasNext;
 } //-- hasNext
-
-/**
- * Returns true if a successful call to the previous() method can be made
- * @return MB_TRUE if a successful call to the previous() method can be made,
- * otherwise MB_FALSE
-**/
-MBool txListIterator::hasPrevious() {
-    MBool hasPrevious = MB_FALSE;
-    if (currentItem)
-        hasPrevious = (currentItem->prevItem != 0);
-    else if (atEndOfList)
-        hasPrevious = (list->lastItem != 0);
-
-    return hasPrevious;
-} //-- hasPrevious
 
 /**
  * Returns the next Object pointer in the list
@@ -318,7 +210,7 @@ void* txListIterator::next() {
     if (currentItem)
         obj = currentItem->objPtr;
     else
-        atEndOfList = MB_TRUE;
+        atEndOfList = true;
 
     return obj;
 } //-- next
@@ -338,7 +230,7 @@ void* txListIterator::previous() {
     if (currentItem)
         obj = currentItem->objPtr;
 
-    atEndOfList = MB_FALSE;
+    atEndOfList = false;
 
     return obj;
 } //-- previous
@@ -353,40 +245,6 @@ void* txListIterator::current() {
 
     return 0;
 } //-- current
-
-/**
- * Moves the specified number of steps
-**/
-void* txListIterator::advance(int i) {
-
-    void* obj = 0;
-
-    if (i > 0) {
-        if (!currentItem && !atEndOfList) {
-            currentItem = list->firstItem;
-            --i;
-        }
-        for (; currentItem && i > 0; i--)
-            currentItem = currentItem->nextItem;
-        
-        atEndOfList = currentItem == 0;
-    }
-    else if (i < 0) {
-        if (!currentItem && atEndOfList) {
-            currentItem = list->lastItem;
-            ++i;
-        }
-        for (; currentItem && i < 0; i++)
-            currentItem = currentItem->prevItem;
-
-        atEndOfList = MB_FALSE;
-    }
-
-    if (currentItem)
-        obj = currentItem->objPtr;
-
-    return obj;
-} //-- advance
 
 /**
  * Removes the Object last returned by the next() or previous() methods;
@@ -409,7 +267,7 @@ void* txListIterator::remove() {
  * Resets the current location within the txList to the beginning of the txList
 **/
 void txListIterator::reset() {
-   atEndOfList = MB_FALSE;
+   atEndOfList = false;
    currentItem = 0;
 } //-- reset
 
@@ -417,6 +275,6 @@ void txListIterator::reset() {
  * Move the iterator to right after the last element
 **/
 void txListIterator::resetToEnd() {
-   atEndOfList = MB_TRUE;
+   atEndOfList = true;
    currentItem = 0;
 } //-- moveToEnd

@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK *****
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  *
  *
  * This Original Code has been modified by IBM Corporation.
@@ -57,8 +25,10 @@
 #include "nsString.h"
 #include "nsID.h"
 #include "pldhash.h"
-
 #include "nsDOMClassInfo.h"
+#include "nsIObserver.h"
+#include "nsWeakReference.h"
+
 
 struct nsGlobalNameStruct
 {
@@ -71,8 +41,10 @@ struct nsGlobalNameStruct
 
   enum nametype {
     eTypeNotInitialized,
+    eTypeNewDOMBinding,
     eTypeInterface,
     eTypeProperty,
+    eTypeNavigatorProperty,
     eTypeExternalConstructor,
     eTypeStaticNameSet,
     eTypeDynamicNameSet,
@@ -83,15 +55,20 @@ struct nsGlobalNameStruct
     eTypeExternalConstructorAlias
   } mType;
 
-  PRBool mChromeOnly;
+  bool mChromeOnly;
+  bool mDisabled;
 
   union {
-    PRInt32 mDOMClassInfoID; // eTypeClassConstructor
+    int32_t mDOMClassInfoID; // eTypeClassConstructor
     nsIID mIID; // eTypeInterface, eTypeClassProto
     nsExternalDOMClassInfoData* mData; // eTypeExternalClassInfo
     ConstructorAlias* mAlias; // eTypeExternalConstructorAlias
-    nsCID mCID; // All other types...
+    nsCID mCID; // All other types except eTypeNewDOMBinding
   };
+
+  // For new style DOM bindings.
+  mozilla::dom::DefineInterface mDefineDOMInterface;
+  mozilla::dom::PrefEnabled mPrefEnabled; // May be null if not pref controlled
 
 private:
 
@@ -104,9 +81,13 @@ class nsICategoryManager;
 class GlobalNameMapEntry;
 
 
-class nsScriptNameSpaceManager
+class nsScriptNameSpaceManager : public nsIObserver,
+                                 public nsSupportsWeakReference
 {
 public:
+  NS_DECL_ISUPPORTS
+  NS_DECL_NSIOBSERVER
+
   nsScriptNameSpaceManager();
   virtual ~nsScriptNameSpaceManager();
 
@@ -118,20 +99,29 @@ public:
   // valid until the next call to any of the methods in this class.
   // It also returns a pointer to the string buffer of the classname
   // in the nsGlobalNameStruct.
-  nsresult LookupName(const nsAString& aName,
-                      const nsGlobalNameStruct **aNameStruct,
-                      const PRUnichar **aClassName = nsnull);
+  const nsGlobalNameStruct* LookupName(const nsAString& aName,
+                                       const PRUnichar **aClassName = nullptr)
+  {
+    return LookupNameInternal(aName, aClassName);
+  }
+
+  // Returns a nsGlobalNameStruct for the navigator property aName, or
+  // null if one is not found. The returned nsGlobalNameStruct is only
+  // guaranteed to be valid until the next call to any of the methods
+  // in this class.
+  const nsGlobalNameStruct* LookupNavigatorName(const nsAString& aName);
 
   nsresult RegisterClassName(const char *aClassName,
-                             PRInt32 aDOMClassInfoID,
-                             PRBool aPrivileged,
+                             int32_t aDOMClassInfoID,
+                             bool aPrivileged,
+                             bool aDisabled,
                              const PRUnichar **aResult);
 
   nsresult RegisterClassProto(const char *aClassName,
                               const nsIID *aConstructorProtoIID,
-                              PRBool *aFoundOld);
+                              bool *aFoundOld);
 
-  nsresult RegisterExternalInterfaces(PRBool aAsProto);
+  nsresult RegisterExternalInterfaces(bool aAsProto);
 
   nsresult RegisterExternalClassName(const char *aClassName,
                                      nsCID& aCID);
@@ -142,34 +132,65 @@ public:
                              nsDOMClassInfoExternalConstructorFnc aConstructorFptr,
                              const nsIID *aProtoChainInterface,
                              const nsIID **aInterfaces,
-                             PRUint32 aScriptableFlags,
-                             PRBool aHasClassInterface,
+                             uint32_t aScriptableFlags,
+                             bool aHasClassInterface,
                              const nsCID *aConstructorCID);
 
   nsGlobalNameStruct* GetConstructorProto(const nsGlobalNameStruct* aStruct);
 
-protected:
+  void RegisterDefineDOMInterface(const nsAFlatString& aName,
+    mozilla::dom::DefineInterface aDefineDOMInterface,
+    mozilla::dom::PrefEnabled aPrefEnabled);
+
+  typedef PLDHashOperator
+  (* GlobalNameEnumerator)(const nsAString& aGlobalName, void* aClosure);
+
+  void EnumerateGlobalNames(GlobalNameEnumerator aEnumerator,
+                            void* aClosure);
+
+  size_t SizeOfIncludingThis(nsMallocSizeOfFun aMallocSizeOf);
+
+private:
   // Adds a new entry to the hash and returns the nsGlobalNameStruct
   // that aKey will be mapped to. If mType in the returned
   // nsGlobalNameStruct is != eTypeNotInitialized, an entry for aKey
   // already existed.
-  nsGlobalNameStruct *AddToHash(const char *aKey,
-                                const PRUnichar **aClassName = nsnull);
+  nsGlobalNameStruct *AddToHash(PLDHashTable *aTable, const nsAString *aKey,
+                                const PRUnichar **aClassName = nullptr);
+  nsGlobalNameStruct *AddToHash(PLDHashTable *aTable, const char *aKey,
+                                const PRUnichar **aClassName = nullptr)
+  {
+    NS_ConvertASCIItoUTF16 key(aKey);
+    return AddToHash(aTable, &key, aClassName);
+  }
 
   nsresult FillHash(nsICategoryManager *aCategoryManager,
-                    const char *aCategory,
-                    nsGlobalNameStruct::nametype aType,
-                    PRBool aPrivilegedOnly);
+                    const char *aCategory);
   nsresult FillHashWithDOMInterfaces();
   nsresult RegisterInterface(const char* aIfName,
                              const nsIID *aIfIID,
-                             PRBool* aFoundOld);
+                             bool* aFoundOld);
 
-  // Inline PLDHashTable, init with PL_DHashTableInit() and delete
-  // with PL_DHashTableFinish().
+  /**
+   * Add a new category entry into the hash table.
+   * Only some categories can be added (see the beginning of the definition).
+   * The other ones will be ignored.
+   *
+   * @aCategoryManager Instance of the category manager service.
+   * @aCategory        Category where the entry comes from.
+   * @aEntry           The entry that should be added.
+   */
+  nsresult AddCategoryEntryToHash(nsICategoryManager* aCategoryManager,
+                                  const char* aCategory,
+                                  nsISupports* aEntry);
+
+  nsGlobalNameStruct* LookupNameInternal(const nsAString& aName,
+                                         const PRUnichar **aClassName = nullptr);
+
   PLDHashTable mGlobalNames;
+  PLDHashTable mNavigatorNames;
 
-  PRPackedBool mIsInitialized;
+  bool mIsInitialized;
 };
 
 #endif /* nsScriptNameSpaceManager_h__ */

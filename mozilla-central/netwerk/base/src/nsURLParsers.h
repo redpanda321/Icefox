@@ -1,45 +1,13 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsURLParsers_h__
 #define nsURLParsers_h__
 
 #include "nsIURLParser.h"
+#include "mozilla/Attributes.h"
 
 //----------------------------------------------------------------------------
 // base class for url parsers
@@ -48,16 +16,15 @@
 class nsBaseURLParser : public nsIURLParser
 {
 public:
-    NS_DECL_ISUPPORTS
     NS_DECL_NSIURLPARSER
 
     nsBaseURLParser() { }
 
 protected:
     // implemented by subclasses
-    virtual void ParseAfterScheme(const char *spec, PRInt32 specLen,
-                                  PRUint32 *authPos, PRInt32 *authLen,
-                                  PRUint32 *pathPos, PRInt32 *pathLen) = 0;
+    virtual void ParseAfterScheme(const char *spec, int32_t specLen,
+                                  uint32_t *authPos, int32_t *authLen,
+                                  uint32_t *pathPos, int32_t *pathLen) = 0;
 };
 
 //----------------------------------------------------------------------------
@@ -73,25 +40,27 @@ protected:
 //     file://foo/bar.txt     (the authority "foo"  is ignored)
 //----------------------------------------------------------------------------
 
-class nsNoAuthURLParser : public nsBaseURLParser
+class nsNoAuthURLParser MOZ_FINAL : public nsBaseURLParser
 {
-public: 
+public:
+    NS_DECL_ISUPPORTS
+
 #if defined(XP_WIN) || defined(XP_OS2)
-    NS_IMETHOD ParseFilePath(const char *, PRInt32,
-                             PRUint32 *, PRInt32 *,
-                             PRUint32 *, PRInt32 *,
-                             PRUint32 *, PRInt32 *);
+    NS_IMETHOD ParseFilePath(const char *, int32_t,
+                             uint32_t *, int32_t *,
+                             uint32_t *, int32_t *,
+                             uint32_t *, int32_t *);
 #endif
 
-    NS_IMETHOD ParseAuthority(const char *auth, PRInt32 authLen,
-                              PRUint32 *usernamePos, PRInt32 *usernameLen,
-                              PRUint32 *passwordPos, PRInt32 *passwordLen,
-                              PRUint32 *hostnamePos, PRInt32 *hostnameLen,
-                              PRInt32 *port);
+    NS_IMETHOD ParseAuthority(const char *auth, int32_t authLen,
+                              uint32_t *usernamePos, int32_t *usernameLen,
+                              uint32_t *passwordPos, int32_t *passwordLen,
+                              uint32_t *hostnamePos, int32_t *hostnameLen,
+                              int32_t *port);
 
-    void ParseAfterScheme(const char *spec, PRInt32 specLen,
-                          PRUint32 *authPos, PRInt32 *authLen,
-                          PRUint32 *pathPos, PRInt32 *pathLen);
+    void ParseAfterScheme(const char *spec, int32_t specLen,
+                          uint32_t *authPos, int32_t *authLen,
+                          uint32_t *pathPos, int32_t *pathLen);
 };
 
 //----------------------------------------------------------------------------
@@ -105,24 +74,28 @@ public:
 
 class nsAuthURLParser : public nsBaseURLParser
 {
-public: 
-    NS_IMETHOD ParseAuthority(const char *auth, PRInt32 authLen,
-                              PRUint32 *usernamePos, PRInt32 *usernameLen,
-                              PRUint32 *passwordPos, PRInt32 *passwordLen,
-                              PRUint32 *hostnamePos, PRInt32 *hostnameLen,
-                              PRInt32 *port);
+public:
+    NS_DECL_ISUPPORTS
 
-    NS_IMETHOD ParseUserInfo(const char *userinfo, PRInt32 userinfoLen,
-                             PRUint32 *usernamePos, PRInt32 *usernameLen,
-                             PRUint32 *passwordPos, PRInt32 *passwordLen);
+    virtual ~nsAuthURLParser() {}
 
-    NS_IMETHOD ParseServerInfo(const char *serverinfo, PRInt32 serverinfoLen,
-                               PRUint32 *hostnamePos, PRInt32 *hostnameLen,
-                               PRInt32 *port);
+    NS_IMETHOD ParseAuthority(const char *auth, int32_t authLen,
+                              uint32_t *usernamePos, int32_t *usernameLen,
+                              uint32_t *passwordPos, int32_t *passwordLen,
+                              uint32_t *hostnamePos, int32_t *hostnameLen,
+                              int32_t *port);
 
-    void ParseAfterScheme(const char *spec, PRInt32 specLen,
-                          PRUint32 *authPos, PRInt32 *authLen,
-                          PRUint32 *pathPos, PRInt32 *pathLen);
+    NS_IMETHOD ParseUserInfo(const char *userinfo, int32_t userinfoLen,
+                             uint32_t *usernamePos, int32_t *usernameLen,
+                             uint32_t *passwordPos, int32_t *passwordLen);
+
+    NS_IMETHOD ParseServerInfo(const char *serverinfo, int32_t serverinfoLen,
+                               uint32_t *hostnamePos, int32_t *hostnameLen,
+                               int32_t *port);
+
+    void ParseAfterScheme(const char *spec, int32_t specLen,
+                          uint32_t *authPos, int32_t *authLen,
+                          uint32_t *pathPos, int32_t *pathLen);
 };
 
 //----------------------------------------------------------------------------
@@ -138,9 +111,9 @@ public:
 class nsStdURLParser : public nsAuthURLParser
 {
 public: 
-    void ParseAfterScheme(const char *spec, PRInt32 specLen,
-                          PRUint32 *authPos, PRInt32 *authLen,
-                          PRUint32 *pathPos, PRInt32 *pathLen);
+    void ParseAfterScheme(const char *spec, int32_t specLen,
+                          uint32_t *authPos, int32_t *authLen,
+                          uint32_t *pathPos, int32_t *pathLen);
 };
 
 #endif // nsURLParsers_h__

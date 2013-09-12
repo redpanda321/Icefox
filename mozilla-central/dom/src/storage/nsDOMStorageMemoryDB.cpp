@@ -1,44 +1,10 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Neil Deakin <enndeakin@sympatico.ca>
- *   Honza Bambas <honzab@firemni.cz>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsCOMPtr.h"
-#include "nsDOMError.h"
+#include "nsError.h"
 #include "nsDOMStorage.h"
 #include "nsDOMStorageMemoryDB.h"
 #include "nsNetUtil.h"
@@ -46,8 +12,7 @@
 nsresult
 nsDOMStorageMemoryDB::Init(nsDOMStoragePersistentDB* aPreloadDB)
 {
-  if (!mData.Init(20))
-    return NS_ERROR_OUT_OF_MEMORY;
+  mData.Init(20);
 
   mPreloadDB = aPreloadDB;
   return NS_OK;
@@ -67,29 +32,26 @@ AllKeyEnum(nsSessionStorageEntry* aEntry, void* userArg)
   aEntry->mItem->GetValue(item->mValue);
   nsresult rv = aEntry->mItem->GetSecure(&item->mSecure);
   if (NS_FAILED(rv))
-    item->mSecure = PR_FALSE;
+    item->mSecure = false;
 
   target->Put(aEntry->GetKey(), item);
   return PL_DHASH_NEXT;
 }
 
 nsresult
-nsDOMStorageMemoryDB::GetItemsTable(nsDOMStorage* aStorage,
+nsDOMStorageMemoryDB::GetItemsTable(DOMStorageImpl* aStorage,
                                     nsInMemoryStorage** aMemoryStorage)
 {
   if (mData.Get(aStorage->GetScopeDBKey(), aMemoryStorage))
     return NS_OK;
 
-  *aMemoryStorage = nsnull;
+  *aMemoryStorage = nullptr;
 
   nsInMemoryStorage* storageData = new nsInMemoryStorage();
   if (!storageData)
     return NS_ERROR_OUT_OF_MEMORY;
 
-  if (!storageData->mTable.Init()) {
-    delete storageData;
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
+  storageData->mTable.Init();
 
   if (mPreloadDB) {
     nsresult rv;
@@ -100,9 +62,9 @@ nsDOMStorageMemoryDB::GetItemsTable(nsDOMStorage* aStorage,
     rv = mPreloadDB->GetAllKeys(aStorage, &keys);
     NS_ENSURE_SUCCESS(rv, rv);
 
-    mPreloading = PR_TRUE;
+    mPreloading = true;
     keys.EnumerateEntries(AllKeyEnum, &storageData->mTable);
-    mPreloading = PR_FALSE;
+    mPreloading = false;
   }
 
   mData.Put(aStorage->GetScopeDBKey(), storageData);
@@ -114,7 +76,7 @@ nsDOMStorageMemoryDB::GetItemsTable(nsDOMStorage* aStorage,
 struct GetAllKeysEnumStruc
 {
   nsTHashtable<nsSessionStorageEntry>* mTarget;
-  nsDOMStorage* mStorage;
+  DOMStorageImpl* mStorage;
 };
 
 static PLDHashOperator
@@ -139,7 +101,7 @@ GetAllKeysEnum(const nsAString& keyname,
 }
 
 nsresult
-nsDOMStorageMemoryDB::GetAllKeys(nsDOMStorage* aStorage,
+nsDOMStorageMemoryDB::GetAllKeys(DOMStorageImpl* aStorage,
                                  nsTHashtable<nsSessionStorageEntry>* aKeys)
 {
   nsresult rv;
@@ -157,10 +119,10 @@ nsDOMStorageMemoryDB::GetAllKeys(nsDOMStorage* aStorage,
 }
 
 nsresult
-nsDOMStorageMemoryDB::GetKeyValue(nsDOMStorage* aStorage,
+nsDOMStorageMemoryDB::GetKeyValue(DOMStorageImpl* aStorage,
                                   const nsAString& aKey,
                                   nsAString& aValue,
-                                  PRBool* aSecure)
+                                  bool* aSecure)
 {
   if (mPreloading) {
     NS_PRECONDITION(mPreloadDB, "Must have a preload DB set when preloading");
@@ -183,13 +145,10 @@ nsDOMStorageMemoryDB::GetKeyValue(nsDOMStorage* aStorage,
 }
 
 nsresult
-nsDOMStorageMemoryDB::SetKey(nsDOMStorage* aStorage,
+nsDOMStorageMemoryDB::SetKey(DOMStorageImpl* aStorage,
                              const nsAString& aKey,
                              const nsAString& aValue,
-                             PRBool aSecure,
-                             PRInt32 aQuota,
-                             PRBool aExcludeOfflineFromUsage,
-                             PRInt32 *aNewUsage)
+                             bool aSecure)
 {
   nsresult rv;
 
@@ -197,9 +156,9 @@ nsDOMStorageMemoryDB::SetKey(nsDOMStorage* aStorage,
   rv = GetItemsTable(aStorage, &storage);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  PRInt32 usage = 0;
-  if (!aStorage->GetQuotaDomainDBKey(!aExcludeOfflineFromUsage).IsEmpty()) {
-    rv = GetUsage(aStorage, aExcludeOfflineFromUsage, &usage);
+  int32_t usage = 0;
+  if (!aStorage->GetQuotaDBKey().IsEmpty()) {
+    rv = GetUsage(aStorage, &usage);
     NS_ENSURE_SUCCESS(rv, rv);
   }
 
@@ -207,7 +166,7 @@ nsDOMStorageMemoryDB::SetKey(nsDOMStorage* aStorage,
 
   nsInMemoryItem* item;
   if (!storage->mTable.Get(aKey, &item)) {
-    if (usage > aQuota) {
+    if (usage > GetQuota()) {
       return NS_ERROR_DOM_QUOTA_REACHED;
     }
 
@@ -220,8 +179,10 @@ nsDOMStorageMemoryDB::SetKey(nsDOMStorage* aStorage,
   }
   else
   {
+    if (!aSecure && item->mSecure)
+      return NS_ERROR_DOM_SECURITY_ERR;
     usage -= aKey.Length() + item->mValue.Length();
-    if (usage > aQuota) {
+    if (usage > GetQuota()) {
       return NS_ERROR_DOM_QUOTA_REACHED;
     }
   }
@@ -231,15 +192,15 @@ nsDOMStorageMemoryDB::SetKey(nsDOMStorage* aStorage,
   item->mValue = aValue;
   item->mSecure = aSecure;
 
-  *aNewUsage = usage;
+  MarkScopeDirty(aStorage);
 
   return NS_OK;
 }
 
 nsresult
-nsDOMStorageMemoryDB::SetSecure(nsDOMStorage* aStorage,
+nsDOMStorageMemoryDB::SetSecure(DOMStorageImpl* aStorage,
                                 const nsAString& aKey,
-                                const PRBool aSecure)
+                                const bool aSecure)
 {
   nsresult rv;
 
@@ -253,14 +214,14 @@ nsDOMStorageMemoryDB::SetSecure(nsDOMStorage* aStorage,
 
   item->mSecure = aSecure;
 
+  MarkScopeDirty(aStorage);
+
   return NS_OK;
 }
 
 nsresult
-nsDOMStorageMemoryDB::RemoveKey(nsDOMStorage* aStorage,
-                                const nsAString& aKey,
-                                PRBool aExcludeOfflineFromUsage,
-                                PRInt32 aKeyUsage)
+nsDOMStorageMemoryDB::RemoveKey(DOMStorageImpl* aStorage,
+                                const nsAString& aKey)
 {
   nsresult rv;
 
@@ -274,6 +235,8 @@ nsDOMStorageMemoryDB::RemoveKey(nsDOMStorage* aStorage,
 
   storage->mUsageDelta -= aKey.Length() + item->mValue.Length();
   storage->mTable.Remove(aKey);
+
+  MarkScopeDirty(aStorage);
 
   return NS_OK;
 }
@@ -291,7 +254,7 @@ RemoveAllKeysEnum(const nsAString& keyname,
 }
 
 nsresult
-nsDOMStorageMemoryDB::ClearStorage(nsDOMStorage* aStorage)
+nsDOMStorageMemoryDB::ClearStorage(DOMStorageImpl* aStorage)
 {
   nsresult rv;
 
@@ -300,20 +263,24 @@ nsDOMStorageMemoryDB::ClearStorage(nsDOMStorage* aStorage)
   NS_ENSURE_SUCCESS(rv, rv);
 
   storage->mTable.Enumerate(RemoveAllKeysEnum, storage);
+
+  MarkScopeDirty(aStorage);
+
   return NS_OK;
 }
 
 nsresult
-nsDOMStorageMemoryDB::DropStorage(nsDOMStorage* aStorage)
+nsDOMStorageMemoryDB::DropStorage(DOMStorageImpl* aStorage)
 {
   mData.Remove(aStorage->GetScopeDBKey());
+  MarkScopeDirty(aStorage);
   return NS_OK;
 }
 
 struct RemoveOwnersStruc
 {
   nsCString* mSubDomain;
-  PRBool mMatch;
+  bool mMatch;
 };
 
 static PLDHashOperator
@@ -330,51 +297,17 @@ RemoveOwnersEnum(const nsACString& key,
 }
 
 nsresult
-nsDOMStorageMemoryDB::RemoveOwner(const nsACString& aOwner,
-                                  PRBool aIncludeSubDomains)
+nsDOMStorageMemoryDB::RemoveOwner(const nsACString& aOwner)
 {
-  nsCAutoString subdomainsDBKey;
-  nsDOMStorageDBWrapper::CreateDomainScopeDBKey(aOwner, subdomainsDBKey);
-
-  if (!aIncludeSubDomains)
-    subdomainsDBKey.AppendLiteral(":");
+  nsAutoCString subdomainsDBKey;
+  nsDOMStorageDBWrapper::CreateReversedDomain(aOwner, subdomainsDBKey);
 
   RemoveOwnersStruc struc;
   struc.mSubDomain = &subdomainsDBKey;
-  struc.mMatch = PR_TRUE;
+  struc.mMatch = true;
   mData.Enumerate(RemoveOwnersEnum, &struc);
 
-  return NS_OK;
-}
-
-
-nsresult
-nsDOMStorageMemoryDB::RemoveOwners(const nsTArray<nsString> &aOwners,
-                                   PRBool aIncludeSubDomains,
-                                   PRBool aMatch)
-{
-  if (aOwners.Length() == 0) {
-    if (aMatch) {
-      return NS_OK;
-    }
-
-    return RemoveAll();
-  }
-
-  for (PRUint32 i = 0; i < aOwners.Length(); i++) {
-    nsCAutoString quotaKey;
-    nsresult rv;
-    rv = nsDOMStorageDBWrapper::CreateDomainScopeDBKey(
-      NS_ConvertUTF16toUTF8(aOwners[i]), quotaKey);
-
-    if (!aIncludeSubDomains)
-      quotaKey.AppendLiteral(":");
-
-    RemoveOwnersStruc struc;
-    struc.mSubDomain = &quotaKey;
-    struc.mMatch = aMatch;
-    mData.Enumerate(RemoveOwnersEnum, &struc);
-  }
+  MarkAllScopesDirty();
 
   return NS_OK;
 }
@@ -383,38 +316,34 @@ nsresult
 nsDOMStorageMemoryDB::RemoveAll()
 {
   mData.Clear(); // XXX Check this releases all instances
+
+  MarkAllScopesDirty();
+
   return NS_OK;
 }
 
 nsresult
-nsDOMStorageMemoryDB::GetUsage(nsDOMStorage* aStorage,
-                               PRBool aExcludeOfflineFromUsage, PRInt32 *aUsage)
+nsDOMStorageMemoryDB::GetUsage(DOMStorageImpl* aStorage, int32_t *aUsage)
 {
-  return GetUsageInternal(aStorage->GetQuotaDomainDBKey(!aExcludeOfflineFromUsage),
-                          aExcludeOfflineFromUsage, aUsage);
+  return GetUsageInternal(aStorage->GetQuotaDBKey(), aUsage);
 }
 
 nsresult
 nsDOMStorageMemoryDB::GetUsage(const nsACString& aDomain,
-                               PRBool aIncludeSubDomains,
-                               PRInt32 *aUsage)
+                               int32_t *aUsage)
 {
   nsresult rv;
 
-  nsCAutoString quotadomainDBKey;
-  rv = nsDOMStorageDBWrapper::CreateQuotaDomainDBKey(aDomain,
-                                                     aIncludeSubDomains,
-                                                     PR_FALSE,
-                                                     quotadomainDBKey);
+  nsAutoCString quotaDBKey;
+  rv = nsDOMStorageDBWrapper::CreateQuotaDBKey(aDomain, quotaDBKey);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  return GetUsageInternal(quotadomainDBKey, PR_FALSE, aUsage);
+  return GetUsageInternal(quotaDBKey, aUsage);
 }
 
 struct GetUsageEnumStruc
 {
-  PRInt32 mUsage;
-  PRInt32 mExcludeOfflineFromUsage;
+  int32_t mUsage;
   nsCString mSubdomain;
 };
 
@@ -426,13 +355,6 @@ GetUsageEnum(const nsACString& key,
   GetUsageEnumStruc* struc = (GetUsageEnumStruc*)closure;
 
   if (StringBeginsWith(key, struc->mSubdomain)) {
-    if (struc->mExcludeOfflineFromUsage) {
-      nsCAutoString domain;
-      nsresult rv = nsDOMStorageDBWrapper::GetDomainFromScopeKey(key, domain);
-      if (NS_SUCCEEDED(rv) && IsOfflineAllowed(domain))
-        return PL_DHASH_NEXT;
-    }
-
     struc->mUsage += storageData->mUsageDelta;
   }
 
@@ -440,20 +362,17 @@ GetUsageEnum(const nsACString& key,
 }
 
 nsresult
-nsDOMStorageMemoryDB::GetUsageInternal(const nsACString& aQuotaDomainDBKey,
-                                       PRBool aExcludeOfflineFromUsage,
-                                       PRInt32 *aUsage)
+nsDOMStorageMemoryDB::GetUsageInternal(const nsACString& aQuotaDBKey,
+                                       int32_t *aUsage)
 {
   GetUsageEnumStruc struc;
   struc.mUsage = 0;
-  struc.mExcludeOfflineFromUsage = aExcludeOfflineFromUsage;
-  struc.mSubdomain = aQuotaDomainDBKey;
+  struc.mSubdomain = aQuotaDBKey;
 
   if (mPreloadDB) {
     nsresult rv;
 
-    rv = mPreloadDB->GetUsageInternal(aQuotaDomainDBKey,
-                                      aExcludeOfflineFromUsage, &struc.mUsage);
+    rv = mPreloadDB->GetUsageInternal(aQuotaDBKey, &struc.mUsage);
     NS_ENSURE_SUCCESS(rv, rv);
   }
 

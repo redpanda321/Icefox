@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla MathML Project.
- *
- * The Initial Developer of the Original Code is
- * The University Of Queensland.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Roger B. Sidje <rbs@maths.uq.edu.au>
- *   David J. Fiddes <D.J.Fiddes@hw.ac.uk>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #include "nsCOMPtr.h"
@@ -43,8 +9,6 @@
 #include "nsStyleContext.h"
 #include "nsStyleConsts.h"
 #include "nsINameSpaceManager.h"
-#include "nsIRenderingContext.h"
-#include "nsIFontMetrics.h"
 
 #include "nsMathMLmstyleFrame.h"
 
@@ -78,26 +42,24 @@ nsMathMLmstyleFrame::InheritAutomaticData(nsIFrame* aParent)
   // see if the displaystyle attribute is there
   nsMathMLFrame::FindAttrDisplaystyle(mContent, mPresentationData);
 
+  // see if the directionality attribute is there
+  nsMathMLFrame::FindAttrDirectionality(mContent, mPresentationData);
+
   return NS_OK;
 }
 
 NS_IMETHODIMP
 nsMathMLmstyleFrame::TransmitAutomaticData()
 {
-  // Nothing particular to do here, the values that we computed in
-  // InheritAutomaticData() are the values that we wanted to pass to
-  // our children. Our children would have inherited these values in
-  // their own InheritAutomaticData() as we descended the frame tree.
-
-  return NS_OK;
+  return TransmitAutomaticDataForMrowLikeElement();
 }
 
 // displaystyle and scriptlevel are special in <mstyle>...
 // Since UpdatePresentation() and UpdatePresentationDataFromChildAt() can be called
 // by a parent, ensure that the explicit attributes of <mstyle> take precedence
 NS_IMETHODIMP
-nsMathMLmstyleFrame::UpdatePresentationData(PRUint32        aFlagsValues,
-                                            PRUint32        aWhichFlags)
+nsMathMLmstyleFrame::UpdatePresentationData(uint32_t        aFlagsValues,
+                                            uint32_t        aWhichFlags)
 {
   if (NS_MATHML_HAS_EXPLICIT_DISPLAYSTYLE(mPresentationData.flags)) {
     // our current state takes precedence, disallow updating the displastyle
@@ -109,10 +71,10 @@ nsMathMLmstyleFrame::UpdatePresentationData(PRUint32        aFlagsValues,
 }
 
 NS_IMETHODIMP
-nsMathMLmstyleFrame::UpdatePresentationDataFromChildAt(PRInt32         aFirstIndex,
-                                                       PRInt32         aLastIndex,
-                                                       PRUint32        aFlagsValues,
-                                                       PRUint32        aWhichFlags)
+nsMathMLmstyleFrame::UpdatePresentationDataFromChildAt(int32_t         aFirstIndex,
+                                                       int32_t         aLastIndex,
+                                                       uint32_t        aFlagsValues,
+                                                       uint32_t        aWhichFlags)
 {
   if (NS_MATHML_HAS_EXPLICIT_DISPLAYSTYLE(mPresentationData.flags)) {
     // our current state takes precedence, disallow updating the displastyle
@@ -127,9 +89,9 @@ nsMathMLmstyleFrame::UpdatePresentationDataFromChildAt(PRInt32         aFirstInd
 }
 
 NS_IMETHODIMP
-nsMathMLmstyleFrame::AttributeChanged(PRInt32         aNameSpaceID,
+nsMathMLmstyleFrame::AttributeChanged(int32_t         aNameSpaceID,
                                       nsIAtom*        aAttribute,
-                                      PRInt32         aModType)
+                                      int32_t         aModType)
 {
   // Other attributes can affect too many things, ask our parent to re-layout
   // its children so that we can pick up changes in our attributes & transmit

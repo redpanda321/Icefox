@@ -1,58 +1,13 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Scott Collins <scc@mozilla.org> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsCharTraits_h___
 #define nsCharTraits_h___
 
 #include <ctype.h>
   // for |EOF|, |WEOF|
-
-#define FORCED_CPP_2BYTE_WCHAR_T
-  // disable special optimizations for now through this hack
-
-#if defined(HAVE_CPP_2BYTE_WCHAR_T) && !defined(FORCED_CPP_2BYTE_WCHAR_T)
-#define USE_CPP_WCHAR_FUNCS
-#endif
-
-#ifdef USE_CPP_WCHAR_FUNCS
-#include <wchar.h>
-  // for |wmemset|, et al
-#endif
 
 #include <string.h>
   // for |memcpy|, et al
@@ -77,12 +32,6 @@
 #endif
 #endif
 
-#ifdef HAVE_CPP_BOOL
-  typedef bool nsCharTraits_bool;
-#else
-  typedef PRBool nsCharTraits_bool;
-#endif
-
 /*
  * Some macros for converting PRUnichar (UTF-16) to and from Unicode scalar
  * values.
@@ -103,28 +52,28 @@
  * low-surrogate pairs.
  */
 
-#define PLANE1_BASE          PRUint32(0x00010000)
+#define PLANE1_BASE          uint32_t(0x00010000)
 // High surrogates are in the range 0xD800 -- OxDBFF
-#define NS_IS_HIGH_SURROGATE(u) ((PRUint32(u) & 0xFFFFFC00) == 0xD800)
+#define NS_IS_HIGH_SURROGATE(u) ((uint32_t(u) & 0xFFFFFC00) == 0xD800)
 // Low surrogates are in the range 0xDC00 -- 0xDFFF
-#define NS_IS_LOW_SURROGATE(u)  ((PRUint32(u) & 0xFFFFFC00) == 0xDC00)
+#define NS_IS_LOW_SURROGATE(u)  ((uint32_t(u) & 0xFFFFFC00) == 0xDC00)
 // Faster than testing NS_IS_HIGH_SURROGATE || NS_IS_LOW_SURROGATE
-#define IS_SURROGATE(u)      ((PRUint32(u) & 0xFFFFF800) == 0xD800)
+#define IS_SURROGATE(u)      ((uint32_t(u) & 0xFFFFF800) == 0xD800)
 
 // Everything else is not a surrogate: 0x000 -- 0xD7FF, 0xE000 -- 0xFFFF
 
 // N = (H - 0xD800) * 0x400 + 0x10000 + (L - 0xDC00)
 // I wonder whether we could somehow assert that H is a high surrogate
 // and L is a low surrogate
-#define SURROGATE_TO_UCS4(h, l) (((PRUint32(h) & 0x03FF) << 10) + \
-                                 (PRUint32(l) & 0x03FF) + PLANE1_BASE)
+#define SURROGATE_TO_UCS4(h, l) (((uint32_t(h) & 0x03FF) << 10) + \
+                                 (uint32_t(l) & 0x03FF) + PLANE1_BASE)
 
 // Extract surrogates from a UCS4 char
 // Reference: the Unicode standard 4.0, section 3.9
 // Since (c - 0x10000) >> 10 == (c >> 10) - 0x0080 and 
 // 0xD7C0 == 0xD800 - 0x0080,
 // ((c - 0x10000) >> 10) + 0xD800 can be simplified to
-#define H_SURROGATE(c) PRUnichar(PRUnichar(PRUint32(c) >> 10) + \
+#define H_SURROGATE(c) PRUnichar(PRUnichar(uint32_t(c) >> 10) + \
                                  PRUnichar(0xD7C0)) 
 // where it's to be noted that 0xD7C0 is not bitwise-OR'd
 // but added.
@@ -132,26 +81,26 @@
 // Since 0x10000 & 0x03FF == 0, 
 // (c - 0x10000) & 0x03FF == c & 0x03FF so that
 // ((c - 0x10000) & 0x03FF) | 0xDC00 is equivalent to
-#define L_SURROGATE(c) PRUnichar(PRUnichar(PRUint32(c) & PRUint32(0x03FF)) | \
+#define L_SURROGATE(c) PRUnichar(PRUnichar(uint32_t(c) & uint32_t(0x03FF)) | \
                                  PRUnichar(0xDC00))
 
-#define IS_IN_BMP(ucs) (PRUint32(ucs) < PLANE1_BASE)
+#define IS_IN_BMP(ucs) (uint32_t(ucs) < PLANE1_BASE)
 #define UCS2_REPLACEMENT_CHAR PRUnichar(0xFFFD)
 
-#define UCS_END PRUint32(0x00110000)
-#define IS_VALID_CHAR(c) ((PRUint32(c) < UCS_END) && !IS_SURROGATE(c))
+#define UCS_END uint32_t(0x00110000)
+#define IS_VALID_CHAR(c) ((uint32_t(c) < UCS_END) && !IS_SURROGATE(c))
 #define ENSURE_VALID_CHAR(c) (IS_VALID_CHAR(c) ? (c) : UCS2_REPLACEMENT_CHAR)
 
 template <class CharT> struct nsCharTraits {};
 
-NS_SPECIALIZE_TEMPLATE
+template <>
 struct nsCharTraits<PRUnichar>
   {
     typedef PRUnichar char_type;
-    typedef PRUint16  unsigned_char_type;
+    typedef uint16_t  unsigned_char_type;
     typedef char      incompatible_char_type;
 
-    NS_COM static char_type *sEmptyBuffer;
+    static char_type *sEmptyBuffer;
 
     static
     void
@@ -162,12 +111,7 @@ struct nsCharTraits<PRUnichar>
 
 
       // integer representation of characters:
-
-#ifdef USE_CPP_WCHAR_FUNCS
-    typedef wint_t int_type;
-#else
     typedef int int_type;
-#endif
 
     static
     char_type
@@ -184,7 +128,7 @@ struct nsCharTraits<PRUnichar>
       }
 
     static
-    nsCharTraits_bool
+    bool
     eq_int_type( int_type lhs, int_type rhs )
       {
         return lhs == rhs;
@@ -194,14 +138,14 @@ struct nsCharTraits<PRUnichar>
       // |char_type| comparisons:
 
     static
-    nsCharTraits_bool
+    bool
     eq( char_type lhs, char_type rhs )
       {
         return lhs == rhs;
       }
 
     static
-    nsCharTraits_bool
+    bool
     lt( char_type lhs, char_type rhs )
       {
         return lhs < rhs;
@@ -239,23 +183,16 @@ struct nsCharTraits<PRUnichar>
     char_type*
     assign( char_type* s, size_t n, char_type c )
       {
-#ifdef USE_CPP_WCHAR_FUNCS
-        return static_cast<char_type*>(wmemset(s, to_int_type(c), n));
-#else
         char_type* result = s;
         while ( n-- )
           assign(*s++, c);
         return result;
-#endif
       }
 
     static
     int
     compare( const char_type* s1, const char_type* s2, size_t n )
       {
-#ifdef USE_CPP_WCHAR_FUNCS
-        return wmemcmp(s1, s2, n);
-#else
         for ( ; n--; ++s1, ++s2 )
           {
             if ( !eq(*s1, *s2) )
@@ -263,7 +200,6 @@ struct nsCharTraits<PRUnichar>
           }
 
         return 0;
-#endif
       }
 
     static
@@ -377,23 +313,16 @@ struct nsCharTraits<PRUnichar>
     size_t
     length( const char_type* s )
       {
-#ifdef USE_CPP_WCHAR_FUNCS
-        return wcslen(s);
-#else
         size_t result = 0;
         while ( !eq(*s++, char_type(0)) )
           ++result;
         return result;
-#endif
       }
 
     static
     const char_type*
     find( const char_type* s, size_t n, char_type c )
       {
-#ifdef USE_CPP_WCHAR_FUNCS
-        return reinterpret_cast<const char_type*>(wmemchr(s, to_int_type(c), n));
-#else
         while ( n-- )
           {
             if ( eq(*s, c) )
@@ -402,46 +331,17 @@ struct nsCharTraits<PRUnichar>
           }
 
         return 0;
-#endif
       }
-
-#if 0
-      // I/O related:
-
-    typedef streamoff off_type;
-    typedef streampos pos_type;
-    typedef mbstate_t state_type;
-
-    static
-    int_type
-    eof()
-      {
-#ifdef USE_CPP_WCHAR_FUNCS
-        return WEOF;
-#else
-        return EOF;
-#endif
-      }
-
-    static
-    int_type
-    not_eof( int_type c )
-      {
-        return eq_int_type(c, eof()) ? ~eof() : c;
-      }
-
-    // static state_type get_state( pos_type );
-#endif
   };
 
-NS_SPECIALIZE_TEMPLATE
+template <>
 struct nsCharTraits<char>
   {
     typedef char           char_type;
     typedef unsigned char  unsigned_char_type;
     typedef PRUnichar      incompatible_char_type;
 
-    NS_COM static char_type *sEmptyBuffer;
+    static char_type *sEmptyBuffer;
 
     static
     void
@@ -470,7 +370,7 @@ struct nsCharTraits<char>
       }
 
     static
-    nsCharTraits_bool
+    bool
     eq_int_type( int_type lhs, int_type rhs )
       {
         return lhs == rhs;
@@ -480,14 +380,14 @@ struct nsCharTraits<char>
       // |char_type| comparisons:
 
     static
-    nsCharTraits_bool
+    bool
     eq( char_type lhs, char_type rhs )
       {
         return lhs == rhs;
       }
 
     static
-    nsCharTraits_bool
+    bool
     lt( char_type lhs, char_type rhs )
       {
         return lhs < rhs;
@@ -635,30 +535,6 @@ struct nsCharTraits<char>
       {
         return reinterpret_cast<const char_type*>(memchr(s, to_int_type(c), n));
       }
-
-#if 0
-      // I/O related:
-
-    typedef streamoff off_type;
-    typedef streampos pos_type;
-    typedef mbstate_t state_type;
-
-    static
-    int_type
-    eof()
-      {
-        return EOF;
-      }
-
-    static
-    int_type
-    not_eof( int_type c )
-      {
-        return eq_int_type(c, eof()) ? ~eof() : c;
-      }
-
-    // static state_type get_state( pos_type );
-#endif
   };
 
 template <class InputIterator>
@@ -667,11 +543,11 @@ struct nsCharSourceTraits
     typedef typename InputIterator::difference_type difference_type;
 
     static
-    PRUint32
+    uint32_t
     readable_distance( const InputIterator& first, const InputIterator& last )
       {
         // assumes single fragment
-        return PRUint32(last.get() - first.get());
+        return uint32_t(last.get() - first.get());
       }
 
     static
@@ -697,18 +573,18 @@ struct nsCharSourceTraits<CharT*>
     typedef ptrdiff_t difference_type;
 
     static
-    PRUint32
+    uint32_t
     readable_distance( CharT* s )
       {
-        return PRUint32(nsCharTraits<CharT>::length(s));
-//      return numeric_limits<PRUint32>::max();
+        return uint32_t(nsCharTraits<CharT>::length(s));
+//      return numeric_limits<uint32_t>::max();
       }
 
     static
-    PRUint32
+    uint32_t
     readable_distance( CharT* first, CharT* last )
       {
-        return PRUint32(last-first);
+        return uint32_t(last-first);
       }
 
     static
@@ -728,24 +604,24 @@ struct nsCharSourceTraits<CharT*>
 
 #else
 
-NS_SPECIALIZE_TEMPLATE
+template <>
 struct nsCharSourceTraits<const char*>
   {
     typedef ptrdiff_t difference_type;
 
     static
-    PRUint32
+    uint32_t
     readable_distance( const char* s )
       {
-        return PRUint32(nsCharTraits<char>::length(s));
-//      return numeric_limits<PRUint32>::max();
+        return uint32_t(nsCharTraits<char>::length(s));
+//      return numeric_limits<uint32_t>::max();
       }
 
     static
-    PRUint32
+    uint32_t
     readable_distance( const char* first, const char* last )
       {
-        return PRUint32(last-first);
+        return uint32_t(last-first);
       }
 
     static
@@ -764,24 +640,24 @@ struct nsCharSourceTraits<const char*>
  };
 
 
-NS_SPECIALIZE_TEMPLATE
+template <>
 struct nsCharSourceTraits<const PRUnichar*>
   {
     typedef ptrdiff_t difference_type;
 
     static
-    PRUint32
+    uint32_t
     readable_distance( const PRUnichar* s )
       {
-        return PRUint32(nsCharTraits<PRUnichar>::length(s));
-//      return numeric_limits<PRUint32>::max();
+        return uint32_t(nsCharTraits<PRUnichar>::length(s));
+//      return numeric_limits<uint32_t>::max();
       }
 
     static
-    PRUint32
+    uint32_t
     readable_distance( const PRUnichar* first, const PRUnichar* last )
       {
-        return PRUint32(last-first);
+        return uint32_t(last-first);
       }
 
     static
@@ -807,7 +683,7 @@ struct nsCharSinkTraits
   {
     static
     void
-    write( OutputIterator& iter, const typename OutputIterator::value_type* s, PRUint32 n )
+    write( OutputIterator& iter, const typename OutputIterator::value_type* s, uint32_t n )
       {
         iter.write(s, n);
       }
@@ -820,7 +696,7 @@ struct nsCharSinkTraits<CharT*>
   {
     static
     void
-    write( CharT*& iter, const CharT* s, PRUint32 n )
+    write( CharT*& iter, const CharT* s, uint32_t n )
       {
         nsCharTraits<CharT>::move(iter, s, n);
         iter += n;
@@ -829,24 +705,24 @@ struct nsCharSinkTraits<CharT*>
 
 #else
 
-NS_SPECIALIZE_TEMPLATE
+template <>
 struct nsCharSinkTraits<char*>
   {
     static
     void
-    write( char*& iter, const char* s, PRUint32 n )
+    write( char*& iter, const char* s, uint32_t n )
       {
         nsCharTraits<char>::move(iter, s, n);
         iter += n;
       }
   };
 
-NS_SPECIALIZE_TEMPLATE
+template <>
 struct nsCharSinkTraits<PRUnichar*>
   {
     static
     void
-    write( PRUnichar*& iter, const PRUnichar* s, PRUint32 n )
+    write( PRUnichar*& iter, const PRUnichar* s, uint32_t n )
       {
         nsCharTraits<PRUnichar>::move(iter, s, n);
         iter += n;

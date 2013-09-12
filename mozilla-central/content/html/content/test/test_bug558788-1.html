@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=558788
 -->
 <head>
   <title>Test for Bug 558788</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
@@ -40,8 +39,13 @@ function checkValidApplies(elmt)
      "rgb(0, 255, 0)", ":valid pseudo-class should apply");
 }
 
-function checkInvalidApplies(elmt)
+function checkInvalidApplies(elmt, aTodo)
 {
+  if (aTodo) {
+    todo_is(window.getComputedStyle(elmt, null).getPropertyValue('background-color'),
+            "rgb(255, 0, 0)", ":invalid pseudo-class should apply");
+    return;
+  }
   is(window.getComputedStyle(elmt, null).getPropertyValue('background-color'),
      "rgb(255, 0, 0)", ":invalid pseudo-class should apply");
 }
@@ -70,7 +74,7 @@ function checkTooLong(elementName)
   element.value = "foo";
   element.maxLength = 2;
   gContent.appendChild(element);
-  checkInvalidApplies(element);
+  checkInvalidApplies(element, true);
 
   element.focus();
 
@@ -117,12 +121,17 @@ function checkInputEmail()
   synthesizeKey("a", {});
   checkInvalidApplies(element);
 
-  sendString("@b.c", element);
+  sendString("@b.c");
   checkValidApplies(element);
 
   synthesizeKey("VK_BACK_SPACE", {});
   for (var i=0; i<4; ++i) {
-    checkInvalidApplies(element);
+    if (i == 1) {
+      // a@b is a valid value.
+      checkValidApplies(element);
+    } else {
+      checkInvalidApplies(element);
+    }
     synthesizeKey("VK_BACK_SPACE", {});
   }
   checkValidApplies(element);
@@ -142,7 +151,7 @@ function checkInputURL()
   synthesizeKey("h", {});
   checkInvalidApplies(element);
 
-  sendString("ttp://mozilla.org", element);
+  sendString("ttp://mozilla.org");
   checkValidApplies(element);
 
   for (var i=0; i<13; ++i) {

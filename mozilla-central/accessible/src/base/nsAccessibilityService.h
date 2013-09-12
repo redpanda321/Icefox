@@ -1,56 +1,49 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   John Gaunt (jgaunt@netscape.com)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef __nsAccessibilityService_h__
 #define __nsAccessibilityService_h__
 
 #include "nsIAccessibilityService.h"
 
-#include "a11yGeneric.h"
-#include "nsAccDocManager.h"
+#include "mozilla/a11y/DocManager.h"
+#include "mozilla/a11y/FocusManager.h"
 
 #include "nsIObserver.h"
 
-class nsAccessibilityService : public nsAccDocManager,
+class nsImageFrame;
+class nsObjectFrame;
+class nsITreeView;
+
+namespace mozilla {
+namespace a11y {
+
+class ApplicationAccessible;
+
+/**
+ * Return focus manager.
+ */
+FocusManager* FocusMgr();
+
+/**
+ * Returns the application accessible.
+ */
+ApplicationAccessible* ApplicationAcc();
+
+} // namespace a11y
+} // namespace mozilla
+
+class nsAccessibilityService : public mozilla::a11y::DocManager,
+                               public mozilla::a11y::FocusManager,
                                public nsIAccessibilityService,
                                public nsIObserver
 {
 public:
+  typedef mozilla::a11y::Accessible Accessible;
+  typedef mozilla::a11y::DocAccessible DocAccessible;
+
   virtual ~nsAccessibilityService();
 
   NS_DECL_ISUPPORTS_INHERITED
@@ -58,156 +51,88 @@ public:
   NS_DECL_NSIOBSERVER
 
   // nsIAccessibilityService
-  virtual nsAccessible* GetAccessibleInShell(nsINode* aNode,
-                                             nsIPresShell* aPresShell);
+  virtual Accessible* GetRootDocumentAccessible(nsIPresShell* aPresShell,
+                                                bool aCanCreate);
+  already_AddRefed<Accessible>
+    CreatePluginAccessible(nsObjectFrame* aFrame, nsIContent* aContent,
+                           Accessible* aContext);
 
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLBRAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTML4ButtonAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLButtonAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLCaptionAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLCheckboxAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLComboboxAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLGroupboxAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLHRAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLImageAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLLabelAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLLIAccessible(nsIContent* aContent, nsIPresShell* aPresShell,
-                           const nsAString& aBulletText);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLListboxAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLMediaAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLObjectFrameAccessible(nsObjectFrame* aFrame, nsIContent* aContent,
-                                    nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLRadioButtonAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLTableAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLTableCellAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLTextAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLTextFieldAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateHyperTextAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
-  virtual already_AddRefed<nsAccessible>
-    CreateOuterDocAccessible(nsIContent* aContent, nsIPresShell* aPresShell);
+  /**
+   * Adds/remove ATK root accessible for gtk+ native window to/from children
+   * of the application accessible.
+   */
+  virtual Accessible* AddNativeRootAccessible(void* aAtkAccessible);
+  virtual void RemoveNativeRootAccessible(Accessible* aRootAccessible);
 
-  virtual nsAccessible* AddNativeRootAccessible(void* aAtkAccessible);
-  virtual void RemoveNativeRootAccessible(nsAccessible* aRootAccessible);
+  /**
+   * Notification used to update the accessible tree when new content is
+   * inserted.
+   */
+  void ContentRangeInserted(nsIPresShell* aPresShell, nsIContent* aContainer,
+                            nsIContent* aStartChild, nsIContent* aEndChild);
 
-  virtual nsresult InvalidateSubtreeFor(nsIPresShell *aPresShell,
-                                        nsIContent *aContent,
-                                        PRUint32 aChangeType);
+  /**
+   * Notification used to update the accessible tree when content is removed.
+   */
+  void ContentRemoved(nsIPresShell* aPresShell, nsIContent* aContainer,
+                      nsIContent* aChild);
 
-  virtual void NotifyOfAnchorJumpTo(nsIContent *aTarget);
+  virtual void UpdateText(nsIPresShell* aPresShell, nsIContent* aContent);
 
-  virtual void PresShellDestroyed(nsIPresShell* aPresShell);
+  /**
+   * Update XUL:tree accessible tree when treeview is changed.
+   */
+  void TreeViewChanged(nsIPresShell* aPresShell, nsIContent* aContent,
+                       nsITreeView* aView);
 
-  virtual nsresult FireAccessibleEvent(PRUint32 aEvent, nsIAccessible *aTarget);
+  /**
+   * Update list bullet accessible.
+   */
+  virtual void UpdateListBullet(nsIPresShell* aPresShell,
+                                nsIContent* aHTMLListItemContent,
+                                bool aHasBullet);
+
+  /**
+   * Update the image map.
+   */
+  void UpdateImageMap(nsImageFrame* aImageFrame);
+
+  /**
+   * Notify accessibility that anchor jump has been accomplished to the given
+   * target. Used by layout.
+   */
+  void NotifyOfAnchorJumpTo(nsIContent *aTarget);
+
+  /**
+   * Notify that presshell is activated.
+   */
+  virtual void PresShellActivated(nsIPresShell* aPresShell);
+
+  /**
+   * Recreate an accessible for the given content node in the presshell.
+   */
+  void RecreateAccessible(nsIPresShell* aPresShell, nsIContent* aContent);
+
+  virtual void FireAccessibleEvent(uint32_t aEvent, Accessible* aTarget);
 
   // nsAccessibiltiyService
 
   /**
    * Return true if accessibility service has been shutdown.
    */
-  static PRBool IsShutdown() { return gIsShutdown; }
+  static bool IsShutdown() { return gIsShutdown; }
 
   /**
    * Return an accessible for the given DOM node from the cache or create new
    * one.
    *
-   * @param  aNode       [in] the given node
-   * @param  aPresShell  [in] the pres shell of the node
-   * @param  aWeakShell  [in] the weak shell for the pres shell
-   * @param  aIsHidden   [out, optional] indicates whether the node's frame is
-   *                       hidden
+   * @param  aNode             [in] the given node
+   * @param  aContext          [in] context the accessible is created in
+   * @param  aIsSubtreeHidden  [out, optional] indicates whether the node's
+   *                             frame and its subtree is hidden
    */
-  already_AddRefed<nsAccessible>
-    GetOrCreateAccessible(nsINode* aNode, nsIPresShell* aPresShell,
-                          nsIWeakReference* aWeakShell,
-                          PRBool* aIsHidden = nsnull);
-
-  /**
-   * Return an accessible for the given DOM node.
-   */
-  nsAccessible* GetAccessible(nsINode* aNode);
-
-  /**
-   * Return an accessible for a DOM node in the given presshell.
-   *
-   * @param aNode       [in] the given node
-   * @param aWeakShell  [in] the presentation shell for the given node
-   */
-  inline nsAccessible* GetAccessibleInWeakShell(nsINode* aNode,
-                                                nsIWeakReference* aWeakShell)
-  {
-    return GetAccessibleByRule(aNode, aWeakShell, eGetAccForNode);
-  }
-
-  /**
-   * Return an accessible for the given DOM node or container accessible if
-   * the node is not accessible.
-   */
-  inline nsAccessible* GetAccessibleOrContainer(nsINode* aNode,
-                                                nsIWeakReference* aWeakShell)
-  {
-    return GetAccessibleByRule(aNode, aWeakShell, eGetAccForNodeOrContainer);
-  }
-
-  /**
-   * Return a container accessible for the given DOM node.
-   */
-  inline nsAccessible* GetContainerAccessible(nsINode* aNode,
-                                              nsIWeakReference* aWeakShell)
-  {
-    return GetAccessibleByRule(aNode, aWeakShell, eGetAccForContainer);
-  }
-
-  /**
-   * Return the first cached accessible parent of a DOM node.
-   *
-   * @param aDOMNode    [in] the DOM node to get an accessible for
-   */
-  nsAccessible* GetCachedContainerAccessible(nsINode *aNode);
-
-  /**
-   * Initialize an accessible and cache it. The method should be called for
-   * every created accessible.
-   *
-   * @param  aAccessible    [in] accessible to initialize.
-   * @param  aRoleMapEntry  [in] the role map entry role the ARIA role or nsnull
-   *                          if none
-   *
-   * @return true if the accessible was initialized, otherwise false
-   */
-  PRBool InitAccessible(nsAccessible *aAccessible,
-                        nsRoleMapEntry *aRoleMapEntry);
-
-protected:
-  /**
-   * Return an accessible for the DOM node in the given presentation shell if
-   * the accessible already exists, otherwise null.
-   *
-   * @param  aNode       [in] the DOM node to get an access node for
-   * @param  aPresShell  [in] the presentation shell which contains layout info
-   *                       for the DOM node
-   */
-  nsAccessible *GetCachedAccessible(nsINode *aNode,
-                                    nsIWeakReference *aShell);
+  Accessible* GetOrCreateAccessible(nsINode* aNode, Accessible* aContext,
+                                    bool* aIsSubtreeHidden = nullptr);
 
 private:
   // nsAccessibilityService creation is controlled by friend
@@ -220,87 +145,67 @@ private:
   /**
    * Initialize accessibility service.
    */
-  PRBool Init();
+  bool Init();
 
   /**
    * Shutdowns accessibility service.
    */
   void Shutdown();
 
-  enum EWhatAccToGet {
-    eGetAccForNode = 0x1,
-    eGetAccForContainer = 0x2,
-    eGetAccForNodeOrContainer = eGetAccForNode | eGetAccForContainer
-  };
-
-  /**
-   * Return accessible or accessible container for the given node in presshell.
-   */
-  nsAccessible* GetAccessibleByRule(nsINode* aNode,
-                                    nsIWeakReference* aWeakShell,
-                                    EWhatAccToGet aWhatToGet);
-
-  /**
-   * Return accessible for HTML area element associated with an image map.
-   *
-   * @param  aImageFrame       [in] image frame
-   * @param  aAreaNode         [in] area node
-   * @param  aWeakShell        [in] presshell of image frame
-   * @param  aImageAccessible  [out, optional] image accessible, isn't addrefed
-   */
-  nsAccessible* GetAreaAccessible(nsIFrame* aImageFrame, nsINode* aAreaNode,
-                                  nsIWeakReference* aWeakShell,
-                                  nsAccessible** aImageAccessible = nsnull);
-
   /**
    * Create accessible for the element implementing nsIAccessibleProvider
    * interface.
    */
-  already_AddRefed<nsAccessible>
-    CreateAccessibleByType(nsIContent* aContent, nsIWeakReference* aWeakShell);
+  already_AddRefed<Accessible>
+    CreateAccessibleByType(nsIContent* aContent, DocAccessible* aDoc);
 
   /**
    * Create accessible for HTML node by tag name.
    */
-  already_AddRefed<nsAccessible>
+  already_AddRefed<Accessible>
     CreateHTMLAccessibleByMarkup(nsIFrame* aFrame, nsIContent* aContent,
-                                 nsIWeakReference* aWeakShell);
+                                 Accessible* aContext);
+
+  /**
+   * Create an accessible whose type depends on the given frame.
+   */
+  already_AddRefed<Accessible>
+    CreateAccessibleByFrameType(nsIFrame* aFrame, nsIContent* aContent,
+                                Accessible* aContext);
 
   /**
    * Create accessible if parent is a deck frame.
    */
-  already_AddRefed<nsAccessible>
+  already_AddRefed<Accessible>
     CreateAccessibleForDeckChild(nsIFrame* aFrame, nsIContent* aContent,
-                                 nsIWeakReference* aWeakShell);
+                                 DocAccessible* aDoc);
 
 #ifdef MOZ_XUL
   /**
    * Create accessible for XUL tree element.
    */
-  already_AddRefed<nsAccessible>
-    CreateAccessibleForXULTree(nsIContent* aContent, nsIWeakReference* aWeakShell);
+  already_AddRefed<Accessible>
+    CreateAccessibleForXULTree(nsIContent* aContent, DocAccessible* aDoc);
 #endif
 
   /**
-   * Reference for accessibility service.
+   * Reference for accessibility service instance.
    */
-  static nsAccessibilityService *gAccessibilityService;
+  static nsAccessibilityService* gAccessibilityService;
+
+  /**
+   * Reference for application accessible instance.
+   */
+  static mozilla::a11y::ApplicationAccessible* gApplicationAccessible;
 
   /**
    * Indicates whether accessibility service was shutdown.
    */
-  static PRBool gIsShutdown;
-
-  /**
-   * Does this content node have a universal ARIA property set on it?
-   * A universal ARIA property is one that can be defined on any element even if there is no role.
-   *
-   * @param aContent The content node to test
-   * @return PR_TRUE if there is a universal ARIA property set on the node
-   */
-  PRBool HasUniversalAriaProperty(nsIContent *aContent);
+  static bool gIsShutdown;
 
   friend nsAccessibilityService* GetAccService();
+  friend mozilla::a11y::FocusManager* mozilla::a11y::FocusMgr();
+  friend mozilla::a11y::ApplicationAccessible* mozilla::a11y::ApplicationAcc();
 
   friend nsresult NS_GetAccessibilityService(nsIAccessibilityService** aResult);
 };
@@ -313,136 +218,6 @@ GetAccService()
 {
   return nsAccessibilityService::gAccessibilityService;
 }
-
-/**
- * Map nsIAccessibleRole constants to strings. Used by
- * nsIAccessibleRetrieval::getStringRole() method.
- */
-static const char kRoleNames[][20] = {
-  "nothing",             //ROLE_NOTHING
-  "titlebar",            //ROLE_TITLEBAR
-  "menubar",             //ROLE_MENUBAR
-  "scrollbar",           //ROLE_SCROLLBAR
-  "grip",                //ROLE_GRIP
-  "sound",               //ROLE_SOUND
-  "cursor",              //ROLE_CURSOR
-  "caret",               //ROLE_CARET
-  "alert",               //ROLE_ALERT
-  "window",              //ROLE_WINDOW
-  "internal frame",      //ROLE_INTERNAL_FRAME
-  "menupopup",           //ROLE_MENUPOPUP
-  "menuitem",            //ROLE_MENUITEM
-  "tooltip",             //ROLE_TOOLTIP
-  "application",         //ROLE_APPLICATION
-  "document",            //ROLE_DOCUMENT
-  "pane",                //ROLE_PANE
-  "chart",               //ROLE_CHART
-  "dialog",              //ROLE_DIALOG
-  "border",              //ROLE_BORDER
-  "grouping",            //ROLE_GROUPING
-  "separator",           //ROLE_SEPARATOR
-  "toolbar",             //ROLE_TOOLBAR
-  "statusbar",           //ROLE_STATUSBAR
-  "table",               //ROLE_TABLE
-  "columnheader",        //ROLE_COLUMNHEADER
-  "rowheader",           //ROLE_ROWHEADER
-  "column",              //ROLE_COLUMN
-  "row",                 //ROLE_ROW
-  "cell",                //ROLE_CELL
-  "link",                //ROLE_LINK
-  "helpballoon",         //ROLE_HELPBALLOON
-  "character",           //ROLE_CHARACTER
-  "list",                //ROLE_LIST
-  "listitem",            //ROLE_LISTITEM
-  "outline",             //ROLE_OUTLINE
-  "outlineitem",         //ROLE_OUTLINEITEM
-  "pagetab",             //ROLE_PAGETAB
-  "propertypage",        //ROLE_PROPERTYPAGE
-  "indicator",           //ROLE_INDICATOR
-  "graphic",             //ROLE_GRAPHIC
-  "statictext",          //ROLE_STATICTEXT
-  "text leaf",           //ROLE_TEXT_LEAF
-  "pushbutton",          //ROLE_PUSHBUTTON
-  "checkbutton",         //ROLE_CHECKBUTTON
-  "radiobutton",         //ROLE_RADIOBUTTON
-  "combobox",            //ROLE_COMBOBOX
-  "droplist",            //ROLE_DROPLIST
-  "progressbar",         //ROLE_PROGRESSBAR
-  "dial",                //ROLE_DIAL
-  "hotkeyfield",         //ROLE_HOTKEYFIELD
-  "slider",              //ROLE_SLIDER
-  "spinbutton",          //ROLE_SPINBUTTON
-  "diagram",             //ROLE_DIAGRAM
-  "animation",           //ROLE_ANIMATION
-  "equation",            //ROLE_EQUATION
-  "buttondropdown",      //ROLE_BUTTONDROPDOWN
-  "buttonmenu",          //ROLE_BUTTONMENU
-  "buttondropdowngrid",  //ROLE_BUTTONDROPDOWNGRID
-  "whitespace",          //ROLE_WHITESPACE
-  "pagetablist",         //ROLE_PAGETABLIST
-  "clock",               //ROLE_CLOCK
-  "splitbutton",         //ROLE_SPLITBUTTON
-  "ipaddress",           //ROLE_IPADDRESS
-  "accel label",         //ROLE_ACCEL_LABEL
-  "arrow",               //ROLE_ARROW
-  "canvas",              //ROLE_CANVAS
-  "check menu item",     //ROLE_CHECK_MENU_ITEM
-  "color chooser",       //ROLE_COLOR_CHOOSER
-  "date editor",         //ROLE_DATE_EDITOR
-  "desktop icon",        //ROLE_DESKTOP_ICON
-  "desktop frame",       //ROLE_DESKTOP_FRAME
-  "directory pane",      //ROLE_DIRECTORY_PANE
-  "file chooser",        //ROLE_FILE_CHOOSER
-  "font chooser",        //ROLE_FONT_CHOOSER
-  "chrome window",       //ROLE_CHROME_WINDOW
-  "glass pane",          //ROLE_GLASS_PANE
-  "html container",      //ROLE_HTML_CONTAINER
-  "icon",                //ROLE_ICON
-  "label",               //ROLE_LABEL
-  "layered pane",        //ROLE_LAYERED_PANE
-  "option pane",         //ROLE_OPTION_PANE
-  "password text",       //ROLE_PASSWORD_TEXT
-  "popup menu",          //ROLE_POPUP_MENU
-  "radio menu item",     //ROLE_RADIO_MENU_ITEM
-  "root pane",           //ROLE_ROOT_PANE
-  "scroll pane",         //ROLE_SCROLL_PANE
-  "split pane",          //ROLE_SPLIT_PANE
-  "table column header", //ROLE_TABLE_COLUMN_HEADER
-  "table row header",    //ROLE_TABLE_ROW_HEADER
-  "tear off menu item",  //ROLE_TEAR_OFF_MENU_ITEM
-  "terminal",            //ROLE_TERMINAL
-  "text container",      //ROLE_TEXT_CONTAINER
-  "toggle button",       //ROLE_TOGGLE_BUTTON
-  "tree table",          //ROLE_TREE_TABLE
-  "viewport",            //ROLE_VIEWPORT
-  "header",              //ROLE_HEADER
-  "footer",              //ROLE_FOOTER
-  "paragraph",           //ROLE_PARAGRAPH
-  "ruler",               //ROLE_RULER
-  "autocomplete",        //ROLE_AUTOCOMPLETE
-  "editbar",             //ROLE_EDITBAR
-  "entry",               //ROLE_ENTRY
-  "caption",             //ROLE_CAPTION
-  "document frame",      //ROLE_DOCUMENT_FRAME
-  "heading",             //ROLE_HEADING
-  "page",                //ROLE_PAGE
-  "section",             //ROLE_SECTION
-  "redundant object",    //ROLE_REDUNDANT_OBJECT
-  "form",                //ROLE_FORM
-  "ime",                 //ROLE_IME
-  "app root",            //ROLE_APP_ROOT
-  "parent menuitem",     //ROLE_PARENT_MENUITEM
-  "calendar",            //ROLE_CALENDAR
-  "combobox list",       //ROLE_COMBOBOX_LIST
-  "combobox option",     //ROLE_COMBOBOX_OPTION
-  "image map",           //ROLE_IMAGE_MAP
-  "listbox option",      //ROLE_OPTION
-  "listbox rich option", //ROLE_RICH_OPTION
-  "listbox",             //ROLE_LISTBOX
-  "flat equation",       //ROLE_FLAT_EQUATION
-  "gridcell",            //ROLE_GRID_CELL
-  "embedded object"      //ROLE_EMBEDDED_OBJECT
-};
 
 /**
  * Map nsIAccessibleEvents constants to strings. Used by
@@ -494,7 +269,7 @@ static const char kEventTypeNames[][40] = {
   "document attributes changed",             // EVENT_DOCUMENT_ATTRIBUTES_CHANGED
   "document content changed",                // EVENT_DOCUMENT_CONTENT_CHANGED
   "property changed",                        // EVENT_PROPERTY_CHANGED
-  "selection changed",                       // EVENT_SELECTION_CHANGED
+  "page changed",                           // EVENT_PAGE_CHANGED
   "text attribute changed",                  // EVENT_TEXT_ATTRIBUTE_CHANGED
   "text caret moved",                        // EVENT_TEXT_CARET_MOVED
   "text changed",                            // EVENT_TEXT_CHANGED
@@ -535,7 +310,7 @@ static const char kEventTypeNames[][40] = {
   "hypertext changed",                       // EVENT_HYPERTEXT_CHANGED
   "hypertext links count changed",           // EVENT_HYPERTEXT_NLINKS_CHANGED
   "object attribute changed",                // EVENT_OBJECT_ATTRIBUTE_CHANGED
-  "page changed"                             // EVENT_PAGE_CHANGED
+  "virtual cursor changed"                   // EVENT_VIRTUALCURSOR_CHANGED
 };
 
 /**

@@ -65,6 +65,7 @@
 // Disable exception handler warnings.
 #pragma warning( disable : 4530 )
 
+#include <list>
 #include <string>
 #include <vector>
 
@@ -78,6 +79,22 @@ namespace google_breakpad {
 using std::vector;
 using std::wstring;
 
+// These entries store a list of memory regions that the client wants included
+// in the minidump.
+struct AppMemory {
+  ULONG64 ptr;
+  ULONG length;
+
+  bool operator==(const struct AppMemory& other) const {
+    return ptr == other.ptr;
+  }
+
+  bool operator==(const void* other) const {
+    return ptr == reinterpret_cast<ULONG64>(other);
+  }
+};
+typedef std::list<AppMemory> AppMemoryList;
+
 class ExceptionHandler {
  public:
   // A callback function to run before Breakpad performs any substantial
@@ -88,9 +105,9 @@ class ExceptionHandler {
   // if any.
   //
   // If a FilterCallback returns true, Breakpad will continue processing,
-  // attempting to write a minidump.  If a FilterCallback returns false, Breakpad
-  // will immediately report the exception as unhandled without writing a
-  // minidump, allowing another handler the opportunity to handle it.
+  // attempting to write a minidump.  If a FilterCallback returns false,
+  // Breakpad will immediately report the exception as unhandled without
+  // writing a minidump, allowing another handler the opportunity to handle it.
   typedef bool (*FilterCallback)(void* context, EXCEPTION_POINTERS* exinfo,
                                  MDRawAssertionInfo* assertion);
 
@@ -153,7 +170,7 @@ class ExceptionHandler {
                    void* callback_context,
                    int handler_types);
 
-  // Creates a new ExcetpionHandler instance that can attempt to perform
+  // Creates a new ExceptionHandler instance that can attempt to perform
   // out-of-process dump generation if pipe_name is not NULL. If pipe_name is
   // NULL, or if out-of-process dump generation registration step fails,
   // in-process dump generation will be used. This also allows specifying
@@ -167,6 +184,17 @@ class ExceptionHandler {
                    const wchar_t* pipe_name,
                    const CustomClientInfo* custom_info);
 
+  // As above, creates a new ExceptionHandler instance to perform
+  // out-of-process dump generation if the given pipe_handle is not NULL.
+  ExceptionHandler(const wstring& dump_path,
+                   FilterCallback filter,
+                   MinidumpCallback callback,
+                   void* callback_context,
+                   int handler_types,
+                   MINIDUMP_TYPE dump_type,
+                   HANDLE pipe_handle,
+                   const CustomClientInfo* custom_info);
+
   ~ExceptionHandler();
 
   // Get and set the minidump path.
@@ -176,6 +204,9 @@ class ExceptionHandler {
     dump_path_c_ = dump_path_.c_str();
     UpdateNextID();  // Necessary to put dump_path_ in next_minidump_path_.
   }
+
+  // Requests that a previously reported crash be uploaded.
+  bool RequestUpload(DWORD crash_id);
 
   // Writes a minidump immediately.  This can be used to capture the
   // execution state independently of a crash.  Returns true on success.
@@ -190,12 +221,6 @@ class ExceptionHandler {
   static bool WriteMinidump(const wstring &dump_path,
                             MinidumpCallback callback, void* callback_context);
 
-  // Variant of WriteMinidump() above that optionally allows writing
-  // an artificial exception stream in the minidump.
-  static bool WriteMinidump(const wstring &dump_path,
-                            bool write_exception_stream,
-                            MinidumpCallback callback, void* callback_context);
-
   // Write a minidump of |child| immediately.  This can be used to
   // capture the execution state of |child| independently of a crash.
   // Pass a meaningful |child_blamed_thread| to make that thread in
@@ -203,9 +228,9 @@ class ExceptionHandler {
   // extracted.
   static bool WriteMinidumpForChild(HANDLE child,
                                     DWORD child_blamed_thread,
-                                    const wstring &dump_path,
+                                    const wstring& dump_path,
                                     MinidumpCallback callback,
-                                    void *callback_context);
+                                    void* callback_context);
 
   // Get the thread ID of the thread requesting the dump (either the exception
   // thread or any other thread that called WriteMinidump directly).  This
@@ -222,6 +247,11 @@ class ExceptionHandler {
   // Returns whether out-of-process dump generation is used or not.
   bool IsOutOfProcess() const { return crash_generation_client_.get() != NULL; }
 
+  // Calling RegisterAppMemory(p, len) causes len bytes starting
+  // at address p to be copied to the minidump when a crash happens.
+  void RegisterAppMemory(void* ptr, size_t length);
+  void UnregisterAppMemory(void* ptr);
+
  private:
   friend class AutoExceptionHandler;
 
@@ -233,6 +263,7 @@ class ExceptionHandler {
                   int handler_types,
                   MINIDUMP_TYPE dump_type,
                   const wchar_t* pipe_name,
+                  HANDLE pipe_handle,
                   const CustomClientInfo* custom_info);
 
   // Function pointer type for MiniDumpWriteDump, which is looked up
@@ -295,6 +326,13 @@ class ExceptionHandler {
                                   EXCEPTION_POINTERS* exinfo,
                                   MDRawAssertionInfo* assertion);
 
+  // This function is used as a callback when calling MinidumpWriteDump,
+  // in order to add additional memory regions to the dump.
+  static BOOL CALLBACK MinidumpWriteDumpCallback(
+      PVOID context,
+      const PMINIDUMP_CALLBACK_INPUT callback_input,
+      PMINIDUMP_CALLBACK_OUTPUT callback_output);
+
   // This function does the actual writing of a minidump.  It is
   // called on the handler thread.  requesting_thread_id is the ID of
   // the thread that requested the dump, if that information is
@@ -307,7 +345,6 @@ class ExceptionHandler {
                                             EXCEPTION_POINTERS* exinfo,
                                             MDRawAssertionInfo* assertion,
                                             HANDLE process,
-                                            DWORD processId,
                                             bool write_requester_stream);
 
   // Generates a new ID and stores it in next_minidump_id_, and stores the
@@ -414,6 +451,10 @@ class ExceptionHandler {
   // EXCEPTION_SINGLE_STEP exceptions.  Leave this false (the default)
   // to not interfere with debuggers.
   bool handle_debug_exceptions_;
+
+  // Callers can request additional memory regions to be included in
+  // the dump.
+  AppMemoryList app_memory_info_;
 
   // A stack of ExceptionHandler objects that have installed unhandled
   // exception filters.  This vector is used by HandleException to determine

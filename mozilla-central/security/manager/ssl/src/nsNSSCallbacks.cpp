@@ -1,83 +1,39 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Brian Ryner <bryner@brianryner.com>
- *   Terry Hayes <thayes@netscape.com>
- *   Kai Engert <kengert@redhat.com>
- *   Petr Kostka <petr.kostka@st.com>
- *   Honza Bambas <honzab@firemni.cz>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-#include "nsNSSComponent.h" // for PIPNSS string bundle calls.
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 #include "nsNSSCallbacks.h"
-#include "nsNSSCertificate.h"
-#include "nsNSSCleaner.h"
-#include "nsSSLStatus.h"
-#include "nsNSSIOLayer.h" // for nsNSSSocketInfo
+
+#include "mozilla/Telemetry.h"
+#include "mozilla/TimeStamp.h"
+#include "nsNSSComponent.h"
+#include "nsNSSIOLayer.h"
 #include "nsIWebProgressListener.h"
-#include "nsIStringBundle.h"
-#include "nsXPIDLString.h"
-#include "nsCOMPtr.h"
-#include "nsAutoPtr.h"
-#include "nsIServiceManager.h"
-#include "nsReadableUtils.h"
-#include "nsIPrompt.h"
-#include "nsProxiedService.h"
-#include "nsIInterfaceRequestor.h"
-#include "nsIInterfaceRequestorUtils.h"
 #include "nsProtectedAuthThread.h"
 #include "nsITokenDialogs.h"
-#include "nsCRT.h"
 #include "nsNSSShutDown.h"
 #include "nsIUploadChannel.h"
-#include "nsSSLThread.h"
 #include "nsThreadUtils.h"
-#include "nsAutoLock.h"
-#include "nsIThread.h"
-#include "nsIWindowWatcher.h"
 #include "nsIPrompt.h"
 #include "nsProxyRelease.h"
+#include "PSMRunnable.h"
+#include "ScopedNSSTypes.h"
 #include "nsIConsoleService.h"
+#include "nsIHttpChannelInternal.h"
+#include "nsCRT.h"
+#include "SharedSSLState.h"
 
 #include "ssl.h"
-#include "cert.h"
+#include "sslproto.h"
 #include "ocsp.h"
 #include "nssb64.h"
 
+using namespace mozilla;
+using namespace mozilla::psm;
+
 static NS_DEFINE_CID(kNSSComponentCID, NS_NSSCOMPONENT_CID);
-NSSCleanupAutoPtrClass(CERTCertificate, CERT_DestroyCertificate)
 
 #ifdef PR_LOGGING
 extern PRLogModuleInfo* gPIPNSSLog;
@@ -93,11 +49,12 @@ public:
   nsNSSHttpRequestSession *mRequestSession;
   
   nsCOMPtr<nsHTTPListener> mListener;
-  PRBool mResponsibleForDoneSignal;
+  bool mResponsibleForDoneSignal;
+  TimeStamp mStartTime;
 };
 
 nsHTTPDownloadEvent::nsHTTPDownloadEvent()
-:mResponsibleForDoneSignal(PR_TRUE)
+:mResponsibleForDoneSignal(true)
 {
 }
 
@@ -121,8 +78,10 @@ nsHTTPDownloadEvent::Run()
   NS_ENSURE_STATE(ios);
 
   nsCOMPtr<nsIChannel> chan;
-  ios->NewChannel(mRequestSession->mURL, nsnull, nsnull, getter_AddRefs(chan));
+  ios->NewChannel(mRequestSession->mURL, nullptr, nullptr, getter_AddRefs(chan));
   NS_ENSURE_STATE(chan);
+
+  chan->SetLoadFlags(nsIRequest::LOAD_ANONYMOUS);
 
   // Create a loadgroup for this new channel.  This way if the channel
   // is redirected, we'll have a way to cancel the resulting channel.
@@ -133,7 +92,7 @@ nsHTTPDownloadEvent::Run()
   {
     nsCOMPtr<nsIInputStream> uploadStream;
     rv = NS_NewPostDataStream(getter_AddRefs(uploadStream),
-                              PR_FALSE,
+                              false,
                               mRequestSession->mPostData,
                               0, ios);
     NS_ENSURE_SUCCESS(rv, rv);
@@ -147,14 +106,24 @@ nsHTTPDownloadEvent::Run()
     NS_ENSURE_SUCCESS(rv, rv);
   }
 
+  // Do not use SPDY for internal security operations. It could result
+  // in the silent upgrade to ssl, which in turn could require an SSL
+  // operation to fufill something like a CRL fetch, which is an
+  // endless loop.
+  nsCOMPtr<nsIHttpChannelInternal> internalChannel = do_QueryInterface(chan);
+  if (internalChannel) {
+    rv = internalChannel->SetAllowSpdy(false);
+    NS_ENSURE_SUCCESS(rv, rv);
+  }
+
   nsCOMPtr<nsIHttpChannel> hchan = do_QueryInterface(chan);
   NS_ENSURE_STATE(hchan);
 
   rv = hchan->SetRequestMethod(mRequestSession->mRequestMethod);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  mResponsibleForDoneSignal = PR_FALSE;
-  mListener->mResponsibleForDoneSignal = PR_TRUE;
+  mResponsibleForDoneSignal = false;
+  mListener->mResponsibleForDoneSignal = true;
 
   mListener->mLoadGroup = lg.get();
   NS_ADDREF(mListener->mLoadGroup);
@@ -163,16 +132,18 @@ nsHTTPDownloadEvent::Run()
   rv = NS_NewStreamLoader(getter_AddRefs(mListener->mLoader), 
                           mListener);
 
-  if (NS_SUCCEEDED(rv))
-    rv = hchan->AsyncOpen(mListener->mLoader, nsnull);
+  if (NS_SUCCEEDED(rv)) {
+    mStartTime = TimeStamp::Now();
+    rv = hchan->AsyncOpen(mListener->mLoader, nullptr);
+  }
 
   if (NS_FAILED(rv)) {
-    mListener->mResponsibleForDoneSignal = PR_FALSE;
-    mResponsibleForDoneSignal = PR_TRUE;
+    mListener->mResponsibleForDoneSignal = false;
+    mResponsibleForDoneSignal = true;
 
     NS_RELEASE(mListener->mLoadGroup);
-    mListener->mLoadGroup = nsnull;
-    mListener->mLoadGroupOwnerThread = nsnull;
+    mListener->mLoadGroup = nullptr;
+    mListener->mLoadGroupOwnerThread = nullptr;
   }
 
   return NS_OK;
@@ -182,14 +153,14 @@ struct nsCancelHTTPDownloadEvent : nsRunnable {
   nsCOMPtr<nsHTTPListener> mListener;
 
   NS_IMETHOD Run() {
-    mListener->FreeLoadGroup(PR_TRUE);
-    mListener = nsnull;
+    mListener->FreeLoadGroup(true);
+    mListener = nullptr;
     return NS_OK;
   }
 };
 
 SECStatus nsNSSHttpServerSession::createSessionFcn(const char *host,
-                                                   PRUint16 portnum,
+                                                   uint16_t portnum,
                                                    SEC_HTTP_SERVER_SESSION *pSession)
 {
   if (!host || !pSession)
@@ -229,29 +200,29 @@ SECStatus nsNSSHttpRequestSession::createFcn(SEC_HTTP_SERVER_SESSION session,
 
   // Use a maximum timeout value of 10 seconds because of bug 404059.
   // FIXME: Use a better approach once 406120 is ready.
-  PRUint32 maxBug404059Timeout = PR_TicksPerSecond() * 10;
+  uint32_t maxBug404059Timeout = PR_TicksPerSecond() * 10;
   if (timeout > maxBug404059Timeout) {
     rs->mTimeoutInterval = maxBug404059Timeout;
   }
 
-  rs->mURL.Append(nsDependentCString(http_protocol_variant));
+  rs->mURL.Assign(http_protocol_variant);
   rs->mURL.AppendLiteral("://");
   rs->mURL.Append(hss->mHost);
   rs->mURL.AppendLiteral(":");
   rs->mURL.AppendInt(hss->mPort);
   rs->mURL.Append(path_and_query_string);
 
-  rs->mRequestMethod = nsDependentCString(http_request_method);
+  rs->mRequestMethod = http_request_method;
 
   *pRequest = (void*)rs;
   return SECSuccess;
 }
 
 SECStatus nsNSSHttpRequestSession::setPostDataFcn(const char *http_data, 
-                                                  const PRUint32 http_data_len,
+                                                  const uint32_t http_data_len,
                                                   const char *http_content_type)
 {
-  mHasPostData = PR_TRUE;
+  mHasPostData = true;
   mPostData.Assign(http_data, http_data_len);
   mPostContentType.Assign(http_content_type);
 
@@ -271,22 +242,22 @@ SECStatus nsNSSHttpRequestSession::addHeaderFcn(const char *http_header_name,
   // The header will need to be set using 
   //   mHttpChannel->SetRequestHeader(nsDependentCString(http_header_name), 
   //                                  nsDependentCString(http_header_value), 
-  //                                  PR_FALSE)));
+  //                                  false)));
 }
 
 SECStatus nsNSSHttpRequestSession::trySendAndReceiveFcn(PRPollDesc **pPollDesc,
-                                                        PRUint16 *http_response_code, 
+                                                        uint16_t *http_response_code, 
                                                         const char **http_response_content_type, 
                                                         const char **http_response_headers, 
                                                         const char **http_response_data, 
-                                                        PRUint32 *http_response_data_len)
+                                                        uint32_t *http_response_data_len)
 {
   PR_LOG(gPIPNSSLog, PR_LOG_DEBUG,
          ("nsNSSHttpRequestSession::trySendAndReceiveFcn to %s\n", mURL.get()));
 
   const int max_retries = 2;
   int retry_count = 0;
-  PRBool retryable_error = PR_FALSE;
+  bool retryable_error = false;
   SECStatus result_sec_status = SECFailure;
 
   do
@@ -304,7 +275,7 @@ SECStatus nsNSSHttpRequestSession::trySendAndReceiveFcn(PRPollDesc **pPollDesc,
     }
 
     ++retry_count;
-    retryable_error = PR_FALSE;
+    retryable_error = false;
 
     result_sec_status =
       internal_send_receive_attempt(retryable_error, pPollDesc, http_response_code,
@@ -333,34 +304,34 @@ SECStatus nsNSSHttpRequestSession::trySendAndReceiveFcn(PRPollDesc **pPollDesc,
 void
 nsNSSHttpRequestSession::AddRef()
 {
-  PR_AtomicIncrement(&mRefCount);
+  NS_AtomicIncrementRefcnt(mRefCount);
 }
 
 void
 nsNSSHttpRequestSession::Release()
 {
-  PRInt32 newRefCount = PR_AtomicDecrement(&mRefCount);
+  int32_t newRefCount = NS_AtomicDecrementRefcnt(mRefCount);
   if (!newRefCount) {
     delete this;
   }
 }
 
 SECStatus
-nsNSSHttpRequestSession::internal_send_receive_attempt(PRBool &retryable_error,
+nsNSSHttpRequestSession::internal_send_receive_attempt(bool &retryable_error,
                                                        PRPollDesc **pPollDesc,
-                                                       PRUint16 *http_response_code,
+                                                       uint16_t *http_response_code,
                                                        const char **http_response_content_type,
                                                        const char **http_response_headers,
                                                        const char **http_response_data,
-                                                       PRUint32 *http_response_data_len)
+                                                       uint32_t *http_response_data_len)
 {
-  if (pPollDesc) *pPollDesc = nsnull;
+  if (pPollDesc) *pPollDesc = nullptr;
   if (http_response_code) *http_response_code = 0;
   if (http_response_content_type) *http_response_content_type = 0;
   if (http_response_headers) *http_response_headers = 0;
   if (http_response_data) *http_response_data = 0;
 
-  PRUint32 acceptableResultSize = 0;
+  uint32_t acceptableResultSize = 0;
 
   if (http_response_data_len)
   {
@@ -371,15 +342,12 @@ nsNSSHttpRequestSession::internal_send_receive_attempt(PRBool &retryable_error,
   if (!mListener)
     return SECFailure;
 
-  if (NS_FAILED(mListener->InitLocks()))
-    return SECFailure;
+  Mutex& waitLock = mListener->mLock;
+  CondVar& waitCondition = mListener->mCondition;
+  volatile bool &waitFlag = mListener->mWaitFlag;
+  waitFlag = true;
 
-  PRLock *waitLock = mListener->mLock;
-  PRCondVar *waitCondition = mListener->mCondition;
-  volatile PRBool &waitFlag = mListener->mWaitFlag;
-  waitFlag = PR_TRUE;
-
-  nsRefPtr<nsHTTPDownloadEvent> event = new nsHTTPDownloadEvent;
+  RefPtr<nsHTTPDownloadEvent> event(new nsHTTPDownloadEvent);
   if (!event)
     return SECFailure;
 
@@ -390,21 +358,28 @@ nsNSSHttpRequestSession::internal_send_receive_attempt(PRBool &retryable_error,
   nsresult rv = NS_DispatchToMainThread(event);
   if (NS_FAILED(rv))
   {
-    event->mResponsibleForDoneSignal = PR_FALSE;
+    event->mResponsibleForDoneSignal = false;
     return SECFailure;
   }
 
-  PRBool request_canceled = PR_FALSE;
+  bool request_canceled = false;
 
   {
-    nsAutoLock locker(waitLock);
+    MutexAutoLock locker(waitLock);
 
     const PRIntervalTime start_time = PR_IntervalNow();
     PRIntervalTime wait_interval;
 
-    PRBool running_on_main_thread = NS_IsMainThread();
+    bool running_on_main_thread = NS_IsMainThread();
     if (running_on_main_thread)
     {
+      // The result of running this on the main thread
+      // is a series of small timeouts mixed with spinning the
+      // event loop - this is always dangerous as there is so much main
+      // thread code that does not expect to be called re-entrantly. Your
+      // app really shouldn't do that.
+      NS_WARNING("Security network blocking I/O on Main Thread");
+
       // let's process events quickly
       wait_interval = PR_MicrosecondsToInterval(50);
     }
@@ -425,27 +400,26 @@ nsNSSHttpRequestSession::internal_send_receive_attempt(PRBool &retryable_error,
         // thread manager. Thanks a lot to Christian Biesinger who
         // made me aware of this possibility. (kaie)
 
-        locker.unlock();
-        NS_ProcessNextEvent(nsnull);
-        locker.lock();
+        MutexAutoUnlock unlock(waitLock);
+        NS_ProcessNextEvent(nullptr);
       }
 
-      PR_WaitCondVar(waitCondition, wait_interval);
+      waitCondition.Wait(wait_interval);
       
       if (!waitFlag)
         break;
 
       if (!request_canceled)
       {
-        PRBool wantExit = nsSSLThread::exitRequested();
-        PRBool timeout = 
+        bool timeout = 
           (PRIntervalTime)(PR_IntervalNow() - start_time) > mTimeoutInterval;
-
-        if (wantExit || timeout)
+ 
+        if (timeout)
         {
-          request_canceled = PR_TRUE;
+          request_canceled = true;
 
-          nsRefPtr<nsCancelHTTPDownloadEvent> cancelevent = new nsCancelHTTPDownloadEvent;
+          RefPtr<nsCancelHTTPDownloadEvent> cancelevent(
+            new nsCancelHTTPDownloadEvent);
           cancelevent->mListener = mListener;
           rv = NS_DispatchToMainThread(cancelevent);
           if (NS_FAILED(rv)) {
@@ -457,6 +431,31 @@ nsNSSHttpRequestSession::internal_send_receive_attempt(PRBool &retryable_error,
     }
   }
 
+  if (!event->mStartTime.IsNull()) {
+    if (request_canceled) {
+      Telemetry::Accumulate(Telemetry::CERT_VALIDATION_HTTP_REQUEST_RESULT, 0);
+      Telemetry::AccumulateTimeDelta(
+        Telemetry::CERT_VALIDATION_HTTP_REQUEST_CANCELED_TIME,
+        event->mStartTime, TimeStamp::Now());
+    }
+    else if (NS_SUCCEEDED(mListener->mResultCode) &&
+             mListener->mHttpResponseCode == 200) {
+      Telemetry::Accumulate(Telemetry::CERT_VALIDATION_HTTP_REQUEST_RESULT, 1);
+      Telemetry::AccumulateTimeDelta(
+        Telemetry::CERT_VALIDATION_HTTP_REQUEST_SUCCEEDED_TIME,
+        event->mStartTime, TimeStamp::Now());
+    }
+    else {
+      Telemetry::Accumulate(Telemetry::CERT_VALIDATION_HTTP_REQUEST_RESULT, 2);
+      Telemetry::AccumulateTimeDelta(
+        Telemetry::CERT_VALIDATION_HTTP_REQUEST_FAILED_TIME,
+        event->mStartTime, TimeStamp::Now());
+    }
+  }
+  else {
+    Telemetry::Accumulate(Telemetry::CERT_VALIDATION_HTTP_REQUEST_RESULT, 3);
+  }
+
   if (request_canceled)
     return SECFailure;
 
@@ -466,7 +465,7 @@ nsNSSHttpRequestSession::internal_send_receive_attempt(PRBool &retryable_error,
         ||
         mListener->mResultCode == NS_ERROR_NET_RESET)
     {
-      retryable_error = PR_TRUE;
+      retryable_error = true;
     }
     return SECFailure;
   }
@@ -516,7 +515,7 @@ SECStatus nsNSSHttpRequestSession::freeFcn()
 
 nsNSSHttpRequestSession::nsNSSHttpRequestSession()
 : mRefCount(1),
-  mHasPostData(PR_FALSE),
+  mHasPostData(false),
   mTimeoutInterval(0),
   mListener(new nsHTTPListener)
 {
@@ -550,48 +549,25 @@ void nsNSSHttpInterface::registerHttpClient()
 
 void nsNSSHttpInterface::unregisterHttpClient()
 {
-  SEC_RegisterDefaultHttpClient(nsnull);
+  SEC_RegisterDefaultHttpClient(nullptr);
 }
 
 nsHTTPListener::nsHTTPListener()
-: mResultData(nsnull),
+: mResultData(nullptr),
   mResultLen(0),
-  mLock(nsnull),
-  mCondition(nsnull),
-  mWaitFlag(PR_TRUE),
-  mResponsibleForDoneSignal(PR_FALSE),
-  mLoadGroup(nsnull),
-  mLoadGroupOwnerThread(nsnull)
+  mLock("nsHTTPListener.mLock"),
+  mCondition(mLock, "nsHTTPListener.mCondition"),
+  mWaitFlag(true),
+  mResponsibleForDoneSignal(false),
+  mLoadGroup(nullptr),
+  mLoadGroupOwnerThread(nullptr)
 {
-}
-
-nsresult nsHTTPListener::InitLocks()
-{
-  mLock = PR_NewLock();
-  if (!mLock)
-    return NS_ERROR_OUT_OF_MEMORY;
-  
-  mCondition = PR_NewCondVar(mLock);
-  if (!mCondition)
-  {
-    PR_DestroyLock(mLock);
-    mLock = nsnull;
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
-  
-  return NS_OK;
 }
 
 nsHTTPListener::~nsHTTPListener()
 {
   if (mResponsibleForDoneSignal)
     send_done_signal();
-
-  if (mCondition)
-    PR_DestroyCondVar(mCondition);
-  
-  if (mLock)
-    PR_DestroyLock(mLock);
 
   if (mLoader) {
     nsCOMPtr<nsIThread> mainThread(do_GetMainThread());
@@ -602,22 +578,20 @@ nsHTTPListener::~nsHTTPListener()
 NS_IMPL_THREADSAFE_ISUPPORTS1(nsHTTPListener, nsIStreamLoaderObserver)
 
 void
-nsHTTPListener::FreeLoadGroup(PRBool aCancelLoad)
+nsHTTPListener::FreeLoadGroup(bool aCancelLoad)
 {
-  nsILoadGroup *lg = nsnull;
+  nsILoadGroup *lg = nullptr;
 
-  if (mLock) {
-    nsAutoLock locker(mLock);
+  MutexAutoLock locker(mLock);
 
-    if (mLoadGroup) {
-      if (mLoadGroupOwnerThread != PR_GetCurrentThread()) {
-        NS_ASSERTION(PR_FALSE,
-          "attempt to access nsHTTPDownloadEvent::mLoadGroup on multiple threads, leaking it!");
-      }
-      else {
-        lg = mLoadGroup;
-        mLoadGroup = nsnull;
-      }
+  if (mLoadGroup) {
+    if (mLoadGroupOwnerThread != PR_GetCurrentThread()) {
+      NS_ASSERTION(false,
+                   "attempt to access nsHTTPDownloadEvent::mLoadGroup on multiple threads, leaking it!");
+    }
+    else {
+      lg = mLoadGroup;
+      mLoadGroup = nullptr;
     }
   }
 
@@ -633,12 +607,12 @@ NS_IMETHODIMP
 nsHTTPListener::OnStreamComplete(nsIStreamLoader* aLoader,
                                  nsISupports* aContext,
                                  nsresult aStatus,
-                                 PRUint32 stringLen,
-                                 const PRUint8* string)
+                                 uint32_t stringLen,
+                                 const uint8_t* string)
 {
   mResultCode = aStatus;
 
-  FreeLoadGroup(PR_FALSE);
+  FreeLoadGroup(false);
 
   nsCOMPtr<nsIRequest> req;
   nsCOMPtr<nsIHttpChannel> hchan;
@@ -660,7 +634,7 @@ nsHTTPListener::OnStreamComplete(nsIStreamLoader* aLoader,
   {
     rv = hchan->GetRequestSucceeded(&mHttpRequestSucceeded);
     if (NS_FAILED(rv))
-      mHttpRequestSucceeded = PR_FALSE;
+      mHttpRequestSucceeded = false;
 
     mResultLen = stringLen;
     mResultData = string; // reference. Make sure loader lives as long as this
@@ -684,19 +658,24 @@ nsHTTPListener::OnStreamComplete(nsIStreamLoader* aLoader,
 
 void nsHTTPListener::send_done_signal()
 {
-  mResponsibleForDoneSignal = PR_FALSE;
+  mResponsibleForDoneSignal = false;
 
   {
-    nsAutoLock locker(mLock);
-    mWaitFlag = PR_FALSE;
-    PR_NotifyAllCondVar(mCondition);
+    MutexAutoLock locker(mLock);
+    mWaitFlag = false;
+    mCondition.NotifyAll();
   }
 }
 
 static char*
 ShowProtectedAuthPrompt(PK11SlotInfo* slot, nsIInterfaceRequestor *ir)
 {
-  char* protAuthRetVal = nsnull;
+  if (!NS_IsMainThread()) {
+    NS_ERROR("ShowProtectedAuthPrompt called off the main thread");
+    return nullptr;
+  }
+
+  char* protAuthRetVal = nullptr;
 
   // Get protected auth dialogs
   nsITokenDialogs* dialogs = 0;
@@ -733,7 +712,7 @@ ShowProtectedAuthPrompt(PK11SlotInfo* slot, nsIInterfaceRequestor *ir)
                   protAuthRetVal = ToNewCString(nsDependentCString(PK11_PW_RETRY));
                   break;
               default:
-                  protAuthRetVal = nsnull;
+                  protAuthRetVal = nullptr;
                   break;
               
           }
@@ -748,84 +727,72 @@ ShowProtectedAuthPrompt(PK11SlotInfo* slot, nsIInterfaceRequestor *ir)
 
   return protAuthRetVal;
 }
-  
-char* PR_CALLBACK
-PK11PasswordPrompt(PK11SlotInfo* slot, PRBool retry, void* arg) {
+
+class PK11PasswordPromptRunnable : public SyncRunnableBase
+{
+public:
+  PK11PasswordPromptRunnable(PK11SlotInfo* slot, 
+                             nsIInterfaceRequestor* ir)
+    : mResult(nullptr),
+      mSlot(slot),
+      mIR(ir)
+  {
+  }
+  char * mResult; // out
+  virtual void RunOnTargetThread();
+private:
+  PK11SlotInfo* const mSlot; // in
+  nsIInterfaceRequestor* const mIR; // in
+};
+
+void PK11PasswordPromptRunnable::RunOnTargetThread()
+{
   nsNSSShutDownPreventionLock locker;
   nsresult rv = NS_OK;
-  PRUnichar *password = nsnull;
-  PRBool value = PR_FALSE;
-  nsIInterfaceRequestor *ir = static_cast<nsIInterfaceRequestor*>(arg);
-  nsCOMPtr<nsIPrompt> proxyPrompt;
+  PRUnichar *password = nullptr;
+  bool value = false;
+  nsCOMPtr<nsIPrompt> prompt;
 
   /* TODO: Retry should generate a different dialog message */
 /*
   if (retry)
-    return nsnull;
+    return nullptr;
 */
 
-  if (!ir)
+  if (!mIR)
   {
-    nsCOMPtr<nsIWindowWatcher> wwatch(do_GetService(NS_WINDOWWATCHER_CONTRACTID));
-    if (!wwatch)
-      return nsnull;
-
-    nsCOMPtr<nsIPrompt> prompter;
-    wwatch->GetNewPrompter(0, getter_AddRefs(prompter));
-    if (!prompter)
-      return nsnull;
-
-    NS_GetProxyForObject(NS_PROXY_TO_MAIN_THREAD,
-                         NS_GET_IID(nsIPrompt),
-                         prompter, NS_PROXY_SYNC,
-                         getter_AddRefs(proxyPrompt));
-    if (!proxyPrompt)
-      return nsnull;
+    nsNSSComponent::GetNewPrompter(getter_AddRefs(prompt));
   }
   else
   {
-    // The interface requestor object may not be safe, so
-    // proxy the call to get the nsIPrompt.
-  
-    nsCOMPtr<nsIInterfaceRequestor> proxiedCallbacks;
-    NS_GetProxyForObject(NS_PROXY_TO_MAIN_THREAD,
-                         NS_GET_IID(nsIInterfaceRequestor),
-                         ir,
-                         NS_PROXY_SYNC,
-                         getter_AddRefs(proxiedCallbacks));
-  
-    // Get the desired interface
-    nsCOMPtr<nsIPrompt> prompt(do_GetInterface(proxiedCallbacks));
-    if (!prompt) {
-      NS_ASSERTION(PR_FALSE, "callbacks does not implement nsIPrompt");
-      return nsnull;
-    }
-  
-    // Finally, get a proxy for the nsIPrompt
-    NS_GetProxyForObject(NS_PROXY_TO_MAIN_THREAD,
-                         NS_GET_IID(nsIPrompt),
-                         prompt,
-                         NS_PROXY_SYNC,
-                         getter_AddRefs(proxyPrompt));
+    prompt = do_GetInterface(mIR);
+    NS_ASSERTION(prompt, "callbacks does not implement nsIPrompt");
   }
 
-  if (PK11_ProtectedAuthenticationPath(slot))
-    return ShowProtectedAuthPrompt(slot, ir);
+  if (!prompt)
+    return;
+
+  if (PK11_ProtectedAuthenticationPath(mSlot)) {
+    mResult = ShowProtectedAuthPrompt(mSlot, mIR);
+    return;
+  }
 
   nsAutoString promptString;
   nsCOMPtr<nsINSSComponent> nssComponent(do_GetService(kNSSComponentCID, &rv));
 
   if (NS_FAILED(rv))
-    return nsnull; 
+    return; 
 
-  const PRUnichar* formatStrings[1] = { ToNewUnicode(NS_ConvertUTF8toUTF16(PK11_GetTokenName(slot))) };
+  const PRUnichar* formatStrings[1] = { 
+    ToNewUnicode(NS_ConvertUTF8toUTF16(PK11_GetTokenName(mSlot)))
+  };
   rv = nssComponent->PIPBundleFormatStringFromName("CertPassPrompt",
                                       formatStrings, 1,
                                       promptString);
   nsMemory::Free(const_cast<PRUnichar*>(formatStrings[0]));
 
   if (NS_FAILED(rv))
-    return nsnull;
+    return;
 
   {
     nsPSMUITracker tracker;
@@ -833,52 +800,69 @@ PK11PasswordPrompt(PK11SlotInfo* slot, PRBool retry, void* arg) {
       rv = NS_ERROR_NOT_AVAILABLE;
     }
     else {
-      PRBool checkState;
-      rv = proxyPrompt->PromptPassword(nsnull, promptString.get(),
-                                       &password, nsnull, &checkState, &value);
+      // Although the exact value is ignored, we must not pass invalid
+      // bool values through XPConnect.
+      bool checkState = false;
+      rv = prompt->PromptPassword(nullptr, promptString.get(),
+                                  &password, nullptr, &checkState, &value);
     }
   }
   
   if (NS_SUCCEEDED(rv) && value) {
-    char* str = ToNewUTF8String(nsDependentString(password));
+    mResult = ToNewUTF8String(nsDependentString(password));
     NS_Free(password);
-    return str;
   }
-
-  return nsnull;
 }
 
-void PR_CALLBACK HandshakeCallback(PRFileDesc* fd, void* client_data) {
+char*
+PK11PasswordPrompt(PK11SlotInfo* slot, PRBool retry, void* arg)
+{
+  RefPtr<PK11PasswordPromptRunnable> runnable(
+    new PK11PasswordPromptRunnable(slot,
+                                   static_cast<nsIInterfaceRequestor*>(arg)));
+  runnable->DispatchToMainThreadAndWait();
+  return runnable->mResult;
+}
+
+void HandshakeCallback(PRFileDesc* fd, void* client_data) {
   nsNSSShutDownPreventionLock locker;
-  PRInt32 sslStatus;
-  char* signer = nsnull;
-  char* cipherName = nsnull;
-  PRInt32 keyLength;
+  int32_t sslStatus;
+  char* signer = nullptr;
+  char* cipherName = nullptr;
+  int32_t keyLength;
   nsresult rv;
-  PRInt32 encryptBits;
+  int32_t encryptBits;
+
+  nsNSSSocketInfo* infoObject = (nsNSSSocketInfo*) fd->higher->secret;
+
+  if (infoObject) {
+    // This is the first callback on resumption handshakes
+    infoObject->SetFirstServerHelloReceived();
+  }
+
+  // If the handshake completed, then we know the site is TLS tolerant (if this
+  // was a TLS connection).
+  nsSSLIOLayerHelpers& ioLayerHelpers = infoObject->SharedState().IOLayerHelpers();
+  ioLayerHelpers.rememberTolerantSite(infoObject);
 
   if (SECSuccess != SSL_SecurityStatus(fd, &sslStatus, &cipherName, &keyLength,
-                                       &encryptBits, &signer, nsnull)) {
+                                       &encryptBits, &signer, nullptr)) {
     return;
   }
 
-  PRInt32 secStatus;
+  int32_t secStatus;
   if (sslStatus == SSL_SECURITY_STATUS_OFF)
     secStatus = nsIWebProgressListener::STATE_IS_BROKEN;
-  else if (encryptBits >= 90)
-    secStatus = (nsIWebProgressListener::STATE_IS_SECURE |
-                 nsIWebProgressListener::STATE_SECURE_HIGH);
   else
-    secStatus = (nsIWebProgressListener::STATE_IS_SECURE |
-                 nsIWebProgressListener::STATE_SECURE_LOW);
+    secStatus = nsIWebProgressListener::STATE_IS_SECURE
+              | nsIWebProgressListener::STATE_SECURE_HIGH;
 
   PRBool siteSupportsSafeRenego;
   if (SSL_HandshakeNegotiatedExtension(fd, ssl_renegotiation_info_xtn, &siteSupportsSafeRenego) != SECSuccess
       || !siteSupportsSafeRenego) {
 
-    PRBool wantWarning = (nsSSLIOLayerHelpers::getWarnLevelMissingRFC5746() > 0);
+    bool wantWarning = (ioLayerHelpers.getWarnLevelMissingRFC5746() > 0);
 
-    nsNSSSocketInfo* infoObject = (nsNSSSocketInfo*) fd->higher->secret;
     nsCOMPtr<nsIConsoleService> console;
     if (infoObject && wantWarning) {
       console = do_GetService(NS_CONSOLESERVICE_CONTRACTID);
@@ -893,16 +877,15 @@ void PR_CALLBACK HandshakeCallback(PRFileDesc* fd, void* client_data) {
         console->LogStringMessage(msg.get());
       }
     }
-    if (nsSSLIOLayerHelpers::treatUnsafeNegotiationAsBroken()) {
+    if (ioLayerHelpers.treatUnsafeNegotiationAsBroken()) {
       secStatus = nsIWebProgressListener::STATE_IS_BROKEN;
     }
   }
 
 
-  CERTCertificate *peerCert = SSL_PeerCertificate(fd);
-  const char* caName = nsnull; // caName is a pointer only, no ownership
-  char* certOrgName = CERT_GetOrgName(&peerCert->issuer);
-  CERT_DestroyCertificate(peerCert);
+  ScopedCERTCertificate serverCert(SSL_PeerCertificate(fd));
+  const char* caName = nullptr; // caName is a pointer only, no ownership
+  char* certOrgName = CERT_GetOrgName(&serverCert->issuer);
   caName = certOrgName ? certOrgName : signer;
 
   const char* verisignName = "Verisign, Inc.";
@@ -927,161 +910,88 @@ void PR_CALLBACK HandshakeCallback(PRFileDesc* fd, void* client_data) {
     infoObject->SetShortSecurityDescription(shortDesc.get());
 
     /* Set the SSL Status information */
-    nsRefPtr<nsSSLStatus> status = infoObject->SSLStatus();
+    RefPtr<nsSSLStatus> status(infoObject->SSLStatus());
     if (!status) {
       status = new nsSSLStatus();
       infoObject->SetSSLStatus(status);
     }
 
-    nsSSLIOLayerHelpers::mHostsWithCertErrors->LookupCertErrorBits(
-      infoObject, status);
+    RememberCertErrorsTable::GetInstance().LookupCertErrorBits(infoObject,
+                                                               status);
 
-    CERTCertificate *serverCert = SSL_PeerCertificate(fd);
     if (serverCert) {
-      nsRefPtr<nsNSSCertificate> nssc = new nsNSSCertificate(serverCert);
-      CERT_DestroyCertificate(serverCert);
-      serverCert = nsnull;
-
+      RefPtr<nsNSSCertificate> nssc(nsNSSCertificate::Create(serverCert));
       nsCOMPtr<nsIX509Cert> prevcert;
       infoObject->GetPreviousCert(getter_AddRefs(prevcert));
 
-      PRBool equals_previous = PR_FALSE;
-      if (prevcert) {
+      bool equals_previous = false;
+      if (prevcert && nssc) {
         nsresult rv = nssc->Equals(prevcert, &equals_previous);
         if (NS_FAILED(rv)) {
-          equals_previous = PR_FALSE;
+          equals_previous = false;
         }
       }
 
       if (equals_previous) {
         PR_LOG(gPIPNSSLog, PR_LOG_DEBUG,
                ("HandshakeCallback using PREV cert %p\n", prevcert.get()));
-        infoObject->SetCert(prevcert);
         status->mServerCert = prevcert;
       }
       else {
         if (status->mServerCert) {
           PR_LOG(gPIPNSSLog, PR_LOG_DEBUG,
                  ("HandshakeCallback KEEPING cert %p\n", status->mServerCert.get()));
-          infoObject->SetCert(status->mServerCert);
         }
         else {
           PR_LOG(gPIPNSSLog, PR_LOG_DEBUG,
                  ("HandshakeCallback using NEW cert %p\n", nssc.get()));
-          infoObject->SetCert(nssc);
           status->mServerCert = nssc;
         }
       }
     }
 
-    status->mHaveKeyLengthAndCipher = PR_TRUE;
+    status->mHaveKeyLengthAndCipher = true;
     status->mKeyLength = keyLength;
     status->mSecretKeyLength = encryptBits;
     status->mCipherName.Assign(cipherName);
+
+    // Get the NPN value.
+    SSLNextProtoState state;
+    unsigned char npnbuf[256];
+    unsigned int npnlen;
+    
+    if (SSL_GetNextProto(fd, &state, npnbuf, &npnlen, 256) == SECSuccess) {
+      if (state == SSL_NEXT_PROTO_NEGOTIATED)
+        infoObject->SetNegotiatedNPN(reinterpret_cast<char *>(npnbuf), npnlen);
+      else
+        infoObject->SetNegotiatedNPN(nullptr, 0);
+      mozilla::Telemetry::Accumulate(Telemetry::SSL_NPN_TYPE, state);
+    }
+    else
+      infoObject->SetNegotiatedNPN(nullptr, 0);
+
+    SSLChannelInfo channelInfo;
+    if (SSL_GetChannelInfo(fd, &channelInfo, sizeof(channelInfo)) == SECSuccess) {
+      // Get the protocol version for telemetry
+      // 0=ssl3, 1=tls1, 2=tls1.1, 3=tls1.2
+      unsigned int versionEnum = channelInfo.protocolVersion & 0xFF;
+      Telemetry::Accumulate(Telemetry::SSL_HANDSHAKE_VERSION, versionEnum);
+
+      SSLCipherSuiteInfo cipherInfo;
+      if (SSL_GetCipherSuiteInfo(channelInfo.cipherSuite, &cipherInfo,
+                                 sizeof (cipherInfo)) == SECSuccess) {
+        // keyExchange null=0, rsa=1, dh=2, fortezza=3, ecdh=4
+        Telemetry::Accumulate(Telemetry::SSL_KEY_EXCHANGE_ALGORITHM,
+                              cipherInfo.keaType);
+      }
+      
+    }
+    infoObject->SetHandshakeCompleted();
   }
 
   PORT_Free(cipherName);
   PR_FREEIF(certOrgName);
   PR_Free(signer);
-}
-
-SECStatus PR_CALLBACK AuthCertificateCallback(void* client_data, PRFileDesc* fd,
-                                              PRBool checksig, PRBool isServer) {
-  nsNSSShutDownPreventionLock locker;
-
-  // first the default action
-  SECStatus rv = SSL_AuthCertificate(CERT_GetDefaultCertDB(), fd, checksig, isServer);
-
-  // We want to remember the CA certs in the temp db, so that the application can find the
-  // complete chain at any time it might need it.
-  // But we keep only those CA certs in the temp db, that we didn't already know.
-  
-  CERTCertificate *serverCert = SSL_PeerCertificate(fd);
-  CERTCertificateCleaner serverCertCleaner(serverCert);
-
-  if (serverCert) {
-    nsNSSSocketInfo* infoObject = (nsNSSSocketInfo*) fd->higher->secret;
-    nsRefPtr<nsSSLStatus> status = infoObject->SSLStatus();
-    nsRefPtr<nsNSSCertificate> nsc;
-
-    if (!status || !status->mServerCert) {
-      nsc = new nsNSSCertificate(serverCert);
-    }
-
-    if (SECSuccess == rv) {
-      if (nsc) {
-        PRBool dummyIsEV;
-        nsc->GetIsExtendedValidation(&dummyIsEV); // the nsc object will cache the status
-      }
-    
-      CERTCertList *certList = CERT_GetCertChainFromCert(serverCert, PR_Now(), certUsageSSLCA);
-
-      nsCOMPtr<nsINSSComponent> nssComponent;
-      
-      for (CERTCertListNode *node = CERT_LIST_HEAD(certList);
-           !CERT_LIST_END(node, certList);
-           node = CERT_LIST_NEXT(node)) {
-
-        if (node->cert->slot) {
-          // This cert was found on a token, no need to remember it in the temp db.
-          continue;
-        }
-
-        if (node->cert->isperm) {
-          // We don't need to remember certs already stored in perm db.
-          continue;
-        }
-        
-        if (node->cert == serverCert) {
-          // We don't want to remember the server cert, 
-          // the code that cares for displaying page info does this already.
-          continue;
-        }
-
-        // We have found a signer cert that we want to remember.
-        nsCAutoString nickname;
-        nickname = nsNSSCertificate::defaultServerNickname(node->cert);
-        if (!nickname.IsEmpty()) {
-          PK11SlotInfo *slot = PK11_GetInternalKeySlot();
-          if (slot) {
-            PK11_ImportCert(slot, node->cert, CK_INVALID_HANDLE, 
-                            const_cast<char*>(nickname.get()), PR_FALSE);
-            PK11_FreeSlot(slot);
-          }
-        }
-      }
-
-      CERT_DestroyCertList(certList);
-    }
-
-    // The connection may get terminated, for example, if the server requires
-    // a client cert. Let's provide a minimal SSLStatus
-    // to the caller that contains at least the cert and its status.
-    if (!status) {
-      status = new nsSSLStatus();
-      infoObject->SetSSLStatus(status);
-    }
-
-    if (rv == SECSuccess) {
-      // Certificate verification succeeded delete any potential record
-      // of certificate error bits.
-      nsSSLIOLayerHelpers::mHostsWithCertErrors->RememberCertHasError(
-        infoObject, nsnull, rv);
-    }
-    else {
-      // Certificate verification failed, update the status' bits.
-      nsSSLIOLayerHelpers::mHostsWithCertErrors->LookupCertErrorBits(
-        infoObject, status);
-    }
-
-    if (status && !status->mServerCert) {
-      status->mServerCert = nsc;
-      PR_LOG(gPIPNSSLog, PR_LOG_DEBUG,
-             ("AuthCertificateCallback setting NEW cert %p\n", status->mServerCert.get()));
-    }
-  }
-
-  return rv;
 }
 
 struct OCSPDefaultResponders {
@@ -1096,65 +1006,65 @@ static struct OCSPDefaultResponders myDefaultOCSPResponders[] = {
   /* COMODO */
   {
     "CN=AddTrust External CA Root,OU=AddTrust External TTP Network,O=AddTrust AB,C=SE",
-    nsnull, "rb2YejS0Jvf6xCZU7wO94CTLVBo=", nsnull,
+    nullptr, "rb2YejS0Jvf6xCZU7wO94CTLVBo=", nullptr,
     "http://ocsp.comodoca.com"
   },
   {
     "CN=COMODO Certification Authority,O=COMODO CA Limited,L=Salford,ST=Greater Manchester,C=GB",
-    nsnull, "C1jli8ZMFTekQKkwqSG+RzZaVv8=", nsnull,
+    nullptr, "C1jli8ZMFTekQKkwqSG+RzZaVv8=", nullptr,
     "http://ocsp.comodoca.com"
   },
   {
     "CN=COMODO EV SGC CA,O=COMODO CA Limited,L=Salford,ST=Greater Manchester,C=GB",
-    nsnull, "f/ZMNigUrs0eN6/eWvJbw6CsK/4=", nsnull,
+    nullptr, "f/ZMNigUrs0eN6/eWvJbw6CsK/4=", nullptr,
     "http://ocsp.comodoca.com"
   },
   {
     "CN=COMODO EV SSL CA,O=COMODO CA Limited,L=Salford,ST=Greater Manchester,C=GB",
-    nsnull, "aRZJ7LZ1ZFrpAyNgL1RipTRcPuI=", nsnull,
+    nullptr, "aRZJ7LZ1ZFrpAyNgL1RipTRcPuI=", nullptr,
     "http://ocsp.comodoca.com"
   },
   {
     "CN=UTN - DATACorp SGC,OU=http://www.usertrust.com,O=The USERTRUST Network,L=Salt Lake City,ST=UT,C=US",
-    nsnull, "UzLRs89/+uDxoF2FTpLSnkUdtE8=", nsnull,
+    nullptr, "UzLRs89/+uDxoF2FTpLSnkUdtE8=", nullptr,
     "http://ocsp.usertrust.com"
   },
   {
     "CN=UTN-USERFirst-Hardware,OU=http://www.usertrust.com,O=The USERTRUST Network,L=Salt Lake City,ST=UT,C=US",
-    nsnull, "oXJfJhsomEOVXQc31YWWnUvSw0U=", nsnull,
+    nullptr, "oXJfJhsomEOVXQc31YWWnUvSw0U=", nullptr,
     "http://ocsp.usertrust.com"
   },
   /* Network Solutions */
   {
     "CN=Network Solutions Certificate Authority,O=Network Solutions L.L.C.,C=US",
-    nsnull, "ITDJ+wDXTpjah6oq0KcusUAxp0w=", nsnull,
+    nullptr, "ITDJ+wDXTpjah6oq0KcusUAxp0w=", nullptr,
     "http://ocsp.netsolssl.com"
   },
   {
     "CN=Network Solutions EV SSL CA,O=Network Solutions L.L.C.,C=US",
-    nsnull, "tk6FnYQfGx3UUolOB5Yt+d7xj8w=", nsnull,
+    nullptr, "tk6FnYQfGx3UUolOB5Yt+d7xj8w=", nullptr,
     "http://ocsp.netsolssl.com"
   },
   /* GlobalSign */
   {
     "CN=GlobalSign Root CA,OU=Root CA,O=GlobalSign nv-sa,C=BE",
-    nsnull, "YHtmGkUNl8qJUC99BM00qP/8/Us=", nsnull,
+    nullptr, "YHtmGkUNl8qJUC99BM00qP/8/Us=", nullptr,
     "http://ocsp.globalsign.com/ExtendedSSLCACross"
   },
   {
     "CN=GlobalSign,O=GlobalSign,OU=GlobalSign Root CA - R2",
-    nsnull, "m+IHV2ccHsBqBt5ZtJot39wZhi4=", nsnull,
+    nullptr, "m+IHV2ccHsBqBt5ZtJot39wZhi4=", nullptr,
     "http://ocsp.globalsign.com/ExtendedSSLCA"
   },
   {
     "CN=GlobalSign Extended Validation CA,O=GlobalSign,OU=Extended Validation CA",
-    nsnull, "NLH5yYxrNUTMCGkK7uOjuVy/FuA=", nsnull,
+    nullptr, "NLH5yYxrNUTMCGkK7uOjuVy/FuA=", nullptr,
     "http://ocsp.globalsign.com/ExtendedSSL"
   },
   /* Trustwave */
   {
     "CN=SecureTrust CA,O=SecureTrust Corporation,C=US",
-    nsnull, "QjK2FvoE/f5dS3rD/fdMQB1aQ68=", nsnull,
+    nullptr, "QjK2FvoE/f5dS3rD/fdMQB1aQ68=", nullptr,
     "http://ocsp.trustwave.com"
   }
 };
@@ -1162,7 +1072,7 @@ static struct OCSPDefaultResponders myDefaultOCSPResponders[] = {
 static const unsigned int numResponders =
     (sizeof myDefaultOCSPResponders) / (sizeof myDefaultOCSPResponders[0]);
 
-static CERT_StringFromCertFcn oldOCSPAIAInfoCallback = nsnull;
+static CERT_StringFromCertFcn oldOCSPAIAInfoCallback = nullptr;
 
 /*
  * See if we have a hard-coded default responder for this certificate's
@@ -1170,7 +1080,7 @@ static CERT_StringFromCertFcn oldOCSPAIAInfoCallback = nsnull;
  *
  * The result needs to be freed (PORT_Free) when no longer in use.
  */
-char* PR_CALLBACK MyAlternateOCSPAIAInfoCallback(CERTCertificate *cert) {
+char* MyAlternateOCSPAIAInfoCallback(CERTCertificate *cert) {
   if (cert && !cert->isRoot) {
     unsigned int i;
     for (i=0; i < numResponders; i++) {
@@ -1191,7 +1101,7 @@ char* PR_CALLBACK MyAlternateOCSPAIAInfoCallback(CERTCertificate *cert) {
   if (oldOCSPAIAInfoCallback)
     return (*oldOCSPAIAInfoCallback)(cert);
 
-  return nsnull;
+  return nullptr;
 }
 
 void cleanUpMyDefaultOCSPResponders() {
@@ -1200,11 +1110,11 @@ void cleanUpMyDefaultOCSPResponders() {
   for (i=0; i < numResponders; i++) {
     if (myDefaultOCSPResponders[i].issuerName) {
       CERT_DestroyName(myDefaultOCSPResponders[i].issuerName);
-      myDefaultOCSPResponders[i].issuerName = nsnull;
+      myDefaultOCSPResponders[i].issuerName = nullptr;
     }
     if (myDefaultOCSPResponders[i].issuerKeyID) {
-      SECITEM_FreeItem(myDefaultOCSPResponders[i].issuerKeyID, PR_TRUE);
-      myDefaultOCSPResponders[i].issuerKeyID = nsnull;
+      SECITEM_FreeItem(myDefaultOCSPResponders[i].issuerKeyID, true);
+      myDefaultOCSPResponders[i].issuerKeyID = nullptr;
     }
   }
 }
@@ -1224,9 +1134,9 @@ SECStatus RegisterMyOCSPAIAInfoCallback() {
     if (!(myDefaultOCSPResponders[i].issuerName))
       goto loser;
     // Create a SECItem from the Base64 authority key identifier keyID.
-    myDefaultOCSPResponders[i].issuerKeyID = NSSBase64_DecodeBuffer(nsnull,
-          nsnull, myDefaultOCSPResponders[i].issuerKeyID_base64,
-          (PRUint32)PORT_Strlen(myDefaultOCSPResponders[i].issuerKeyID_base64));
+    myDefaultOCSPResponders[i].issuerKeyID = NSSBase64_DecodeBuffer(nullptr,
+          nullptr, myDefaultOCSPResponders[i].issuerKeyID_base64,
+          (uint32_t)PORT_Strlen(myDefaultOCSPResponders[i].issuerKeyID_base64));
     if (!(myDefaultOCSPResponders[i].issuerKeyID))
       goto loser;
   }
@@ -1253,12 +1163,12 @@ SECStatus UnregisterMyOCSPAIAInfoCallback() {
 
   // Unregister our alternate OCSP Responder URL lookup function.
   rv = CERT_RegisterAlternateOCSPAIAInfoCallBack(oldOCSPAIAInfoCallback,
-                                                 nsnull);
+                                                 nullptr);
   if (rv != SECSuccess)
     return rv;
 
   // Tidy up.
-  oldOCSPAIAInfoCallback = nsnull;
+  oldOCSPAIAInfoCallback = nullptr;
   cleanUpMyDefaultOCSPResponders();
   return SECSuccess;
 }

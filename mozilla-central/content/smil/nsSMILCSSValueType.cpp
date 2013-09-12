@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SMIL module.
- *
- * The Initial Developer of the Original Code is the Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Daniel Holbert <dholbert@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* representation of a value for a SMIL-animated CSS property */
 
@@ -45,19 +13,19 @@
 #include "nsCSSValue.h"
 #include "nsColor.h"
 #include "nsPresContext.h"
-#include "nsIContent.h"
+#include "mozilla/dom/Element.h"
 #include "nsDebug.h"
+
+using namespace mozilla::dom;
 
 /*static*/ nsSMILCSSValueType nsSMILCSSValueType::sSingleton;
 
 struct ValueWrapper {
-  ValueWrapper(nsCSSProperty aPropID, const nsStyleAnimation::Value& aValue,
-               nsPresContext* aPresContext) :
-    mPropID(aPropID), mCSSValue(aValue), mPresContext(aPresContext) {}
+  ValueWrapper(nsCSSProperty aPropID, const nsStyleAnimation::Value& aValue) :
+    mPropID(aPropID), mCSSValue(aValue) {}
 
   nsCSSProperty mPropID;
   nsStyleAnimation::Value mCSSValue;
-  nsPresContext* mPresContext;
 };
 
 // Helper "zero" values of various types
@@ -88,22 +56,65 @@ GetZeroValueForUnit(nsStyleAnimation::Unit aUnit)
     case nsStyleAnimation::eUnit_Color:
       return &sZeroColor;
     default:
-      return nsnull;
+      return nullptr;
   }
 }
 
-static void
-InvertSign(nsStyleAnimation::Value& aStyleCoord)
+// This method requires at least one of its arguments to be non-null.
+//
+// If one argument is null, this method updates it to point to "zero"
+// for the other argument's Unit (if applicable; otherwise, we return false).
+//
+// If neither argument is null, this method generally does nothing, though it
+// may apply a workaround for the special case where a 0 length-value is mixed
+// with a eUnit_Float value.  (See comment below.)
+//
+// Returns true on success, or false.
+static const bool
+FinalizeStyleAnimationValues(const nsStyleAnimation::Value*& aValue1,
+                             const nsStyleAnimation::Value*& aValue2)
 {
-  switch (aStyleCoord.GetUnit()) {
+  NS_ABORT_IF_FALSE(aValue1 || aValue2,
+                    "expecting at least one non-null value");
+
+  // Are we missing either val? (If so, it's an implied 0 in other val's units)
+  if (!aValue1) {
+    aValue1 = GetZeroValueForUnit(aValue2->GetUnit());
+    return !!aValue1; // Fail if we have no zero value for this unit.
+  }
+  if (!aValue2) {
+    aValue2 = GetZeroValueForUnit(aValue1->GetUnit());
+    return !!aValue2; // Fail if we have no zero value for this unit.
+  }
+
+  // Ok, both values were specified.
+  // Need to handle a special-case, though: unitless nonzero length (parsed as
+  // eUnit_Float) mixed with unitless 0 length (parsed as eUnit_Coord).  These
+  // won't interoperate in nsStyleAnimation, since their Units don't match.
+  // In this case, we replace the eUnit_Coord 0 value with eUnit_Float 0 value.
+  if (*aValue1 == sZeroCoord &&
+      aValue2->GetUnit() == nsStyleAnimation::eUnit_Float) {
+    aValue1 = &sZeroFloat;
+  } else if (*aValue2 == sZeroCoord &&
+             aValue1->GetUnit() == nsStyleAnimation::eUnit_Float) {
+    aValue2 = &sZeroFloat;
+  }
+
+  return true;
+}
+
+static void
+InvertSign(nsStyleAnimation::Value& aValue)
+{
+  switch (aValue.GetUnit()) {
     case nsStyleAnimation::eUnit_Coord:
-      aStyleCoord.SetCoordValue(-aStyleCoord.GetCoordValue());
+      aValue.SetCoordValue(-aValue.GetCoordValue());
       break;
     case nsStyleAnimation::eUnit_Percent:
-      aStyleCoord.SetPercentValue(-aStyleCoord.GetPercentValue());
+      aValue.SetPercentValue(-aValue.GetPercentValue());
       break;
     case nsStyleAnimation::eUnit_Float:
-      aStyleCoord.SetFloatValue(-aStyleCoord.GetFloatValue());
+      aValue.SetFloatValue(-aValue.GetFloatValue());
       break;
     default:
       NS_NOTREACHED("Calling InvertSign with an unsupported unit");
@@ -130,7 +141,7 @@ nsSMILCSSValueType::Init(nsSMILValue& aValue) const
 {
   NS_ABORT_IF_FALSE(aValue.IsNull(), "Unexpected SMIL value type");
 
-  aValue.mU.mPtr = nsnull;
+  aValue.mU.mPtr = nullptr;
   aValue.mType = this;
 }
 
@@ -154,9 +165,6 @@ nsSMILCSSValueType::Assign(nsSMILValue& aDest, const nsSMILValue& aSrc) const
     if (!destWrapper) {
       // barely-initialized dest -- need to alloc & copy
       aDest.mU.mPtr = new ValueWrapper(*srcWrapper);
-      if (!aDest.mU.mPtr) {
-        return NS_ERROR_OUT_OF_MEMORY;
-      }
     } else {
       // both already fully-initialized -- just copy straight across
       *destWrapper = *srcWrapper;
@@ -164,13 +172,13 @@ nsSMILCSSValueType::Assign(nsSMILValue& aDest, const nsSMILValue& aSrc) const
   } else if (destWrapper) {
     // fully-initialized dest, barely-initialized src -- clear dest
     delete destWrapper;
-    aDest.mU.mPtr = destWrapper = nsnull;
+    aDest.mU.mPtr = destWrapper = nullptr;
   } // else, both are barely-initialized -- nothing to do.
 
   return NS_OK;
 }
 
-PRBool
+bool
 nsSMILCSSValueType::IsEqual(const nsSMILValue& aLeft,
                             const nsSMILValue& aRight) const
 {
@@ -184,24 +192,23 @@ nsSMILCSSValueType::IsEqual(const nsSMILValue& aLeft,
       // Both non-null
       NS_WARN_IF_FALSE(leftWrapper != rightWrapper,
                        "Two nsSMILValues with matching ValueWrapper ptr");
-      // mPresContext doesn't really matter for equality comparison
       return (leftWrapper->mPropID == rightWrapper->mPropID &&
               leftWrapper->mCSSValue == rightWrapper->mCSSValue);
     }
     // Left non-null, right null
-    return PR_FALSE;
+    return false;
   }
   if (rightWrapper) {
     // Left null, right non-null
-    return PR_FALSE;
+    return false;
   }
   // Both null
-  return PR_TRUE;
+  return true;
 }
 
 nsresult
 nsSMILCSSValueType::Add(nsSMILValue& aDest, const nsSMILValue& aValueToAdd,
-                        PRUint32 aCount) const
+                        uint32_t aCount) const
 {
   NS_ABORT_IF_FALSE(aValueToAdd.mType == aDest.mType,
                     "Trying to add invalid types");
@@ -221,33 +228,27 @@ nsSMILCSSValueType::Add(nsSMILValue& aDest, const nsSMILValue& aValueToAdd,
     return NS_ERROR_FAILURE;
   }
 
-  // Handle barely-initialized "zero" added value.
-  const nsStyleAnimation::Value* realValueToAdd = valueToAddWrapper ?
-    &valueToAddWrapper->mCSSValue :
-    GetZeroValueForUnit(destWrapper->mCSSValue.GetUnit());
-  if (!realValueToAdd) {
-    // No zero value for this unit --> doesn't support addition.
+  const nsStyleAnimation::Value* valueToAdd = valueToAddWrapper ?
+    &valueToAddWrapper->mCSSValue : nullptr;
+  const nsStyleAnimation::Value* destValue = destWrapper ?
+    &destWrapper->mCSSValue : nullptr;
+  if (!FinalizeStyleAnimationValues(valueToAdd, destValue)) {
     return NS_ERROR_FAILURE;
+  }
+  // Did FinalizeStyleAnimationValues change destValue?
+  // If so, update outparam to use the new value.
+  if (destWrapper && &destWrapper->mCSSValue != destValue) {
+    destWrapper->mCSSValue = *destValue;
   }
 
   // Handle barely-initialized "zero" destination.
   if (!destWrapper) {
-    // Need to fully initialize destination, since it's an outparam
-    const nsStyleAnimation::Value* zeroVal =
-      GetZeroValueForUnit(valueToAddWrapper->mCSSValue.GetUnit());
-    if (!zeroVal) {
-      // No zero value for this unit --> doesn't support addition.
-      return NS_ERROR_FAILURE;
-    }
     aDest.mU.mPtr = destWrapper =
-      new ValueWrapper(property, *zeroVal, valueToAddWrapper->mPresContext);
-    if (!destWrapper) {
-      return NS_ERROR_OUT_OF_MEMORY;
-    }
+      new ValueWrapper(property, *destValue);
   }
 
-  return nsStyleAnimation::Add(property, destWrapper->mCSSValue,
-                               *realValueToAdd, aCount) ?
+  return nsStyleAnimation::Add(property,
+                               destWrapper->mCSSValue, *valueToAdd, aCount) ?
     NS_OK : NS_ERROR_FAILURE;
 }
 
@@ -265,15 +266,15 @@ nsSMILCSSValueType::ComputeDistance(const nsSMILValue& aFrom,
   NS_ABORT_IF_FALSE(toWrapper, "expecting non-null endpoint");
 
   const nsStyleAnimation::Value* fromCSSValue = fromWrapper ?
-    &fromWrapper->mCSSValue :
-    GetZeroValueForUnit(toWrapper->mCSSValue.GetUnit());
-  if (!fromCSSValue) {
-    // No zero value for this unit --> doesn't support distance-computation.
+    &fromWrapper->mCSSValue : nullptr;
+  const nsStyleAnimation::Value* toCSSValue = &toWrapper->mCSSValue;
+  if (!FinalizeStyleAnimationValues(fromCSSValue, toCSSValue)) {
     return NS_ERROR_FAILURE;
   }
 
-  return nsStyleAnimation::ComputeDistance(toWrapper->mPropID, *fromCSSValue,
-                                           toWrapper->mCSSValue, aDistance) ?
+  return nsStyleAnimation::ComputeDistance(toWrapper->mPropID,
+                                           *fromCSSValue, *toCSSValue,
+                                           aDistance) ?
     NS_OK : NS_ERROR_FAILURE;
 }
 
@@ -290,69 +291,75 @@ nsSMILCSSValueType::Interpolate(const nsSMILValue& aStartVal,
   NS_ABORT_IF_FALSE(aResult.mType == this, "Unexpected result type");
   NS_ABORT_IF_FALSE(aUnitDistance >= 0.0 && aUnitDistance <= 1.0,
                     "unit distance value out of bounds");
+  NS_ABORT_IF_FALSE(!aResult.mU.mPtr, "expecting barely-initialized outparam");
 
   const ValueWrapper* startWrapper = ExtractValueWrapper(aStartVal);
   const ValueWrapper* endWrapper = ExtractValueWrapper(aEndVal);
   NS_ABORT_IF_FALSE(endWrapper, "expecting non-null endpoint");
-  NS_ABORT_IF_FALSE(!aResult.mU.mPtr, "expecting barely-initialized outparam");
 
   const nsStyleAnimation::Value* startCSSValue = startWrapper ?
-    &startWrapper->mCSSValue :
-    GetZeroValueForUnit(endWrapper->mCSSValue.GetUnit());
-  if (!startCSSValue) {
-    // No zero value for this unit --> doesn't support interpolation.
+    &startWrapper->mCSSValue : nullptr;
+  const nsStyleAnimation::Value* endCSSValue = &endWrapper->mCSSValue;
+  if (!FinalizeStyleAnimationValues(startCSSValue, endCSSValue)) {
     return NS_ERROR_FAILURE;
   }
 
   nsStyleAnimation::Value resultValue;
-  if (nsStyleAnimation::Interpolate(endWrapper->mPropID, *startCSSValue,
-                                    endWrapper->mCSSValue, aUnitDistance,
-                                    resultValue)) {
-    aResult.mU.mPtr = new ValueWrapper(endWrapper->mPropID, resultValue,
-                                       endWrapper->mPresContext);
-    return aResult.mU.mPtr ? NS_OK : NS_ERROR_OUT_OF_MEMORY;
+  if (nsStyleAnimation::Interpolate(endWrapper->mPropID,
+                                    *startCSSValue, *endCSSValue,
+                                    aUnitDistance, resultValue)) {
+    aResult.mU.mPtr = new ValueWrapper(endWrapper->mPropID, resultValue);
+    return NS_OK;
   }
   return NS_ERROR_FAILURE;
 }
 
 // Helper function to extract presContext
 static nsPresContext*
-GetPresContextForElement(nsIContent* aElem)
+GetPresContextForElement(Element* aElem)
 {
   nsIDocument* doc = aElem->GetCurrentDoc();
   if (!doc) {
     // This can happen if we process certain types of restyles mid-sample
     // and remove anonymous animated content from the document as a result.
     // See bug 534975.
-    return nsnull;
+    return nullptr;
   }
   nsIPresShell* shell = doc->GetShell();
-  return shell ? shell->GetPresContext() : nsnull;
+  return shell ? shell->GetPresContext() : nullptr;
 }
 
 // Helper function to parse a string into a nsStyleAnimation::Value
-static PRBool
+static bool
 ValueFromStringHelper(nsCSSProperty aPropID,
-                      nsIContent* aTargetElement,
+                      Element* aTargetElement,
                       nsPresContext* aPresContext,
                       const nsAString& aString,
-                      nsStyleAnimation::Value& aStyleAnimValue)
+                      nsStyleAnimation::Value& aStyleAnimValue,
+                      bool* aIsContextSensitive)
 {
   // If value is negative, we'll strip off the "-" so the CSS parser won't
   // barf, and then manually make the parsed value negative.
   // (This is a partial solution to let us accept some otherwise out-of-bounds
   // CSS values. Bug 501188 will provide a more complete fix.)
-  PRBool isNegative = PR_FALSE;
-  PRUint32 subStringBegin = 0;
-  PRInt32 absValuePos = nsSMILParserUtils::CheckForNegativeNumber(aString);
-  if (absValuePos > 0) {
-    isNegative = PR_TRUE;
-    subStringBegin = (PRUint32)absValuePos; // Start parsing after '-' sign
+  bool isNegative = false;
+  uint32_t subStringBegin = 0;
+
+  // NOTE: We need to opt-out 'stroke-dasharray' from the negative-number
+  // check.  Its values might look negative (e.g. by starting with "-1"), but
+  // they're more complicated than our simple negation logic here can handle.
+  if (aPropID != eCSSProperty_stroke_dasharray) {
+    int32_t absValuePos = nsSMILParserUtils::CheckForNegativeNumber(aString);
+    if (absValuePos > 0) {
+      isNegative = true;
+      subStringBegin = (uint32_t)absValuePos; // Start parsing after '-' sign
+    }
   }
   nsDependentSubstring subString(aString, subStringBegin);
   if (!nsStyleAnimation::ComputeValue(aPropID, aTargetElement, subString,
-                                      PR_TRUE, aStyleAnimValue)) {
-    return PR_FALSE;
+                                      true, aStyleAnimValue,
+                                      aIsContextSensitive)) {
+    return false;
   }
   if (isNegative) {
     InvertSign(aStyleAnimValue);
@@ -366,17 +373,17 @@ ValueFromStringHelper(nsCSSProperty aPropID,
     aStyleAnimValue.SetCoordValue(aStyleAnimValue.GetCoordValue() /
                                   aPresContext->TextZoom());
   }
-  return PR_TRUE;
+  return true;
 }
 
 // static
 void
 nsSMILCSSValueType::ValueFromString(nsCSSProperty aPropID,
-                                    nsIContent* aTargetElement,
+                                    Element* aTargetElement,
                                     const nsAString& aString,
-                                    nsSMILValue& aValue)
+                                    nsSMILValue& aValue,
+                                    bool* aIsContextSensitive)
 {
-  // XXXbz aTargetElement should be an Element
   NS_ABORT_IF_FALSE(aValue.IsNull(), "Outparam should be null-typed");
   nsPresContext* presContext = GetPresContextForElement(aTargetElement);
   if (!presContext) {
@@ -386,19 +393,14 @@ nsSMILCSSValueType::ValueFromString(nsCSSProperty aPropID,
 
   nsStyleAnimation::Value parsedValue;
   if (ValueFromStringHelper(aPropID, aTargetElement, presContext,
-                            aString, parsedValue)) {
+                            aString, parsedValue, aIsContextSensitive)) {
     sSingleton.Init(aValue);
-    aValue.mU.mPtr = new ValueWrapper(aPropID, parsedValue, presContext);
-    if (!aValue.mU.mPtr) {
-      // Out of memory! Destroy outparam, to leave it as nsSMILNullType,
-      // which indicates to our caller that we failed.
-      sSingleton.Destroy(aValue);
-    }
+    aValue.mU.mPtr = new ValueWrapper(aPropID, parsedValue);
   }
 }
 
 // static
-PRBool
+bool
 nsSMILCSSValueType::ValueToString(const nsSMILValue& aValue,
                                   nsAString& aString)
 {
@@ -406,6 +408,6 @@ nsSMILCSSValueType::ValueToString(const nsSMILValue& aValue,
                     "Unexpected SMIL value type");
   const ValueWrapper* wrapper = ExtractValueWrapper(aValue);
   return !wrapper ||
-    nsStyleAnimation::UncomputeValue(wrapper->mPropID, wrapper->mPresContext,
+    nsStyleAnimation::UncomputeValue(wrapper->mPropID,
                                      wrapper->mCSSValue, aString);
 }

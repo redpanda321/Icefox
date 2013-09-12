@@ -2,8 +2,6 @@
 <head>
   <title>Test for key event handler of text editor</title>
   <script type="text/javascript"
-          src="/MochiKit/packed.js"></script>
-  <script type="text/javascript"
           src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="text/javascript"
           src="/tests/SimpleTest/EventUtils.js"></script>
@@ -52,11 +50,11 @@ function runTests()
       switch (aEvent.eventPhase) {
       case aEvent.CAPTURING_PHASE:
         capturingPhase.fired = true;
-        capturingPhase.prevented = aEvent.getPreventDefault();
+        capturingPhase.prevented = aEvent.defaultPrevented;
         break;
       case aEvent.BUBBLING_PHASE:
         bubblingPhase.fired = true;
-        bubblingPhase.prevented = aEvent.getPreventDefault();
+        bubblingPhase.prevented = aEvent.defaultPrevented;
         aEvent.preventDefault(); // prevent the browser default behavior
         break;
       default:
@@ -90,14 +88,11 @@ function runTests()
        getDesciption(aPreventedOnBubbling) + "prevented on bubbling phase");
   }
 
-  var systemGroup =
-    Components.classes["@mozilla.org/eventlistenerservice;1"].
-      getService(Components.interfaces.nsIEventListenerService).
-      systemEventGroup;
   var parentElement = document.getElementById("display");
-  parentElement.QueryInterface(Components.interfaces.nsIDOM3EventTarget);
-  parentElement.addGroupedEventListener("keypress", listener, true, systemGroup);
-  parentElement.addGroupedEventListener("keypress", listener, false, systemGroup);
+  SpecialPowers.addSystemEventListener(parentElement, "keypress", listener,
+                                       true);
+  SpecialPowers.addSystemEventListener(parentElement, "keypress", listener,
+                                       false);
 
   function doTest(aElement, aDescription, aIsSingleLine, aIsReadonly,
                   aIsTabbable)
@@ -121,24 +116,30 @@ function runTests()
     is(fm.focusedElement, aElement, aDescription + "failed to move focus");
 
     // Modifier keys:
-    //   Only when editor is editable, it consumes.
+    //   Basically, modifier keys shouldn't cause keypress event.  However,
+    //   even if it were dispatched by widget's bug, editor should consume
+    //   it when editor is editable.
     reset("");
-    synthesizeKey("VK_META", { });
+    synthesizeKey("VK_META", { type: "keypress" });
     check(aDescription + "Meta", true, true, !aIsReadonly);
 
     reset("");
-    synthesizeKey("VK_SHIFT", { });
+    synthesizeKey("VK_WIN", { type: "keypress" });
+    check(aDescription + "OS", true, true, !aIsReadonly);
+
+    reset("");
+    synthesizeKey("VK_SHIFT", { type: "keypress" });
     check(aDescription + "Shift", true, true, !aIsReadonly);
 
     reset("");
-    synthesizeKey("VK_CONTROL", { });
+    synthesizeKey("VK_CONTROL", { type: "keypress" });
     check(aDescription + "Control", true, true, !aIsReadonly);
 
     // Alt key press event installs menubar key event listener, so,
     // we should pass Alt key testing on Windows and Linux.
     if (!kIsWin && !kIsLinux) {
       reset("");
-      synthesizeKey("VK_ALT", { });
+      synthesizeKey("VK_ALT", { type: "keypress" });
       check(aDescription + "Alt", true, true, !aIsReadonly);
     }
 
@@ -171,6 +172,10 @@ function runTests()
     reset("");
     synthesizeKey("VK_BACK_SPACE", { metaKey: true });
     check(aDescription + "Meta+Backspace", true, true, aIsReadonly);
+
+    reset("");
+    synthesizeKey("VK_BACK_SPACE", { osKey: true });
+    check(aDescription + "OS+Backspace", true, true, aIsReadonly);
 
     // Delete key:
     //   If editor is readonly, it doesn't consume.
@@ -209,6 +214,11 @@ function runTests()
     check(aDescription + "Meta+Delete",
           true, true, kIsLinux);
 
+    reset("");
+    synthesizeKey("VK_DELETE", { osKey: true });
+    check(aDescription + "OS+Delete",
+          true, true, false);
+
     // XXX input.value returns "\n" when it's empty, so, we should use dummy
     // value ("a") for the following tests.
 
@@ -246,6 +256,11 @@ function runTests()
     check(aDescription + "Meta+Return", true, true, false);
     is(aElement.value, "a", aDescription + "Meta+Return");
 
+    reset("a");
+    synthesizeKey("VK_RETURN", { osKey: true });
+    check(aDescription + "OS+Return", true, true, false);
+    is(aElement.value, "a", aDescription + "OS+Return");
+
     // Enter key (same as Return key):
     //   If editor is readonly, it doesn't consume.
     //   If editor is editable and not single line editor, it consumes Return
@@ -280,6 +295,11 @@ function runTests()
     check(aDescription + "Meta+Enter", true, true, false);
     is(aElement.value, "a", aDescription + "Meta+Enter");
 
+    reset("a");
+    synthesizeKey("VK_ENTER", { osKey: true });
+    check(aDescription + "OS+Enter", true, true, false);
+    is(aElement.value, "a", aDescription + "OS+Enter");
+
     // Tab key:
     //   If editor is tabbable, editor doesn't consume all tab key events.
     //   Otherwise, editor consumes tab key event without any modifier keys.
@@ -287,12 +307,22 @@ function runTests()
     synthesizeKey("VK_TAB", { });
     check(aDescription + "Tab",
           true, true, !aIsTabbable && !aIsReadonly);
-    // The tab char is converted to 4 space characters because textarea/input
-    // elements are not preformatted editor.
-    is(aElement.value, !aIsTabbable && !aIsReadonly ? "a    " : "a",
+    is(aElement.value, !aIsTabbable && !aIsReadonly ? "a\t" : "a",
        aDescription + "Tab");
     is(fm.focusedElement, aElement,
        aDescription + "focus moved unexpectedly (Tab)");
+
+    // If the editor is not tabbable, make sure that it accepts tab characters
+    // even if it's empty.
+    if (!aIsTabbable && !aIsReadonly) {
+      reset("");
+      synthesizeKey("VK_TAB", {});
+      check(aDescription + "Tab on empty textarea",
+            true, true, !aIsReadonly);
+      is(aElement.value, "\t", aDescription + "Tab on empty textarea");
+      is(fm.focusedElement, aElement,
+         aDescription + "focus moved unexpectedly (Tab on empty textarea");
+    }
 
     reset("a");
     synthesizeKey("VK_TAB", { shiftKey: true });
@@ -323,6 +353,13 @@ function runTests()
     is(fm.focusedElement, aElement,
        aDescription + "focus moved unexpectedly (Meta+Tab)");
 
+    reset("a");
+    synthesizeKey("VK_TAB", { osKey: true });
+    check(aDescription + "OS+Tab", true, true, false);
+    is(aElement.value, "a", aDescription + "OS+Tab");
+    is(fm.focusedElement, aElement,
+       aDescription + "focus moved unexpectedly (OS+Tab)");
+
     // Esc key:
     //   In all cases, esc key events are not consumed
     reset("abc");
@@ -344,6 +381,10 @@ function runTests()
     reset("abc");
     synthesizeKey("VK_ESCAPE", { metaKey: true });
     check(aDescription + "Meta+Esc", true, true, false);
+
+    reset("abc");
+    synthesizeKey("VK_ESCAPE", { osKey: true });
+    check(aDescription + "OS+Esc", true, true, false);
 
     // typical typing tests:
     reset("");
@@ -397,8 +438,10 @@ function runTests()
 
   editor.flags = flags;
 
-  parentElement.removeGroupedEventListener("keypress", listener, true, systemGroup);
-  parentElement.removeGroupedEventListener("keypress", listener, false, systemGroup);
+  SpecialPowers.removeSystemEventListener(parentElement, "keypress", listener,
+                                          true);
+  SpecialPowers.removeSystemEventListener(parentElement, "keypress", listener,
+                                          false);
 
   SimpleTest.finish();
 }

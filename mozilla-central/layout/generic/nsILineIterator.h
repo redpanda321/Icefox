@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef nsILineIterator_h___
 #define nsILineIterator_h___
 
@@ -73,20 +41,20 @@ public:
   /**
    * The number of lines in the block
    */
-  virtual PRInt32 GetNumLines() = 0;
+  virtual int32_t GetNumLines() = 0;
 
   /**
    * The prevailing direction of lines.
    *
-   * @return PR_TRUE if the CSS direction property for the block is
-   *         "rtl", otherwise PR_FALSE
+   * @return true if the CSS direction property for the block is
+   *         "rtl", otherwise false
    */
-  virtual PRBool GetDirection() = 0;
+  virtual bool GetDirection() = 0;
 
   // Return structural information about a line. aFirstFrameOnLine is
   // the first frame on the line and aNumFramesOnLine is the number of
   // frames that are on the line. If the line-number is invalid then
-  // aFirstFrameOnLine will be nsnull and aNumFramesOnLine will be
+  // aFirstFrameOnLine will be nullptr and aNumFramesOnLine will be
   // zero.
   //
   // For valid line numbers, aLineBounds is set to the bounding box of
@@ -96,37 +64,40 @@ public:
   //
   // In addition, aLineFlags will contain flag information about the
   // line.
-  NS_IMETHOD GetLine(PRInt32 aLineNumber,
+  NS_IMETHOD GetLine(int32_t aLineNumber,
                      nsIFrame** aFirstFrameOnLine,
-                     PRInt32* aNumFramesOnLine,
+                     int32_t* aNumFramesOnLine,
                      nsRect& aLineBounds,
-                     PRUint32* aLineFlags) = 0;
+                     uint32_t* aLineFlags) = 0;
 
   /**
    * Given a frame that's a child of the block, find which line its on
-   * and return that line index. Returns -1 if the frame cannot be found.
+   * and return that line index, as long as it's at least as big as
+   * aStartLine.  Returns -1 if the frame cannot be found on lines
+   * starting with aStartLine.
    */
-  virtual PRInt32 FindLineContaining(nsIFrame* aFrame) = 0;
+  virtual int32_t FindLineContaining(nsIFrame* aFrame,
+                                     int32_t aStartLine = 0) = 0;
 
   // Given a line number and an X coordinate, find the frame on the
   // line that is nearest to the X coordinate. The
   // aXIsBeforeFirstFrame and aXIsAfterLastFrame flags are updated
   // appropriately.
-  NS_IMETHOD FindFrameAt(PRInt32 aLineNumber,
+  NS_IMETHOD FindFrameAt(int32_t aLineNumber,
                          nscoord aX,
                          nsIFrame** aFrameFound,
-                         PRBool* aXIsBeforeFirstFrame,
-                         PRBool* aXIsAfterLastFrame) = 0;
+                         bool* aXIsBeforeFirstFrame,
+                         bool* aXIsAfterLastFrame) = 0;
 
   // Give the line iterator implementor a chance todo something more complicated than
   // nsIFrame::GetNextSibling()
-  NS_IMETHOD GetNextSiblingOnLine(nsIFrame*& aFrame, PRInt32 aLineNumber) = 0;
+  NS_IMETHOD GetNextSiblingOnLine(nsIFrame*& aFrame, int32_t aLineNumber) = 0;
 
 #ifdef IBMBIDI
   // Check whether visual and logical order of frames within a line are identical.
   //  If not, return the first and last visual frames
-  NS_IMETHOD CheckLineOrder(PRInt32                  aLine,
-                            PRBool                   *aIsReordered,
+  NS_IMETHOD CheckLineOrder(int32_t                  aLine,
+                            bool                     *aIsReordered,
                             nsIFrame                 **aFirstVisual,
                             nsIFrame                 **aLastVisual) = 0;
 #endif
@@ -135,7 +106,7 @@ public:
 class nsAutoLineIterator
 {
 public:
-  nsAutoLineIterator() : mRawPtr(nsnull) { }
+  nsAutoLineIterator() : mRawPtr(nullptr) { }
   nsAutoLineIterator(nsILineIterator *i) : mRawPtr(i) { }
 
   ~nsAutoLineIterator() {

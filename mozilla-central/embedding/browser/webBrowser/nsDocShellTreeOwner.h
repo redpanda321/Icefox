@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla browser.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications, Inc.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Travis Bogard <travis@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsDocShellTreeOwner_h__
 #define nsDocShellTreeOwner_h__
@@ -50,15 +17,10 @@
 #include "nsIInterfaceRequestor.h"
 #include "nsIInterfaceRequestorUtils.h"
 #include "nsIWebBrowserChrome.h"
-#include "nsIDOMMouseListener.h"
-#include "nsIDOMDocument.h"
-#include "nsIDOMEventTarget.h"
+#include "nsIDOMEventListener.h"
 #include "nsIEmbeddingSiteWindow.h"
 #include "nsIWebProgressListener.h"
 #include "nsWeakReference.h"
-#include "nsIDOMKeyListener.h"
-#include "nsIDOMMouseMotionListener.h"
-#include "nsIDOMContextMenuListener.h"
 #include "nsITimer.h"
 #include "nsIPrompt.h"
 #include "nsIAuthPrompt.h"
@@ -66,7 +28,7 @@
 #include "nsITooltipTextProvider.h"
 #include "nsCTooltipTextProvider.h"
 #include "nsIDroppedLinkHandler.h"
-#include "nsPIDOMEventTarget.h"
+#include "nsIDOMEventTarget.h"
 #include "nsCommandHandler.h"
 
 class nsWebBrowser;
@@ -140,7 +102,7 @@ protected:
     // interfaces.  If the object passed to SetWebBrowserChrome() implements
     // nsISupportsWeakReference, then these functions call QueryReferent on
     // that object.  Otherwise, they return an addrefed pointer.  If the
-    // WebBrowserChrome object doesn't exist, they return nsnull.
+    // WebBrowserChrome object doesn't exist, they return nullptr.
     already_AddRefed<nsIWebBrowserChrome>     GetWebBrowserChrome();
     already_AddRefed<nsIEmbeddingSiteWindow>  GetOwnerWin();
     already_AddRefed<nsIInterfaceRequestor>   GetOwnerRequestor();
@@ -177,9 +139,7 @@ protected:
 // with the DOM with AddChromeListeners() and removing itself with
 // RemoveChromeListeners().
 //
-class ChromeTooltipListener : public nsIDOMMouseListener,
-                                public nsIDOMKeyListener,
-                                public nsIDOMMouseMotionListener
+class ChromeTooltipListener : public nsIDOMEventListener
 {
 public:
   NS_DECL_ISUPPORTS
@@ -187,23 +147,8 @@ public:
   ChromeTooltipListener ( nsWebBrowser* inBrowser, nsIWebBrowserChrome* inChrome ) ;
   virtual ~ChromeTooltipListener ( ) ;
 
-    // nsIDOMMouseListener
-  NS_IMETHOD HandleEvent(nsIDOMEvent* aEvent) {	return NS_OK; }
-  NS_IMETHOD MouseDown(nsIDOMEvent* aMouseEvent);
-  NS_IMETHOD MouseUp(nsIDOMEvent* aMouseEvent);
-  NS_IMETHOD MouseClick(nsIDOMEvent* aMouseEvent);
-  NS_IMETHOD MouseDblClick(nsIDOMEvent* aMouseEvent);
-  NS_IMETHOD MouseOver(nsIDOMEvent* aMouseEvent);
-  NS_IMETHOD MouseOut(nsIDOMEvent* aMouseEvent);
-
-    // nsIDOMMouseMotionListener
+  NS_IMETHOD HandleEvent(nsIDOMEvent* aEvent);
   NS_IMETHOD MouseMove(nsIDOMEvent* aMouseEvent);
-  NS_IMETHOD DragMove(nsIDOMEvent* aMouseEvent) { return NS_OK; }
-
-    // nsIDOMKeyListener
-  NS_IMETHOD KeyDown(nsIDOMEvent* aKeyEvent) ;
-  NS_IMETHOD KeyUp(nsIDOMEvent* aKeyEvent) ;
-  NS_IMETHOD KeyPress(nsIDOMEvent* aKeyEvent) ;
 
     // Add/remove the relevant listeners, based on what interfaces
     // the embedding chrome implements.
@@ -214,18 +159,17 @@ private:
 
     // various delays for tooltips
   enum {
-    kTooltipAutoHideTime = 5000,       // 5000ms = 5 seconds
-    kTooltipShowTime = 500             // 500ms = 0.5 seconds
+    kTooltipAutoHideTime = 5000        // 5000ms = 5 seconds
   };
 
   NS_IMETHOD AddTooltipListener();
   NS_IMETHOD RemoveTooltipListener();
 
-  NS_IMETHOD ShowTooltip ( PRInt32 inXCoords, PRInt32 inYCoords, const nsAString & inTipText ) ;
+  NS_IMETHOD ShowTooltip ( int32_t inXCoords, int32_t inYCoords, const nsAString & inTipText ) ;
   NS_IMETHOD HideTooltip ( ) ;
 
   nsWebBrowser* mWebBrowser;
-  nsCOMPtr<nsPIDOMEventTarget> mEventTarget;
+  nsCOMPtr<nsIDOMEventTarget> mEventTarget;
   nsCOMPtr<nsITooltipTextProvider> mTooltipTextProvider;
   
     // This must be a strong ref in order to make sure we can hide the tooltip
@@ -234,13 +178,13 @@ private:
     // to tell it, and no one would ever tell us of that fact.
   nsCOMPtr<nsIWebBrowserChrome> mWebBrowserChrome;
 
-  PRPackedBool mTooltipListenerInstalled;
+  bool mTooltipListenerInstalled;
 
   nsCOMPtr<nsITimer> mTooltipTimer;
   static void sTooltipCallback ( nsITimer* aTimer, void* aListener ) ;
-  PRInt32 mMouseClientX, mMouseClientY;       // mouse coordinates for last mousemove event we saw
-  PRInt32 mMouseScreenX, mMouseScreenY;       // mouse coordinates for tooltip event
-  PRBool mShowingTooltip;
+  int32_t mMouseClientX, mMouseClientY;       // mouse coordinates for last mousemove event we saw
+  int32_t mMouseScreenX, mMouseScreenY;       // mouse coordinates for tooltip event
+  bool mShowingTooltip;
 
     // a timer for auto-hiding the tooltip after a certain delay
   nsCOMPtr<nsITimer> mAutoHideTimer;
@@ -267,7 +211,7 @@ private:
 // with the DOM with AddChromeListeners() and removing itself with
 // RemoveChromeListeners().
 //
-class ChromeContextMenuListener : public nsIDOMContextMenuListener
+class ChromeContextMenuListener : public nsIDOMEventListener
 {
 public:
   NS_DECL_ISUPPORTS
@@ -276,8 +220,7 @@ public:
   virtual ~ChromeContextMenuListener ( ) ;
 
   // nsIDOMContextMenuListener
-  NS_IMETHOD HandleEvent(nsIDOMEvent* aEvent) {	return NS_OK; }
-  NS_IMETHOD ContextMenu ( nsIDOMEvent* aEvent );
+  NS_IMETHOD HandleEvent(nsIDOMEvent* aEvent);
 
   // Add/remove the relevant listeners, based on what interfaces
   // the embedding chrome implements.
@@ -289,10 +232,10 @@ private:
   NS_IMETHOD AddContextMenuListener();
   NS_IMETHOD RemoveContextMenuListener();
 
-  PRPackedBool mContextMenuListenerInstalled;
+  bool mContextMenuListenerInstalled;
 
   nsWebBrowser* mWebBrowser;
-  nsCOMPtr<nsPIDOMEventTarget> mEventTarget;
+  nsCOMPtr<nsIDOMEventTarget> mEventTarget;
   nsCOMPtr<nsIWebBrowserChrome> mWebBrowserChrome;
 
 }; // class ChromeContextMenuListener

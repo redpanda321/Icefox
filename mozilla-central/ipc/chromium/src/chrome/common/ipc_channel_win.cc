@@ -35,16 +35,43 @@ Channel::ChannelImpl::ChannelImpl(const std::wstring& channel_id, Mode mode,
                               Listener* listener)
     : ALLOW_THIS_IN_INITIALIZER_LIST(input_state_(this)),
       ALLOW_THIS_IN_INITIALIZER_LIST(output_state_(this)),
-      pipe_(INVALID_HANDLE_VALUE),
-      listener_(listener),
-      waiting_connect_(mode == MODE_SERVER),
-      processing_incoming_(false),
       ALLOW_THIS_IN_INITIALIZER_LIST(factory_(this)) {
+  Init(mode, listener);
+
   if (!CreatePipe(channel_id, mode)) {
     // The pipe may have been closed already.
     LOG(WARNING) << "Unable to create pipe named \"" << channel_id <<
                     "\" in " << (mode == 0 ? "server" : "client") << " mode.";
   }
+}
+
+Channel::ChannelImpl::ChannelImpl(const std::wstring& channel_id,
+                                  HANDLE server_pipe,
+                                  Mode mode, Listener* listener)
+    : ALLOW_THIS_IN_INITIALIZER_LIST(input_state_(this)),
+      ALLOW_THIS_IN_INITIALIZER_LIST(output_state_(this)),
+      ALLOW_THIS_IN_INITIALIZER_LIST(factory_(this)) {
+  Init(mode, listener);
+
+  if (mode == MODE_SERVER) {
+    // Use the existing handle that was dup'd to us
+    pipe_ = server_pipe;
+    EnqueueHelloMessage();
+  } else {
+    // Take the normal init path to connect to the server pipe
+    CreatePipe(channel_id, mode);
+  }
+}
+
+void Channel::ChannelImpl::Init(Mode mode, Listener* listener) {
+  pipe_ = INVALID_HANDLE_VALUE;
+  listener_ = listener;
+  waiting_connect_ = (mode == MODE_SERVER);
+  processing_incoming_ = false;
+}
+
+HANDLE Channel::ChannelImpl::GetServerPipeHandle() const {
+  return pipe_;
 }
 
 void Channel::ChannelImpl::Close() {
@@ -65,14 +92,8 @@ void Channel::ChannelImpl::Close() {
     pipe_ = INVALID_HANDLE_VALUE;
   }
 
-  // Make sure all IO has completed.
-  base::Time start = base::Time::Now();
   while (input_state_.is_pending || output_state_.is_pending) {
     MessageLoopForIO::current()->WaitForIOCompletion(INFINITE, this);
-  }
-  if (waited) {
-    // We want to see if we block the message loop for too long.
-    UMA_HISTOGRAM_TIMES("AsyncIO.IPCChannelClose", base::Time::Now() - start);
   }
 
   while (!output_queue_.empty()) {
@@ -86,7 +107,9 @@ void Channel::ChannelImpl::Close() {
 }
 
 bool Channel::ChannelImpl::Send(Message* message) {
-  DCHECK(thread_check_->CalledOnValidThread());
+  if (thread_check_.get()) {
+    DCHECK(thread_check_->CalledOnValidThread());
+  }
   chrome::Counters::ipc_send_counter().Increment();
 #ifdef IPC_MESSAGE_DEBUG_EXTRA
   DLOG(INFO) << "sending message @" << message << " on channel @" << this
@@ -123,15 +146,6 @@ bool Channel::ChannelImpl::CreatePipe(const std::wstring& channel_id,
   DCHECK(pipe_ == INVALID_HANDLE_VALUE);
   const std::wstring pipe_name = PipeName(channel_id);
   if (mode == MODE_SERVER) {
-    SECURITY_ATTRIBUTES security_attributes = {0};
-    security_attributes.bInheritHandle = FALSE;
-    security_attributes.nLength = sizeof(SECURITY_ATTRIBUTES);
-    if (!win_util::GetLogonSessionOnlyDACL(
-        reinterpret_cast<SECURITY_DESCRIPTOR**>(
-            &security_attributes.lpSecurityDescriptor))) {
-      NOTREACHED();
-    }
-
     pipe_ = CreateNamedPipeW(pipe_name.c_str(),
                              PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED |
                                 FILE_FLAG_FIRST_PIPE_INSTANCE,
@@ -142,8 +156,7 @@ bool Channel::ChannelImpl::CreatePipe(const std::wstring& channel_id,
                              // input buffer size (XXX tune)
                              Channel::kReadBufferSize,
                              5000,      // timeout in milliseconds (XXX tune)
-                             &security_attributes);
-    LocalFree(security_attributes.lpSecurityDescriptor);
+                             NULL);
   } else {
     pipe_ = CreateFileW(pipe_name.c_str(),
                         GENERIC_READ | GENERIC_WRITE,
@@ -161,6 +174,10 @@ bool Channel::ChannelImpl::CreatePipe(const std::wstring& channel_id,
   }
 
   // Create the Hello message to be sent when Connect is called
+  return EnqueueHelloMessage();
+}
+
+bool Channel::ChannelImpl::EnqueueHelloMessage() {
   scoped_ptr<Message> m(new Message(MSG_ROUTING_NONE,
                                     HELLO_MESSAGE_TYPE,
                                     IPC::Message::PRIORITY_NORMAL));
@@ -175,8 +192,6 @@ bool Channel::ChannelImpl::CreatePipe(const std::wstring& channel_id,
 }
 
 bool Channel::ChannelImpl::Connect() {
-  DLOG(WARNING) << "Connect called twice";
-
   if (!thread_check_.get())
     thread_check_.reset(new NonThreadSafe());
 
@@ -421,6 +436,11 @@ Channel::Channel(const std::wstring& channel_id, Mode mode,
     : channel_impl_(new ChannelImpl(channel_id, mode, listener)) {
 }
 
+Channel::Channel(const std::wstring& channel_id, void* server_pipe,
+                 Mode mode, Listener* listener)
+   : channel_impl_(new ChannelImpl(channel_id, server_pipe, mode, listener)) {
+}
+
 Channel::~Channel() {
   delete channel_impl_;
 }
@@ -433,15 +453,13 @@ void Channel::Close() {
   channel_impl_->Close();
 }
 
-#ifdef CHROMIUM_MOZILLA_BUILD
+void* Channel::GetServerPipeHandle() const {
+  return channel_impl_->GetServerPipeHandle();
+}
+
 Channel::Listener* Channel::set_listener(Listener* listener) {
   return channel_impl_->set_listener(listener);
 }
-#else
-void Channel::set_listener(Listener* listener) {
-  channel_impl_->set_listener(listener);
-}
-#endif
 
 bool Channel::Send(Message* message) {
   return channel_impl_->Send(message);

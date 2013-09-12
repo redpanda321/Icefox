@@ -23,9 +23,6 @@
 #include "base/basictypes.h"
 #include "base/logging.h"
 #include "base/singleton.h"
-#ifndef CHROMIUM_MOZILLA_BUILD
-#include "base/third_party/dmg_fp/dmg_fp.h"
-#endif
 
 namespace {
 
@@ -60,7 +57,7 @@ struct ToUnsigned<wchar_t> {
 #if defined(WCHAR_T_IS_UTF16)
   typedef unsigned short Unsigned;
 #elif defined(WCHAR_T_IS_UTF32)
-  typedef uint32 Unsigned;
+  typedef uint32_t Unsigned;
 #endif
 };
 template<>
@@ -167,7 +164,7 @@ class String16ToLongTraits {
 class StringToInt64Traits {
  public:
   typedef std::string string_type;
-  typedef int64 value_type;
+  typedef int64_t value_type;
   static const int kBase = 10;
   static inline value_type convert_func(const string_type::value_type* str,
                                         string_type::value_type** endptr) {
@@ -185,7 +182,7 @@ class StringToInt64Traits {
 class String16ToInt64Traits {
  public:
   typedef string16 string_type;
-  typedef int64 value_type;
+  typedef int64_t value_type;
   static const int kBase = 10;
   static inline value_type convert_func(const string_type::value_type* str,
                                         string_type::value_type** endptr) {
@@ -249,47 +246,6 @@ class HexString16ToLongTraits {
   }
 };
 
-#ifndef CHROMIUM_MOZILLA_BUILD
-class StringToDoubleTraits {
- public:
-  typedef std::string string_type;
-  typedef double value_type;
-  static inline value_type convert_func(const string_type::value_type* str,
-                                        string_type::value_type** endptr) {
-    return dmg_fp::strtod(str, endptr);
-  }
-  static inline bool valid_func(const string_type& str) {
-    return !str.empty() && !isspace(str[0]);
-  }
-};
-
-class String16ToDoubleTraits {
- public:
-  typedef string16 string_type;
-  typedef double value_type;
-  static inline value_type convert_func(const string_type::value_type* str,
-                                        string_type::value_type** endptr) {
-    // Because dmg_fp::strtod does not like char16, we convert it to ASCII.
-    // In theory, this should be safe, but it's possible that 16-bit chars
-    // might get ignored by accident causing something to be parsed when it
-    // shouldn't.
-    std::string ascii_string = UTF16ToASCII(string16(str));
-    char* ascii_end = NULL;
-    value_type ret = dmg_fp::strtod(ascii_string.c_str(), &ascii_end);
-    if (ascii_string.c_str() + ascii_string.length() == ascii_end) {
-      // Put endptr at end of input string, so it's not recognized as an error.
-      *endptr =
-          const_cast<string_type::value_type*>(str) + ascii_string.length();
-    }
-
-    return ret;
-  }
-  static inline bool valid_func(const string_type& str) {
-    return !str.empty() && !iswspace(str[0]);
-  }
-};
-#endif
-
 }  // namespace
 
 
@@ -335,9 +291,7 @@ bool IsWprintfFormatPortable(const wchar_t* format) {
 
 }  // namespace base
 
-#ifdef CHROMIUM_MOZILLA_BUILD
 namespace base {
-#endif
 
 const std::string& EmptyString() {
   return Singleton<EmptyStrings>::get()->s;
@@ -351,9 +305,7 @@ const string16& EmptyString16() {
   return Singleton<EmptyStrings>::get()->s16;
 }
 
-#ifdef CHROMIUM_MOZILLA_BUILD
 }
-#endif
 
 const wchar_t kWhitespaceWide[] = {
   0x0009,  // <control-0009> to <control-000D>
@@ -734,6 +686,8 @@ bool LowerCaseEqualsASCII(std::wstring::const_iterator a_begin,
                           const char* b) {
   return DoLowerCaseEqualsASCII(a_begin, a_end, b);
 }
+
+#ifndef ANDROID
 bool LowerCaseEqualsASCII(const char* a_begin,
                           const char* a_end,
                           const char* b) {
@@ -744,7 +698,7 @@ bool LowerCaseEqualsASCII(const wchar_t* a_begin,
                           const char* b) {
   return DoLowerCaseEqualsASCII(a_begin, a_end, b);
 }
-
+#endif
 bool StartsWithASCII(const std::string& str,
                      const std::string& search,
                      bool case_sensitive) {
@@ -763,19 +717,15 @@ bool StartsWith(const std::wstring& str,
     if (search.size() > str.size())
       return false;
     return std::equal(search.begin(), search.end(), str.begin(),
-#if defined(CHROMIUM_MOZILLA_BUILD)
                       chromium_CaseInsensitiveCompare<wchar_t>());
-#else
-                      CaseInsensitiveCompare<wchar_t>());
-#endif
   }
 }
 
-DataUnits GetByteDisplayUnits(int64 bytes) {
+DataUnits GetByteDisplayUnits(int64_t bytes) {
   // The byte thresholds at which we display amounts.  A byte count is displayed
   // in unit U when kUnitThresholds[U] <= bytes < kUnitThresholds[U+1].
   // This must match the DataUnits enum.
-  static const int64 kUnitThresholds[] = {
+  static const int64_t kUnitThresholds[] = {
     0,              // DATA_UNITS_BYTE,
     3*1024,         // DATA_UNITS_KILOBYTE,
     2*1024*1024,    // DATA_UNITS_MEGABYTE,
@@ -813,7 +763,7 @@ static const wchar_t* const kSpeedStrings[] = {
   L"GB/s"
 };
 
-std::wstring FormatBytesInternal(int64 bytes,
+std::wstring FormatBytesInternal(int64_t bytes,
                                  DataUnits units,
                                  bool show_units,
                                  const wchar_t* const* suffix) {
@@ -836,7 +786,7 @@ std::wstring FormatBytesInternal(int64 bytes,
   modf(fractional_part * 10, &int_part);
   if (int_part == 0) {
     base::swprintf(tmp, arraysize(tmp),
-                   L"%lld", static_cast<int64>(unit_amount));
+                   L"%lld", static_cast<int64_t>(unit_amount));
   } else {
     base::swprintf(tmp, arraysize(tmp), L"%.1lf", unit_amount);
   }
@@ -850,11 +800,11 @@ std::wstring FormatBytesInternal(int64 bytes,
   return ret;
 }
 
-std::wstring FormatBytes(int64 bytes, DataUnits units, bool show_units) {
+std::wstring FormatBytes(int64_t bytes, DataUnits units, bool show_units) {
   return FormatBytesInternal(bytes, units, show_units, kByteStrings);
 }
 
-std::wstring FormatSpeed(int64 bytes, DataUnits units, bool show_units) {
+std::wstring FormatSpeed(int64_t bytes, DataUnits units, bool show_units) {
   return FormatBytesInternal(bytes, units, show_units, kSpeedStrings);
 }
 
@@ -942,11 +892,7 @@ static void StringAppendVT(StringType* dst,
   typename StringType::value_type stack_buf[1024];
 
   va_list backup_ap;
-#if !defined(CHROMIUM_MOZILLA_BUILD)
-  base::va_copy(backup_ap, ap);
-#else
   base_va_copy(backup_ap, ap);
-#endif	// !defined(CHROMIUM_MOZILLA_BUILD)
 
 #if !defined(OS_WIN)
   errno = 0;
@@ -993,11 +939,7 @@ static void StringAppendVT(StringType* dst,
     std::vector<typename StringType::value_type> mem_buf(mem_length);
 
     // Restore the va_list before we use it again.
-#if !defined(CHROMIUM_MOZILLA_BUILD)
-    base::va_copy(backup_ap, ap);
-#else
     base_va_copy(backup_ap, ap);
-#endif	// !defined(CHROMIUM_MOZILLA_BUILD)
 
     result = vsnprintfT(&mem_buf[0], mem_length, format, ap);
     va_end(backup_ap);
@@ -1092,35 +1034,22 @@ std::wstring UintToWString(unsigned int value) {
   return IntToStringT<std::wstring, unsigned int, unsigned int, false>::
       IntToString(value);
 }
-std::string Int64ToString(int64 value) {
-  return IntToStringT<std::string, int64, uint64, true>::
+std::string Int64ToString(int64_t value) {
+  return IntToStringT<std::string, int64_t, uint64_t, true>::
       IntToString(value);
 }
-std::wstring Int64ToWString(int64 value) {
-  return IntToStringT<std::wstring, int64, uint64, true>::
+std::wstring Int64ToWString(int64_t value) {
+  return IntToStringT<std::wstring, int64_t, uint64_t, true>::
       IntToString(value);
 }
-std::string Uint64ToString(uint64 value) {
-  return IntToStringT<std::string, uint64, uint64, false>::
+std::string Uint64ToString(uint64_t value) {
+  return IntToStringT<std::string, uint64_t, uint64_t, false>::
       IntToString(value);
 }
-std::wstring Uint64ToWString(uint64 value) {
-  return IntToStringT<std::wstring, uint64, uint64, false>::
+std::wstring Uint64ToWString(uint64_t value) {
+  return IntToStringT<std::wstring, uint64_t, uint64_t, false>::
       IntToString(value);
 }
-
-#ifndef CHROMIUM_MOZILLA_BUILD
-std::string DoubleToString(double value) {
-  // According to g_fmt.cc, it is sufficient to declare a buffer of size 32.
-  char buffer[32];
-  dmg_fp::g_fmt(buffer, value);
-  return std::string(buffer);
-}
-
-std::wstring DoubleToWString(double value) {
-  return ASCIIToWide(DoubleToString(value));
-}
-#endif
 
 void StringAppendV(std::string* dst, const char* format, va_list ap) {
   StringAppendVT(dst, format, ap);
@@ -1493,7 +1422,7 @@ bool MatchPattern(const std::string& eval, const std::string& pattern) {
 
 // XXX Sigh.
 
-#if !defined(ARCH_CPU_64_BITS) || !defined(CHROMIUM_MOZILLA_BUILD)
+#if !defined(ARCH_CPU_64_BITS)
 bool StringToInt(const std::string& input, int* output) {
   COMPILE_ASSERT(sizeof(int) == sizeof(long), cannot_strtol_to_int);
   return StringToNumber<StringToLongTraits>(input,
@@ -1526,17 +1455,17 @@ bool StringToInt(const string16& input, int* output) {
   *output = static_cast<int>(tmp);
   return true;
 }
-#endif //  !defined(ARCH_CPU_64_BITS) || !defined(CHROMIUM_MOZILLA_BUILD)
+#endif //  !defined(ARCH_CPU_64_BITS)
 
-bool StringToInt64(const std::string& input, int64* output) {
+bool StringToInt64(const std::string& input, int64_t* output) {
   return StringToNumber<StringToInt64Traits>(input, output);
 }
 
-bool StringToInt64(const string16& input, int64* output) {
+bool StringToInt64(const string16& input, int64_t* output) {
   return StringToNumber<String16ToInt64Traits>(input, output);
 }
 
-#if !defined(ARCH_CPU_64_BITS) || !defined(CHROMIUM_MOZILLA_BUILD)
+#if !defined(ARCH_CPU_64_BITS)
 bool HexStringToInt(const std::string& input, int* output) {
   COMPILE_ASSERT(sizeof(int) == sizeof(long), cannot_strtol_to_int);
   return StringToNumber<HexStringToLongTraits>(input,
@@ -1570,12 +1499,12 @@ bool HexStringToInt(const string16& input, int* output) {
   return true;
 }
 
-#endif // !defined(ARCH_CPU_64_BITS) || !defined(CHROMIUM_MOZILLA_BUILD)
+#endif // !defined(ARCH_CPU_64_BITS)
 
 namespace {
 
 template<class CHAR>
-bool HexDigitToIntT(const CHAR digit, uint8* val) {
+bool HexDigitToIntT(const CHAR digit, uint8_t* val) {
   if (digit >= '0' && digit <= '9')
     *val = digit - '0';
   else if (digit >= 'a' && digit <= 'f')
@@ -1588,14 +1517,14 @@ bool HexDigitToIntT(const CHAR digit, uint8* val) {
 }
 
 template<typename STR>
-bool HexStringToBytesT(const STR& input, std::vector<uint8>* output) {
+bool HexStringToBytesT(const STR& input, std::vector<uint8_t>* output) {
   DCHECK(output->size() == 0);
   int count = input.size();
   if (count == 0 || (count % 2) != 0)
     return false;
   for (int i = 0; i < count / 2; ++i) {
-    uint8 msb = 0;  // most significant 4 bits
-    uint8 lsb = 0;  // least significant 4 bits
+    uint8_t msb = 0;  // most significant 4 bits
+    uint8_t lsb = 0;  // least significant 4 bits
     if (!HexDigitToIntT(input[i * 2], &msb) ||
         !HexDigitToIntT(input[i * 2 + 1], &lsb))
       return false;
@@ -1606,11 +1535,11 @@ bool HexStringToBytesT(const STR& input, std::vector<uint8>* output) {
 
 }  // namespace
 
-bool HexStringToBytes(const std::string& input, std::vector<uint8>* output) {
+bool HexStringToBytes(const std::string& input, std::vector<uint8_t>* output) {
   return HexStringToBytesT(input, output);
 }
 
-bool HexStringToBytes(const string16& input, std::vector<uint8>* output) {
+bool HexStringToBytes(const string16& input, std::vector<uint8_t>* output) {
   return HexStringToBytesT(input, output);
 }
 
@@ -1626,14 +1555,14 @@ int StringToInt(const string16& value) {
   return result;
 }
 
-int64 StringToInt64(const std::string& value) {
-  int64 result;
+int64_t StringToInt64(const std::string& value) {
+  int64_t result;
   StringToInt64(value, &result);
   return result;
 }
 
-int64 StringToInt64(const string16& value) {
-  int64 result;
+int64_t StringToInt64(const string16& value) {
+  int64_t result;
   StringToInt64(value, &result);
   return result;
 }
@@ -1649,28 +1578,6 @@ int HexStringToInt(const string16& value) {
   HexStringToInt(value, &result);
   return result;
 }
-
-#ifndef CHROMIUM_MOZILLA_BUILD
-bool StringToDouble(const std::string& input, double* output) {
-  return StringToNumber<StringToDoubleTraits>(input, output);
-}
-
-bool StringToDouble(const string16& input, double* output) {
-  return StringToNumber<String16ToDoubleTraits>(input, output);
-}
-
-double StringToDouble(const std::string& value) {
-  double result;
-  StringToDouble(value, &result);
-  return result;
-}
-
-double StringToDouble(const string16& value) {
-  double result;
-  StringToDouble(value, &result);
-  return result;
-}
-#endif
 
 // The following code is compatible with the OpenBSD lcpy interface.  See:
 //   http://www.gratisoft.us/todd/papers/strlcpy.html

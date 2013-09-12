@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=445004
 -->
 <head>
   <title>Test for Bug 445004</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
 </head>
@@ -23,7 +22,7 @@ is(window.location.port, "8888", "Unexpected port; fix testcase");
 
 SimpleTest.waitForExplicitFinish();
 
-var loads = 0;
+var loads = 1;
 
 function loadStarted() {
   ++loads;
@@ -34,6 +33,8 @@ function loadEnded() {
     doTest();
   }
 }
+
+window.onload = loadEnded;
 
 function getMessage(evt) {
   ok(evt.data == "start" || evt.data == "end", "Must have start or end");
@@ -54,9 +55,7 @@ function checkURI(uri, name, type) {
 
 function checkFrame(num) {
   // Just snarf our data
-  netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-
-  var outer = window.frames[num]
+  var outer = SpecialPowers.wrap(window.frames[num]);
   name = outer.name;
 
   is(outer.document.baseURI,
@@ -123,10 +122,10 @@ function doTest() {
      src="http://example.org/tests/content/html/document/test/bug445004-outer-rel.html"
      name="bug445004-outer-rel.html"></iframe>
   <iframe
-     src="http://test1.example.org/tests/content/html/document/test/bug445004-outer-rel.html">
+     src="http://test1.example.org/tests/content/html/document/test/bug445004-outer-rel.html"
      name="bug445004-outer-rel.html offsite"></iframe>
   <iframe
-     src="http://example.org/tests/content/html/document/test/bug445004-outer-abs.html">
+     src="http://example.org/tests/content/html/document/test/bug445004-outer-abs.html"
      name="bug445004-outer-abs.html"></iframe>
   <iframe
      src="http://test1.example.org/tests/content/html/document/test/bug445004-outer-abs.html"

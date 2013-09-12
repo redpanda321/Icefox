@@ -1,95 +1,93 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Ben Goodger <ben@mozilla.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include "mozilla/Util.h"
+
+#include "prtypes.h"
 #include "MacLaunchHelper.h"
 
-#include "nsObjCExceptions.h"
+#include "nsMemory.h"
+#include "nsAutoPtr.h"
+#include "nsIAppStartup.h"
 
-#include <Cocoa/Cocoa.h>
+#include <stdio.h>
+#include <spawn.h>
+#include <crt_externs.h>
 
-#ifdef __ppc__
-#include <sys/types.h>
-#include <sys/sysctl.h>
-#include <mach/machine.h>
-#endif /* __ppc__ */
+using namespace mozilla;
 
-void LaunchChildMac(int aArgc, char** aArgv)
+namespace {
+cpu_type_t pref_cpu_types[2] = {
+#if defined(__i386__)
+                                 CPU_TYPE_X86,
+#elif defined(__x86_64__)
+                                 CPU_TYPE_X86_64,
+#elif defined(__ppc__)
+                                 CPU_TYPE_POWERPC,
+#endif
+                                 CPU_TYPE_ANY };
+
+cpu_type_t cpu_i386_types[2] = {
+                                 CPU_TYPE_X86,
+                                 CPU_TYPE_ANY };
+
+cpu_type_t cpu_x64_86_types[2] = {
+                                 CPU_TYPE_X86_64,
+                                 CPU_TYPE_ANY };
+}
+
+void LaunchChildMac(int aArgc, char** aArgv,
+                    uint32_t aRestartType, pid_t *pid)
 {
-  NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
-
-  int i;
-  NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
-  NSTask* child = [[[NSTask alloc] init] autorelease];
-  NSMutableArray* args = [[[NSMutableArray alloc] init] autorelease];
-
-#ifdef __ppc__
-  // It's possible that the app is a universal binary running under Rosetta
-  // translation because the user forced it to.  Relaunching via NSTask would
-  // launch the app natively, which the user apparently doesn't want.
-  // In that case, try to preserve translation.
-
-  // If the sysctl doesn't exist, it's because Rosetta doesn't exist,
-  // so don't try to force translation.  In case of other errors, just assume
-  // that the app is native.
-
-  int isNative = 0;
-  size_t sz = sizeof(isNative);
-
-  if (sysctlbyname("sysctl.proc_native", &isNative, &sz, NULL, 0) == 0 &&
-      !isNative) {
-    // Running translated on ppc.
-
-    cpu_type_t preferredCPU = CPU_TYPE_POWERPC;
-    sysctlbyname("sysctl.proc_exec_affinity", NULL, NULL,
-                 &preferredCPU, sizeof(preferredCPU));
-
-    // Nothing can be done to handle failure, relaunch anyway.
+  // "posix_spawnp" uses null termination for arguments rather than a count.
+  // Note that we are not duplicating the argument strings themselves.
+  nsAutoArrayPtr<char*> argv_copy(new char*[aArgc + 1]);
+  for (int i = 0; i < aArgc; i++) {
+    argv_copy[i] = aArgv[i];
   }
-#endif /* __ppc__ */
+  argv_copy[aArgc] = NULL;
 
-  for (i = 1; i < aArgc; ++i) 
-    [args addObject: [NSString stringWithCString: aArgv[i]]];
-  
-  [child setCurrentDirectoryPath:[[[NSBundle mainBundle] executablePath] stringByDeletingLastPathComponent]];
-  [child setLaunchPath:[[NSBundle mainBundle] executablePath]];
-  [child setArguments:args];
-  [child launch];
-  [pool release];
+  // Initialize spawn attributes.
+  posix_spawnattr_t spawnattr;
+  if (posix_spawnattr_init(&spawnattr) != 0) {
+    printf("Failed to init posix spawn attribute.");
+    return;
+  }
 
-  NS_OBJC_END_TRY_ABORT_BLOCK;
+  cpu_type_t *wanted_type = pref_cpu_types;
+  size_t attr_count = ArrayLength(pref_cpu_types);
+
+  if (aRestartType & nsIAppStartup::eRestarti386) {
+    wanted_type = cpu_i386_types;
+    attr_count = ArrayLength(cpu_i386_types);
+  } else if (aRestartType & nsIAppStartup::eRestartx86_64) {
+    wanted_type = cpu_x64_86_types;
+    attr_count = ArrayLength(cpu_x64_86_types);
+  }
+
+  // Set spawn attributes.
+  size_t attr_ocount = 0;
+  if (posix_spawnattr_setbinpref_np(&spawnattr, attr_count, wanted_type, &attr_ocount) != 0 ||
+      attr_ocount != attr_count) {
+    printf("Failed to set binary preference on posix spawn attribute.");
+    posix_spawnattr_destroy(&spawnattr);
+    return;
+  }
+
+  // Pass along our environment.
+  char** envp = NULL;
+  char*** cocoaEnvironment = _NSGetEnviron();
+  if (cocoaEnvironment) {
+    envp = *cocoaEnvironment;
+  }
+
+  int result = posix_spawnp(pid, argv_copy[0], NULL, &spawnattr, argv_copy, envp);
+
+  posix_spawnattr_destroy(&spawnattr);
+
+  if (result != 0) {
+    printf("Process spawn failed with code %d!", result);
+  }
 }

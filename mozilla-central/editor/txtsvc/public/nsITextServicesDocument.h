@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsITextServicesDocument_h__
 #define nsITextServicesDocument_h__
@@ -141,7 +109,7 @@ public:
    * selected in the string.
    */
 
-  NS_IMETHOD LastSelectedBlock(TSDBlockSelectionStatus *aSelectionStatus, PRInt32 *aSelectionOffset, PRInt32 *aSelectionLength) = 0;
+  NS_IMETHOD LastSelectedBlock(TSDBlockSelectionStatus *aSelectionStatus, int32_t *aSelectionOffset, int32_t *aSelectionLength) = 0;
 
   /**
    * Tells the document to point to the text block before
@@ -164,7 +132,7 @@ public:
   NS_IMETHOD NextBlock() = 0;
 
   /**
-   * IsDone() will always set aIsDone == PR_FALSE unless
+   * IsDone() will always set aIsDone == false unless
    * the document contains no text, PrevBlock() was called
    * while the document was already pointing to the first
    * text block in the document, or NextBlock() was called
@@ -173,7 +141,7 @@ public:
    * @param aIsDone will contain the result.
    */
 
-  NS_IMETHOD IsDone(PRBool *aIsDone) = 0;
+  NS_IMETHOD IsDone(bool *aIsDone) = 0;
 
   /**
    * SetSelection() allows the caller to set the selection
@@ -185,7 +153,7 @@ public:
    * @param aLength number characters selected.
    */
 
-  NS_IMETHOD SetSelection(PRInt32 aOffset, PRInt32 aLength) = 0;
+  NS_IMETHOD SetSelection(int32_t aOffset, int32_t aLength) = 0;
 
   /**
    * Scrolls the document so that the current selection is visible.

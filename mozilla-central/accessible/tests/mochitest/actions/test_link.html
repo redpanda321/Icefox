@@ -7,30 +7,66 @@
         href="chrome://mochikit/content/tests/SimpleTest/test.css" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js"></script>
+          src="../common.js"></script>
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/events.js"></script>
+          src="../events.js"></script>
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/actions.js"></script>
+          src="../actions.js"></script>
 
   <script type="application/javascript">
+    function getAnchorTargetDocumentAcc()
+    {
+      var thisTabDocAcc = getTabDocAccessible();
+      var thisDocTabPanelAcc = thisTabDocAcc.parent.parent;
+      var tabPanelsAcc = thisDocTabPanelAcc.parent;
+      var newDocTabPanelAcc = tabPanelsAcc.lastChild.firstChild;
+      return newDocTabPanelAcc.firstChild;
+    }
+
+    function linkChecker(aID)
+    {
+      this.type = EVENT_DOCUMENT_LOAD_COMPLETE;
+      this.__defineGetter__("target", getAnchorTargetDocumentAcc);
+
+      this.check = function linkChecker_check()
+      {
+        var anchorTargetWindow =
+          getAccessible(getAnchorTargetDocumentAcc(), [nsIAccessibleDocument]).
+          window;
+        anchorTargetWindow.close();
+      }
+
+      this.getID = function linkChecker_getID()
+      {
+        return "link '" + aID + "' states check ";
+      }
+    }
+
+    //gA11yEventDumpID = "eventdump"; // debug stuff
+    gA11yEventDumpToConsole = true;
+
     function doTest()
     {
       var actionsArray = [
         {
           ID: "link1",
           actionName: "jump",
-          events: CLICK_EVENTS
+          events: CLICK_EVENTS,
+          eventSeq: [
+            new linkChecker("link1")
+          ]
         },
         {
           ID: "img1",
-          actionName: "click",
-          events: CLICK_EVENTS
+          targetID: "link1",
+          actionName: "jump",
+          events: CLICK_EVENTS,
+          eventSeq: [
+            new linkChecker("link1")
+          ]
         },
         {
           ID: "link2",
@@ -39,7 +75,8 @@
         },
         {
           ID: "img2",
-          actionName: "click",
+          targetID: "link2",
+          actionName: "jump",
           events: CLICK_EVENTS
         },
         {
@@ -49,7 +86,8 @@
         },
         {
           ID: "img3",
-          actionName: "click",
+          targetID: "link3",
+          actionName: "jump",
           events: CLICK_EVENTS
         },
         {
@@ -59,7 +97,8 @@
         },
         {
           ID: "img4",
-          actionName: "click",
+          targetID: "link4",
+          actionName: "jump",
           events: CLICK_EVENTS
         }
       ];
@@ -83,17 +122,19 @@
   <pre id="test">
   </pre>
 
-  <a href="http://mozilla.org" id="link1">
-    <img src="chrome://mochikit/content/a11y/accessible/moz.png" id="img1">
+  <a href="about:mozilla" id="link1" target="_blank">
+    <img src="../moz.png" id="img1">
   </a>
   <a id="link2" onmousedown="">
-    <img src="chrome://mochikit/content/a11y/accessible/moz.png" id="img2">
+    <img src="../moz.png" id="img2">
   </a>
   <a id="link3" onclick="">
-    <img src="chrome://mochikit/content/a11y/accessible/moz.png" id="img3">
+    <img src="../moz.png" id="img3">
   </a>
   <a id="link4" onmouseup="">
-    <img src="chrome://mochikit/content/a11y/accessible/moz.png" id="img4">
+    <img src="../moz.png" id="img4">
   </a>
+
+  <div id="eventdump"></div>
 </body>
 </html>

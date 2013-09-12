@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=455327
 -->
 <head>
   <title>Test for timeout option </title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="text/javascript" src="geolocation_common.js"></script>
 
@@ -21,6 +20,10 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=455327
 <script class="testbody" type="text/javascript">
 /** Test for Bug  **/
 
+// ensure we are using the right testing provider
+resume_geolocationProvider();
+force_prompt(true);
+
 SimpleTest.waitForExplicitFinish();
 
 stop_geolocationProvider();
@@ -28,6 +31,7 @@ stop_geolocationProvider();
 function successCallback(pos){
   ok(false, "success should have never been called.");
   resume_geolocationProvider();
+  reset_prompt()
   SimpleTest.finish();
 }
 
@@ -37,6 +41,7 @@ function errorCallback(err) {
   else
     ok(err.code == err.TIMEOUT, "ensure error is a timeout.");
   resume_geolocationProvider();
+  reset_prompt()
   SimpleTest.finish();
 }
 
@@ -49,9 +54,6 @@ var options = {
 navigator.geolocation.watchPosition(successCallback,
                                     errorCallback,
                                     options);
-
-setTimeout(clickNotificationButton, 10, kAcceptButton);
-
 </script>
 </pre>
 </body>

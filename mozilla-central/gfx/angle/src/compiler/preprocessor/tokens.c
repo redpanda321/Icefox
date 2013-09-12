@@ -1,8 +1,3 @@
-//
-// Copyright (c) 2002-2010 The ANGLE Project Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-//
 /****************************************************************************\
 Copyright (c) 2002, NVIDIA Corporation.
 
@@ -55,8 +50,15 @@ NVIDIA HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 #include <ctype.h>
 
-#include "compiler/debug.h"
+#include "common/angleutils.h"
+#include "compiler/compilerdebug.h"
 #include "compiler/preprocessor/slglobals.h"
+#include "compiler/util.h"
+
+#if defined(_MSC_VER)
+#pragma warning(disable: 4054)
+#pragma warning(disable: 4152)
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////// Preprocessor and Token Recorder and Playback: ////////////////////////
@@ -210,7 +212,7 @@ void DeleteTokenStream(TokenStream *pTok)
 void RecordToken(TokenStream *pTok, int token, yystypepp * yylvalpp)
 {
     const char *s;
-    unsigned char *str=NULL;
+    char *str=NULL;
 
     if (token > 256)
         lAddByte(pTok, (unsigned char)((token & 0x7f) + 0x80));
@@ -229,8 +231,7 @@ void RecordToken(TokenStream *pTok, int token, yystypepp * yylvalpp)
     case CPP_INTCONSTANT:
          str=yylvalpp->symbol_name;
          while (*str){
-            lAddByte(pTok,(unsigned char) *str);
-            *str++;
+            lAddByte(pTok, (unsigned char) *str++);
          }
          lAddByte(pTok, 0);
          break;
@@ -265,6 +266,8 @@ int ReadToken(TokenStream *pTok, yystypepp * yylvalpp)
     char string_val[MAX_STRING_LEN + 1];
     int ltoken, len;
     char ch;
+    int base, accum;
+    char ch_val;
 
     ltoken = lReadByte(pTok);
     if (ltoken >= 0) {
@@ -281,8 +284,7 @@ int ReadToken(TokenStream *pTok, yystypepp * yylvalpp)
                      ch == '_')
             {
                 if (len < MAX_SYMBOL_NAME_LEN) {
-                    symbol_name[len] = ch;
-                    len++;
+                    symbol_name[len++] = ch;
                     ch = lReadByte(pTok);
                 }
             }
@@ -296,7 +298,7 @@ int ReadToken(TokenStream *pTok, yystypepp * yylvalpp)
             while ((ch = lReadByte(pTok)) != 0)
                 if (len < MAX_STRING_LEN)
                     string_val[len++] = ch;
-            string_val[len] = 0;
+            string_val[len] = '\0';
             yylvalpp->sc_ident = LookUpAddString(atable, string_val);
             break;
         case CPP_FLOATCONSTANT:
@@ -305,31 +307,52 @@ int ReadToken(TokenStream *pTok, yystypepp * yylvalpp)
             while ((ch >= '0' && ch <= '9')||(ch=='e'||ch=='E'||ch=='.')||(ch=='+'||ch=='-'))
             {
                 if (len < MAX_SYMBOL_NAME_LEN) {
-                    symbol_name[len] = ch;
-                    len++;
+                    symbol_name[len++] = ch;
                     ch = lReadByte(pTok);
                 }
             }
             symbol_name[len] = '\0';
             assert(ch == '\0');
             strcpy(yylvalpp->symbol_name,symbol_name);
-            yylvalpp->sc_fval=(float)atof(yylvalpp->symbol_name);
+            yylvalpp->sc_fval=(float)atof_dot(yylvalpp->symbol_name);
             break;
         case CPP_INTCONSTANT:
             len = 0;
+	    accum = 0;
             ch = lReadByte(pTok);
-            while ((ch >= '0' && ch <= '9'))
-            {
-                if (len < MAX_SYMBOL_NAME_LEN) {
-                    symbol_name[len] = ch;
-                    len++;
+            if (ch == '0') {
+                symbol_name[len++] = ch;
+                ch = lReadByte(pTok);
+                if (ch == 'x' || ch == 'X') {
+                    symbol_name[len++] = ch;
+                    base = 16;
                     ch = lReadByte(pTok);
+                } else {
+                    base = 8;
                 }
+            } else {
+                base = 10;
+            }
+
+            while (len < MAX_SYMBOL_NAME_LEN)
+            {
+                ch_val = -1;
+                if (isdigit(ch))
+                    ch_val = ch - '0';
+                else if (isxdigit(ch))
+                    ch_val = tolower(ch) - 'a' + 10;
+
+                if (ch_val < 0 || ch_val >= base)
+                    break;
+
+                symbol_name[len++] = ch;
+                accum = accum * base + ch_val;
+                ch = lReadByte(pTok);
             }
             symbol_name[len] = '\0';
             assert(ch == '\0');
-            strcpy(yylvalpp->symbol_name,symbol_name);
-            yylvalpp->sc_int=atoi(yylvalpp->symbol_name);
+            strcpy(yylvalpp->symbol_name, symbol_name);
+            yylvalpp->sc_int = accum;
             break;
         case '(':
             yylvalpp->sc_int = lReadByte(pTok);
@@ -417,10 +440,10 @@ void DumpTokenStream(FILE *fp, TokenStream *s, yystypepp * yylvalpp) {
         switch (token) {
         case CPP_IDENTIFIER:
         case CPP_TYPEIDENTIFIER:
-            sprintf(str, "%s ", GetAtomString(atable, yylvalpp->sc_ident));
+            snprintf(str, sizeof(str), "%s ", GetAtomString(atable, yylvalpp->sc_ident));
             break;
         case CPP_STRCONSTANT:
-            sprintf(str, "\"%s\"", GetAtomString(atable, yylvalpp->sc_ident));
+            snprintf(str, sizeof(str), "\"%s\"", GetAtomString(atable, yylvalpp->sc_ident));
             break;
         case CPP_FLOATCONSTANT:
             //printf("%g9.6 ", yylvalpp->sc_fval);
@@ -430,9 +453,9 @@ void DumpTokenStream(FILE *fp, TokenStream *s, yystypepp * yylvalpp) {
             break;
         default:
             if (token >= 127)
-                sprintf(str, "%s ", GetAtomString(atable, token));
+                snprintf(str, sizeof(str), "%s ", GetAtomString(atable, token));
             else
-                sprintf(str, "%c", token);
+                snprintf(str, sizeof(str), "%c", token);
             break;
         }
         CPPDebugLogMsg(str);

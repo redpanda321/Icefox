@@ -1,48 +1,19 @@
 /* -*- Mode: Objective-C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Original Author: Håkan Waara <hwaara@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #import "mozActionElements.h"
-#import "nsIAccessible.h"
 
+#import "MacUtils.h"
+#include "Accessible-inl.h"
+#include "DocAccessible.h"
+#include "XULTabAccessible.h"
+
+#include "nsDeckFrame.h"
 #include "nsObjCExceptions.h"
 
-extern const NSString *kInstanceDescriptionAttribute; // NSAccessibilityDescriptionAttribute
-extern const NSString *kTopLevelUIElementAttribute;   // NSAccessibilityTopLevelUIElementAttribute
+using namespace mozilla::a11y;
 
 enum CheckboxValue {
   // these constants correspond to the values in the OS
@@ -61,16 +32,20 @@ enum CheckboxValue {
   if (!attributes) {
     attributes = [[NSArray alloc] initWithObjects:NSAccessibilityParentAttribute, // required
                                                   NSAccessibilityRoleAttribute, // required
+                                                  NSAccessibilityRoleDescriptionAttribute,
                                                   NSAccessibilityPositionAttribute, // required
                                                   NSAccessibilitySizeAttribute, // required
                                                   NSAccessibilityWindowAttribute, // required
                                                   NSAccessibilityPositionAttribute, // required
-                                                  kTopLevelUIElementAttribute, // required
+                                                  NSAccessibilityTopLevelUIElementAttribute, // required
                                                   NSAccessibilityHelpAttribute,
                                                   NSAccessibilityEnabledAttribute, // required
                                                   NSAccessibilityFocusedAttribute, // required
                                                   NSAccessibilityTitleAttribute, // required
-                                                  kInstanceDescriptionAttribute,
+                                                  NSAccessibilityDescriptionAttribute,
+#if DEBUG
+                                                  @"AXMozDescription",
+#endif
                                                   nil];
   }
   return attributes;
@@ -84,6 +59,13 @@ enum CheckboxValue {
 
   if ([attribute isEqualToString:NSAccessibilityChildrenAttribute])
     return nil;
+  if ([attribute isEqualToString:NSAccessibilityRoleDescriptionAttribute]) {
+    if ([self isTab])
+      return utils::LocalizedString(NS_LITERAL_STRING("tab"));
+    
+    return NSAccessibilityRoleDescription([self role], nil);
+  }
+  
   return [super accessibilityAttributeValue:attribute];
 
   NS_OBJC_END_TRY_ABORT_BLOCK_NIL;
@@ -91,7 +73,7 @@ enum CheckboxValue {
 
 - (BOOL)accessibilityIsIgnored
 {
-  return mIsExpired;
+  return !mGeckoAccessible;
 }
 
 - (NSArray*)accessibilityActionNames
@@ -110,9 +92,13 @@ enum CheckboxValue {
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK_NIL;
 
-  if ([action isEqualToString:NSAccessibilityPressAction])
+  if ([action isEqualToString:NSAccessibilityPressAction]) {
+    if ([self isTab])
+      return utils::LocalizedString(NS_LITERAL_STRING("switch"));
+  
     return @"press button"; // XXX: localize this later?
-    
+  }
+  
   return nil;
 
   NS_OBJC_END_TRY_ABORT_BLOCK_NIL;
@@ -133,6 +119,11 @@ enum CheckboxValue {
   // both buttons and checkboxes have only one action. we should really stop using arbitrary
   // arrays with actions, and define constants for these actions.
   mGeckoAccessible->DoAction(0);
+}
+
+- (BOOL)isTab
+{
+  return (mGeckoAccessible && (mGeckoAccessible->Role() == roles::PAGETAB));
 }
 
 @end
@@ -157,12 +148,11 @@ enum CheckboxValue {
 
 - (int)isChecked
 {
-  PRUint32 state = 0;
-  mGeckoAccessible->GetStateInternal(&state, nsnull);
+  uint64_t state = mGeckoAccessible->NativeState();
 
   // check if we're checked or in a mixed state
-  if (state & nsIAccessibleStates::STATE_CHECKED) {
-    return (state & nsIAccessibleStates::STATE_MIXED) ? kMixed : kChecked;
+  if (state & states::CHECKED) {
+    return (state & states::MIXED) ? kMixed : kChecked;
   }
   
   return kUnchecked;
@@ -193,13 +183,16 @@ enum CheckboxValue {
                                                   NSAccessibilityRoleAttribute, // required
                                                   NSAccessibilitySizeAttribute, // required
                                                   NSAccessibilityWindowAttribute, // required
-                                                  kTopLevelUIElementAttribute, // required
+                                                  NSAccessibilityTopLevelUIElementAttribute, // required
                                                   NSAccessibilityHelpAttribute,
                                                   NSAccessibilityEnabledAttribute, // required
                                                   NSAccessibilityFocusedAttribute, // required
                                                   NSAccessibilityTitleAttribute, // required for popupmenus, and for menubuttons with a title
                                                   NSAccessibilityChildrenAttribute, // required
-                                                  kInstanceDescriptionAttribute, // required if it has no title attr
+                                                  NSAccessibilityDescriptionAttribute, // required if it has no title attr
+#if DEBUG
+                                                  @"AXMozDescription",
+#endif
                                                   nil];
   }
   return attributes;
@@ -225,9 +218,7 @@ enum CheckboxValue {
 
   if ([self isEnabled]) {
     return [NSArray arrayWithObjects:NSAccessibilityPressAction,
-#if MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_4
                                      NSAccessibilityShowMenuAction,
-#endif
                                      nil];
   }
   return nil;
@@ -239,10 +230,8 @@ enum CheckboxValue {
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK_NIL;
 
-#if MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_4
   if ([action isEqualToString:NSAccessibilityShowMenuAction])
     return @"show menu";
-#endif
   return [super accessibilityActionDescription:action];
 
   NS_OBJC_END_TRY_ABORT_BLOCK_NIL;
@@ -261,6 +250,128 @@ enum CheckboxValue {
   }
 
   NS_OBJC_END_TRY_ABORT_BLOCK;
+}
+
+@end
+
+@implementation mozTabsAccessible
+
+- (void)dealloc
+{
+  [mTabs release];
+
+  [super dealloc];
+}
+
+- (NSArray*)accessibilityAttributeNames
+{
+  // standard attributes that are shared and supported by root accessible (AXMain) elements.
+  static NSMutableArray* attributes = nil;
+  
+  if (!attributes) {
+    attributes = [[super accessibilityAttributeNames] mutableCopy];
+    [attributes addObject:NSAccessibilityContentsAttribute];
+    [attributes addObject:NSAccessibilityTabsAttribute];
+  }
+  
+  return attributes;  
+}
+
+- (id)accessibilityAttributeValue:(NSString *)attribute
+{  
+  if ([attribute isEqualToString:NSAccessibilityContentsAttribute])
+    return [super children];
+  if ([attribute isEqualToString:NSAccessibilityTabsAttribute])
+    return [self tabs];
+  
+  return [super accessibilityAttributeValue:attribute];  
+}
+
+/**
+ * Returns the selected tab (the mozAccessible)
+ */
+- (id)value
+{
+  if (!mGeckoAccessible)
+    return nil;
+    
+  Accessible* accessible = mGeckoAccessible->GetSelectedItem(0);
+  if (!accessible)
+    return nil;
+
+  mozAccessible* nativeAcc = nil;
+  nsresult rv = accessible->GetNativeInterface((void**)&nativeAcc);
+  NS_ENSURE_SUCCESS(rv, nil);
+  
+  return nativeAcc;
+}
+
+/**
+ * Return the mozAccessibles that are the tabs.
+ */
+- (id)tabs
+{
+  if (mTabs)
+    return mTabs;
+
+  NSArray* children = [self children];
+  NSEnumerator* enumerator = [children objectEnumerator];
+  mTabs = [[NSMutableArray alloc] init];
+  
+  id obj;
+  while ((obj = [enumerator nextObject]))
+    if ([obj isTab])
+      [mTabs addObject:obj];
+
+  return mTabs;
+}
+
+- (void)invalidateChildren
+{
+  [super invalidateChildren];
+
+  [mTabs release];
+  mTabs = nil;
+}
+
+@end
+
+@implementation mozPaneAccessible
+
+- (NSUInteger)accessibilityArrayAttributeCount:(NSString*)attribute
+{
+  if (!mGeckoAccessible)
+    return 0;
+
+  // By default this calls -[[mozAccessible children] count].
+  // Since we don't cache mChildren. This is faster.
+  if ([attribute isEqualToString:NSAccessibilityChildrenAttribute])
+    return mGeckoAccessible->ChildCount() ? 1 : 0;
+
+  return [super accessibilityArrayAttributeCount:attribute];
+}
+
+- (NSArray*)children
+{
+  if (!mGeckoAccessible)
+    return nil;
+
+  nsDeckFrame* deckFrame = do_QueryFrame(mGeckoAccessible->GetFrame());
+  nsIFrame* selectedFrame = deckFrame ? deckFrame->GetSelectedBox() : nullptr;
+
+  Accessible* selectedAcc = nullptr;
+  if (selectedFrame) {
+    nsINode* node = selectedFrame->GetContent();
+    selectedAcc = mGeckoAccessible->Document()->GetAccessible(node);
+  }
+
+  if (selectedAcc) {
+    mozAccessible *curNative = GetNativeFromGeckoAccessible(selectedAcc);
+    if (curNative)
+      return [NSArray arrayWithObjects:GetObjectOrRepresentedView(curNative), nil];
+  }
+
+  return nil;
 }
 
 @end

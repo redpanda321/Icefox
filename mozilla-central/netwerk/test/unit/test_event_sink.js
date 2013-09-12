@@ -1,13 +1,16 @@
 // This file tests channel event sinks (bug 315598 et al)
 
-do_load_httpd_js();
+const Cc = Components.classes;
+const Ci = Components.interfaces;
+const Cu = Components.utils;
+const Cr = Components.results;
+
+Cu.import("resource://testing-common/httpd.js");
 
 const sinkCID = Components.ID("{14aa4b81-e266-45cb-88f8-89595dece114}");
 const sinkContract = "@mozilla.org/network/unittest/channeleventsink;1";
 
 const categoryName = "net-channel-event-sinks";
-
-const NS_BINDING_ABORTED = 0x804b0002;
 
 /**
  * This object is both a factory and an nsIChannelEventSink implementation (so, it
@@ -34,7 +37,7 @@ var eventsink = {
   asyncOnChannelRedirect: function eventsink_onredir(oldChan, newChan, flags, callback) {
     // veto
     this.called = true;
-    throw NS_BINDING_ABORTED;
+    throw Components.results.NS_BINDING_ABORTED;
   },
 
   getInterface: function eventsink_gi(iid) {
@@ -105,7 +108,7 @@ function makeChan(url) {
 var httpserv = null;
 
 function run_test() {
-  httpserv = new nsHttpServer();
+  httpserv = new HttpServer();
   httpserv.registerPathHandler("/redirect", redirect);
   httpserv.registerPathHandler("/redirectfile", redirectfile);
   httpserv.start(4444);

@@ -15,8 +15,8 @@
     PR_END_MACRO
 
 static NS_DEFINE_CID(kEventQueueServiceCID, NS_EVENTQUEUESERVICE_CID);
-static nsIEventQueue* gEventQ = nsnull;
-static PRBool gKeepRunning = PR_TRUE;
+static nsIEventQueue* gEventQ = nullptr;
+static bool gKeepRunning = true;
 
 //-----------------------------------------------------------------------------
 // nsIStreamListener implementation
@@ -48,23 +48,23 @@ NS_IMETHODIMP
 MyListener::OnStopRequest(nsIRequest *req, nsISupports *ctxt, nsresult status)
 {
     printf(">>> OnStopRequest status=%x\n", status);
-    gKeepRunning = PR_FALSE;
+    gKeepRunning = false;
     return NS_OK;
 }
 
 NS_IMETHODIMP
 MyListener::OnDataAvailable(nsIRequest *req, nsISupports *ctxt,
                             nsIInputStream *stream,
-                            PRUint32 offset, PRUint32 count)
+                            uint64_t offset, uint32_t count)
 {
     printf(">>> OnDataAvailable [count=%u]\n", count);
 
     char buf[256];
     nsresult rv;
-    PRUint32 bytesRead=0;
+    uint32_t bytesRead=0;
 
     while (count) {
-        PRUint32 amount = PR_MIN(count, sizeof(buf));
+        uint32_t amount = NS_MIN<uint32_t>(count, sizeof(buf));
 
         rv = stream->Read(buf, amount, &bytesRead);
         if (NS_FAILED(rv)) {
@@ -115,7 +115,7 @@ MyNotifications::OnStatus(nsIRequest *req, nsISupports *ctx,
 
 NS_IMETHODIMP
 MyNotifications::OnProgress(nsIRequest *req, nsISupports *ctx,
-                            PRUint64 progress, PRUint64 progressMax)
+                            uint64_t progress, uint64_t progressMax)
 {
     printf("progress: %llu/%llu\n", progress, progressMax);
     return NS_OK;
@@ -136,11 +136,11 @@ int main(int argc, char **argv)
     }
     {
         nsCOMPtr<nsIServiceManager> servMan;
-        NS_InitXPCOM2(getter_AddRefs(servMan), nsnull, nsnull);
+        NS_InitXPCOM2(getter_AddRefs(servMan), nullptr, nullptr);
         nsCOMPtr<nsIComponentRegistrar> registrar = do_QueryInterface(servMan);
         NS_ASSERTION(registrar, "Null nsIComponentRegistrar");
         if (registrar)
-            registrar->AutoRegister(nsnull);
+            registrar->AutoRegister(nullptr);
 
         // Create the Event Queue for this thread...
         nsCOMPtr<nsIEventQueueService> eqs =
@@ -161,10 +161,10 @@ int main(int argc, char **argv)
         rv = NS_NewURI(getter_AddRefs(uri), argv[1]);
         RETURN_IF_FAILED(rv, "NS_NewURI");
 
-        rv = NS_NewChannel(getter_AddRefs(chan), uri, nsnull, nsnull, callbacks);
+        rv = NS_NewChannel(getter_AddRefs(chan), uri, nullptr, nullptr, callbacks);
         RETURN_IF_FAILED(rv, "NS_OpenURI");
 
-        rv = chan->AsyncOpen(listener, nsnull);
+        rv = chan->AsyncOpen(listener, nullptr);
         RETURN_IF_FAILED(rv, "AsyncOpen");
 
         while (gKeepRunning)
@@ -173,7 +173,7 @@ int main(int argc, char **argv)
         printf(">>> done\n");
     } // this scopes the nsCOMPtrs
     // no nsCOMPtrs are allowed to be alive when you call NS_ShutdownXPCOM
-    rv = NS_ShutdownXPCOM(nsnull);
+    rv = NS_ShutdownXPCOM(nullptr);
     NS_ASSERTION(NS_SUCCEEDED(rv), "NS_ShutdownXPCOM failed");
     return 0;
 }

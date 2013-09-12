@@ -1,8 +1,3 @@
-//
-// Copyright (c) 2002-2010 The ANGLE Project Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-//
 /****************************************************************************\
 Copyright (c) 2002, NVIDIA Corporation.
 
@@ -56,6 +51,10 @@ NVIDIA HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 #include "compiler/preprocessor/memory.h"
+
+#if defined(_MSC_VER)
+#pragma warning(disable: 4706)
+#endif
 
 // default alignment and chunksize, if called with 0 arguments
 #define CHUNKSIZE       (64*1024)

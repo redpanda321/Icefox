@@ -2,28 +2,28 @@
 <?xml-stylesheet href="chrome://global/skin" type="text/css"?>
 <?xml-stylesheet href="chrome://mochikit/content/tests/SimpleTest/test.css"
                  type="text/css"?>
-<?xml-stylesheet href="chrome://mochikit/content/a11y/accessible/treeview.css"
+<?xml-stylesheet href="../treeview.css"
                  type="text/css"?>
 
 <window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         title="Accessible XUL tree actions tests">
 
-  <script type="application/javascript" 
-          src="chrome://mochikit/content/MochiKit/packed.js" />
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/treeview.js" />
+          src="../treeview.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js" />
+          src="../common.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/states.js" />
+          src="../role.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/events.js" />
+          src="../states.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/actions.js" />
+          src="../events.js" />
+  <script type="application/javascript"
+          src="../actions.js" />
 
   <script type="application/javascript">
   <![CDATA[
@@ -68,7 +68,6 @@
     function doTestActions()
     {
       var treeNode = getNode("tabletree");
-      treeNode.removeEventListener("TreeViewChanged", doTestActions, false);
 
       var treeBodyNode = treeNode.boxObject.treeBody;
       treeNode.focus();
@@ -150,7 +149,7 @@
     function doTest()
     {
       var treeNode = getNode("tabletree");
-      treeNode.addEventListener("TreeViewChanged", doTestActions, false);
+      waitForEvent(EVENT_REORDER, treeNode, doTestActions);
       treeNode.view = new nsTreeTreeView();
     }
 

@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  * vim: sw=2 ts=2 sts=2 expandtab
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Andrew Sutherland <asutherland@asutherland.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef mozilla_storage_StorageBaseStatementInternal_h_
 #define mozilla_storage_StorageBaseStatementInternal_h_
@@ -57,7 +25,7 @@ namespace storage {
   {0xd18856c9, 0xbf07, 0x4ae2, {0x94, 0x5b, 0x1a, 0xdd, 0x49, 0x19, 0x55, 0x2a}}
 
 class Connection;
-struct StatementData;
+class StatementData;
 
 class AsyncStatementFinalizer;
 
@@ -159,11 +127,13 @@ protected: // mix-in bits are protected
   void asyncFinalize();
 
   /**
-   * Cleanup the async sqlite3_stmt stored in mAsyncStatement if it exists.
+   * Cleanup the async sqlite3_stmt stored in mAsyncStatement if it exists by
+   * attempting to dispatch to the asynchronous thread if available, finalizing
+   * on this thread if it is not.
    *
    * @note Call this from your destructor, call asyncFinalize otherwise.
    */
-  void internalAsyncFinalize();
+  void destructorAsyncFinalize();
 
   NS_IMETHOD NewBindingParamsArray(mozIStorageBindingParamsArray **_array);
   NS_IMETHOD ExecuteAsync(mozIStorageStatementCallback *aCallback,
@@ -286,7 +256,7 @@ NS_DEFINE_STATIC_IID_ACCESSOR(StorageBaseStatementInternal,
     NS_ENSURE_TRUE(params, NS_ERROR_OUT_OF_MEMORY);         \
     return params->BindByName(aName, aValue);               \
   }                                                         \
-  NS_IMETHODIMP _class::BindByIndex(PRUint32 aIndex,        \
+  NS_IMETHODIMP _class::BindByIndex(uint32_t aIndex,        \
                                     nsIVariant *aValue)     \
   {                                                         \
     _optionalGuard                                          \
@@ -305,50 +275,50 @@ NS_DEFINE_STATIC_IID_ACCESSOR(StorageBaseStatementInternal,
                 UTF8String,                              \
                 (const nsACString &aWhere,               \
                  const nsACString &aValue),              \
-                (PRUint32 aWhere,                        \
+                (uint32_t aWhere,                        \
                  const nsACString &aValue),              \
                 (aWhere, aValue))                        \
   BIND_GEN_IMPL(_class, _optionalGuard,                  \
                 String,                                  \
                 (const nsACString &aWhere,               \
                  const nsAString  &aValue),              \
-                (PRUint32 aWhere,                        \
+                (uint32_t aWhere,                        \
                  const nsAString  &aValue),              \
                 (aWhere, aValue))                        \
   BIND_GEN_IMPL(_class, _optionalGuard,                  \
                 Double,                                  \
                 (const nsACString &aWhere,               \
                  double aValue),                         \
-                (PRUint32 aWhere,                        \
+                (uint32_t aWhere,                        \
                  double aValue),                         \
                 (aWhere, aValue))                        \
   BIND_GEN_IMPL(_class, _optionalGuard,                  \
                 Int32,                                   \
                 (const nsACString &aWhere,               \
-                 PRInt32 aValue),                        \
-                (PRUint32 aWhere,                        \
-                 PRInt32 aValue),                        \
+                 int32_t aValue),                        \
+                (uint32_t aWhere,                        \
+                 int32_t aValue),                        \
                 (aWhere, aValue))                        \
   BIND_GEN_IMPL(_class, _optionalGuard,                  \
                 Int64,                                   \
                 (const nsACString &aWhere,               \
-                 PRInt64 aValue),                        \
-                (PRUint32 aWhere,                        \
-                 PRInt64 aValue),                        \
+                 int64_t aValue),                        \
+                (uint32_t aWhere,                        \
+                 int64_t aValue),                        \
                 (aWhere, aValue))                        \
   BIND_GEN_IMPL(_class, _optionalGuard,                  \
                 Null,                                    \
                 (const nsACString &aWhere),              \
-                (PRUint32 aWhere),                       \
+                (uint32_t aWhere),                       \
                 (aWhere))                                \
   BIND_GEN_IMPL(_class, _optionalGuard,                  \
                 Blob,                                    \
                 (const nsACString &aWhere,               \
-                 const PRUint8 *aValue,                  \
-                 PRUint32 aValueSize),                   \
-                (PRUint32 aWhere,                        \
-                 const PRUint8 *aValue,                  \
-                 PRUint32 aValueSize),                   \
+                 const uint8_t *aValue,                  \
+                 uint32_t aValueSize),                   \
+                (uint32_t aWhere,                        \
+                 const uint8_t *aValue,                  \
+                 uint32_t aValueSize),                   \
                 (aWhere, aValue, aValueSize))
 
   

@@ -1,46 +1,13 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Ian McGreer <mcgreer@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /* $Id: nsPKCS12Blob.h,v 1.16 2006/04/12 15:43:32 benjamin%smedbergs.us Exp $ */
 
 #ifndef _NS_PKCS12BLOB_H_
 #define _NS_PKCS12BLOB_H_
 
 #include "nsCOMPtr.h"
-#include "nsILocalFile.h"
+#include "nsIFile.h"
 #include "nsIPK11TokenDB.h"
 #include "nsNSSHelper.h"
 #include "nsIPK11Token.h"
@@ -48,10 +15,8 @@
 
 #include "nss.h"
 
-extern "C" {
 #include "pkcs12.h"
 #include "p12plcy.h"
-}
 
 class nsIX509Cert;
 
@@ -70,14 +35,14 @@ public:
   nsresult SetToken(nsIPK11Token *token);
 
   // PKCS#12 Import
-  nsresult ImportFromFile(nsILocalFile *file);
+  nsresult ImportFromFile(nsIFile *file);
 
   // PKCS#12 Export
 #if 0
   //nsresult LoadCerts(const PRUnichar **certNames, int numCerts);
   nsresult LoadCerts(nsIX509Cert **certs, int numCerts);
 #endif
-  nsresult ExportToFile(nsILocalFile *file, nsIX509Cert **certs, int numCerts);
+  nsresult ExportToFile(nsIFile *file, nsIX509Cert **certs, int numCerts);
 
 private:
 
@@ -88,7 +53,7 @@ private:
   // local helper functions
   nsresult getPKCS12FilePassword(SECItem *);
   nsresult newPKCS12FilePassword(SECItem *);
-  nsresult inputToDecoder(SEC_PKCS12DecoderContext *, nsILocalFile *);
+  nsresult inputToDecoder(SEC_PKCS12DecoderContext *, nsIFile *);
   void unicodeToItem(const PRUnichar *, SECItem *);
   void handleError(int myerr = 0);
 
@@ -107,7 +72,7 @@ private:
   enum RetryReason { rr_do_not_retry, rr_bad_password, rr_auto_retry_empty_password_flavors };
   enum ImportMode { im_standard_prompt, im_try_zero_length_secitem };
   
-  nsresult ImportFromFileHelper(nsILocalFile *file, ImportMode aImportMode, RetryReason &aWantRetry);
+  nsresult ImportFromFileHelper(nsIFile *file, ImportMode aImportMode, RetryReason &aWantRetry);
 
   // NSPR file I/O for export file
   PRFileDesc *mTmpFile;
@@ -117,15 +82,15 @@ private:
   nsCString                 *mDigest;
   nsCString::const_iterator *mDigestIterator;
 
-  PRBool      mTokenSet;
+  bool        mTokenSet;
 
   // C-style callback functions for the NSS PKCS#12 library
-  static SECStatus PR_CALLBACK digest_open(void *, PRBool);
-  static SECStatus PR_CALLBACK digest_close(void *, PRBool);
-  static int       PR_CALLBACK digest_read(void *, unsigned char *, unsigned long);
-  static int       PR_CALLBACK digest_write(void *, unsigned char *, unsigned long);
-  static SECItem * PR_CALLBACK nickname_collision(SECItem *, PRBool *, void *);
-  static void PR_CALLBACK write_export_file(void *arg, const char *buf, unsigned long len);
+  static SECStatus digest_open(void *, PRBool);
+  static SECStatus digest_close(void *, PRBool);
+  static int       digest_read(void *, unsigned char *, unsigned long);
+  static int       digest_write(void *, unsigned char *, unsigned long);
+  static SECItem * nickname_collision(SECItem *, PRBool *, void *);
+  static void write_export_file(void *arg, const char *buf, unsigned long len);
 
 };
 

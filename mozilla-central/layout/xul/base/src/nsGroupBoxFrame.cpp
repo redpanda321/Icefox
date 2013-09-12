@@ -1,44 +1,13 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // YY need to pass isMultiple before create called
 
 #include "nsBoxFrame.h"
 #include "nsCSSRendering.h"
+#include "nsRenderingContext.h"
 #include "nsStyleContext.h"
 #include "nsDisplayList.h"
 
@@ -61,20 +30,20 @@ public:
   }
 #endif
 
-  virtual PRBool HonorPrintBackgroundSettings() { return PR_FALSE; }
+  virtual bool HonorPrintBackgroundSettings() { return false; }
 
-  void PaintBorderBackground(nsIRenderingContext& aRenderingContext,
+  void PaintBorderBackground(nsRenderingContext& aRenderingContext,
       nsPoint aPt, const nsRect& aDirtyRect);
 
   // make sure we our kids get our orient and align instead of us.
   // our child box has no content node so it will search for a parent with one.
   // that will be us.
-  virtual void GetInitialOrientation(PRBool& aHorizontal) { aHorizontal = PR_FALSE; }
-  virtual PRBool GetInitialHAlignment(Halignment& aHalign)  { aHalign = hAlign_Left; return PR_TRUE; } 
-  virtual PRBool GetInitialVAlignment(Valignment& aValign)  { aValign = vAlign_Top; return PR_TRUE; } 
-  virtual PRBool GetInitialAutoStretch(PRBool& aStretch)    { aStretch = PR_TRUE; return PR_TRUE; } 
+  virtual void GetInitialOrientation(bool& aHorizontal) { aHorizontal = false; }
+  virtual bool GetInitialHAlignment(Halignment& aHalign)  { aHalign = hAlign_Left; return true; } 
+  virtual bool GetInitialVAlignment(Valignment& aValign)  { aValign = vAlign_Top; return true; } 
+  virtual bool GetInitialAutoStretch(bool& aStretch)    { aStretch = true; return true; } 
 
-  nsIBox* GetCaptionBox(nsPresContext* aPresContext, nsRect& aCaptionRect);
+  nsIFrame* GetCaptionBox(nsPresContext* aPresContext, nsRect& aCaptionRect);
 };
 
 /*
@@ -92,7 +61,7 @@ public:
 #endif
   
   // we are always flexible
-  virtual PRBool GetDefaultFlex(PRInt32& aFlex) { aFlex = 1; return PR_TRUE; }
+  virtual bool GetDefaultFlex(int32_t& aFlex) { aFlex = 1; return true; }
 
 };
 */
@@ -123,13 +92,13 @@ public:
     aOutFrames->AppendElement(mFrame);
   }
   virtual void Paint(nsDisplayListBuilder* aBuilder,
-                     nsIRenderingContext* aCtx);
+                     nsRenderingContext* aCtx);
   NS_DISPLAY_DECL_NAME("XULGroupBackground", TYPE_XUL_GROUP_BACKGROUND)
 };
 
 void
 nsDisplayXULGroupBackground::Paint(nsDisplayListBuilder* aBuilder,
-                                   nsIRenderingContext* aCtx)
+                                   nsRenderingContext* aCtx)
 {
   static_cast<nsGroupBoxFrame*>(mFrame)->
     PaintBorderBackground(*aCtx, ToReferenceFrame(), mVisibleRect);
@@ -155,16 +124,16 @@ nsGroupBoxFrame::BuildDisplayList(nsDisplayListBuilder*   aBuilder,
 }
 
 void
-nsGroupBoxFrame::PaintBorderBackground(nsIRenderingContext& aRenderingContext,
+nsGroupBoxFrame::PaintBorderBackground(nsRenderingContext& aRenderingContext,
     nsPoint aPt, const nsRect& aDirtyRect) {
-  PRIntn skipSides = 0;
+  int skipSides = 0;
   const nsStyleBorder* borderStyleData = GetStyleBorder();
-  const nsMargin& border = borderStyleData->GetActualBorder();
+  const nsMargin& border = borderStyleData->GetComputedBorder();
   nscoord yoff = 0;
   nsPresContext* presContext = PresContext();
 
   nsRect groupRect;
-  nsIBox* groupBox = GetCaptionBox(presContext, groupRect);
+  nsIFrame* groupBox = GetCaptionBox(presContext, groupRect);
 
   if (groupBox) {        
     // if the border is smaller than the legend. Move the border down
@@ -196,7 +165,7 @@ nsGroupBoxFrame::PaintBorderBackground(nsIRenderingContext& aRenderingContext,
     clipRect.height = border.top;
 
     aRenderingContext.PushState();
-    aRenderingContext.SetClipRect(clipRect, nsClipCombine_kIntersect);
+    aRenderingContext.IntersectClip(clipRect);
     nsCSSRendering::PaintBorder(presContext, aRenderingContext, this,
                                 aDirtyRect, rect, mStyleContext, skipSides);
 
@@ -210,7 +179,7 @@ nsGroupBoxFrame::PaintBorderBackground(nsIRenderingContext& aRenderingContext,
     clipRect.height = border.top;
 
     aRenderingContext.PushState();
-    aRenderingContext.SetClipRect(clipRect, nsClipCombine_kIntersect);
+    aRenderingContext.IntersectClip(clipRect);
     nsCSSRendering::PaintBorder(presContext, aRenderingContext, this,
                                 aDirtyRect, rect, mStyleContext, skipSides);
 
@@ -225,7 +194,7 @@ nsGroupBoxFrame::PaintBorderBackground(nsIRenderingContext& aRenderingContext,
     clipRect.height = mRect.height - (yoff + border.top);
   
     aRenderingContext.PushState();
-    aRenderingContext.SetClipRect(clipRect, nsClipCombine_kIntersect);
+    aRenderingContext.IntersectClip(clipRect);
     nsCSSRendering::PaintBorder(presContext, aRenderingContext, this,
                                 aDirtyRect, rect, mStyleContext, skipSides);
 
@@ -238,25 +207,25 @@ nsGroupBoxFrame::PaintBorderBackground(nsIRenderingContext& aRenderingContext,
   }
 }
 
-nsIBox*
+nsIFrame*
 nsGroupBoxFrame::GetCaptionBox(nsPresContext* aPresContext, nsRect& aCaptionRect)
 {
     // first child is our grouped area
-    nsIBox* box = GetChildBox();
+    nsIFrame* box = GetChildBox();
 
     // no area fail.
     if (!box)
-      return nsnull;
+      return nullptr;
 
     // get the first child in the grouped area, that is the caption
     box = box->GetChildBox();
 
     // nothing in the area? fail
     if (!box)
-      return nsnull;
+      return nullptr;
 
     // now get the caption itself. It is in the caption frame.
-    nsIBox* child = box->GetChildBox();
+    nsIFrame* child = box->GetChildBox();
 
     if (child) {
        // convert to our coordinates.

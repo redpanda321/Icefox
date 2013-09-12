@@ -6,14 +6,16 @@
 
 Components.utils.import("resource://gre/modules/AddonRepository.jsm");
 
-do_load_httpd_js();
+Components.utils.import("resource://testing-common/httpd.js");
 let gServer;
 
 const PORT      = 4444;
 const BASE_URL  = "http://localhost:" + PORT;
 
 const PREF_GETADDONS_CACHE_ENABLED = "extensions.getAddons.cache.enabled";
+const PREF_GETADDONS_CACHE_TYPES   = "extensions.getAddons.cache.types";
 const PREF_GETADDONS_BYIDS         = "extensions.getAddons.get.url";
+const PREF_GETADDONS_BYIDS_PERF    = "extensions.getAddons.getWithPerformance.url";
 const GETADDONS_RESULTS            = BASE_URL + "/data/test_AddonRepository_cache.xml";
 const GETADDONS_EMPTY              = BASE_URL + "/data/test_AddonRepository_empty.xml";
 const GETADDONS_FAILED             = BASE_URL + "/data/test_AddonRepository_failed.xml";
@@ -25,18 +27,21 @@ const ADDON_NAMES = ["test_AddonRepository_1",
 const ADDON_IDS = ADDON_NAMES.map(function(aName) aName + "@tests.mozilla.org");
 const ADDON_FILES = ADDON_NAMES.map(do_get_addon);
 
+const PREF_ADDON0_CACHE_ENABLED = "extensions." + ADDON_IDS[0] + ".getAddons.cache.enabled";
+const PREF_ADDON1_CACHE_ENABLED = "extensions." + ADDON_IDS[1] + ".getAddons.cache.enabled";
 
 // Properties of an individual add-on that should be checked
 // Note: size and updateDate are checked separately
 const ADDON_PROPERTIES = ["id", "type", "name", "version", "creator",
                           "developers", "translators", "contributors",
                           "description", "fullDescription",
-                          "developerComments", "eula", "iconURL",
+                          "developerComments", "eula", "iconURL", "icons",
                           "screenshots", "homepageURL", "supportURL",
                           "optionsURL", "aboutURL", "contributionURL",
                           "contributionAmount", "averageRating", "reviewCount",
                           "reviewURL", "totalDownloads", "weeklyDownloads",
-                          "dailyUsers", "sourceURI", "repositoryStatus"];
+                          "dailyUsers", "sourceURI", "repositoryStatus",
+                          "compatibilityOverrides"];
 
 // The size and updateDate properties are annoying to test for XPI add-ons.
 // However, since we only care about whether the repository value vs. the
@@ -50,10 +55,7 @@ const REPOSITORY_UPDATEDATE = 9;
 function get_subfile_uri(aId, aFilename) {
   let file = gProfD.clone();
   file.append("extensions");
-  file.append(aId);
-  if (aFilename)
-    file.append(aFilename);
-  return NetUtil.newURI(file).spec;
+  return do_get_addon_root_uri(file, aId) + aFilename;
 }
 
 
@@ -74,11 +76,12 @@ const REPOSITORY_ADDONS = [{
                             name: "Repo Add-on 1 - Second Developer",
                             url:  BASE_URL + "/repo/1/secondDeveloper.html"
                           }],
-  description:            "Repo Add-on 1 - Description",
-  fullDescription:        "Repo Add-on 1 - Full Description",
-  developerComments:      "Repo Add-on 1 - Developer Comments",
+  description:            "Repo Add-on 1 - Description\nSecond line",
+  fullDescription:        "Repo Add-on 1 - Full Description & some extra",
+  developerComments:      "Repo Add-on 1\nDeveloper Comments",
   eula:                   "Repo Add-on 1 - EULA",
   iconURL:                BASE_URL + "/repo/1/icon.png",
+  icons:                  { "32": BASE_URL + "/repo/1/icon.png" },
   homepageURL:            BASE_URL + "/repo/1/homepage.html",
   supportURL:             BASE_URL + "/repo/1/support.html",
   contributionURL:        BASE_URL + "/repo/1/meetDevelopers.html",
@@ -90,7 +93,22 @@ const REPOSITORY_ADDONS = [{
   weeklyDownloads:        3331,
   dailyUsers:             4441,
   sourceURI:              BASE_URL + "/repo/1/install.xpi",
-  repositoryStatus:       4
+  repositoryStatus:       4,
+  compatibilityOverrides: [{
+                            type: "incompatible",
+                            minVersion: 0.1,
+                            maxVersion: 0.2,
+                            appID: "xpcshell@tests.mozilla.org",
+                            appMinVersion: 3.0,
+                            appMaxVersion: 4.0
+                          }, {
+                            type: "incompatible",
+                            minVersion: 0.2,
+                            maxVersion: 0.3,
+                            appID: "xpcshell@tests.mozilla.org",
+                            appMinVersion: 5.0,
+                            appMaxVersion: 6.0
+                          }]
 }, {
   id:                     ADDON_IDS[1],
   type:                   "theme",
@@ -112,6 +130,7 @@ const REPOSITORY_ADDONS = [{
   developerComments:      "Repo Add-on 2 - Developer Comments",
   eula:                   "Repo Add-on 2 - EULA",
   iconURL:                BASE_URL + "/repo/2/icon.png",
+  icons:                  { "32": BASE_URL + "/repo/2/icon.png" },
   screenshots:            [{
                             url:          BASE_URL + "/repo/2/firstFull.png",
                             thumbnailURL: BASE_URL + "/repo/2/firstThumbnail.png",
@@ -124,7 +143,7 @@ const REPOSITORY_ADDONS = [{
   homepageURL:            BASE_URL + "/repo/2/homepage.html",
   supportURL:             BASE_URL + "/repo/2/support.html",
   contributionURL:        BASE_URL + "/repo/2/meetDevelopers.html",
-  contributionAmount:     "$11.12",
+  contributionAmount:     null,
   averageRating:          2,
   reviewCount:            1112,
   reviewURL:              BASE_URL + "/repo/2/review.html",
@@ -138,6 +157,7 @@ const REPOSITORY_ADDONS = [{
   name:                   "Repo Add-on 3",
   version:                "2.3",
   iconURL:                BASE_URL + "/repo/3/icon.png",
+  icons:                  { "32": BASE_URL + "/repo/3/icon.png" },
   screenshots:            [{
                             url:          BASE_URL + "/repo/3/firstFull.png",
                             thumbnailURL: BASE_URL + "/repo/3/firstThumbnail.png",
@@ -165,6 +185,7 @@ const WITHOUT_CACHE = [{
                            { name: "XPI Add-on 1 - Second Contributor" }],
   description:            "XPI Add-on 1 - Description",
   iconURL:                BASE_URL + "/xpi/1/icon.png",
+  icons:                  { "32": BASE_URL + "/xpi/1/icon.png" },
   homepageURL:            BASE_URL + "/xpi/1/homepage.html",
   optionsURL:             BASE_URL + "/xpi/1/options.html",
   aboutURL:               BASE_URL + "/xpi/1/about.html",
@@ -174,14 +195,20 @@ const WITHOUT_CACHE = [{
   type:                   "theme",
   name:                   "XPI Add-on 2",
   version:                "1.2",
-  sourceURI:              NetUtil.newURI(ADDON_FILES[1]).spec
+  sourceURI:              NetUtil.newURI(ADDON_FILES[1]).spec,
+  icons:                  {}
 }, {
   id:                     ADDON_IDS[2],
   type:                   "theme",
   name:                   "XPI Add-on 3",
   version:                "1.3",
-  iconURL:                get_subfile_uri(ADDON_IDS[2], "icon.png"),
-  screenshots:            [{ url: get_subfile_uri(ADDON_IDS[2], "preview.png") }],
+  get iconURL () {
+    return get_subfile_uri(ADDON_IDS[2], "icon.png");
+  },
+  get icons () {
+    return { "32": get_subfile_uri(ADDON_IDS[2], "icon.png") };
+  },
+  screenshots:            [{ get url () { return get_subfile_uri(ADDON_IDS[2], "preview.png"); } }],
   sourceURI:              NetUtil.newURI(ADDON_FILES[2]).spec
 }];
 
@@ -203,10 +230,11 @@ const WITH_CACHE = [{
   contributors:           [{ name: "XPI Add-on 1 - First Contributor" },
                            { name: "XPI Add-on 1 - Second Contributor" }],
   description:            "XPI Add-on 1 - Description",
-  fullDescription:        "Repo Add-on 1 - Full Description",
-  developerComments:      "Repo Add-on 1 - Developer Comments",
+  fullDescription:        "Repo Add-on 1 - Full Description & some extra",
+  developerComments:      "Repo Add-on 1\nDeveloper Comments",
   eula:                   "Repo Add-on 1 - EULA",
   iconURL:                BASE_URL + "/xpi/1/icon.png",
+  icons:                  { "32": BASE_URL + "/xpi/1/icon.png" },
   homepageURL:            BASE_URL + "/xpi/1/homepage.html",
   supportURL:             BASE_URL + "/repo/1/support.html",
   optionsURL:             BASE_URL + "/xpi/1/options.html",
@@ -220,7 +248,22 @@ const WITH_CACHE = [{
   weeklyDownloads:        3331,
   dailyUsers:             4441,
   sourceURI:              NetUtil.newURI(ADDON_FILES[0]).spec,
-  repositoryStatus:       4
+  repositoryStatus:       4,
+  compatibilityOverrides: [{
+                            type: "incompatible",
+                            minVersion: 0.1,
+                            maxVersion: 0.2,
+                            appID: "xpcshell@tests.mozilla.org",
+                            appMinVersion: 3.0,
+                            appMaxVersion: 4.0
+                          }, {
+                            type: "incompatible",
+                            minVersion: 0.2,
+                            maxVersion: 0.3,
+                            appID: "xpcshell@tests.mozilla.org",
+                            appMinVersion: 5.0,
+                            appMaxVersion: 6.0
+                          }]
 }, {
   id:                     ADDON_IDS[1],
   type:                   "theme",
@@ -242,6 +285,7 @@ const WITH_CACHE = [{
   developerComments:      "Repo Add-on 2 - Developer Comments",
   eula:                   "Repo Add-on 2 - EULA",
   iconURL:                BASE_URL + "/repo/2/icon.png",
+  icons:                  { "32": BASE_URL + "/repo/2/icon.png" },
   screenshots:            [{
                             url:          BASE_URL + "/repo/2/firstFull.png",
                             thumbnailURL: BASE_URL + "/repo/2/firstThumbnail.png",
@@ -254,7 +298,7 @@ const WITH_CACHE = [{
   homepageURL:            BASE_URL + "/repo/2/homepage.html",
   supportURL:             BASE_URL + "/repo/2/support.html",
   contributionURL:        BASE_URL + "/repo/2/meetDevelopers.html",
-  contributionAmount:     "$11.12",
+  contributionAmount:     null,
   averageRating:          2,
   reviewCount:            1112,
   reviewURL:              BASE_URL + "/repo/2/review.html",
@@ -268,7 +312,12 @@ const WITH_CACHE = [{
   type:                   "theme",
   name:                   "XPI Add-on 3",
   version:                "1.3",
-  iconURL:                get_subfile_uri(ADDON_IDS[2], "icon.png"),
+  get iconURL () {
+    return get_subfile_uri(ADDON_IDS[2], "icon.png");
+  },
+  get icons () {
+    return { "32": get_subfile_uri(ADDON_IDS[2], "icon.png") };
+  },
   screenshots:            [{
                             url:          BASE_URL + "/repo/3/firstFull.png",
                             thumbnailURL: BASE_URL + "/repo/3/firstThumbnail.png",
@@ -278,6 +327,79 @@ const WITH_CACHE = [{
                             thumbnailURL: BASE_URL + "/repo/3/secondThumbnail.png",
                             caption:      "Repo Add-on 3 - Second Caption"
                           }],
+  sourceURI:              NetUtil.newURI(ADDON_FILES[2]).spec
+}];
+
+// Expected add-ons when using cache
+const WITH_EXTENSION_CACHE = [{
+  id:                     ADDON_IDS[0],
+  type:                   "extension",
+  name:                   "XPI Add-on 1",
+  version:                "1.1",
+  creator:                {
+                            name: "Repo Add-on 1 - Creator",
+                            url:  BASE_URL + "/repo/1/creator.html"
+                          },
+  developers:             [{ name: "XPI Add-on 1 - First Developer" },
+                           { name: "XPI Add-on 1 - Second Developer" }],
+  translators:            [{ name: "XPI Add-on 1 - First Translator" },
+                           { name: "XPI Add-on 1 - Second Translator" }],
+  contributors:           [{ name: "XPI Add-on 1 - First Contributor" },
+                           { name: "XPI Add-on 1 - Second Contributor" }],
+  description:            "XPI Add-on 1 - Description",
+  fullDescription:        "Repo Add-on 1 - Full Description & some extra",
+  developerComments:      "Repo Add-on 1\nDeveloper Comments",
+  eula:                   "Repo Add-on 1 - EULA",
+  iconURL:                BASE_URL + "/xpi/1/icon.png",
+  icons:                  { "32": BASE_URL + "/xpi/1/icon.png" },
+  homepageURL:            BASE_URL + "/xpi/1/homepage.html",
+  supportURL:             BASE_URL + "/repo/1/support.html",
+  optionsURL:             BASE_URL + "/xpi/1/options.html",
+  aboutURL:               BASE_URL + "/xpi/1/about.html",
+  contributionURL:        BASE_URL + "/repo/1/meetDevelopers.html",
+  contributionAmount:     "$11.11",
+  averageRating:          1,
+  reviewCount:            1111,
+  reviewURL:              BASE_URL + "/repo/1/review.html",
+  totalDownloads:         2221,
+  weeklyDownloads:        3331,
+  dailyUsers:             4441,
+  sourceURI:              NetUtil.newURI(ADDON_FILES[0]).spec,
+  repositoryStatus:       4,
+  compatibilityOverrides: [{
+                            type: "incompatible",
+                            minVersion: 0.1,
+                            maxVersion: 0.2,
+                            appID: "xpcshell@tests.mozilla.org",
+                            appMinVersion: 3.0,
+                            appMaxVersion: 4.0
+                          }, {
+                            type: "incompatible",
+                            minVersion: 0.2,
+                            maxVersion: 0.3,
+                            appID: "xpcshell@tests.mozilla.org",
+                            appMinVersion: 5.0,
+                            appMaxVersion: 6.0
+                          }]
+}, {
+  id:                     ADDON_IDS[1],
+  type:                   "theme",
+  name:                   "XPI Add-on 2",
+  version:                "1.2",
+  sourceURI:              NetUtil.newURI(ADDON_FILES[1]).spec,
+  icons:                  {}
+}, {
+  id:                     ADDON_IDS[2],
+  type:                   "theme",
+  name:                   "XPI Add-on 3",
+  version:                "1.3",
+  get iconURL () {
+    return get_subfile_uri(ADDON_IDS[2], "icon.png");
+  },
+  get icons () {
+    return { "32": get_subfile_uri(ADDON_IDS[2], "icon.png") };
+  },
+  screenshots:            [{ get url () { return get_subfile_uri(ADDON_IDS[2], "preview.png"); } }],
   sourceURI:              NetUtil.newURI(ADDON_FILES[2]).spec
 }];
 
@@ -411,7 +533,7 @@ function run_test() {
   installAllFiles(ADDON_FILES, function() {
     restartManager();
 
-    gServer = new nsHttpServer();
+    gServer = new HttpServer();
     gServer.registerDirectory("/data/", do_get_file("data"));
     gServer.start(PORT);
 
@@ -464,7 +586,18 @@ function run_test_5() {
   Services.prefs.setCharPref(PREF_GETADDONS_BYIDS, GETADDONS_RESULTS);
 
   AddonRepository.repopulateCache(ADDON_IDS, function() {
-    check_initialized_cache([true, true, true], run_test_6);
+    check_initialized_cache([true, true, true], run_test_5_1);
+  });
+}
+
+// Tests repopulateCache when caching is disabled for a single add-on
+function run_test_5_1() {
+  Services.prefs.setBoolPref(PREF_ADDON0_CACHE_ENABLED, false);
+
+  AddonRepository.repopulateCache(ADDON_IDS, function() {
+    // Reset pref for next test
+    Services.prefs.setBoolPref(PREF_ADDON0_CACHE_ENABLED, true);
+    check_initialized_cache([false, true, true], run_test_6);
   });
 }
 
@@ -506,7 +639,18 @@ function run_test_9() {
   Services.prefs.setCharPref(PREF_GETADDONS_BYIDS, GETADDONS_RESULTS);
 
   AddonRepository.cacheAddons([ADDON_IDS[0]], function() {
-    check_initialized_cache([true, false, false], run_test_10);
+    check_initialized_cache([true, false, false], run_test_9_1);
+  });
+}
+
+// Tests cacheAddons when caching is disabled for a single add-on
+function run_test_9_1() {
+  Services.prefs.setBoolPref(PREF_ADDON1_CACHE_ENABLED, false);
+
+  AddonRepository.cacheAddons(ADDON_IDS, function() {
+    // Reset pref for next test
+    Services.prefs.setBoolPref(PREF_ADDON1_CACHE_ENABLED, true);
+    check_initialized_cache([true, false, true], run_test_10);
   });
 }
 
@@ -548,6 +692,7 @@ function run_test_12() {
 // database, and that XPI add-ons still do not use any of repository properties
 function run_test_13() {
   check_database_exists(true);
+  Services.prefs.setCharPref(PREF_GETADDONS_BYIDS_PERF, GETADDONS_EMPTY);
 
   trigger_background_update(function() {
     // Database should have been deleted
@@ -564,7 +709,6 @@ function run_test_13() {
 // enabled but has no information
 function run_test_14() {
   Services.prefs.setBoolPref(PREF_GETADDONS_CACHE_ENABLED, true);
-  Services.prefs.setCharPref(PREF_GETADDONS_BYIDS, GETADDONS_EMPTY);
 
   trigger_background_update(function() {
     check_database_exists(true);
@@ -579,7 +723,7 @@ function run_test_14() {
 // Tests that the XPI add-ons correctly use the repository properties when
 // caching is enabled and the repository information is available
 function run_test_15() {
-  Services.prefs.setCharPref(PREF_GETADDONS_BYIDS, GETADDONS_RESULTS);
+  Services.prefs.setCharPref(PREF_GETADDONS_BYIDS_PERF, GETADDONS_RESULTS);
 
   trigger_background_update(function() {
     AddonManager.getAddonsByIDs(ADDON_IDS, function(aAddons) {
@@ -597,7 +741,19 @@ function run_test_16() {
 
   AddonManager.getAddonsByIDs(ADDON_IDS, function(aAddons) {
     check_results(aAddons, WITH_CACHE);
-    end_test();
+    run_test_17();
+  });
+}
+
+// Tests that setting a list of types to cache works
+function run_test_17() {
+  Services.prefs.setCharPref(PREF_GETADDONS_CACHE_TYPES, "foo,bar,extension,baz");
+
+  trigger_background_update(function() {
+    AddonManager.getAddonsByIDs(ADDON_IDS, function(aAddons) {
+      check_results(aAddons, WITH_EXTENSION_CACHE);
+      end_test();
+    });
   });
 }
 

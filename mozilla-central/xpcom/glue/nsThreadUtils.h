@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et cindent: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla code.
- *
- * The Initial Developer of the Original Code is Google Inc.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Darin Fisher <darin@meer.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsThreadUtils_h__
 #define nsThreadUtils_h__
@@ -44,15 +12,20 @@
 #include "nsIThreadManager.h"
 #include "nsIThread.h"
 #include "nsIRunnable.h"
+#include "nsICancelableRunnable.h"
 #include "nsStringGlue.h"
 #include "nsCOMPtr.h"
 #include "nsAutoPtr.h"
+#include "mozilla/threads/nsThreadIDs.h"
+#include "mozilla/Likely.h"
 
 // This is needed on some systems to prevent collisions between the symbols
 // appearing in xpcom_core and xpcomglue.  It may be unnecessary in the future
 // with better toolchain support.
 #ifdef MOZILLA_INTERNAL_API
+# define NS_SetThreadName NS_SetThreadName_P
 # define NS_NewThread NS_NewThread_P
+# define NS_NewNamedThread NS_NewNamedThread_P
 # define NS_GetCurrentThread NS_GetCurrentThread_P
 # define NS_GetMainThread NS_GetMainThread_P
 # define NS_IsMainThread NS_IsMainThread_P
@@ -68,18 +41,56 @@
 // for convenience.
 
 /**
+ * Set name of the target thread.  This operation is asynchronous.
+ */
+extern NS_COM_GLUE void
+NS_SetThreadName(nsIThread *thread, const nsACString &name);
+
+/**
+ * Static length version of the above function checking length of the
+ * name at compile time.
+ */
+template <size_t LEN>
+inline NS_COM_GLUE void
+NS_SetThreadName(nsIThread *thread, const char (&name)[LEN])
+{
+  MOZ_STATIC_ASSERT(LEN <= 16,
+                    "Thread name must be no more than 16 characters");
+  NS_SetThreadName(thread, nsDependentCString(name));
+}
+
+/**
  * Create a new thread, and optionally provide an initial event for the thread.
  *
  * @param result
  *   The resulting nsIThread object.
  * @param initialEvent
  *   The initial event to run on this thread.  This parameter may be null.
+ * @param stackSize
+ *   The size in bytes to reserve for the thread's stack.
  *
  * @returns NS_ERROR_INVALID_ARG
  *   Indicates that the given name is not unique.
  */
 extern NS_COM_GLUE NS_METHOD
-NS_NewThread(nsIThread **result, nsIRunnable *initialEvent = nsnull);
+NS_NewThread(nsIThread **result,
+             nsIRunnable *initialEvent = nullptr,
+             uint32_t stackSize = nsIThreadManager::DEFAULT_STACK_SIZE);
+
+/**
+ * Creates a named thread, otherwise the same as NS_NewThread
+ */
+template <size_t LEN>
+inline NS_METHOD
+NS_NewNamedThread(const char (&name)[LEN],
+                  nsIThread **result,
+                  nsIRunnable *initialEvent = nullptr,
+                  uint32_t stackSize = nsIThreadManager::DEFAULT_STACK_SIZE)
+{
+    nsresult rv = NS_NewThread(result, initialEvent, stackSize);
+    NS_SetThreadName<LEN>(*result, name);
+    return rv;
+}
 
 /**
  * Get a reference to the current thread.
@@ -100,27 +111,20 @@ extern NS_COM_GLUE NS_METHOD
 NS_GetMainThread(nsIThread **result);
 
 #if defined(MOZILLA_INTERNAL_API) && defined(XP_WIN)
-
-NS_COM bool NS_IsMainThread();
-
+bool NS_IsMainThread();
 #elif defined(MOZILLA_INTERNAL_API) && defined(NS_TLS)
-// This is defined in nsThreadManager.cpp and initialized to `true` for the
+// This is defined in nsThreadManager.cpp and initialized to `Main` for the
 // main thread by nsThreadManager::Init.
-extern NS_TLS bool gTLSIsMainThread;
-
-#ifdef MOZ_ENABLE_LIBXUL
+extern NS_TLS mozilla::threads::ID gTLSThreadID;
 inline bool NS_IsMainThread()
 {
-  return gTLSIsMainThread;
+  return gTLSThreadID == mozilla::threads::Main;
 }
-#else
-NS_COM bool NS_IsMainThread();
-#endif
 #else
 /**
  * Test to see if the current thread is the main thread.
  *
- * @returns PR_TRUE if the current thread is the main thread, and PR_FALSE
+ * @returns true if the current thread is the main thread, and false
  * otherwise.
  */
 extern NS_COM_GLUE bool NS_IsMainThread();
@@ -151,7 +155,7 @@ NS_DispatchToCurrentThread(nsIRunnable *event);
  */
 extern NS_COM_GLUE NS_METHOD
 NS_DispatchToMainThread(nsIRunnable *event,
-                        PRUint32 dispatchFlags = NS_DISPATCH_NORMAL);
+                        uint32_t dispatchFlags = NS_DISPATCH_NORMAL);
 
 #ifndef XPCOM_GLUE_AVOID_NSPR
 /**
@@ -178,7 +182,7 @@ NS_ProcessPendingEvents(nsIThread *thread,
  * Shortcut for nsIThread::HasPendingEvents.
  *
  * It is an error to call this function when the given thread is not the
- * current thread.  This function will return PR_FALSE if called from some
+ * current thread.  This function will return false if called from some
  * other thread.
  *
  * @param thread
@@ -188,14 +192,14 @@ NS_ProcessPendingEvents(nsIThread *thread,
  *   A boolean value that if "true" indicates that there are pending events
  *   in the current thread's event queue.
  */
-extern NS_COM_GLUE PRBool
-NS_HasPendingEvents(nsIThread *thread = nsnull);
+extern NS_COM_GLUE bool
+NS_HasPendingEvents(nsIThread *thread = nullptr);
 
 /**
  * Shortcut for nsIThread::ProcessNextEvent.
  *   
  * It is an error to call this function when the given thread is not the
- * current thread.  This function will simply return PR_FALSE if called
+ * current thread.  This function will simply return false if called
  * from some other thread.
  *
  * @param thread
@@ -208,22 +212,22 @@ NS_HasPendingEvents(nsIThread *thread = nsnull);
  *   A boolean value that if "true" indicates that an event from the current
  *   thread's event queue was processed.
  */
-extern NS_COM_GLUE PRBool
-NS_ProcessNextEvent(nsIThread *thread = nsnull, PRBool mayWait = PR_TRUE);
+extern NS_COM_GLUE bool
+NS_ProcessNextEvent(nsIThread *thread = nullptr, bool mayWait = true);
 
 //-----------------------------------------------------------------------------
 // Helpers that work with nsCOMPtr:
 
 inline already_AddRefed<nsIThread>
 do_GetCurrentThread() {
-  nsIThread *thread = nsnull;
+  nsIThread *thread = nullptr;
   NS_GetCurrentThread(&thread);
   return already_AddRefed<nsIThread>(thread);
 }
 
 inline already_AddRefed<nsIThread>
 do_GetMainThread() {
-  nsIThread *thread = nsnull;
+  nsIThread *thread = nullptr;
   NS_GetMainThread(&thread);
   return already_AddRefed<nsIThread>(thread);
 }
@@ -257,6 +261,22 @@ public:
 
 protected:
   virtual ~nsRunnable() {
+  }
+};
+
+// This class is designed to be subclassed.
+class NS_COM_GLUE nsCancelableRunnable : public nsICancelableRunnable
+{
+public:
+  NS_DECL_ISUPPORTS
+  NS_DECL_NSIRUNNABLE
+  NS_DECL_NSICANCELABLERUNNABLE
+
+  nsCancelableRunnable() {
+  }
+
+protected:
+  virtual ~nsCancelableRunnable() {
   }
 };
 
@@ -306,7 +326,7 @@ template <class ClassType>
 struct nsRunnableMethodReceiver<ClassType, false> {
   ClassType *mObj;
   nsRunnableMethodReceiver(ClassType *obj) : mObj(obj) {}
-  void Revoke() { mObj = nsnull; }
+  void Revoke() { mObj = nullptr; }
 };
 
 template <typename Method, bool Owning> struct nsRunnableMethodTraits;
@@ -343,7 +363,7 @@ public:
   {}
 
   NS_IMETHOD Run() {
-    if (NS_LIKELY(mReceiver.mObj))
+    if (MOZ_LIKELY(mReceiver.mObj))
       ((*mReceiver.mObj).*mMethod)();
     return NS_OK;
   }
@@ -390,7 +410,7 @@ NS_NewNonOwningRunnableMethod(PtrType ptr, Method method)
 //   class E : public nsRunnable {
 //   public:
 //     void Revoke() {
-//       mResource = nsnull;
+//       mResource = nullptr;
 //     }
 //   private:
 //     R *mResource;
@@ -428,7 +448,7 @@ template <class T>
 class nsRevocableEventPtr {
 public:
   nsRevocableEventPtr()
-    : mEvent(nsnull) {
+    : mEvent(nullptr) {
   }
 
   ~nsRevocableEventPtr() {
@@ -446,16 +466,16 @@ public:
   void Revoke() {
     if (mEvent) {
       mEvent->Revoke();
-      mEvent = nsnull;
+      mEvent = nullptr;
     }
   }
 
   void Forget() {
-    mEvent = nsnull;
+    mEvent = nullptr;
   }
 
-  PRBool IsPending() {
-    return mEvent != nsnull;
+  bool IsPending() {
+    return mEvent != nullptr;
   }
   
   T *get() { return mEvent; }
@@ -467,5 +487,50 @@ private:
 
   nsRefPtr<T> mEvent;
 };
+
+/**
+ * A simple helper to suffix thread pool name
+ * with incremental numbers.
+ */
+class nsThreadPoolNaming
+{
+public:
+  nsThreadPoolNaming() : mCounter(0) {}
+
+  /**
+   * Creates and sets next thread name as "<aPoolName> #<n>"
+   * on the specified thread.  If no thread is specified (aThread
+   * is null) then the name is synchronously set on the current thread.
+   */
+  void SetThreadPoolName(const nsACString & aPoolName,
+                         nsIThread * aThread = nullptr);
+
+private:
+  volatile uint32_t mCounter;
+
+  nsThreadPoolNaming(const nsThreadPoolNaming &) MOZ_DELETE;
+  void operator=(const nsThreadPoolNaming &) MOZ_DELETE;
+};
+
+/**
+ * Thread priority in most operating systems affect scheduling, not IO.  This
+ * helper is used to set the current thread to low IO priority for the lifetime
+ * of the created object.  You can only use this low priority IO setting within
+ * the context of the current thread.
+ */
+class NS_STACK_CLASS nsAutoLowPriorityIO
+{
+public:
+  nsAutoLowPriorityIO();
+  ~nsAutoLowPriorityIO();
+
+private:
+  bool lowIOPrioritySet;
+#if defined(XP_MACOSX)
+  int oldPriority;
+#endif
+};
+
+
 
 #endif  // nsThreadUtils_h__

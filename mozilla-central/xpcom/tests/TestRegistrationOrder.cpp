@@ -1,44 +1,11 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Kathleen Brade <brade@pearlcrescent.com>
- * Mark Smith <mcs@pearlcrescent.com>
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "TestHarness.h"
-#include "nsILocalFile.h"
+#include "nsIFile.h"
 #include "nsIDirectoryService.h"
 #include "nsDirectoryServiceDefs.h"
 #include "nsCOMArray.h"
@@ -133,6 +100,12 @@ nsresult TestRegular()
                           kCoreServiceA_CID, kExtServiceA_CID);
 }
 
+nsresult TestJar()
+{
+  return execRegOrderTest("TestJar", SERVICE_B_CONTRACT_ID,
+                          kCoreServiceB_CID, kExtServiceB_CID);
+}
+
 bool TestContractFirst()
 {
   nsCOMPtr<nsIComponentRegistrar> r;
@@ -157,17 +130,18 @@ bool TestContractFirst()
   return true;
 }
 
-static already_AddRefed<nsILocalFile>
+static already_AddRefed<nsIFile>
 GetRegDirectory(const char* basename, const char* dirname, const char* leafname)
 {
-    nsCOMPtr<nsILocalFile> f;
-    nsresult rv = NS_NewNativeLocalFile(nsDependentCString(basename), PR_TRUE,
+    nsCOMPtr<nsIFile> f;
+    nsresult rv = NS_NewNativeLocalFile(nsDependentCString(basename), true,
                                         getter_AddRefs(f));
     if (NS_FAILED(rv))
         return NULL;
 
     f->AppendNative(nsDependentCString(dirname));
-    f->AppendNative(nsDependentCString(leafname));
+    if (leafname)
+        f->AppendNative(nsDependentCString(leafname));
     return f.forget();
 }
 
@@ -182,18 +156,35 @@ int main(int argc, char** argv)
   }
 
   ScopedLogging logging;
-  
+
+#ifdef XP_WIN
+  // On Windows, convert to backslashes
+  size_t regPathLen = strlen(argv[1]);
+  char* regPath = new char[regPathLen + 1];
+  for (size_t i = 0; i < regPathLen; i++) {
+    char curr = argv[1][i];
+    regPath[i] = (curr == '/') ? '\\' : curr;
+  }
+  regPath[regPathLen] = '\0';
+#else
   const char *regPath = argv[1];
+#endif
+
   XRE_AddManifestLocation(NS_COMPONENT_LOCATION,
-                          nsCOMPtr<nsILocalFile>(GetRegDirectory(regPath, "core", "component.manifest")));
+                          nsCOMPtr<nsIFile>(GetRegDirectory(regPath, "core", "component.manifest")));
   XRE_AddManifestLocation(NS_COMPONENT_LOCATION,
-                          nsCOMPtr<nsILocalFile>(GetRegDirectory(regPath, "extension", "extComponent.manifest")));
+                          nsCOMPtr<nsIFile>(GetRegDirectory(regPath, "extension", "extComponent.manifest")));
+  XRE_AddJarManifestLocation(NS_COMPONENT_LOCATION,
+                          nsCOMPtr<nsIFile>(GetRegDirectory(regPath, "extension2.jar", NULL)));
   ScopedXPCOM xpcom("RegistrationOrder");
   if (xpcom.failed())
     return 1;
 
   int rv = 0;
   if (NS_FAILED(TestRegular()))
+    rv = 1;
+
+  if (NS_FAILED(TestJar()))
     rv = 1;
 
   if (!TestContractFirst())

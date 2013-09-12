@@ -1,53 +1,19 @@
 /* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 4 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Oracle Corporation code.
- *
- * The Initial Developer of the Original Code is Oracle Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Stuart Parmenter <pavlov@pavlov.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef GFX_COLOR_H
 #define GFX_COLOR_H
-
-#ifdef MOZILLA_INTERNAL_API
-#include "nsPrintfCString.h"
-#endif
 
 #include "gfxTypes.h"
 
 #include "prbit.h" // for PR_ROTATE_(LEFT,RIGHT)32
 #include "prio.h"  // for ntohl
 
-#define GFX_UINT32_FROM_BPTR(pbptr,i) (((PRUint32*)(pbptr))[i])
+#include "mozilla/Attributes.h" // for MOZ_ALWAYS_INLINE
+
+#define GFX_UINT32_FROM_BPTR(pbptr,i) (((uint32_t*)(pbptr))[i])
 
 #if defined(IS_BIG_ENDIAN)
   #define GFX_NTOHL(x) (x)
@@ -94,14 +60,14 @@
 /**
  * GFX_BLOCK_RGB_TO_FRGB(from,to)
  *   sizeof(*from) == sizeof(char)
- *   sizeof(*to)   == sizeof(PRUint32)
+ *   sizeof(*to)   == sizeof(uint32_t)
  *
  * Copy 4 pixels at a time, reading blocks of 12 bytes (RGB x4)
  *   and writing blocks of 16 bytes (FRGB x4)
  */
 #define GFX_BLOCK_RGB_TO_FRGB(from,to) \
   PR_BEGIN_MACRO \
-    PRUint32 m0 = GFX_UINT32_FROM_BPTR(from,0), \
+    uint32_t m0 = GFX_UINT32_FROM_BPTR(from,0), \
              m1 = GFX_UINT32_FROM_BPTR(from,1), \
              m2 = GFX_UINT32_FROM_BPTR(from,2), \
              rgbr = GFX_NTOHL(m0), \
@@ -127,27 +93,40 @@
      (((((unsigned)(v)) << 8) + ((unsigned)(v)) + 255) >> 16)
 
 /**
- * Fast premultiply macro
+ * Fast premultiply
  *
  * equivalent to (((c)*(a))/255)
  */
-#define GFX_PREMULTIPLY(c,a) GFX_DIVIDE_BY_255((c)*(a))
+uint8_t MOZ_ALWAYS_INLINE gfxPreMultiply(uint8_t c, uint8_t a) {
+    return GFX_DIVIDE_BY_255((c)*(a));
+}
 
-/** 
- * Macro to pack the 4 8-bit channels (A,R,G,B) 
- * into a 32-bit packed premultiplied pixel.
- *
- * The checks for 0 alpha or max alpha ensure that the
- * compiler selects the quicked calculation when alpha is constant.
+/**
+ * Pack the 4 8-bit channels (A,R,G,B)
+ * into a 32-bit packed NON-premultiplied pixel.
  */
-#define GFX_PACKED_PIXEL(a,r,g,b)                                       \
-    ((a) == 0x00) ? 0x00000000 :                                        \
-    ((a) == 0xFF) ? ((0xFF << 24) | ((r) << 16) | ((g) << 8) | (b))     \
-                  : ((a) << 24) |                                       \
-                    (GFX_PREMULTIPLY(r,a) << 16) |                      \
-                    (GFX_PREMULTIPLY(g,a) << 8) |                       \
-                    (GFX_PREMULTIPLY(b,a))
+uint32_t MOZ_ALWAYS_INLINE
+gfxPackedPixelNoPreMultiply(uint8_t a, uint8_t r, uint8_t g, uint8_t b) {
+    return (((a) << 24) | ((r) << 16) | ((g) << 8) | (b));
+}
 
+/**
+ * Pack the 4 8-bit channels (A,R,G,B)
+ * into a 32-bit packed premultiplied pixel.
+ */
+uint32_t MOZ_ALWAYS_INLINE
+gfxPackedPixel(uint8_t a, uint8_t r, uint8_t g, uint8_t b) {
+    if (a == 0x00)
+        return 0x00000000;
+    else if (a == 0xFF) {
+        return gfxPackedPixelNoPreMultiply(a, r, g, b);
+    } else {
+        return  ((a) << 24) |
+                (gfxPreMultiply(r,a) << 16) |
+                (gfxPreMultiply(g,a) << 8)  |
+                (gfxPreMultiply(b,a));
+    }
+}
 
 /**
  * A color value, storing red, green, blue and alpha components.
@@ -166,12 +145,10 @@ struct THEBES_API gfxRGBA {
         PACKED_ARGB,
         PACKED_ARGB_PREMULTIPLIED,
 
-        PACKED_XBGR,
         PACKED_XRGB
     };
 
     gfxRGBA() { }
-    gfxRGBA(const gfxRGBA& c) : r(c.r), g(c.g), b(c.b), a(c.a) {}
     /**
      * Intialize this color using explicit red, green, blue and alpha
      * values.
@@ -183,11 +160,12 @@ struct THEBES_API gfxRGBA {
      * The color value is interpreted based on colorType;
      * all values use the native platform endianness.
      *
+     * Resulting gfxRGBA stores non-premultiplied data.
+     *
      * @see gfxRGBA::Packed
      */
-    gfxRGBA(PRUint32 c, PackedColorType colorType = PACKED_ABGR) {
+    gfxRGBA(uint32_t c, PackedColorType colorType = PACKED_ABGR) {
         if (colorType == PACKED_ABGR ||
-            colorType == PACKED_XBGR ||
             colorType == PACKED_ABGR_PREMULTIPLIED)
         {
             r = ((c >> 0) & 0xff) * (1.0 / 255.0);
@@ -212,89 +190,66 @@ struct THEBES_API gfxRGBA {
                 g /= a;
                 b /= a;
             }
-        } else if (colorType == PACKED_XBGR ||
-                   colorType == PACKED_XRGB)
-        {
+        } else if (colorType == PACKED_XRGB) {
             a = 1.0;
         }
     }
-
-    /**
-     * Initialize this color by parsing the given string.
-     * XXX implement me!
-     */
-#if 0
-    gfxRGBA(const char* str) {
-        a = 1.0;
-        // if aString[0] is a #, parse it as hex
-        // if aString[0] is a letter, parse it as a color name
-        // if aString[0] is a number, parse it loosely as hex
-    }
-#endif
 
     bool operator==(const gfxRGBA& other) const
     {
         return r == other.r && g == other.g && b == other.b && a == other.a;
     }
+    bool operator!=(const gfxRGBA& other) const
+    {
+        return !(*this == other);
+    }
 
     /**
      * Returns this color value as a packed 32-bit integer. This reconstructs
-     * the int32 based on the given colorType, always in the native byte order.
+     * the int32_t based on the given colorType, always in the native byte order.
      *
      * Note: gcc 4.2.3 on at least Ubuntu (x86) does something strange with
-     * (PRUint8)(c * 255.0) << x, where the result is different than
-     * double d = c * 255.0; v = ((PRUint8) d) << x. 
+     * (uint8_t)(c * 255.0) << x, where the result is different than
+     * double d = c * 255.0; v = ((uint8_t) d) << x. 
      */
-    PRUint32 Packed(PackedColorType colorType = PACKED_ABGR) const {
+    uint32_t Packed(PackedColorType colorType = PACKED_ABGR) const {
         gfxFloat rb = (r * 255.0);
         gfxFloat gb = (g * 255.0);
         gfxFloat bb = (b * 255.0);
         gfxFloat ab = (a * 255.0);
 
-        if (colorType == PACKED_ABGR || colorType == PACKED_XBGR) {
-            return (PRUint8(ab) << 24) |
-                   (PRUint8(bb) << 16) |
-                   (PRUint8(gb) << 8) |
-                   (PRUint8(rb) << 0);
-        } else if (colorType == PACKED_ARGB || colorType == PACKED_XRGB) {
-            return (PRUint8(ab) << 24) |
-                   (PRUint8(rb) << 16) |
-                   (PRUint8(gb) << 8) |
-                   (PRUint8(bb) << 0);
+        if (colorType == PACKED_ABGR) {
+            return (uint8_t(ab) << 24) |
+                   (uint8_t(bb) << 16) |
+                   (uint8_t(gb) << 8) |
+                   (uint8_t(rb) << 0);
+        }
+        if (colorType == PACKED_ARGB || colorType == PACKED_XRGB) {
+            return (uint8_t(ab) << 24) |
+                   (uint8_t(rb) << 16) |
+                   (uint8_t(gb) << 8) |
+                   (uint8_t(bb) << 0);
         }
 
-        rb = (r*a) * 255.0;
-        gb = (g*a) * 255.0;
-        bb = (b*a) * 255.0;
+        rb *= a;
+        gb *= a;
+        bb *= a;
 
         if (colorType == PACKED_ABGR_PREMULTIPLIED) {
-            return (((PRUint8)(ab) << 24) |
-                    ((PRUint8)(bb) << 16) |
-                    ((PRUint8)(gb) << 8) |
-                    ((PRUint8)(rb) << 0));
-        } else if (colorType == PACKED_ARGB_PREMULTIPLIED) {
-            return (((PRUint8)(ab) << 24) |
-                    ((PRUint8)(rb) << 16) |
-                    ((PRUint8)(gb) << 8) |
-                    ((PRUint8)(bb) << 0));
+            return (((uint8_t)(ab) << 24) |
+                    ((uint8_t)(bb) << 16) |
+                    ((uint8_t)(gb) << 8) |
+                    ((uint8_t)(rb) << 0));
+        }
+        if (colorType == PACKED_ARGB_PREMULTIPLIED) {
+            return (((uint8_t)(ab) << 24) |
+                    ((uint8_t)(rb) << 16) |
+                    ((uint8_t)(gb) << 8) |
+                    ((uint8_t)(bb) << 0));
         }
 
         return 0;
     }
-
-#ifdef MOZILLA_INTERNAL_API
-    /**
-     * Convert this color to a hex value. For example, for rgb(255,0,0),
-     * this will return FF0000.
-     */
-    // XXX I'd really prefer to just have this return an nsACString
-    // Does this function even make sense, since we're just ignoring the alpha value?
-    void Hex(nsACString& result) const {
-        nsPrintfCString hex(8, "%02x%02x%02x", PRUint8(r*255.0), PRUint8(g*255.0), PRUint8(b*255.0));
-        result.Assign(hex);
-    }
-#endif
-
 };
 
 #endif /* _GFX_COLOR_H */

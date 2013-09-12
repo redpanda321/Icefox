@@ -1,4 +1,8 @@
 <?xml version="1.0"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 <?xml-stylesheet href="chrome://testpilot/content/browser.css" type="text/css"?>
 
 <!DOCTYPE overlay [
@@ -7,11 +11,6 @@
 ]>
 
 <overlay xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
-<script src="chrome://testpilot/content/browser.js"
-  type="application/x-javascript" />
-<script src="chrome://testpilot/content/window-utils.js"
-  type="application/x-javascript" />
-
 <menupopup id="menu_ToolsPopup">
   <menu id="pilot-menu" insertafter="menu_openAddons" />
 </menupopup>
@@ -55,15 +54,8 @@
   </menupopup>
 </menu>
 
-<statusbar id="status-bar">
-  <statusbarpanel id="pilot-notifications-button"
-                  class="statusbarpanel-iconic"
-                  insertbefore="security-button"
-                  onmousedown="
-                    event.preventDefault();
-                    TestPilotMenuUtils.onMenuButtonMouseDown();"
-                  image="chrome://testpilot/skin/testpilot_16x16.png"/>
-
+<toolbar id="nav-bar">
+  <image id="tp-notification-popup-icon" role="button" hidden="true"/>
   <panel id="pilot-notification-popup" hidden="true" noautofocus="true"
     level="parent" position="after_start">
     <vbox class="pilot-notification-popup-container">
@@ -79,7 +71,7 @@
         </vbox>
       </hbox>
       <description id="pilot-notification-text" />
-      <hbox align="right"><label id="pilot-notification-link" /></hbox>
+      <hbox align="right"><label id="pilot-notification-link"/></hbox>
       <hbox>
         <checkbox id="pilot-notification-always-submit-checkbox"
           label="&testpilot.settings.alwaysSubmitData.label;" />
@@ -90,6 +82,5 @@
       </hbox>
     </vbox>
   </panel>
-
-</statusbar>
+</toolbar>
 </overlay>

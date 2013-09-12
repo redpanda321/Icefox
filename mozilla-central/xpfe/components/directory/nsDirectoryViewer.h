@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Chris Waterson           <waterson@netscape.com>
- *   Robert John Churchill    <rjc@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsdirectoryviewer__h____
 #define nsdirectoryviewer__h____
@@ -43,12 +9,10 @@
 #include "nsNetUtil.h"
 #include "nsIStreamListener.h"
 #include "nsIContentViewer.h"
-#ifdef MOZ_RDF
 #include "nsIHTTPIndex.h"
 #include "nsIRDFService.h"
 #include "nsIRDFDataSource.h"
 #include "nsIRDFLiteral.h"
-#endif
 #include "nsIDocumentLoaderFactory.h"
 #include "nsITimer.h"
 #include "nsISupportsArray.h"
@@ -68,7 +32,6 @@ public:
     NS_DECL_NSIDOCUMENTLOADERFACTORY
 };
 
-#ifdef MOZ_RDF
 class nsHTTPIndex : public nsIHTTPIndex,
                     public nsIRDFDataSource,
                     public nsIStreamListener,
@@ -110,7 +73,7 @@ protected:
     nsCOMPtr<nsIDirIndexParser>  mParser;
     nsCString mBaseURL;
     nsCString                    mEncoding;
-    PRBool                       mBindToGlobalObject;
+    bool                         mBindToGlobalObject;
     nsIInterfaceRequestor*       mRequestor; // WEAK
     nsCOMPtr<nsIRDFResource>     mDirectory;
 
@@ -118,7 +81,7 @@ protected:
     nsresult CommonInit(void);
     nsresult Init(nsIURI* aBaseURL);
     void        GetDestination(nsIRDFResource* r, nsXPIDLCString& dest);
-    PRBool      isWellknownContainerURI(nsIRDFResource *r);
+    bool        isWellknownContainerURI(nsIRDFResource *r);
     nsresult    AddElement(nsIRDFResource *parent, nsIRDFResource *prop,
                            nsIRDFNode *child);
 
@@ -149,11 +112,9 @@ public:
     NS_DECL_CYCLE_COLLECTING_ISUPPORTS
     NS_DECL_CYCLE_COLLECTION_CLASS_AMBIGUOUS(nsHTTPIndex, nsIHTTPIndex)
 };
-#endif
 
 // {82776710-5690-11d3-BE36-00104BDE6048}
 #define NS_DIRECTORYVIEWERFACTORY_CID \
 { 0x82776710, 0x5690, 0x11d3, { 0xbe, 0x36, 0x0, 0x10, 0x4b, 0xde, 0x60, 0x48 } }
-
 
 #endif // nsdirectoryviewer__h____

@@ -1,47 +1,8 @@
 <?xml version="1.0"?>
 
-<!-- ***** BEGIN LICENSE BLOCK *****
-   - Version: MPL 1.1/GPL 2.0/LGPL 2.1
-   -
-   - The contents of this file are subject to the Mozilla Public License Version
-   - 1.1 (the "License"); you may not use this file except in compliance with
-   - the License. You may obtain a copy of the License at
-   - http://www.mozilla.org/MPL/
-   -
-   - Software distributed under the License is distributed on an "AS IS" basis,
-   - WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-   - for the specific language governing rights and limitations under the
-   - License.
-   -
-   - The Original Code is mozilla.org viewsource frontend.
-   -
-   - The Initial Developer of the Original Code is
-   - Netscape Communications Corporation.
-   - Portions created by the Initial Developer are Copyright (C) 2003
-   - the Initial Developer. All Rights Reserved.
-   -
-   - Contributor(s):
-   -     Blake Ross <blake@cs.stanford.edu> (Original Author)
-   -     Masayuki Nakano <masayuki@d-toybox.com>
-   -     Ben Basson <contact@cusser.net>
-   -     Jason Barnabe <jason_barnabe@fastmail.fm>
-   -     Asaf Romano <mano@mozilla.com>
-   -     Ehsan Akhgari <ehsan.akhgari@gmail.com>
-   -     Graeme McCutcheon <graememcc_firefox@graeme-online.co.uk>
-   -
-   - Alternatively, the contents of this file may be used under the terms of
-   - either the GNU General Public License Version 2 or later (the "GPL"), or
-   - the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-   - in which case the provisions of the GPL or the LGPL are applicable instead
-   - of those above. If you wish to allow use of your version of this file only
-   - under the terms of either the GPL or the LGPL, and not to allow others to
-   - use your version of this file under the terms of the MPL, indicate your
-   - decision by deleting the provisions above and replace them with the notice
-   - and other provisions required by the GPL or the LGPL. If you do not delete
-   - the provisions above, a recipient may use your version of this file under
-   - the terms of any one of the MPL, the GPL or the LGPL.
-   -
-   - ***** END LICENSE BLOCK ***** -->
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
 
 <!DOCTYPE bindings [
 <!ENTITY % findBarDTD SYSTEM "chrome://global/locale/findbar.dtd" >
@@ -113,12 +74,21 @@
 
     <handlers>
       <handler event="input"><![CDATA[
+        // We should do nothing during composition.  E.g., composing string
+        // before converting may matches a forward word of expected word.
+        // After that, even if user converts the composition string to the
+        // expected word, it may find second or later searching word in the
+        // document.
+        if (this.findbar._isIMEComposing) {
+          return;
+        }
         this.findbar._find(this.value);
       ]]></handler>
 
       <handler event="keypress"><![CDATA[
         var win = this.findbar._currentWindow ||
                   this.findbar.browser.contentWindow;
+        var controller = this.findbar._getSelectionController(win);
 
         var shouldHandle = !event.altKey && !event.ctrlKey &&
                            !event.metaKey && !event.shiftKey;
@@ -132,22 +102,22 @@
             break;
           case KeyEvent.DOM_VK_PAGE_UP:
             if (shouldHandle) {
-              win.scrollByPages(-1);
+              controller.scrollPage(false);
               event.preventDefault();
             }
             break;
           case KeyEvent.DOM_VK_PAGE_DOWN:
             if (shouldHandle) {
-              win.scrollByPages(1);
+              controller.scrollPage(true);
               event.preventDefault();
             }
             break;
           case KeyEvent.DOM_VK_UP:
-            win.scrollByLines(-1);
+            controller.scrollLine(false);
             event.preventDefault();
             break;
           case KeyEvent.DOM_VK_DOWN:
-            win.scrollByLines(1);
+            controller.scrollLine(true);
             event.preventDefault();
             break;
         }
@@ -215,7 +185,7 @@
       <xul:label anonid="find-label" class="findbar-find-fast" control="findbar-textbox"/>
       <xul:textbox class="findbar-textbox findbar-find-fast" anonid="findbar-textbox"
                    xbl:inherits="flash"/>
-#ifdef MOZ_WIDGET_GTK2
+#ifdef MOZ_WIDGET_GTK
       <xul:toolbarbutton anonid="find-previous"
                          class="findbar-find-previous tabbable"
                          label="&previous.label;"
@@ -233,7 +203,7 @@
                          oncommand="onFindAgainCommand(false);"
                          disabled="true"
                          xbl:inherits="accesskey=findnextaccesskey"/>
-#ifndef MOZ_WIDGET_GTK2
+#ifndef MOZ_WIDGET_GTK
       <xul:toolbarbutton anonid="find-previous"
                          class="findbar-find-previous tabbable"
                          label="&previous.label;"
@@ -275,12 +245,21 @@
       <field name="_tmpOutline">null</field>
       <field name="_tmpOutlineOffset">"0"</field>
       <field name="_drawOutline">false</field>
-      <field name="_foundLink">null</field>
       <field name="_editors">null</field>
       <field name="_stateListeners">null</field>
 
       <field name="_flashFindBar">0</field>
       <field name="_initialFlashFindBarCount">6</field>
+
+      <property name="_foundLink"
+                onget="return this._foundLinkRef.get();"
+                onset="this._foundLinkRef = Components.utils.getWeakReference(val); return val;"/>
+      <property name="_foundEditable"
+                onget="return this._foundEditableRef.get();"
+                onset="this._foundEditableRef = Components.utils.getWeakReference(val); return val;"/>
+      <property name="_currentWindow"
+                onget="return this._currentWindowRef.get();"
+                onset="this._currentWindowRef = Components.utils.getWeakReference(val); return val;"/>
 
       <property name="prefillWithSelection"
                 onget="return this.getAttribute('prefillwithselection') != 'false'"
@@ -299,6 +278,20 @@
       <property name="findMode"
                 readonly="true"
                 onget="return this._findMode;"/>
+
+      <property name="canClear" readonly="true">
+        <getter><![CDATA[
+          if (this._findField.value)
+            return true;
+
+          // Watch out for lazy editor init
+          if (this._findField.editor) {
+            let tm = this._findField.editor.transactionManager;
+            return !!(tm.numberOfUndoItems || tm.numberOfRedoItems);
+          }
+          return false;
+        ]]></getter>
+      </property>
 
       <field name="_browser">null</field>
       <property name="browser">
@@ -345,7 +338,7 @@
             return;
 
           var prefsvc =
-            aSubject.QueryInterface(Components.interfaces.nsIPrefBranch2);
+            aSubject.QueryInterface(Components.interfaces.nsIPrefBranch);
 
           switch (aPrefName) {
             case "accessibility.typeaheadfind":
@@ -372,9 +365,13 @@
         this._findStatusIcon = this.getElement("find-status-icon");
         this._findStatusDesc = this.getElement("find-status");
 
+        this._foundLink = null;
+        this._foundEditable = null;
+        this._currentWindow = null;
+
         var prefsvc =
           Components.classes["@mozilla.org/preferences-service;1"]
-                    .getService(Components.interfaces.nsIPrefBranch2);
+                    .getService(Components.interfaces.nsIPrefBranch);
 
         this._quickFindTimeoutLength =
           prefsvc.getIntPref("accessibility.typeaheadfind.timeout");
@@ -404,7 +401,8 @@
 
         // Make sure the FAYT keypress listener is attached by initializing the
         // browser property
-        setTimeout(function(aSelf) { aSelf.browser = aSelf.browser; }, 0, this);
+        if (this.getAttribute("browserid"))
+          setTimeout(function(aSelf) { aSelf.browser = aSelf.browser; }, 0, this);
       ]]></constructor>
 
       <destructor><![CDATA[
@@ -433,7 +431,7 @@
 
           var prefsvc =
             Components.classes["@mozilla.org/preferences-service;1"]
-                      .getService(Components.interfaces.nsIPrefBranch2);
+                      .getService(Components.interfaces.nsIPrefBranch);
           prefsvc.removeObserver("accessibility.typeaheadfind",
                                  this._observer);
           prefsvc.removeObserver("accessibility.typeaheadfind.linksonly",
@@ -905,6 +903,9 @@
       <method name="toggleHighlight">
         <parameter name="aHighlight"/>
         <body><![CDATA[
+          if (!this._dispatchFindEvent("highlightallchange"))
+            return;
+
           var word = this._findField.value;
 
           // Bug 429723. Don't attempt to highlight ""
@@ -958,14 +959,14 @@
             return textFound;
 
           if (aHighlight) {
-            this._searchRange = doc.createRange();
-            this._searchRange.selectNodeContents(doc.body);
+            var searchRange = doc.createRange();
+            searchRange.selectNodeContents(doc.body);
 
-            this._startPt = this._searchRange.cloneRange();
-            this._startPt.collapse(true);
+            var startPt = searchRange.cloneRange();
+            startPt.collapse(true);
 
-            this._endPt = this._searchRange.cloneRange();
-            this._endPt.collapse(false);
+            var endPt = searchRange.cloneRange();
+            endPt.collapse(false);
 
             var retRange = null;
             var finder = Components.classes["@mozilla.org/embedcomp/rangefind;1"]
@@ -974,11 +975,11 @@
 
             finder.caseSensitive = this._shouldBeCaseSensitive(aWord);
 
-            while ((retRange = finder.Find(aWord, this._searchRange,
-                                          this._startPt, this._endPt))) {
+            while ((retRange = finder.Find(aWord, searchRange,
+                                           startPt, endPt))) {
               this._highlight(retRange, controller);
-              this._startPt = retRange.cloneRange();
-              this._startPt.collapse(false);
+              startPt = retRange.cloneRange();
+              startPt.collapse(false);
 
               textFound = true;
             }
@@ -1091,11 +1092,13 @@
         <body><![CDATA[
           var prefsvc =
             Components.classes["@mozilla.org/preferences-service;1"]
-                      .getService(Components.interfaces.nsIPrefBranch2);
+                      .getService(Components.interfaces.nsIPrefBranch);
 
           // Just set the pref; our observer will change the find bar behavior
           prefsvc.setIntPref("accessibility.typeaheadfind.casesensitive",
                              aCaseSensitive ? 1 : 0);
+
+          this._dispatchFindEvent("casesensitivitychange");
         ]]></body>
       </method>
 
@@ -1141,6 +1144,11 @@
             this.hidden = false;
 
             this._updateStatusUI(this.nsITypeAheadFind.FIND_FOUND);
+
+            let event = document.createEvent("Events");
+            event.initEvent("findbaropen", true, false);
+            this.dispatchEvent(event);
+
             return true;
           }
           return false;
@@ -1152,6 +1160,9 @@
         -->
       <method name="close">
         <body><![CDATA[
+          if (this.hidden)
+            return;
+
           var fm =
             Components.classes["@mozilla.org/focus-manager;1"]
                       .getService(Components.interfaces.nsIFocusManager);
@@ -1186,6 +1197,19 @@
           }
 
           this._findFailedString = null;
+        ]]></body>
+      </method>
+
+      <method name="clear">
+        <body><![CDATA[
+          this.browser.fastFind.collapseSelection();
+          this._findField.reset();
+          this.toggleHighlight(false);
+          this._updateStatusUI();
+          this._enableFindButtons(false);
+          this._setFoundLink(null);
+          this._foundEditable = null;
+          this._currentWindow = null;
         ]]></body>
       </method>
 
@@ -1340,7 +1364,7 @@
         <parameter name="aEvent"/>
         <body><![CDATA[
           if (aEvent.ctrlKey || aEvent.altKey || aEvent.metaKey ||
-              aEvent.getPreventDefault())
+              aEvent.defaultPrevented)
             return false;
 
           var elt = document.commandDispatcher.focusedElement;
@@ -1350,7 +1374,6 @@
 
             if (elt instanceof HTMLTextAreaElement ||
                 elt instanceof HTMLSelectElement ||
-                elt instanceof HTMLIsIndexElement ||
                 elt instanceof HTMLObjectElement ||
                 elt instanceof HTMLEmbedElement)
               return false;
@@ -1360,10 +1383,15 @@
           if (win && !this._mimeTypeIsTextBased(win.document.contentType))
               return false;
 
-          // disable FAYT in about:config and about:blank to prevent FAYT
-          // opening unexpectedly - to fix bugs 264562, 267150, 269712
-          var url = this.browser.currentURI.spec;
-          if (url == "about:blank" || url == "about:config")
+          // disable FAYT in about:blank to prevent FAYT opening unexpectedly.
+          var url = this.browser.currentURI;
+          if (url.spec == "about:blank")
+            return false;
+
+          // disable FAYT in documents that ask for it to be disabled.
+          if ((url.schemeIs("about") || url.schemeIs("chrome")) &&
+              (win.document.documentElement &&
+               win.document.documentElement.getAttribute("disablefastfind") == "true"))
             return false;
 
           if (win) {
@@ -1516,6 +1544,9 @@
       <method name="_find">
         <parameter name="aValue"/>
         <body><![CDATA[
+          if (!this._dispatchFindEvent(""))
+            return this.nsITypeAheadFind.FIND_PENDING;
+
           var val = aValue || this._findField.value;
           var res = this.nsITypeAheadFind.FIND_NOTFOUND;
 
@@ -1622,6 +1653,11 @@
               this._findStatusDesc.textContent = this._notFoundStr;
               this._findField.setAttribute("status", "notfound");
               break;
+            case this.nsITypeAheadFind.FIND_PENDING:
+              this._findStatusIcon.setAttribute("status", "pending");
+              this._findStatusDesc.textContent = "";
+              this._findField.removeAttribute("status");
+              break;
             case this.nsITypeAheadFind.FIND_FOUND:
             default:
               this._findStatusIcon.removeAttribute("status");
@@ -1631,6 +1667,16 @@
           }
         ]]></body>
       </method>
+
+      <method name="updateControlState">
+        <parameter name="aResult"/>
+        <parameter name="aFindPrevious"/>
+        <body><![CDATA[
+          this._updateStatusUI(aResult, aFindPrevious);
+          this._enableFindButtons(aResult !== this.nsITypeAheadFind.FIND_NOTFOUND);
+        ]]></body>
+      </method>
+
 
       <method name="_getInitialSelection">
         <body><![CDATA[
@@ -1669,6 +1715,22 @@
         ]]></body>
       </method>
 
+      <method name="_dispatchFindEvent">
+        <parameter name="aType"/>
+        <parameter name="aFindPrevious"/>
+        <body><![CDATA[
+          let event = document.createEvent("CustomEvent");
+          event.initCustomEvent("find" + aType, true, true, {
+            query: this._findField.value,
+            caseSensitive: !!this._typeAheadCaseSensitive,
+            highlightAll: this.getElement("highlight").checked,
+            findPrevious: aFindPrevious
+          });
+          return this.dispatchEvent(event);
+        ]]></body>
+      </method>
+
+
       <!--
         - Opens the findbar, focuses the findfield and selects its contents.
         - Also flashes the findbar the first time it's used.
@@ -1682,7 +1744,7 @@
         <body><![CDATA[
           var prefsvc =
             Components.classes["@mozilla.org/preferences-service;1"]
-                      .getService(Components.interfaces.nsIPrefBranch2);
+                      .getService(Components.interfaces.nsIPrefBranch);
           var userWantsPrefill = true;
           this.open(aMode);
 
@@ -1736,6 +1798,13 @@
             this.startFind();
             return;
           }
+
+          // We dispatch the findAgain event here instead of in _findAgain since
+          // if there is a find event handler that prevents the default then
+          // fastFind.searchString will never get updated which in turn means
+          // there would never be findAgain events because of the logic below.
+          if (!this._dispatchFindEvent("again", aFindPrevious))
+            return;
 
           // user explicitly requested another search, so do it even if we think it'll fail
           this._findFailedString = null;

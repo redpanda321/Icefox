@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsHTMLInputElement_h__
 #define nsHTMLInputElement_h__
@@ -45,51 +12,33 @@
 #include "nsITextControlElement.h"
 #include "nsIPhonetic.h"
 #include "nsIDOMNSEditableElement.h"
-#include "nsIFileControlElement.h"
-
 #include "nsTextEditorState.h"
 #include "nsCOMPtr.h"
 #include "nsIConstraintValidation.h"
-
-//
-// Accessors for mBitField
-//
-#define BF_DISABLED_CHANGED 0
-#define BF_HANDLING_CLICK 1
-#define BF_VALUE_CHANGED 2
-#define BF_CHECKED_CHANGED 3
-#define BF_CHECKED 4
-#define BF_HANDLING_SELECT_EVENT 5
-#define BF_SHOULD_INIT_CHECKED 6
-#define BF_PARSER_CREATING 7
-#define BF_IN_INTERNAL_ACTIVATE 8
-#define BF_CHECKED_IS_TOGGLED 9
-#define BF_INDETERMINATE 10
-#define BF_INHIBIT_RESTORATION 11
-
-#define GET_BOOLBIT(bitfield, field) (((bitfield) & (0x01 << (field))) \
-                                        ? PR_TRUE : PR_FALSE)
-#define SET_BOOLBIT(bitfield, field, b) ((b) \
-                                        ? ((bitfield) |=  (0x01 << (field))) \
-                                        : ((bitfield) &= ~(0x01 << (field))))
+#include "nsDOMFile.h"
+#include "nsHTMLFormElement.h" // for ShouldShowInvalidUI()
+#include "nsIFile.h"
+#include "nsIFilePicker.h"
 
 class nsDOMFileList;
+class nsIFilePicker;
+class nsIRadioGroupContainer;
+class nsIRadioGroupVisitor;
+class nsIRadioVisitor;
 
-class UploadLastDir : public nsIObserver, public nsSupportsWeakReference {
+class UploadLastDir MOZ_FINAL : public nsIObserver, public nsSupportsWeakReference {
 public:
   NS_DECL_ISUPPORTS
   NS_DECL_NSIOBSERVER
-
-  UploadLastDir();
 
   /**
    * Fetch the last used directory for this location from the content
    * pref service, if it is available.
    *
-   * @param aURI URI of the current page
+   * @param aDoc  current document
    * @param aFile path to the last used directory
    */
-  nsresult FetchLastUsedDirectory(nsIURI* aURI, nsILocalFile** aFile);
+  nsresult FetchLastUsedDirectory(nsIDocument* aDoc, nsIFile** aFile);
 
   /**
    * Store the last used directory for this location using the
@@ -98,15 +47,8 @@ public:
    * @param aFile file chosen by the user - the path to the parent of this
    *        file will be stored
    */
-  nsresult StoreLastUsedDirectory(nsIURI* aURI, nsILocalFile* aFile);
-private:
-  // Directories are stored here during private browsing mode
-  nsInterfaceHashtable<nsStringHashKey, nsILocalFile> mUploadLastDirStore;
-  PRBool mInPrivateBrowsing;
+  nsresult StoreLastUsedDirectory(nsIDocument* aDoc, nsIFile* aFile);
 };
-
-class nsIRadioGroupContainer;
-class nsIRadioVisitor;
 
 class nsHTMLInputElement : public nsGenericHTMLFormElement,
                            public nsImageLoadingContent,
@@ -114,25 +56,32 @@ class nsHTMLInputElement : public nsGenericHTMLFormElement,
                            public nsITextControlElement,
                            public nsIPhonetic,
                            public nsIDOMNSEditableElement,
-                           public nsIFileControlElement,
                            public nsIConstraintValidation
 {
 public:
+  using nsIConstraintValidation::GetValidationMessage;
+
   nsHTMLInputElement(already_AddRefed<nsINodeInfo> aNodeInfo,
-                     PRUint32 aFromParser);
+                     mozilla::dom::FromParser aFromParser);
   virtual ~nsHTMLInputElement();
+
+  NS_IMPL_FROMCONTENT_HTML_WITH_TAG(nsHTMLInputElement, input)
 
   // nsISupports
   NS_DECL_ISUPPORTS_INHERITED
 
   // nsIDOMNode
-  NS_FORWARD_NSIDOMNODE(nsGenericHTMLFormElement::)
+  NS_FORWARD_NSIDOMNODE_TO_NSINODE
 
   // nsIDOMElement
-  NS_FORWARD_NSIDOMELEMENT(nsGenericHTMLFormElement::)
+  NS_FORWARD_NSIDOMELEMENT_TO_GENERIC
 
   // nsIDOMHTMLElement
-  NS_FORWARD_NSIDOMHTMLELEMENT(nsGenericHTMLFormElement::)
+  NS_FORWARD_NSIDOMHTMLELEMENT_TO_GENERIC
+
+  virtual void Click() MOZ_OVERRIDE;
+  virtual int32_t TabIndexDefault() MOZ_OVERRIDE;
+  virtual void Focus(mozilla::ErrorResult& aError) MOZ_OVERRIDE;
 
   // nsIDOMHTMLInputElement
   NS_DECL_NSIDOMHTMLINPUTELEMENT
@@ -145,26 +94,29 @@ public:
   {
     return nsGenericHTMLElement::GetEditor(aEditor);
   }
+
   NS_IMETHOD SetUserInput(const nsAString& aInput);
 
   // Overriden nsIFormControl methods
-  NS_IMETHOD_(PRUint32) GetType() const { return mType; }
+  NS_IMETHOD_(uint32_t) GetType() const { return mType; }
   NS_IMETHOD Reset();
   NS_IMETHOD SubmitNamesValues(nsFormSubmission* aFormSubmission);
   NS_IMETHOD SaveState();
-  virtual PRBool RestoreState(nsPresState* aState);
-  virtual PRBool AllowDrop();
+  virtual bool RestoreState(nsPresState* aState);
+  virtual bool AllowDrop();
+
+  virtual void FieldSetDisabledChanged(bool aNotify);
 
   // nsIContent
-  virtual PRBool IsHTMLFocusable(PRBool aWithMouse, PRBool *aIsFocusable, PRInt32 *aTabIndex);
+  virtual bool IsHTMLFocusable(bool aWithMouse, bool *aIsFocusable, int32_t *aTabIndex);
 
-  virtual PRBool ParseAttribute(PRInt32 aNamespaceID,
+  virtual bool ParseAttribute(int32_t aNamespaceID,
                                 nsIAtom* aAttribute,
                                 const nsAString& aValue,
                                 nsAttrValue& aResult);
   virtual nsChangeHint GetAttributeChangeHint(const nsIAtom* aAttribute,
-                                              PRInt32 aModType) const;
-  NS_IMETHOD_(PRBool) IsAttributeMapped(const nsIAtom* aAttribute) const;
+                                              int32_t aModType) const;
+  NS_IMETHOD_(bool) IsAttributeMapped(const nsIAtom* aAttribute) const;
   virtual nsMapRuleToAttributesFunc GetAttributeMappingFunction() const;
 
   virtual nsresult PreHandleEvent(nsEventChainPreVisitor& aVisitor);
@@ -172,27 +124,26 @@ public:
 
   virtual nsresult BindToTree(nsIDocument* aDocument, nsIContent* aParent,
                               nsIContent* aBindingParent,
-                              PRBool aCompileEventHandlers);
-  virtual void UnbindFromTree(PRBool aDeep = PR_TRUE,
-                              PRBool aNullParent = PR_TRUE);
+                              bool aCompileEventHandlers);
+  virtual void UnbindFromTree(bool aDeep = true,
+                              bool aNullParent = true);
 
   virtual void DoneCreatingElement();
 
-  virtual PRInt32 IntrinsicState() const;
+  virtual nsEventStates IntrinsicState() const;
 
   // nsITextControlElement
-  NS_IMETHOD SetValueChanged(PRBool aValueChanged);
-  NS_IMETHOD_(PRBool) IsSingleLineTextControl() const;
-  NS_IMETHOD_(PRBool) IsTextArea() const;
-  NS_IMETHOD_(PRBool) IsPlainTextControl() const;
-  NS_IMETHOD_(PRBool) IsPasswordTextControl() const;
-  NS_IMETHOD_(PRInt32) GetCols();
-  NS_IMETHOD_(PRInt32) GetWrapCols();
-  NS_IMETHOD_(PRInt32) GetRows();
+  NS_IMETHOD SetValueChanged(bool aValueChanged);
+  NS_IMETHOD_(bool) IsSingleLineTextControl() const;
+  NS_IMETHOD_(bool) IsTextArea() const;
+  NS_IMETHOD_(bool) IsPlainTextControl() const;
+  NS_IMETHOD_(bool) IsPasswordTextControl() const;
+  NS_IMETHOD_(int32_t) GetCols();
+  NS_IMETHOD_(int32_t) GetWrapCols();
+  NS_IMETHOD_(int32_t) GetRows();
   NS_IMETHOD_(void) GetDefaultValueFromContent(nsAString& aValue);
-  NS_IMETHOD_(PRBool) ValueChanged() const;
-  NS_IMETHOD_(void) GetTextEditorValue(nsAString& aValue, PRBool aIgnoreWrap) const;
-  NS_IMETHOD_(void) SetTextEditorValue(const nsAString& aValue, PRBool aUserInput);
+  NS_IMETHOD_(bool) ValueChanged() const;
+  NS_IMETHOD_(void) GetTextEditorValue(nsAString& aValue, bool aIgnoreWrap) const;
   NS_IMETHOD_(nsIEditor*) GetTextEditor();
   NS_IMETHOD_(nsISelectionController*) GetSelectionController();
   NS_IMETHOD_(nsFrameSelection*) GetConstFrameSelection();
@@ -200,26 +151,25 @@ public:
   NS_IMETHOD_(void) UnbindFromFrame(nsTextControlFrame* aFrame);
   NS_IMETHOD CreateEditor();
   NS_IMETHOD_(nsIContent*) GetRootEditorNode();
+  NS_IMETHOD_(nsIContent*) CreatePlaceholderNode();
   NS_IMETHOD_(nsIContent*) GetPlaceholderNode();
-  NS_IMETHOD_(void) UpdatePlaceholderText(PRBool aNotify);
-  NS_IMETHOD_(void) SetPlaceholderClass(PRBool aVisible, PRBool aNotify);
+  NS_IMETHOD_(void) UpdatePlaceholderVisibility(bool aNotify);
+  NS_IMETHOD_(bool) GetPlaceholderVisibility();
   NS_IMETHOD_(void) InitializeKeyboardEventListeners();
-  NS_IMETHOD_(void) OnValueChanged(PRBool aNotify);
+  NS_IMETHOD_(void) OnValueChanged(bool aNotify);
+  NS_IMETHOD_(bool) HasCachedSelection();
 
-  // nsIFileControlElement
-  virtual void GetDisplayFileName(nsAString& aFileName);
-  virtual void GetFileArray(nsCOMArray<nsIFile> &aFile);
-  virtual void SetFileNames(const nsTArray<nsString>& aFileNames);
+  void GetDisplayFileName(nsAString& aFileName) const;
+  const nsCOMArray<nsIDOMFile>& GetFiles() const;
+  void SetFiles(const nsCOMArray<nsIDOMFile>& aFiles, bool aSetValueChanged);
+  void SetFiles(nsIDOMFileList* aFiles, bool aSetValueChanged);
 
-  void SetCheckedChangedInternal(PRBool aCheckedChanged);
-  PRBool GetCheckedChanged();
-  void AddedToRadioGroup(PRBool aNotify = PR_TRUE);
-  void WillRemoveFromRadioGroup(PRBool aNotify);
-  /**
-   * Get the radio group container for this button (form or document)
-   * @return the radio group container (or null if no form or document)
-   */
-  virtual already_AddRefed<nsIRadioGroupContainer> GetRadioGroupContainer();
+  void SetCheckedChangedInternal(bool aCheckedChanged);
+  bool GetCheckedChanged() const {
+    return mCheckedChanged;
+  }
+  void AddedToRadioGroup();
+  void WillRemoveFromRadioGroup();
 
  /**
    * Helper function returning the currently selected button in the radio group.
@@ -234,13 +184,8 @@ public:
 
   NS_IMETHOD FireAsyncClickHandler();
 
-  virtual void UpdateEditableState()
-  {
-    return UpdateEditableFormControlState();
-  }
-
-  NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED_NO_UNLINK(nsHTMLInputElement,
-                                                     nsGenericHTMLFormElement)
+  NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED(nsHTMLInputElement,
+                                           nsGenericHTMLFormElement)
 
   static UploadLastDir* gUploadLastDir;
   // create and destroy the static UploadLastDir object for remembering
@@ -252,19 +197,91 @@ public:
 
   virtual nsXPCClassInfo* GetClassInfo();
 
+  virtual nsIDOMNode* AsDOMNode() { return this; }
+
   // nsIConstraintValidation
-  PRBool   IsTooLong();
-  PRBool   IsValueMissing();
-  PRBool   HasTypeMismatch();
-  PRBool   HasPatternMismatch();
+  bool     IsTooLong();
+  bool     IsValueMissing() const;
+  bool     HasTypeMismatch() const;
+  bool     HasPatternMismatch() const;
+  bool     IsRangeOverflow() const;
+  bool     IsRangeUnderflow() const;
+  bool     HasStepMismatch() const;
   void     UpdateTooLongValidityState();
   void     UpdateValueMissingValidityState();
   void     UpdateTypeMismatchValidityState();
   void     UpdatePatternMismatchValidityState();
-  void     UpdateAllValidityStates(PRBool aNotify);
-  PRBool   IsBarredFromConstraintValidation() const;
+  void     UpdateRangeOverflowValidityState();
+  void     UpdateRangeUnderflowValidityState();
+  void     UpdateStepMismatchValidityState();
+  void     UpdateAllValidityStates(bool aNotify);
+  void     UpdateBarredFromConstraintValidation();
   nsresult GetValidationMessage(nsAString& aValidationMessage,
                                 ValidityStateType aType);
+  /**
+   * Update the value missing validity state for radio elements when they have
+   * a group.
+   *
+   * @param aIgnoreSelf Whether the required attribute and the checked state
+   * of the current radio should be ignored.
+   * @note This method shouldn't be called if the radio element hasn't a group.
+   */
+  void     UpdateValueMissingValidityStateForRadio(bool aIgnoreSelf);
+
+  /**
+   * Set filters to the filePicker according to the accept attribute value.
+   *
+   * See:
+   * http://dev.w3.org/html5/spec/forms.html#attr-input-accept
+   *
+   * @note You should not call this function if the element has no @accept.
+   * @note "All Files" filter is always set, no matter if there is a valid
+   * filter specifed or not.
+   * @note If there is only one valid filter that is audio or video or image,
+   * it will be selected as the default filter. Otherwise "All files" remains
+   * the default filter.
+   * @note If more than one valid filter is found, the "All Supported Types"
+   * filter is added, which is the concatenation of all valid filters.
+   */
+  void SetFilePickerFiltersFromAccept(nsIFilePicker* filePicker);
+
+  /**
+   * Returns the filter which should be used for the file picker according to
+   * the accept attribute value.
+   *
+   * See:
+   * http://dev.w3.org/html5/spec/forms.html#attr-input-accept
+   *
+   * @return Filter to use on the file picker with AppendFilters, 0 if none.
+   *
+   * @note You should not call this function if the element has no @accept.
+   * @note This will only filter for one type of file. If more than one filter
+   * is specified by the accept attribute they will *all* be ignored.
+   */
+  int32_t GetFilterFromAccept();
+
+  /**
+   * The form might need to request an update of the UI bits
+   * (BF_CAN_SHOW_INVALID_UI and BF_CAN_SHOW_VALID_UI) when an invalid form
+   * submission is tried.
+   *
+   * @param aIsFocused Whether the element is currently focused.
+   *
+   * @note The caller is responsible to call ContentStatesChanged.
+   */
+  void UpdateValidityUIBits(bool aIsFocused);
+
+  bool DefaultChecked() const {
+    return HasAttr(kNameSpaceID_None, nsGkAtoms::checked);
+  }
+
+  bool Indeterminate() const { return mIndeterminate; }
+  bool Checked() const { return mChecked; }
+
+  /**
+   * Fires change event if mFocusedValue and current value held are unequal.
+   */
+  void FireChangeEventIfNeeded();
 
 protected:
   // Pull IsSingleLineTextControl into our scope, otherwise it'd be hidden
@@ -302,7 +319,7 @@ protected:
    * @param aValue  the email address to check.
    * @result        whether the given string is a valid email address.
    */
-  static PRBool IsValidEmailAddress(const nsAString& aValue);
+  static bool IsValidEmailAddress(const nsAString& aValue);
 
   /**
    * This helper method returns true if aValue is a valid email address list.
@@ -314,124 +331,83 @@ protected:
    * @param aValue  the email address list to check.
    * @result        whether the given string is a valid email address list.
    */
-  static PRBool IsValidEmailAddressList(const nsAString& aValue);
-
-  /**
-   * This helper method returns true if the aPattern pattern matches aValue.
-   * aPattern should not contain leading and trailing slashes (/).
-   * The pattern has to match the entire value not just a subset.
-   * aDocument must be a valid pointer (not null).
-   *
-   * This is following the HTML5 specification:
-   * http://dev.w3.org/html5/spec/forms.html#attr-input-pattern
-   *
-   * @param aValue    the string to check.
-   * @param aPattern  the string defining the pattern.
-   * @param aDocument the owner document of the element.
-   * @result          whether the given string is matches the pattern.
-   */
-  static PRBool IsPatternMatching(nsAString& aValue, nsAString& aPattern,
-                                  nsIDocument* aDocument);
+  static bool IsValidEmailAddressList(const nsAString& aValue);
 
   // Helper method
   nsresult SetValueInternal(const nsAString& aValue,
-                            PRBool aUserInput,
-                            PRBool aSetValueChanged);
+                            bool aUserInput,
+                            bool aSetValueChanged);
 
-  void ClearFileNames() {
-    nsTArray<nsString> fileNames;
-    SetFileNames(fileNames);
-  }
-
-  void SetSingleFileName(const nsAString& aFileName) {
-    nsAutoTArray<nsString, 1> fileNames;
-    fileNames.AppendElement(aFileName);
-    SetFileNames(fileNames);
-  }
-
-  nsresult SetIndeterminateInternal(PRBool aValue,
-                                    PRBool aShouldInvalidate);
-
-  nsresult GetSelectionRange(PRInt32* aSelectionStart, PRInt32* aSelectionEnd);
+  nsresult GetValueInternal(nsAString& aValue) const;
 
   /**
-   * Get the name if it exists and return whether it did exist
-   * @param aName the name returned [OUT]
-   * @param true if the name is empty, false otherwise
+   * Returns whether the current value is the empty string.
+   *
+   * @return whether the current value is the empty string.
    */
-  PRBool GetNameIfExists(nsAString& aName) {
-    GetAttr(kNameSpaceID_None, nsGkAtoms::name, aName);
-    return !aName.IsEmpty();
+  bool IsValueEmpty() const;
+
+  void ClearFiles(bool aSetValueChanged) {
+    nsCOMArray<nsIDOMFile> files;
+    SetFiles(files, aSetValueChanged);
   }
+
+  nsresult SetIndeterminateInternal(bool aValue,
+                                    bool aShouldInvalidate);
+
+  nsresult GetSelectionRange(int32_t* aSelectionStart, int32_t* aSelectionEnd);
 
   /**
    * Called when an attribute is about to be changed
    */
-  virtual nsresult BeforeSetAttr(PRInt32 aNameSpaceID, nsIAtom* aName,
-                                 const nsAString* aValue, PRBool aNotify);
+  virtual nsresult BeforeSetAttr(int32_t aNameSpaceID, nsIAtom* aName,
+                                 const nsAttrValueOrString* aValue,
+                                 bool aNotify);
   /**
    * Called when an attribute has just been changed
    */
-  virtual nsresult AfterSetAttr(PRInt32 aNameSpaceID, nsIAtom* aName,
-                                const nsAString* aValue, PRBool aNotify);
+  virtual nsresult AfterSetAttr(int32_t aNameSpaceID, nsIAtom* aName,
+                                const nsAttrValue* aValue, bool aNotify);
 
   /**
    * Dispatch a select event. Returns true if the event was not cancelled.
    */
-  PRBool DispatchSelectEvent(nsPresContext* aPresContext);
+  bool DispatchSelectEvent(nsPresContext* aPresContext);
 
   void SelectAll(nsPresContext* aPresContext);
-  PRBool IsImage() const
+  bool IsImage() const
   {
     return AttrValueIs(kNameSpaceID_None, nsGkAtoms::type,
                        nsGkAtoms::image, eIgnoreCase);
   }
 
-  virtual PRBool AcceptAutofocus() const
-  {
-    return PR_TRUE;
-  }
-
   /**
-   * Fire the onChange event
-   */
-  void FireOnChange();
-
-  /**
-   * Visit a the group of radio buttons this radio belongs to
+   * Visit the group of radio buttons this radio belongs to
    * @param aVisitor the visitor to visit with
    */
-  nsresult VisitGroup(nsIRadioVisitor* aVisitor, PRBool aFlushContent);
+  nsresult VisitGroup(nsIRadioVisitor* aVisitor, bool aFlushContent);
 
   /**
    * Do all the work that |SetChecked| does (radio button handling, etc.), but
    * take an |aNotify| parameter.
    */
-  nsresult DoSetChecked(PRBool aValue, PRBool aNotify, PRBool aSetValueChanged);
+  void DoSetChecked(bool aValue, bool aNotify, bool aSetValueChanged);
 
   /**
    * Do all the work that |SetCheckedChanged| does (radio button handling,
    * etc.), but take an |aNotify| parameter that lets it avoid flushing content
    * when it can.
    */
-  void DoSetCheckedChanged(PRBool aCheckedChanged, PRBool aNotify);
+  void DoSetCheckedChanged(bool aCheckedChanged, bool aNotify);
 
   /**
    * Actually set checked and notify the frame of the change.
    * @param aValue the value of checked to set
    */
-  void SetCheckedInternal(PRBool aValue, PRBool aNotify);
+  void SetCheckedInternal(bool aValue, bool aNotify);
 
-  /**
-   * Syntax sugar to make it easier to check for checked
-   */
-  PRBool GetChecked() const
-  {
-    return GET_BOOLBIT(mBitField, BF_CHECKED);
-  }
-
-  nsresult RadioSetChecked(PRBool aNotify);
-  void SetCheckedChanged(PRBool aCheckedChanged);
+  void RadioSetChecked(bool aNotify);
+  void SetCheckedChanged(bool aCheckedChanged);
 
   /**
    * MaybeSubmitForm looks for a submit input or a single text control
@@ -445,10 +421,15 @@ protected:
   nsresult UpdateFileList();
 
   /**
+   * Called after calling one of the SetFiles() functions.
+   */
+  void AfterSetFiles(bool aSetValueChanged);
+
+  /**
    * Determine whether the editor needs to be initialized explicitly for
    * a particular event.
    */
-  PRBool NeedToInitializeEditorForEvent(nsEventChainPreVisitor& aVisitor) const;
+  bool NeedToInitializeEditorForEvent(nsEventChainPreVisitor& aVisitor) const;
 
   /**
    * Get the value mode of the element, depending of the type.
@@ -462,22 +443,47 @@ protected:
    *
    * See: http://dev.w3.org/html5/spec/forms.html#concept-input-mutable
    */
-  PRBool IsMutable() const;
+  bool IsMutable() const;
 
   /**
    * Returns if the readonly attribute applies for the current type.
    */
-  PRBool DoesReadOnlyApply() const;
+  bool DoesReadOnlyApply() const;
 
   /**
    * Returns if the required attribute applies for the current type.
    */
-  PRBool DoesRequiredApply() const;
+  bool DoesRequiredApply() const;
 
   /**
    * Returns if the pattern attribute applies for the current type.
    */
-  PRBool DoesPatternApply() const;
+  bool DoesPatternApply() const;
+
+  /**
+   * Returns if the min and max attributes apply for the current type.
+   */
+  bool DoesMinMaxApply() const;
+
+  /**
+   * Returns if the step attribute apply for the current type.
+   */
+  bool DoesStepApply() const { return DoesMinMaxApply(); }
+
+  /**
+   * Returns if stepDown and stepUp methods apply for the current type.
+   */
+  bool DoStepDownStepUpApply() const { return DoesStepApply(); }
+
+  /**
+   * Returns if valueAsNumber attribute applies for the current type.
+   */
+  bool DoesValueAsNumberApply() const { return DoesMinMaxApply(); }
+
+  /**
+   * Returns if the maxlength attribute applies for the current type.
+   */
+  bool MaxLengthApplies() const { return IsSingleLineTextControl(false, mType); }
 
   void FreeData();
   nsTextEditorState *GetEditorState() const;
@@ -485,7 +491,7 @@ protected:
   /**
    * Manages the internal data storage across type changes.
    */
-  void HandleTypeChange(PRUint8 aNewType);
+  void HandleTypeChange(uint8_t aNewType);
 
   /**
    * Sanitize the value of the element depending of its current type.
@@ -496,25 +502,114 @@ protected:
   /**
    * Returns whether the placeholder attribute applies for the current type.
    */
-  bool PlaceholderApplies() const { return IsSingleLineTextControlInternal(PR_FALSE, mType); }
+  bool PlaceholderApplies() const { return IsSingleLineTextControl(false, mType); }
 
   /**
    * Set the current default value to the value of the input element.
+   * @note You should not call this method if GetValueMode() doesn't return
+   * VALUE_MODE_VALUE.
    */
   nsresult SetDefaultValueAsValue();
 
-  nsCOMPtr<nsIControllers> mControllers;
+  virtual void SetDirectionIfAuto(bool aAuto, bool aNotify);
 
   /**
-   * The type of this input (<input type=...>) as an integer.
-   * @see nsIFormControl.h (specifically NS_FORM_INPUT_*)
+   * Return if an element should have a specific validity UI
+   * (with :-moz-ui-invalid and :-moz-ui-valid pseudo-classes).
+   *
+   * @return Whether the element should have a validity UI.
    */
-  PRUint8                  mType;
+  bool ShouldShowValidityUI() const {
+    /**
+     * Always show the validity UI if the form has already tried to be submitted
+     * but was invalid.
+     *
+     * Otherwise, show the validity UI if the element's value has been changed.
+     */
+    if (mForm && mForm->HasEverTriedInvalidSubmit()) {
+      return true;
+    }
+
+    switch (GetValueMode()) {
+      case VALUE_MODE_DEFAULT:
+        return true;
+      case VALUE_MODE_DEFAULT_ON:
+        return GetCheckedChanged();
+      case VALUE_MODE_VALUE:
+      case VALUE_MODE_FILENAME:
+        return mValueChanged;
+      default:
+        NS_NOTREACHED("We should not be there: there are no other modes.");
+        return false;
+    }
+  }
+
   /**
-   * A bitfield containing our booleans
-   * @see GET_BOOLBIT / SET_BOOLBIT macros and BF_* field identifiers
+   * Returns the radio group container if the element has one, null otherwise.
+   * The radio group container will be the form owner if there is one.
+   * The current document otherwise.
+   * @return the radio group container if the element has one, null otherwise.
    */
-  PRInt16                  mBitField;
+  nsIRadioGroupContainer* GetRadioGroupContainer() const;
+
+  /**
+   * Returns the input element's value as a double-precision float.
+   * Returns NaN if the current element's value is not a floating point number.
+   *
+   * @return the input element's value as a double-precision float.
+   */
+  double GetValueAsDouble() const;
+
+  /**
+   * Sets the value of the element to the string representation of the double.
+   *
+   * @param aValue The double that will be used to set the value.
+   */
+  void SetValue(double aValue);
+
+  /**
+   * Update the HAS_RANGE bit field value.
+   */
+  void UpdateHasRange();
+
+  /**
+   * Returns the min attribute as a double.
+   * Returns NaN if the min attribute isn't a valid floating point number.
+   */
+  double GetMinAsDouble() const;
+
+  /**
+   * Returns the max attribute as a double.
+   * Returns NaN if the max attribute isn't a valid floating point number.
+   */
+  double GetMaxAsDouble() const;
+
+  /**
+   * Returns the current step value.
+   * Returns kStepAny if the current step is "any" string.
+   *
+   * @return the current step value.
+   */
+  double GetStep() const;
+
+  /**
+   * Return the base used to compute if a value matches step.
+   * Basically, it's the min attribute if present and a default value otherwise.
+   *
+   * @return The step base.
+   */
+  double GetStepBase() const;
+
+  /**
+   * Apply a step change from stepUp or stepDown by multiplying aStep by the
+   * current step value.
+   *
+   * @param aStep The value used to be multiplied against the step value.
+   */
+  nsresult ApplyStep(int32_t aStep);
+
+  nsCOMPtr<nsIControllers> mControllers;
+
   /*
    * In mInputData, the mState field is used if IsSingleLineTextControl returns
    * true and mValue is used otherwise.  We have to be careful when handling it
@@ -543,9 +638,122 @@ protected:
    * the frame. Whenever the frame wants to change the filename it has to call
    * SetFileNames to update this member.
    */
-  nsTArray<nsString>       mFileNames;
+  nsCOMArray<nsIDOMFile>   mFiles;
 
   nsRefPtr<nsDOMFileList>  mFileList;
+
+  nsString mStaticDocFileList;
+  
+  /** 
+   * The value of the input element when first initialized and it is updated
+   * when the element is either changed through a script, focused or dispatches   
+   * a change event. This is to ensure correct future change event firing.
+   * NB: This is ONLY applicable where the element is a text control. ie,
+   * where type= "text", "email", "search", "tel", "url" or "password".
+   */
+  nsString mFocusedValue;  
+
+  // Default step base value when a type do not have specific one.
+  static const double kDefaultStepBase;
+  // Float alue returned by GetStep() when the step attribute is set to 'any'.
+  static const double kStepAny;
+
+  /**
+   * The type of this input (<input type=...>) as an integer.
+   * @see nsIFormControl.h (specifically NS_FORM_INPUT_*)
+   */
+  uint8_t                  mType;
+  bool                     mDisabledChanged     : 1;
+  bool                     mValueChanged        : 1;
+  bool                     mCheckedChanged      : 1;
+  bool                     mChecked             : 1;
+  bool                     mHandlingSelectEvent : 1;
+  bool                     mShouldInitChecked   : 1;
+  bool                     mParserCreating      : 1;
+  bool                     mInInternalActivate  : 1;
+  bool                     mCheckedIsToggled    : 1;
+  bool                     mIndeterminate       : 1;
+  bool                     mInhibitRestoration  : 1;
+  bool                     mCanShowValidUI      : 1;
+  bool                     mCanShowInvalidUI    : 1;
+  bool                     mHasRange            : 1;
+
+private:
+  struct nsFilePickerFilter {
+    nsFilePickerFilter()
+      : mFilterMask(0), mIsTrusted(false) {}
+
+    nsFilePickerFilter(int32_t aFilterMask)
+      : mFilterMask(aFilterMask), mIsTrusted(true) {}
+
+    nsFilePickerFilter(const nsString& aTitle,
+                       const nsString& aFilter,
+                       const bool aIsTrusted = false)
+      : mFilterMask(0), mTitle(aTitle), mFilter(aFilter), mIsTrusted(aIsTrusted) {}
+
+    nsFilePickerFilter(const nsFilePickerFilter& other) {
+      mFilterMask = other.mFilterMask;
+      mTitle = other.mTitle;
+      mFilter = other.mFilter;
+      mIsTrusted = other.mIsTrusted;
+    }
+
+    bool operator== (const nsFilePickerFilter& other) const {
+      if ((mFilter == other.mFilter) && (mFilterMask == other.mFilterMask)) {
+        NS_ASSERTION(mIsTrusted == other.mIsTrusted,
+                     "Filter with similar list of extensions and mask should"
+                     " have the same trusted flag value");
+        return true;
+      } else {
+        return false;
+      }
+    }
+    
+    // Filter mask, using values defined in nsIFilePicker
+    int32_t mFilterMask;
+    // If mFilterMask is defined, mTitle and mFilter are useless and should be
+    // ignored
+    nsString mTitle;
+    nsString mFilter;
+    // mIsTrusted is true if mime type comes from a "trusted" source (e.g. our
+    // hard-coded set).
+    // false means it may come from an "untrusted" source (e.g. OS mime types
+    // mapping, which can be different accross OS, user's personal configuration, ...)
+    // For now, only mask filters are considered to be "trusted".
+    bool mIsTrusted; 
+  };
+
+  class AsyncClickHandler
+    : public nsRunnable
+  {
+  public:
+    AsyncClickHandler(nsHTMLInputElement* aInput);
+    NS_IMETHOD Run();
+
+  protected:
+    nsRefPtr<nsHTMLInputElement> mInput;
+    PopupControlState mPopupControlState;
+  };
+
+  class nsFilePickerShownCallback
+    : public nsIFilePickerShownCallback
+  {
+  public:
+    nsFilePickerShownCallback(nsHTMLInputElement* aInput,
+                              nsIFilePicker* aFilePicker,
+                              bool aMulti);
+    virtual ~nsFilePickerShownCallback()
+    { }
+
+    NS_DECL_ISUPPORTS
+
+    NS_IMETHOD Done(int16_t aResult);
+
+  private:
+    nsCOMPtr<nsIFilePicker> mFilePicker;
+    nsRefPtr<nsHTMLInputElement> mInput;
+    bool mMulti;
+  };
 };
 
 #endif

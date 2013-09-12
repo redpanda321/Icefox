@@ -1,68 +1,38 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Ryan Cassin <rcassin@supernova.org>
- *   Daniel Glazman <glazman@netscape.com>
- *   Charles Manske <cmanske@netscape.com>
- *   Kathleen Brade <brade@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
-#include "nsIEditor.h"
-#include "nsIEditingSession.h"
-#include "nsIPlaintextEditor.h"
-#include "nsIHTMLEditor.h"
-#include "nsIHTMLObjectResizer.h"
-#include "nsIHTMLInlineTableEditor.h"
+#include "nsAutoPtr.h"                  // for nsRefPtr, getter_AddRefs, etc
+#include "nsCOMPtr.h"                   // for nsCOMPtr, do_QueryInterface, etc
+#include "nsCRT.h"                      // for nsCRT
+#include "nsComposerCommands.h"         // for nsSetDocumentOptionsCommand, etc
+#include "nsDebug.h"                    // for NS_ENSURE_ARG_POINTER, etc
+#include "nsError.h"                    // for NS_ERROR_INVALID_ARG, etc
+#include "nsICommandParams.h"           // for nsICommandParams
+#include "nsIDOMDocument.h"             // for nsIDOMDocument
+#include "nsIDocShell.h"                // for nsIDocShell
+#include "nsIDocument.h"                // for nsIDocument
+#include "nsIEditingSession.h"          // for nsIEditingSession, etc
+#include "nsIEditor.h"                  // for nsIEditor
+#include "nsIHTMLEditor.h"              // for nsIHTMLEditor
+#include "nsIHTMLInlineTableEditor.h"   // for nsIHTMLInlineTableEditor
+#include "nsIHTMLObjectResizer.h"       // for nsIHTMLObjectResizer
+#include "nsIPlaintextEditor.h"         // for nsIPlaintextEditor, etc
+#include "nsIPresShell.h"               // for nsIPresShell
+#include "nsISelectionController.h"     // for nsISelectionController
+#include "nsISupportsImpl.h"            // for nsPresContext::Release
+#include "nsISupportsUtils.h"           // for NS_IF_ADDREF
+#include "nsIURI.h"                     // for nsIURI
+#include "nsPresContext.h"              // for nsPresContext
+#include "nscore.h"                     // for NS_IMETHODIMP, nsresult, etc
 
-#include "nsIDOMDocument.h"
-#include "nsIDocument.h"
-#include "nsISelectionController.h"
-#include "nsIPresShell.h"
-#include "nsPresContext.h"
-#include "nsIDocShell.h"
-#include "nsIURI.h"
-
-#include "nsCOMPtr.h"
-
-#include "nsComposerCommands.h"
-#include "nsICommandParams.h"
-#include "nsCRT.h"
+class nsISupports;
 
 //defines
 #define STATE_ENABLED  "state_enabled"
+#define STATE_ALL "state_all"
 #define STATE_ATTRIBUTE "state_attribute"
 #define STATE_DATA "state_data"
 
@@ -71,7 +41,7 @@ nsresult
 GetPresContextFromEditor(nsIEditor *aEditor, nsPresContext **aResult)
 {
   NS_ENSURE_ARG_POINTER(aResult);
-  *aResult = nsnull;
+  *aResult = nullptr;
   NS_ENSURE_ARG_POINTER(aEditor);
 
   nsCOMPtr<nsISelectionController> selCon;
@@ -89,11 +59,14 @@ GetPresContextFromEditor(nsIEditor *aEditor, nsPresContext **aResult)
 NS_IMETHODIMP
 nsSetDocumentOptionsCommand::IsCommandEnabled(const char * aCommandName,
                                               nsISupports *refCon,
-                                              PRBool *outCmdEnabled)
+                                              bool *outCmdEnabled)
 {
   NS_ENSURE_ARG_POINTER(outCmdEnabled);
-  nsCOMPtr<nsIHTMLEditor> editor = do_QueryInterface(refCon);
-  *outCmdEnabled = (editor != nsnull);
+  nsCOMPtr<nsIEditor> editor = do_QueryInterface(refCon);
+  if (editor)
+    return editor->GetIsSelectionEditable(outCmdEnabled);
+
+  *outCmdEnabled = false;
   return NS_OK;
 }
 
@@ -119,16 +92,16 @@ nsSetDocumentOptionsCommand::DoCommandParams(const char *aCommandName,
   NS_ENSURE_SUCCESS(rv, rv);
   NS_ENSURE_TRUE(presContext, NS_ERROR_FAILURE);
 
-  PRInt32 animationMode; 
+  int32_t animationMode; 
   rv = aParams->GetLongValue("imageAnimation", &animationMode);
   if (NS_SUCCEEDED(rv))
   {
     // for possible values of animation mode, see:
-    // http://lxr.mozilla.org/seamonkey/source/modules/libpr0n/public/imgIContainer.idl
+    // http://lxr.mozilla.org/seamonkey/source/image/public/imgIContainer.idl
     presContext->SetImageAnimationMode(animationMode);
   }
 
-  PRBool allowPlugins; 
+  bool allowPlugins; 
   rv = aParams->GetBooleanValue("plugins", &allowPlugins);
   if (NS_SUCCEEDED(rv))
   {
@@ -159,7 +132,7 @@ nsSetDocumentOptionsCommand::GetCommandStateParams(const char *aCommandName,
   NS_ENSURE_TRUE(editor, NS_ERROR_INVALID_ARG);
 
   // Always get the enabled state
-  PRBool outCmdEnabled = PR_FALSE;
+  bool outCmdEnabled = false;
   IsCommandEnabled(aCommandName, refCon, &outCmdEnabled);
   nsresult rv = aParams->SetBooleanValue(STATE_ENABLED, outCmdEnabled);
   NS_ENSURE_SUCCESS(rv, rv);
@@ -170,18 +143,18 @@ nsSetDocumentOptionsCommand::GetCommandStateParams(const char *aCommandName,
   NS_ENSURE_SUCCESS(rv, rv);
   NS_ENSURE_TRUE(presContext, NS_ERROR_FAILURE);
 
-  PRInt32 animationMode;
+  int32_t animationMode;
   rv = aParams->GetLongValue("imageAnimation", &animationMode);
   if (NS_SUCCEEDED(rv))
   {
     // for possible values of animation mode, see
-    // http://lxr.mozilla.org/seamonkey/source/modules/libpr0n/public/imgIContainer.idl
+    // http://lxr.mozilla.org/seamonkey/source/image/public/imgIContainer.idl
     rv = aParams->SetLongValue("imageAnimation",
                                presContext->ImageAnimationMode());
     NS_ENSURE_SUCCESS(rv, rv);
   }
 
-  PRBool allowPlugins; 
+  bool allowPlugins = false; 
   rv = aParams->GetBooleanValue("plugins", &allowPlugins);
   if (NS_SUCCEEDED(rv))
   {
@@ -192,8 +165,7 @@ nsSetDocumentOptionsCommand::GetCommandStateParams(const char *aCommandName,
     NS_ENSURE_SUCCESS(rv, rv);
     NS_ENSURE_TRUE(docShell, NS_ERROR_FAILURE);
 
-    rv = docShell->GetAllowPlugins(&allowPlugins);
-    NS_ENSURE_SUCCESS(rv, rv);
+    allowPlugins = docShell->PluginsAllowedInCurrentDoc();
 
     rv = aParams->SetBooleanValue("plugins", allowPlugins);
     NS_ENSURE_SUCCESS(rv, rv);
@@ -214,11 +186,11 @@ nsSetDocumentOptionsCommand::GetCommandStateParams(const char *aCommandName,
 NS_IMETHODIMP
 nsSetDocumentStateCommand::IsCommandEnabled(const char * aCommandName,
                                             nsISupports *refCon,
-                                            PRBool *outCmdEnabled)
+                                            bool *outCmdEnabled)
 {
+  // These commands are always enabled
   NS_ENSURE_ARG_POINTER(outCmdEnabled);
-  nsCOMPtr<nsIEditor> editor = do_QueryInterface(refCon);
-  *outCmdEnabled = (editor != nsnull);
+  *outCmdEnabled = true;
   return NS_OK;
 }
 
@@ -241,7 +213,7 @@ nsSetDocumentStateCommand::DoCommandParams(const char *aCommandName,
   {
     NS_ENSURE_ARG_POINTER(aParams);
 
-    PRBool modified; 
+    bool modified; 
     nsresult rv = aParams->GetBooleanValue(STATE_ATTRIBUTE, &modified);
 
     // Should we fail if this param wasn't set?
@@ -257,11 +229,11 @@ nsSetDocumentStateCommand::DoCommandParams(const char *aCommandName,
   if (!nsCRT::strcmp(aCommandName, "cmd_setDocumentReadOnly"))
   {
     NS_ENSURE_ARG_POINTER(aParams);
-    PRBool isReadOnly; 
+    bool isReadOnly; 
     nsresult rvRO = aParams->GetBooleanValue(STATE_ATTRIBUTE, &isReadOnly);
     NS_ENSURE_SUCCESS(rvRO, rvRO);
 
-    PRUint32 flags;
+    uint32_t flags;
     editor->GetFlags(&flags);
     if (isReadOnly)
       flags |= nsIPlaintextEditor::eEditorReadonlyMask;
@@ -277,7 +249,7 @@ nsSetDocumentStateCommand::DoCommandParams(const char *aCommandName,
     nsCOMPtr<nsIHTMLEditor> htmleditor = do_QueryInterface(refCon);
     NS_ENSURE_TRUE(htmleditor, NS_ERROR_INVALID_ARG);
 
-    PRBool desireCSS;
+    bool desireCSS;
     nsresult rvCSS = aParams->GetBooleanValue(STATE_ATTRIBUTE, &desireCSS);
     NS_ENSURE_SUCCESS(rvCSS, rvCSS);
 
@@ -290,7 +262,7 @@ nsSetDocumentStateCommand::DoCommandParams(const char *aCommandName,
     nsCOMPtr<nsIHTMLEditor> htmleditor = do_QueryInterface(refCon);
     NS_ENSURE_TRUE(htmleditor, NS_ERROR_INVALID_ARG);
 
-    PRBool insertBrOnReturn;
+    bool insertBrOnReturn;
     nsresult rvBR = aParams->GetBooleanValue(STATE_ATTRIBUTE,
                                               &insertBrOnReturn);
     NS_ENSURE_SUCCESS(rvBR, rvBR);
@@ -304,7 +276,7 @@ nsSetDocumentStateCommand::DoCommandParams(const char *aCommandName,
     nsCOMPtr<nsIHTMLObjectResizer> resizer = do_QueryInterface(refCon);
     NS_ENSURE_TRUE(resizer, NS_ERROR_INVALID_ARG);
 
-    PRBool enabled;
+    bool enabled;
     nsresult rvOR = aParams->GetBooleanValue(STATE_ATTRIBUTE, &enabled);
     NS_ENSURE_SUCCESS(rvOR, rvOR);
 
@@ -317,7 +289,7 @@ nsSetDocumentStateCommand::DoCommandParams(const char *aCommandName,
     nsCOMPtr<nsIHTMLInlineTableEditor> editor = do_QueryInterface(refCon);
     NS_ENSURE_TRUE(editor, NS_ERROR_INVALID_ARG);
 
-    PRBool enabled;
+    bool enabled;
     nsresult rvOR = aParams->GetBooleanValue(STATE_ATTRIBUTE, &enabled);
     NS_ENSURE_SUCCESS(rvOR, rvOR);
 
@@ -340,14 +312,14 @@ nsSetDocumentStateCommand::GetCommandStateParams(const char *aCommandName,
   NS_ENSURE_TRUE(editor, NS_ERROR_INVALID_ARG);
 
   // Always get the enabled state
-  PRBool outCmdEnabled = PR_FALSE;
+  bool outCmdEnabled = false;
   IsCommandEnabled(aCommandName, refCon, &outCmdEnabled);
   nsresult rv = aParams->SetBooleanValue(STATE_ENABLED, outCmdEnabled);
   NS_ENSURE_SUCCESS(rv, rv);
 
   if (!nsCRT::strcmp(aCommandName, "cmd_setDocumentModified"))
   {
-    PRBool modified;
+    bool modified;
     rv = editor->GetDocumentModified(&modified);
     NS_ENSURE_SUCCESS(rv, rv);
 
@@ -358,9 +330,9 @@ nsSetDocumentStateCommand::GetCommandStateParams(const char *aCommandName,
   {
     NS_ENSURE_ARG_POINTER(aParams);
 
-    PRUint32 flags;
+    uint32_t flags;
     editor->GetFlags(&flags);
-    PRBool isReadOnly = flags & nsIPlaintextEditor::eEditorReadonlyMask;
+    bool isReadOnly = flags & nsIPlaintextEditor::eEditorReadonlyMask;
     return aParams->SetBooleanValue(STATE_ATTRIBUTE, isReadOnly);
   }
 
@@ -370,9 +342,9 @@ nsSetDocumentStateCommand::GetCommandStateParams(const char *aCommandName,
     nsCOMPtr<nsIHTMLEditor> htmleditor = do_QueryInterface(refCon);
     NS_ENSURE_TRUE(htmleditor, NS_ERROR_INVALID_ARG);
 
-    PRBool isCSS;
+    bool isCSS;
     htmleditor->GetIsCSSEnabled(&isCSS);
-    return aParams->SetBooleanValue(STATE_ATTRIBUTE, isCSS);
+    return aParams->SetBooleanValue(STATE_ALL, isCSS);
   }
 
   if (!nsCRT::strcmp(aCommandName, "cmd_insertBrOnReturn"))
@@ -381,7 +353,7 @@ nsSetDocumentStateCommand::GetCommandStateParams(const char *aCommandName,
     nsCOMPtr<nsIHTMLEditor> htmleditor = do_QueryInterface(refCon);
     NS_ENSURE_TRUE(htmleditor, NS_ERROR_INVALID_ARG);
 
-    PRBool createPOnReturn;
+    bool createPOnReturn;
     htmleditor->GetReturnInParagraphCreatesNewParagraph(&createPOnReturn);
     return aParams->SetBooleanValue(STATE_ATTRIBUTE, !createPOnReturn);
   }
@@ -392,7 +364,7 @@ nsSetDocumentStateCommand::GetCommandStateParams(const char *aCommandName,
     nsCOMPtr<nsIHTMLObjectResizer> resizer = do_QueryInterface(refCon);
     NS_ENSURE_TRUE(resizer, NS_ERROR_INVALID_ARG);
 
-    PRBool enabled;
+    bool enabled;
     resizer->GetObjectResizingEnabled(&enabled);
     return aParams->SetBooleanValue(STATE_ATTRIBUTE, enabled);
   }
@@ -403,7 +375,7 @@ nsSetDocumentStateCommand::GetCommandStateParams(const char *aCommandName,
     nsCOMPtr<nsIHTMLInlineTableEditor> editor = do_QueryInterface(refCon);
     NS_ENSURE_TRUE(editor, NS_ERROR_INVALID_ARG);
 
-    PRBool enabled;
+    bool enabled;
     editor->GetInlineTableEditingEnabled(&enabled);
     return aParams->SetBooleanValue(STATE_ATTRIBUTE, enabled);
   }
@@ -448,18 +420,14 @@ nsSetDocumentStateCommand::GetCommandStateParams(const char *aCommandName,
  *
  */
 
-#ifdef XP_MAC
-#pragma mark -
-#endif
-
 NS_IMETHODIMP
 nsDocumentStateCommand::IsCommandEnabled(const char* aCommandName,
                                          nsISupports *refCon,
-                                         PRBool *outCmdEnabled)
+                                         bool *outCmdEnabled)
 {
   NS_ENSURE_ARG_POINTER(outCmdEnabled);
   // Always return false to discourage callers from using DoCommand()
-  *outCmdEnabled = PR_FALSE;
+  *outCmdEnabled = false;
   return NS_OK;
 }
 
@@ -489,7 +457,7 @@ nsDocumentStateCommand::GetCommandStateParams(const char *aCommandName,
 
   if (!nsCRT::strcmp(aCommandName, "obs_documentCreated"))
   {
-    PRUint32 editorStatus = nsIEditingSession::eEditorErrorUnknown;
+    uint32_t editorStatus = nsIEditingSession::eEditorErrorUnknown;
 
     nsCOMPtr<nsIEditingSession> editingSession = do_QueryInterface(refCon);
     if (editingSession)

@@ -1,59 +1,24 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Boris Zbarsky <bzbarsky@mit.edu>.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Christian Biesinger <cbiesinger@web.de>
- *   Mats Palmgren <mats.palmgren@bredband.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsReadLine_h__
 #define nsReadLine_h__
 
-#include "prmem.h"
 #include "nsIInputStream.h"
+#include "mozilla/Likely.h"
 
 /**
  * @file
  * Functions to read complete lines from an input stream.
  *
- * To properly use the helper function in here (NS_ReadLine) the caller
- * needs to declare a pointer to an nsLineBuffer, call
- * NS_InitLineBuffer on it, and pass it to NS_ReadLine every time it
+ * To properly use the helper function in here (NS_ReadLine) the caller should
+ * create a nsLineBuffer<T> with new, and pass it to NS_ReadLine every time it
  * wants a line out.
  *
- * When done, the pointer should be freed using PR_Free.
+ * When done, the object should be deleted.
  */
 
 /**
@@ -75,42 +40,12 @@
 template<typename CharT>
 class nsLineBuffer {
   public:
+    nsLineBuffer() : start(buf), end(buf) { }
+
   CharT buf[kLineBufferSize+1];
   CharT* start;
   CharT* end;
 };
-
-/**
- * Initialize a line buffer for use with NS_ReadLine.
- *
- * @param aBufferPtr
- *        Pointer to pointer to a line buffer. Upon successful return,
- *        *aBufferPtr will contain a valid pointer to a line buffer, for use
- *        with NS_ReadLine. Use PR_Free when the buffer is no longer needed.
- *
- * @retval NS_OK Success.
- * @retval NS_ERROR_OUT_OF_MEMORY Not enough memory to allocate the line buffer.
- *
- * @par Example:
- * @code
- *    nsLineBuffer* lb;
- *    rv = NS_InitLineBuffer(&lb);
- *    if (NS_SUCCEEDED(rv)) {
- *      // do stuff...
- *      PR_Free(lb);
- *    }
- * @endcode
- */
-template<typename CharT>
-nsresult
-NS_InitLineBuffer (nsLineBuffer<CharT> ** aBufferPtr) {
-  *aBufferPtr = PR_NEW(nsLineBuffer<CharT>);
-  if (!(*aBufferPtr))
-    return NS_ERROR_OUT_OF_MEMORY;
-
-  (*aBufferPtr)->start = (*aBufferPtr)->end = (*aBufferPtr)->buf;
-  return NS_OK;
-}
 
 /**
  * Read a line from an input stream. Lines are separated by '\r' (0x0D) or '\n'
@@ -119,8 +54,7 @@ NS_InitLineBuffer (nsLineBuffer<CharT> ** aBufferPtr) {
  * @param aStream
  *        The stream to read from
  * @param aBuffer
- *        The line buffer to use. Must have been inited with
- *        NS_InitLineBuffer before. A single line buffer must not be used with
+ *        The line buffer to use.  A single line buffer must not be used with
  *        different input streams.
  * @param aLine [out]
  *        The string where the line will be stored.
@@ -138,7 +72,7 @@ NS_InitLineBuffer (nsLineBuffer<CharT> ** aBufferPtr) {
 template<typename CharT, class StreamType, class StringType>
 nsresult
 NS_ReadLine (StreamType* aStream, nsLineBuffer<CharT> * aBuffer,
-             StringType & aLine, PRBool *more)
+             StringType & aLine, bool *more)
 {
   CharT eolchar = 0; // the first eol char or 1 after \r\n or \n\r is found
 
@@ -146,10 +80,10 @@ NS_ReadLine (StreamType* aStream, nsLineBuffer<CharT> * aBuffer,
 
   while (1) { // will be returning out of this loop on eol or eof
     if (aBuffer->start == aBuffer->end) { // buffer is empty.  Read into it.
-      PRUint32 bytesRead;
+      uint32_t bytesRead;
       nsresult rv = aStream->Read(aBuffer->buf, kLineBufferSize, &bytesRead);
-      if (NS_FAILED(rv) || NS_UNLIKELY(bytesRead == 0)) {
-        *more = PR_FALSE;
+      if (NS_FAILED(rv) || MOZ_UNLIKELY(bytesRead == 0)) {
+        *more = false;
         return rv;
       }
       aBuffer->start = aBuffer->buf;
@@ -168,7 +102,7 @@ NS_ReadLine (StreamType* aStream, nsLineBuffer<CharT> * aBuffer,
      * more char after the end-of-line to set |more| correctly.
      */
     CharT* current = aBuffer->start;
-    if (NS_LIKELY(eolchar == 0)) {
+    if (MOZ_LIKELY(eolchar == 0)) {
       for ( ; current < aBuffer->end; ++current) {
         if (*current == '\n' || *current == '\r') {
           eolchar = *current;
@@ -178,7 +112,7 @@ NS_ReadLine (StreamType* aStream, nsLineBuffer<CharT> * aBuffer,
         }
       }
     }
-    if (NS_LIKELY(eolchar != 0)) {
+    if (MOZ_LIKELY(eolchar != 0)) {
       for ( ; current < aBuffer->end; ++current) {
         if ((eolchar == '\r' && *current == '\n') ||
             (eolchar == '\n' && *current == '\r')) {
@@ -186,7 +120,7 @@ NS_ReadLine (StreamType* aStream, nsLineBuffer<CharT> * aBuffer,
           continue;
         }
         aBuffer->start = current;
-        *more = PR_TRUE;
+        *more = true;
         return NS_OK;
       }
     }

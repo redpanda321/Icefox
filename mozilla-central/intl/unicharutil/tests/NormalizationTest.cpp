@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- *  Simon Montagu <smontagu@smontagu.org>
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include <stdio.h>
 #include "nsISupports.h"
@@ -57,7 +25,7 @@ struct testcaseLine {
 #ifdef DEBUG_smontagu
 #define DEBUG_NAMED_TESTCASE(t, s) \
   printf(t ": "); \
-  for (PRUint32 i = 0; i < s.Length(); ++i) \
+  for (uint32_t i = 0; i < s.Length(); ++i) \
     printf("%x ", s.CharAt(i)); \
   printf("\n")
 #else
@@ -71,14 +39,14 @@ struct testcaseLine {
    normalizer->NormalizeUnicode##form(comparison, normalized);\
    DEBUG_NAMED_TESTCASE(#form "(" #comparison ")", normalized);\
    if (!base.Equals(normalized)) {\
-     rv = PR_FALSE;\
+     rv = false;\
      showError(description, #base " != " #form "(" #comparison ")\n");\
    }
 
 NS_DEFINE_CID(kUnicodeNormalizerCID, NS_UNICODE_NORMALIZER_CID);
 
 nsIUnicodeNormalizer *normalizer;
-PRBool verboseMode = PR_FALSE;
+bool verboseMode = false;
 
 #include "NormalizationData.h"
 
@@ -88,7 +56,7 @@ void showError(const char* description, const char* errorText)
     printf("%s failed: %s", description, errorText);
 }
 
-PRBool TestInvariants(testcaseLine* testLine)
+bool TestInvariants(testcaseLine* testLine)
 {
   nsAutoString c1, c2, c3, c4, c5, normalized;
   c1 = nsDependentString((PRUnichar*)testLine->c1);
@@ -96,7 +64,7 @@ PRBool TestInvariants(testcaseLine* testLine)
   c3 = nsDependentString((PRUnichar*)testLine->c3);
   c4 = nsDependentString((PRUnichar*)testLine->c4);
   c5 = nsDependentString((PRUnichar*)testLine->c5);
-  PRBool rv = PR_TRUE;
+  bool rv = true;
  
   /*
     1. The following invariants must be true for all conformant implementations
@@ -156,7 +124,7 @@ PRBool TestInvariants(testcaseLine* testLine)
   return rv;
 }
 
-PRUint32 UTF32CodepointFromTestcase(testcaseLine* testLine)
+uint32_t UTF32CodepointFromTestcase(testcaseLine* testLine)
 {
   if (!IS_SURROGATE(testLine->c1[0]))
     return testLine->c1[0];
@@ -167,9 +135,9 @@ PRUint32 UTF32CodepointFromTestcase(testcaseLine* testLine)
   return SURROGATE_TO_UCS4(testLine->c1[0], testLine->c1[1]);
 }
 
-PRBool TestUnspecifiedCodepoint(PRUint32 codepoint)
+bool TestUnspecifiedCodepoint(uint32_t codepoint)
 {
-  PRBool rv = PR_TRUE;
+  bool rv = true;
   PRUnichar unicharArray[3];
   nsAutoString X, normalized;
   char description[9];
@@ -206,9 +174,9 @@ void TestPart0()
 {
   printf("Test Part0: Specific cases\n");
 
-  PRUint32 i = 0;
-  PRUint32 numFailed = 0;
-  PRUint32 numPassed = 0;
+  uint32_t i = 0;
+  uint32_t numFailed = 0;
+  uint32_t numPassed = 0;
 
   while (Part0TestData[i].c1[0] != 0) {
     if (TestInvariants(&Part0TestData[i++]))
@@ -223,11 +191,11 @@ void TestPart1()
 {
   printf("Test Part1: Character by character test\n");
 
-  PRUint32 i = 0;
-  PRUint32 numFailed = 0;
-  PRUint32 numPassed = 0;
-  PRUint32 codepoint;
-  PRUint32 testDataCodepoint = UTF32CodepointFromTestcase(&Part1TestData[i]);
+  uint32_t i = 0;
+  uint32_t numFailed = 0;
+  uint32_t numPassed = 0;
+  uint32_t codepoint;
+  uint32_t testDataCodepoint = UTF32CodepointFromTestcase(&Part1TestData[i]);
 
   for (codepoint = 1; codepoint < 0x110000; ++codepoint) {
     if (testDataCodepoint == codepoint) {
@@ -250,9 +218,9 @@ void TestPart2()
 {
   printf("Test Part2: Canonical Order Test\n");
 
-  PRUint32 i = 0;
-  PRUint32 numFailed = 0;
-  PRUint32 numPassed = 0;
+  uint32_t i = 0;
+  uint32_t numFailed = 0;
+  uint32_t numPassed = 0;
 
   while (Part2TestData[i].c1[0] != 0) {
     if (TestInvariants(&Part2TestData[i++]))
@@ -267,9 +235,9 @@ void TestPart3()
 {
   printf("Test Part3: PRI #29 Test\n");
 
-  PRUint32 i = 0;
-  PRUint32 numFailed = 0;
-  PRUint32 numPassed = 0;
+  uint32_t i = 0;
+  uint32_t numFailed = 0;
+  uint32_t numPassed = 0;
 
   while (Part3TestData[i].c1[0] != 0) {
     if (TestInvariants(&Part3TestData[i++]))
@@ -295,9 +263,9 @@ int main(int argc, char** argv) {
   printf("NormalizationTest: test nsIUnicodeNormalizer. UCD version: %s\n", 
          versionText); 
   if (argc <= 1)
-    verboseMode = PR_FALSE;
+    verboseMode = false;
   else if ((argc == 2) && (!strcmp(argv[1], "-v")))
-    verboseMode = PR_TRUE;
+    verboseMode = true;
   else {
     printf("                   Usage: NormalizationTest [OPTION]..\n");
     printf("Options:\n");
@@ -305,17 +273,17 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  nsresult rv = NS_InitXPCOM2(nsnull, nsnull, nsnull);
+  nsresult rv = NS_InitXPCOM2(nullptr, nullptr, nullptr);
   if (NS_FAILED(rv)) {
     printf("NS_InitXPCOM2 failed\n");
     return 1;
   }
   
-  normalizer = NULL;
+  normalizer = nullptr;
   nsresult res;
   res = CallGetService(kUnicodeNormalizerCID, &normalizer);
   
- if(NS_FAILED(res) || ( normalizer == NULL ) ) {
+ if(NS_FAILED(res) || !normalizer) {
     printf("GetService failed\n");
     return 1;
   }

@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Daniel Glazman <glazman@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "nsIDOMHTMLStyleElement.h"
 #include "nsIDOMLinkStyle.h"
 #include "nsIDOMEventTarget.h"
@@ -47,9 +14,12 @@
 #include "nsNetUtil.h"
 #include "nsIDocument.h"
 #include "nsUnicharUtils.h"
-#include "nsParserUtils.h"
 #include "nsThreadUtils.h"
+#include "nsContentUtils.h"
+#include "nsStubMutationObserver.h"
 
+using namespace mozilla;
+using namespace mozilla::dom;
 
 class nsHTMLStyleElement : public nsGenericHTMLElement,
                            public nsIDOMHTMLStyleElement,
@@ -63,36 +33,42 @@ public:
   // nsISupports
   NS_DECL_ISUPPORTS_INHERITED
 
+  // CC
+  NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED(nsHTMLStyleElement,
+                                           nsGenericHTMLElement)
+
   // nsIDOMNode
-  NS_FORWARD_NSIDOMNODE(nsGenericHTMLElement::)
+  NS_FORWARD_NSIDOMNODE_TO_NSINODE
 
   // nsIDOMElement
-  NS_FORWARD_NSIDOMELEMENT(nsGenericHTMLElement::)
+  NS_FORWARD_NSIDOMELEMENT_TO_GENERIC
 
   // nsIDOMHTMLElement
-  NS_FORWARD_NSIDOMHTMLELEMENT(nsGenericHTMLElement::)
+  NS_FORWARD_NSIDOMHTMLELEMENT_TO_GENERIC
+
+  virtual void GetInnerHTML(nsAString& aInnerHTML,
+                            mozilla::ErrorResult& aError) MOZ_OVERRIDE;
+  virtual void SetInnerHTML(const nsAString& aInnerHTML,
+                            mozilla::ErrorResult& aError) MOZ_OVERRIDE;
 
   // nsIDOMHTMLStyleElement
   NS_DECL_NSIDOMHTMLSTYLEELEMENT
 
   virtual nsresult BindToTree(nsIDocument* aDocument, nsIContent* aParent,
                               nsIContent* aBindingParent,
-                              PRBool aCompileEventHandlers);
-  virtual void UnbindFromTree(PRBool aDeep = PR_TRUE,
-                              PRBool aNullParent = PR_TRUE);
-  nsresult SetAttr(PRInt32 aNameSpaceID, nsIAtom* aName,
-                   const nsAString& aValue, PRBool aNotify)
+                              bool aCompileEventHandlers);
+  virtual void UnbindFromTree(bool aDeep = true,
+                              bool aNullParent = true);
+  nsresult SetAttr(int32_t aNameSpaceID, nsIAtom* aName,
+                   const nsAString& aValue, bool aNotify)
   {
-    return SetAttr(aNameSpaceID, aName, nsnull, aValue, aNotify);
+    return SetAttr(aNameSpaceID, aName, nullptr, aValue, aNotify);
   }
-  virtual nsresult SetAttr(PRInt32 aNameSpaceID, nsIAtom* aName,
+  virtual nsresult SetAttr(int32_t aNameSpaceID, nsIAtom* aName,
                            nsIAtom* aPrefix, const nsAString& aValue,
-                           PRBool aNotify);
-  virtual nsresult UnsetAttr(PRInt32 aNameSpaceID, nsIAtom* aAttribute,
-                             PRBool aNotify);
-
-  virtual nsresult GetInnerHTML(nsAString& aInnerHTML);
-  virtual nsresult SetInnerHTML(const nsAString& aInnerHTML);
+                           bool aNotify);
+  virtual nsresult UnsetAttr(int32_t aNameSpaceID, nsIAtom* aAttribute,
+                             bool aNotify);
 
   virtual nsresult Clone(nsINodeInfo *aNodeInfo, nsINode **aResult) const;
 
@@ -103,12 +79,14 @@ public:
   NS_DECL_NSIMUTATIONOBSERVER_CONTENTREMOVED
 
   virtual nsXPCClassInfo* GetClassInfo();
+
+  virtual nsIDOMNode* AsDOMNode() { return this; }
 protected:
-  already_AddRefed<nsIURI> GetStyleSheetURL(PRBool* aIsInline);
+  already_AddRefed<nsIURI> GetStyleSheetURL(bool* aIsInline);
   void GetStyleSheetInfo(nsAString& aTitle,
                          nsAString& aType,
                          nsAString& aMedia,
-                         PRBool* aIsAlternate);
+                         bool* aIsAlternate);
   /**
    * Common method to call from the various mutation observer methods.
    * aContent is a content node that's either the one that changed or its
@@ -131,15 +109,24 @@ nsHTMLStyleElement::~nsHTMLStyleElement()
 {
 }
 
+NS_IMPL_CYCLE_COLLECTION_CLASS(nsHTMLStyleElement)
+NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(nsHTMLStyleElement,
+                                                  nsGenericHTMLElement)
+  tmp->nsStyleLinkElement::Traverse(cb);
+NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
+NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(nsHTMLStyleElement,
+                                                nsGenericHTMLElement)
+  tmp->nsStyleLinkElement::Unlink();
+NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
-NS_IMPL_ADDREF_INHERITED(nsHTMLStyleElement, nsGenericElement) 
-NS_IMPL_RELEASE_INHERITED(nsHTMLStyleElement, nsGenericElement) 
+NS_IMPL_ADDREF_INHERITED(nsHTMLStyleElement, Element)
+NS_IMPL_RELEASE_INHERITED(nsHTMLStyleElement, Element)
 
 
 DOMCI_NODE_DATA(HTMLStyleElement, nsHTMLStyleElement)
 
 // QueryInterface implementation for nsHTMLStyleElement
-NS_INTERFACE_TABLE_HEAD(nsHTMLStyleElement)
+NS_INTERFACE_TABLE_HEAD_CYCLE_COLLECTION_INHERITED(nsHTMLStyleElement)
   NS_HTML_CONTENT_INTERFACE_TABLE4(nsHTMLStyleElement,
                                    nsIDOMHTMLStyleElement,
                                    nsIDOMLinkStyle,
@@ -154,38 +141,26 @@ NS_IMPL_ELEMENT_CLONE(nsHTMLStyleElement)
 
 
 NS_IMETHODIMP
-nsHTMLStyleElement::GetDisabled(PRBool* aDisabled)
+nsHTMLStyleElement::GetDisabled(bool* aDisabled)
 {
-  nsresult result = NS_OK;
-  
-  if (GetStyleSheet()) {
-    nsCOMPtr<nsIDOMStyleSheet> ss(do_QueryInterface(GetStyleSheet()));
-
-    if (ss) {
-      result = ss->GetDisabled(aDisabled);
-    }
-  }
-  else {
-    *aDisabled = PR_FALSE;
+  nsCOMPtr<nsIDOMStyleSheet> ss = do_QueryInterface(GetStyleSheet());
+  if (!ss) {
+    *aDisabled = false;
+    return NS_OK;
   }
 
-  return result;
+  return ss->GetDisabled(aDisabled);
 }
 
 NS_IMETHODIMP 
-nsHTMLStyleElement::SetDisabled(PRBool aDisabled)
+nsHTMLStyleElement::SetDisabled(bool aDisabled)
 {
-  nsresult result = NS_OK;
-  
-  if (GetStyleSheet()) {
-    nsCOMPtr<nsIDOMStyleSheet> ss(do_QueryInterface(GetStyleSheet()));
-
-    if (ss) {
-      result = ss->SetDisabled(aDisabled);
-    }
+  nsCOMPtr<nsIDOMStyleSheet> ss = do_QueryInterface(GetStyleSheet());
+  if (!ss) {
+    return NS_OK;
   }
 
-  return result;
+  return ss->SetDisabled(aDisabled);
 }
 
 NS_IMPL_STRING_ATTR(nsHTMLStyleElement, Media, media)
@@ -203,7 +178,7 @@ void
 nsHTMLStyleElement::ContentAppended(nsIDocument* aDocument,
                                     nsIContent* aContainer,
                                     nsIContent* aFirstNewContent,
-                                    PRInt32 aNewIndexInContainer)
+                                    int32_t aNewIndexInContainer)
 {
   ContentChanged(aContainer);
 }
@@ -212,7 +187,7 @@ void
 nsHTMLStyleElement::ContentInserted(nsIDocument* aDocument,
                                     nsIContent* aContainer,
                                     nsIContent* aChild,
-                                    PRInt32 aIndexInContainer)
+                                    int32_t aIndexInContainer)
 {
   ContentChanged(aChild);
 }
@@ -221,7 +196,7 @@ void
 nsHTMLStyleElement::ContentRemoved(nsIDocument* aDocument,
                                    nsIContent* aContainer,
                                    nsIContent* aChild,
-                                   PRInt32 aIndexInContainer,
+                                   int32_t aIndexInContainer,
                                    nsIContent* aPreviousSibling)
 {
   ContentChanged(aChild);
@@ -231,14 +206,14 @@ void
 nsHTMLStyleElement::ContentChanged(nsIContent* aContent)
 {
   if (nsContentUtils::IsInSameAnonymousTree(this, aContent)) {
-    UpdateStyleSheetInternal(nsnull);
+    UpdateStyleSheetInternal(nullptr);
   }
 }
 
 nsresult
 nsHTMLStyleElement::BindToTree(nsIDocument* aDocument, nsIContent* aParent,
                                nsIContent* aBindingParent,
-                               PRBool aCompileEventHandlers)
+                               bool aCompileEventHandlers)
 {
   nsresult rv = nsGenericHTMLElement::BindToTree(aDocument, aParent,
                                                  aBindingParent,
@@ -252,7 +227,7 @@ nsHTMLStyleElement::BindToTree(nsIDocument* aDocument, nsIContent* aParent,
 }
 
 void
-nsHTMLStyleElement::UnbindFromTree(PRBool aDeep, PRBool aNullParent)
+nsHTMLStyleElement::UnbindFromTree(bool aDeep, bool aNullParent)
 {
   nsCOMPtr<nsIDocument> oldDoc = GetCurrentDoc();
 
@@ -261,77 +236,74 @@ nsHTMLStyleElement::UnbindFromTree(PRBool aDeep, PRBool aNullParent)
 }
 
 nsresult
-nsHTMLStyleElement::SetAttr(PRInt32 aNameSpaceID, nsIAtom* aName,
+nsHTMLStyleElement::SetAttr(int32_t aNameSpaceID, nsIAtom* aName,
                             nsIAtom* aPrefix, const nsAString& aValue,
-                            PRBool aNotify)
+                            bool aNotify)
 {
   nsresult rv = nsGenericHTMLElement::SetAttr(aNameSpaceID, aName, aPrefix,
                                               aValue, aNotify);
-  if (NS_SUCCEEDED(rv)) {
-    UpdateStyleSheetInternal(nsnull,
-                             aNameSpaceID == kNameSpaceID_None &&
-                             (aName == nsGkAtoms::title ||
-                              aName == nsGkAtoms::media ||
-                              aName == nsGkAtoms::type));
+  if (NS_SUCCEEDED(rv) && aNameSpaceID == kNameSpaceID_None &&
+      (aName == nsGkAtoms::title ||
+       aName == nsGkAtoms::media ||
+       aName == nsGkAtoms::type)) {
+    UpdateStyleSheetInternal(nullptr, true);
   }
 
   return rv;
 }
 
 nsresult
-nsHTMLStyleElement::UnsetAttr(PRInt32 aNameSpaceID, nsIAtom* aAttribute,
-                              PRBool aNotify)
+nsHTMLStyleElement::UnsetAttr(int32_t aNameSpaceID, nsIAtom* aAttribute,
+                              bool aNotify)
 {
   nsresult rv = nsGenericHTMLElement::UnsetAttr(aNameSpaceID, aAttribute,
                                                 aNotify);
-  if (NS_SUCCEEDED(rv)) {
-    UpdateStyleSheetInternal(nsnull,
-                             aNameSpaceID == kNameSpaceID_None &&
-                             (aAttribute == nsGkAtoms::title ||
-                              aAttribute == nsGkAtoms::media ||
-                              aAttribute == nsGkAtoms::type));
+  if (NS_SUCCEEDED(rv) && aNameSpaceID == kNameSpaceID_None &&
+      (aAttribute == nsGkAtoms::title ||
+       aAttribute == nsGkAtoms::media ||
+       aAttribute == nsGkAtoms::type)) {
+    UpdateStyleSheetInternal(nullptr, true);
   }
 
   return rv;
 }
 
-nsresult
-nsHTMLStyleElement::GetInnerHTML(nsAString& aInnerHTML)
+void
+nsHTMLStyleElement::GetInnerHTML(nsAString& aInnerHTML, ErrorResult& aError)
 {
-  nsContentUtils::GetNodeTextContent(this, PR_FALSE, aInnerHTML);
-  return NS_OK;
+  nsContentUtils::GetNodeTextContent(this, false, aInnerHTML);
 }
 
-nsresult
-nsHTMLStyleElement::SetInnerHTML(const nsAString& aInnerHTML)
+void
+nsHTMLStyleElement::SetInnerHTML(const nsAString& aInnerHTML,
+                                 ErrorResult& aError)
 {
-  SetEnableUpdates(PR_FALSE);
+  SetEnableUpdates(false);
 
-  nsresult rv = nsContentUtils::SetNodeTextContent(this, aInnerHTML, PR_TRUE);
-  
-  SetEnableUpdates(PR_TRUE);
-  
-  UpdateStyleSheetInternal(nsnull);
-  return rv;
+  aError = nsContentUtils::SetNodeTextContent(this, aInnerHTML, true);
+
+  SetEnableUpdates(true);
+
+  UpdateStyleSheetInternal(nullptr);
 }
 
 already_AddRefed<nsIURI>
-nsHTMLStyleElement::GetStyleSheetURL(PRBool* aIsInline)
+nsHTMLStyleElement::GetStyleSheetURL(bool* aIsInline)
 {
-  *aIsInline = PR_TRUE;
-  return nsnull;
+  *aIsInline = true;
+  return nullptr;
 }
 
 void
 nsHTMLStyleElement::GetStyleSheetInfo(nsAString& aTitle,
                                       nsAString& aType,
                                       nsAString& aMedia,
-                                      PRBool* aIsAlternate)
+                                      bool* aIsAlternate)
 {
   aTitle.Truncate();
   aType.Truncate();
   aMedia.Truncate();
-  *aIsAlternate = PR_FALSE;
+  *aIsAlternate = false;
 
   nsAutoString title;
   GetAttr(kNameSpaceID_None, nsGkAtoms::title, title);
@@ -339,13 +311,15 @@ nsHTMLStyleElement::GetStyleSheetInfo(nsAString& aTitle,
   aTitle.Assign(title);
 
   GetAttr(kNameSpaceID_None, nsGkAtoms::media, aMedia);
-  ToLowerCase(aMedia); // HTML4.0 spec is inconsistent, make it case INSENSITIVE
+  // The HTML5 spec is formulated in terms of the CSSOM spec, which specifies
+  // that media queries should be ASCII lowercased during serialization.
+  nsContentUtils::ASCIIToLower(aMedia);
 
   GetAttr(kNameSpaceID_None, nsGkAtoms::type, aType);
 
   nsAutoString mimeType;
   nsAutoString notUsed;
-  nsParserUtils::SplitMimeType(aType, mimeType, notUsed);
+  nsContentUtils::SplitMimeType(aType, mimeType, notUsed);
   if (!mimeType.IsEmpty() && !mimeType.LowerCaseEqualsLiteral("text/css")) {
     return;
   }
@@ -353,6 +327,4 @@ nsHTMLStyleElement::GetStyleSheetInfo(nsAString& aTitle,
   // If we get here we assume that we're loading a css file, so set the
   // type to 'text/css'
   aType.AssignLiteral("text/css");
-
-  return;
 }

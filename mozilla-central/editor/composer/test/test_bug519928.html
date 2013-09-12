@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=519928
 -->
 <head>
   <title>Test for Bug 519928</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>        
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -23,11 +22,10 @@ var iframe = document.getElementById("load-frame");
 function enableJS() allowJS(true, iframe);
 function disableJS() allowJS(false, iframe);
 function allowJS(allow, frame) {
-  netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-  frame.contentWindow.QueryInterface(Components.interfaces.nsIInterfaceRequestor)
-                     .getInterface(Components.interfaces.nsIWebNavigation)
-                     .QueryInterface(Components.interfaces.nsIDocShell)
-                     .allowJavascript = allow;
+  SpecialPowers.wrap(frame.contentWindow.QueryInterface(SpecialPowers.Ci.nsIInterfaceRequestor))
+               .getInterface(SpecialPowers.Ci.nsIWebNavigation)
+               .QueryInterface(SpecialPowers.Ci.nsIDocShell)
+               .allowJavascript = allow;
 }
 function expectJSAllowed(allowed, testCondition, callback) {
   window.ICanRunMyJS = false;
@@ -112,7 +110,6 @@ function testDocumentDisabledJS() {
     var msg = "The inner iframe should not be able to run Javascript";
     is(self_.ICanRunMyJS, false, msg);
     SimpleTest.finish();
-    endTest();
   }, false);
   var iframeSrc = "data:text/html,<script>parent.parent.ICanRunMyJS = true;</scr" + "ipt>";
   innerFrame.src = iframeSrc;

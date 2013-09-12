@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef __nsmultimixedconv__h__
 #define __nsmultimixedconv__h__
 
@@ -46,6 +14,7 @@
 #include "nsIByteRangeRequest.h"
 #include "nsIMultiPartChannel.h"
 #include "nsAutoPtr.h"
+#include "mozilla/Attributes.h"
 
 #define NS_MULTIMIXEDCONVERTER_CID                         \
 { /* 7584CE90-5B25-11d3-A175-0050041CAF44 */         \
@@ -62,25 +31,23 @@
 // Instances on this channel are passed out to the consumer through the
 // nsIStreamListener interface.
 //
-class nsPartChannel : public nsIChannel,
-                      public nsIByteRangeRequest,
-                      public nsIMultiPartChannel
+class nsPartChannel MOZ_FINAL : public nsIChannel,
+                                public nsIByteRangeRequest,
+                                public nsIMultiPartChannel
 {
 public:
-  nsPartChannel(nsIChannel *aMultipartChannel, PRUint32 aPartID,
+  nsPartChannel(nsIChannel *aMultipartChannel, uint32_t aPartID,
                 nsIStreamListener* aListener);
 
-  void InitializeByteRange(PRInt64 aStart, PRInt64 aEnd);
-  void SetIsLastPart() { mIsLastPart = PR_TRUE; }
+  void InitializeByteRange(int64_t aStart, int64_t aEnd);
+  void SetIsLastPart() { mIsLastPart = true; }
   nsresult SendOnStartRequest(nsISupports* aContext);
   nsresult SendOnDataAvailable(nsISupports* aContext, nsIInputStream* aStream,
-                               PRUint32 aOffset, PRUint32 aLen);
+                               uint64_t aOffset, uint32_t aLen);
   nsresult SendOnStopRequest(nsISupports* aContext, nsresult aStatus);
-
-  void SetContentDisposition(const nsACString& aDisposition)
-  {
-    mContentDisposition = aDisposition;
-  }
+  /* SetContentDisposition expects the full value of the Content-Disposition
+   * header */
+  void SetContentDisposition(const nsACString& aContentDispositionHeader);
 
   NS_DECL_ISUPPORTS
   NS_DECL_NSIREQUEST
@@ -102,16 +69,18 @@ protected:
 
   nsCString               mContentType;
   nsCString               mContentCharset;
-  nsCString               mContentDisposition;
-  PRUint64                mContentLength;
+  uint32_t                mContentDisposition;
+  nsString                mContentDispositionFilename;
+  nsCString               mContentDispositionHeader;
+  uint64_t                mContentLength;
 
-  PRBool                  mIsByteRangeRequest;
-  PRInt64                 mByteRangeStart;
-  PRInt64                 mByteRangeEnd;
+  bool                    mIsByteRangeRequest;
+  int64_t                 mByteRangeStart;
+  int64_t                 mByteRangeEnd;
 
-  PRUint32                mPartID; // unique ID that can be used to identify
+  uint32_t                mPartID; // unique ID that can be used to identify
                                    // this part of the multipart document
-  PRBool                  mIsLastPart;
+  bool                    mIsLastPart;
 };
 
 // The nsMultiMixedConv stream converter converts a stream of type "multipart/x-mixed-replace"
@@ -164,41 +133,41 @@ public:
 protected:
     nsresult SendStart(nsIChannel *aChannel);
     nsresult SendStop(nsresult aStatus);
-    nsresult SendData(char *aBuffer, PRUint32 aLen);
+    nsresult SendData(char *aBuffer, uint32_t aLen);
     nsresult ParseHeaders(nsIChannel *aChannel, char *&aPtr,
-                          PRUint32 &aLen, PRBool *_retval);
-    PRInt32  PushOverLine(char *&aPtr, PRUint32 &aLen);
-    char *FindToken(char *aCursor, PRUint32 aLen);
-    nsresult BufferData(char *aData, PRUint32 aLen);
+                          uint32_t &aLen, bool *_retval);
+    int32_t  PushOverLine(char *&aPtr, uint32_t &aLen);
+    char *FindToken(char *aCursor, uint32_t aLen);
+    nsresult BufferData(char *aData, uint32_t aLen);
 
     // member data
-    PRBool              mNewPart;        // Are we processing the beginning of a part?
-    PRBool              mProcessingHeaders;
+    bool                mNewPart;        // Are we processing the beginning of a part?
+    bool                mProcessingHeaders;
     nsCOMPtr<nsIStreamListener> mFinalListener; // this guy gets the converted data via his OnDataAvailable()
 
     nsCString           mToken;
-    PRUint32            mTokenLen;
+    uint32_t            mTokenLen;
 
     nsRefPtr<nsPartChannel> mPartChannel;   // the channel for the given part we're processing.
                                         // one channel per part.
     nsCOMPtr<nsISupports> mContext;
     nsCString           mContentType;
     nsCString           mContentDisposition;
-    PRUint64            mContentLength;
+    uint64_t            mContentLength;
     
     char                *mBuffer;
-    PRUint32            mBufLen;
-    PRUint64            mTotalSent;
-    PRBool              mFirstOnData;   // used to determine if we're in our first OnData callback.
+    uint32_t            mBufLen;
+    uint64_t            mTotalSent;
+    bool                mFirstOnData;   // used to determine if we're in our first OnData callback.
 
     // The following members are for tracking the byte ranges in
     // multipart/mixed content which specified the 'Content-Range:'
     // header...
-    PRInt64             mByteRangeStart;
-    PRInt64             mByteRangeEnd;
-    PRBool              mIsByteRangeRequest;
+    int64_t             mByteRangeStart;
+    int64_t             mByteRangeEnd;
+    bool                mIsByteRangeRequest;
 
-    PRUint32            mCurrentPartID;
+    uint32_t            mCurrentPartID;
 };
 
 #endif /* __nsmultimixedconv__h__ */

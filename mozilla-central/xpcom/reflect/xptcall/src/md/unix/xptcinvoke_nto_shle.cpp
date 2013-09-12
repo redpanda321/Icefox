@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 #include "xptcprivate.h"
 
 extern "C" {
@@ -6,14 +10,14 @@ const int c_int_register_params = 3;
 const int c_float_register_params = 8;
 
 static void
-copy_to_stack(PRUint32 paramCount, nsXPTCVariant* s, int size, PRUint32* data)
+copy_to_stack(uint32_t paramCount, nsXPTCVariant* s, int size, uint32_t* data)
 {
 	int intCount = 0;
 	int floatCount = 0;
-	PRUint32 *intRegParams = data + (size / sizeof(PRUint32)) - c_int_register_params;
+	uint32_t *intRegParams = data + (size / sizeof(uint32_t)) - c_int_register_params;
 	float  *floatRegParams = (float *)intRegParams - c_float_register_params;
 
-    for ( PRUint32 i = 0; i < paramCount; ++i, ++s )
+    for ( uint32_t i = 0; i < paramCount; ++i, ++s )
     {
 		nsXPTType type = s->IsPtrData() ? nsXPTType::T_I32 : s->type;
 
@@ -22,12 +26,12 @@ copy_to_stack(PRUint32 paramCount, nsXPTCVariant* s, int size, PRUint32* data)
         case nsXPTType::T_U64:
 			// Space to pass in registers?
 			if ( (c_int_register_params - intCount) >= 2 ) {
-				*((PRInt64 *) intRegParams) = s->val.i64;
+				*((int64_t *) intRegParams) = s->val.i64;
 				intRegParams += 2;
 				intCount += 2;
 			}
 			else {
-				*((PRInt64*) data) = s->val.i64;
+				*((int64_t*) data) = s->val.i64;
 				data += 2;
 			}
 			break;
@@ -60,7 +64,7 @@ copy_to_stack(PRUint32 paramCount, nsXPTCVariant* s, int size, PRUint32* data)
 			}			
 			break;
 		default:		// 32 (non-float) value
-			PRInt32 value = (PRInt32) (s->IsPtrData() ?  s->ptr : s->val.p);
+			int32_t value = (int32_t) (s->IsPtrData() ?  s->ptr : s->val.p);
 			// Space to pass in registers?
 			if ( intCount < c_int_register_params ) {
 				*intRegParams = value;
@@ -77,12 +81,12 @@ copy_to_stack(PRUint32 paramCount, nsXPTCVariant* s, int size, PRUint32* data)
 }
 
 XPTC_PUBLIC_API(nsresult)
-XPTC_InvokeByIndex(nsISupports* that, PRUint32 methodIndex,
-                   PRUint32 paramCount, nsXPTCVariant* params)
+XPTC_InvokeByIndex(nsISupports* that, uint32_t methodIndex,
+                   uint32_t paramCount, nsXPTCVariant* params)
 {
 #ifdef __GNUC__            /* Gnu compiler. */
 	int result;
-	void (*fn_copy) (PRUint32 paramCount, nsXPTCVariant* s, int size, PRUint32* d) = copy_to_stack;
+	void (*fn_copy) (uint32_t paramCount, nsXPTCVariant* s, int size, uint32_t* d) = copy_to_stack;
 
 	/* Because the SH processor passes the first few parameters in registers
 	   it is a bit tricky setting things up right.  To make things easier,
@@ -94,7 +98,7 @@ XPTC_InvokeByIndex(nsISupports* that, PRUint32 methodIndex,
  __asm__ __volatile__(
     /* Make space for parameters to be passed to the method.  Assume worst case 
 	   8 bytes per parameter.  Also leave space for 3 longs and 8 floats that
-	   will be put into registers.  The worst case is all int64 parameters
+	   will be put into registers.  The worst case is all int64_t parameters
 	   and even in this case 8 bytes are passed in registers so we can
 	   deduct this from our allocation.
 	*/

@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Chris Waterson <waterson@netscape.com>
- *   Dan Rosen <dr@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsXULDocument_h__
 #define nsXULDocument_h__
@@ -58,9 +24,10 @@
 #include "nsIStreamListener.h"
 #include "nsICSSLoaderObserver.h"
 
+#include "mozilla/Attributes.h"
+
 class nsIRDFResource;
 class nsIRDFService;
-class nsIXULPrototypeCache;
 class nsPIWindowRoot;
 #if 0 // XXXbe save me, scc (need NSCAP_FORWARD_DECL(nsXULPrototypeScript))
 class nsIObjectInputStream;
@@ -99,12 +66,12 @@ public:
   /**
    * @return true if aElement was added, false if we failed due to OOM
    */
-  PRBool AddElement(mozilla::dom::Element* aElement);
+  bool AddElement(mozilla::dom::Element* aElement);
   /**
    * @return true if aElement was removed and it was the last content for
    * this ref, so this entry should be removed from the map
    */
-  PRBool RemoveElement(mozilla::dom::Element* aElement);
+  bool RemoveElement(mozilla::dom::Element* aElement);
 
 private:
   nsSmallVoidArray mRefContentList;
@@ -137,8 +104,8 @@ public:
                                        nsILoadGroup* aLoadGroup,
                                        nsISupports* aContainer,
                                        nsIStreamListener **aDocListener,
-                                       PRBool aReset = PR_TRUE,
-                                       nsIContentSink* aSink = nsnull);
+                                       bool aReset = true,
+                                       nsIContentSink* aSink = nullptr);
 
     virtual void SetContentType(const nsAString& aContentType);
 
@@ -162,33 +129,39 @@ public:
                                      nsIXULTemplateBuilder* aBuilder);
     NS_IMETHOD GetTemplateBuilderFor(nsIContent* aContent,
                                      nsIXULTemplateBuilder** aResult);
-    NS_IMETHOD OnPrototypeLoadDone(PRBool aResumeWalk);
-    PRBool OnDocumentParserError();
+    NS_IMETHOD OnPrototypeLoadDone(bool aResumeWalk);
+    bool OnDocumentParserError();
 
-    // nsIDOMNode interface overrides
-    NS_IMETHOD CloneNode(PRBool deep, nsIDOMNode **_retval);
+    // nsINode interface overrides
+    virtual nsresult Clone(nsINodeInfo *aNodeInfo, nsINode **aResult) const MOZ_OVERRIDE;
+
+    // nsIDOMNode interface
+    NS_FORWARD_NSIDOMNODE_TO_NSINODE
+
+    // nsIDOMDocument interface
+    NS_FORWARD_NSIDOMDOCUMENT(nsXMLDocument::)
+    // And explicitly import the things from nsDocument that we just shadowed
+    using nsDocument::GetImplementation;
+    using nsDocument::GetTitle;
+    using nsDocument::SetTitle;
+    using nsDocument::GetLastStyleSheetSet;
+    using nsDocument::MozSetImageElement;
+    using nsDocument::GetMozFullScreenElement;
 
     // nsDocument interface overrides
-    NS_IMETHOD GetElementById(const nsAString& aId, nsIDOMElement** aReturn)
-    {
-        return nsDocument::GetElementById(aId, aReturn);
-    }
     virtual mozilla::dom::Element* GetElementById(const nsAString & elementId);
 
     // nsIDOMXULDocument interface
     NS_DECL_NSIDOMXULDOCUMENT
 
-    // nsIDOMNSDocument
-    NS_IMETHOD GetContentType(nsAString& aContentType);
-
     // nsICSSLoaderObserver
     NS_IMETHOD StyleSheetLoaded(nsCSSStyleSheet* aSheet,
-                                PRBool aWasAlternate,
+                                bool aWasAlternate,
                                 nsresult aStatus);
 
     virtual void EndUpdate(nsUpdateType aUpdateType);
 
-    virtual PRBool IsDocumentRightToLeft();
+    virtual bool IsDocumentRightToLeft();
 
     virtual void ResetDocumentDirection();
 
@@ -196,9 +169,9 @@ public:
 
     virtual void ResetDocumentLWTheme() { mDocLWTheme = Doc_Theme_Uninitialized; }
 
-    static PRBool
+    static bool
     MatchAttribute(nsIContent* aContent,
-                   PRInt32 aNameSpaceID,
+                   int32_t aNameSpaceID,
                    nsIAtom* aAttrName,
                    void* aData);
 
@@ -218,7 +191,7 @@ protected:
     void
     RemoveElementFromRefMap(mozilla::dom::Element* aElement);
 
-    nsresult GetViewportSize(PRInt32* aWidth, PRInt32* aHeight);
+    nsresult GetViewportSize(int32_t* aWidth, int32_t* aHeight);
 
     nsresult PrepareToLoad(nsISupports* aContainer,
                            const char* aCommand,
@@ -233,8 +206,8 @@ protected:
                            nsIParser** aResult);
 
     nsresult 
-    LoadOverlayInternal(nsIURI* aURI, PRBool aIsDynamic, PRBool* aShouldReturn,
-                        PRBool* aFailureFromContent);
+    LoadOverlayInternal(nsIURI* aURI, bool aIsDynamic, bool* aShouldReturn,
+                        bool* aFailureFromContent);
 
     nsresult ApplyPersistentAttributes();
     nsresult ApplyPersistentAttributesInternal();
@@ -252,17 +225,19 @@ protected:
                                  nsIDOMElement* aListener,
                                  nsIAtom* aAttr);
 
-    already_AddRefed<nsPIWindowRoot> GetWindowRoot();
+    nsresult
+    BroadcastAttributeChangeFromOverlay(nsIContent* aNode,
+                                        int32_t aNameSpaceID,
+                                        nsIAtom* aAttribute,
+                                        nsIAtom* aPrefix,
+                                        const nsAString& aValue);
 
-    PRInt32 GetDefaultNamespaceID() const
-    {
-        return kNameSpaceID_XUL;
-    }
+    already_AddRefed<nsPIWindowRoot> GetWindowRoot();
 
     static NS_HIDDEN_(int) DirectionChanged(const char* aPrefName, void* aData);
 
     // pseudo constants
-    static PRInt32 gRefCnt;
+    static int32_t gRefCnt;
 
     static nsIAtom** kIdentityAttrs[];
 
@@ -275,11 +250,8 @@ protected:
 
     static PRLogModuleInfo* gXULLog;
 
-    PRBool
-    IsCapabilityEnabled(const char* aCapabilityLabel);
-
     nsresult
-    Persist(nsIContent* aElement, PRInt32 aNameSpaceID, nsIAtom* aAttribute);
+    Persist(nsIContent* aElement, int32_t aNameSpaceID, nsIAtom* aAttribute);
 
     // IMPORTANT: The ownership implicit in the following member
     // variables has been explicitly checked and set using nsCOMPtr
@@ -295,9 +267,9 @@ protected:
     // the element's namespace has no registered ID attribute name.
     nsTHashtable<nsRefMapEntry> mRefMap;
     nsCOMPtr<nsIRDFDataSource> mLocalStore;
-    PRPackedBool               mApplyingPersistedAttrs;
-    PRPackedBool               mIsWritingFastLoad;
-    PRPackedBool               mDocumentLoaded;
+    bool                       mApplyingPersistedAttrs;
+    bool                       mIsWritingFastLoad;
+    bool                       mDocumentLoaded;
     /**
      * Since ResumeWalk is interruptible, it's possible that last
      * stylesheet finishes loading while the PD walk is still in
@@ -305,7 +277,7 @@ protected:
      * mStillWalking prevents DoneLoading (and StartLayout) from being
      * called in this situation.
      */
-    PRPackedBool               mStillWalking;
+    bool                       mStillWalking;
 
     /**
      * An array of style sheets, that will be added (preserving order) to the
@@ -321,20 +293,7 @@ protected:
         BuilderTable;
     BuilderTable* mTemplateBuilderTable;
 
-    PRUint32 mPendingSheets;
-
-    /*
-     * XXX dr
-     * ------
-     * We used to have two pointers into the content model: mPopupNode and
-     * mTooltipNode, which were used to retrieve the objects triggering a
-     * popup or tooltip. You need that access because your reference has
-     * disappeared by the time you click on a popup item or do whatever
-     * with a tooltip. These were owning references (no cycles, as pinkerton
-     * pointed out, since we're still parent-child).
-     */
-
-    nsCOMPtr<nsIDOMNode>    mTooltipNode;          // [OWNER] element triggering the tooltip
+    uint32_t mPendingSheets;
 
     /**
      * document lightweight theme for use with :-moz-lwtheme, :-moz-lwtheme-brighttext
@@ -351,26 +310,24 @@ protected:
         struct Entry {
             nsXULPrototypeElement* mPrototype;
             nsIContent*            mElement;
-            PRInt32                mIndex;
+            int32_t                mIndex;
             Entry*                 mNext;
         };
 
         Entry* mTop;
-        PRInt32 mDepth;
+        int32_t mDepth;
 
     public:
         ContextStack();
         ~ContextStack();
 
-        PRInt32 Depth() { return mDepth; }
+        int32_t Depth() { return mDepth; }
 
         nsresult Push(nsXULPrototypeElement* aPrototype, nsIContent* aElement);
         nsresult Pop();
-        nsresult Peek(nsXULPrototypeElement** aPrototype, nsIContent** aElement, PRInt32* aIndex);
+        nsresult Peek(nsXULPrototypeElement** aPrototype, nsIContent** aElement, int32_t* aIndex);
 
-        nsresult SetTopIndex(PRInt32 aIndex);
-
-        PRBool IsInsideXULTemplate();
+        nsresult SetTopIndex(int32_t aIndex);
     };
 
     friend class ContextStack;
@@ -390,20 +347,20 @@ protected:
      * same order as in the document, then the overlays from the chrome
      * registry.
      */
-    nsCOMArray<nsIURI> mUnloadedOverlays;
+    nsTArray<nsCOMPtr<nsIURI> > mUnloadedOverlays;
 
     /**
      * Load the transcluded script at the specified URI. If the
      * prototype construction must 'block' until the load has
      * completed, aBlock will be set to true.
      */
-    nsresult LoadScript(nsXULPrototypeScript *aScriptProto, PRBool* aBlock);
+    nsresult LoadScript(nsXULPrototypeScript *aScriptProto, bool* aBlock);
 
     /**
      * Execute the precompiled script object scoped by this XUL document's
      * containing window object, and using its associated script context.
      */
-    nsresult ExecuteScript(nsIScriptContext *aContext, void* aScriptObject);
+    nsresult ExecuteScript(nsIScriptContext *aContext, JSScript* aScriptObject);
 
     /**
      * Helper method for the above that uses aScript to find the appropriate
@@ -442,7 +399,7 @@ protected:
      * Check if a XUL template builder has already been hooked up.
      */
     static nsresult
-    CheckTemplateBuilderHookup(nsIContent* aElement, PRBool* aNeedsHookup);
+    CheckTemplateBuilderHookup(nsIContent* aElement, bool* aNeedsHookup);
 
     /**
      * Create a XUL template builder on the specified node.
@@ -493,14 +450,14 @@ protected:
     protected:
         nsXULDocument* mDocument;              // [WEAK]
         nsRefPtr<mozilla::dom::Element> mObservesElement; // [OWNER]
-        PRBool mResolved;
+        bool mResolved;
 
     public:
         BroadcasterHookup(nsXULDocument* aDocument,
                           mozilla::dom::Element* aObservesElement)
             : mDocument(aDocument),
               mObservesElement(aObservesElement),
-              mResolved(PR_FALSE)
+              mResolved(false)
         {
         }
 
@@ -521,13 +478,13 @@ protected:
     protected:
         nsXULDocument* mDocument;      // [WEAK]
         nsCOMPtr<nsIContent> mOverlay; // [OWNER]
-        PRBool mResolved;
+        bool mResolved;
 
-        nsresult Merge(nsIContent* aTargetNode, nsIContent* aOverlayNode, PRBool aNotify);
+        nsresult Merge(nsIContent* aTargetNode, nsIContent* aOverlayNode, bool aNotify);
 
     public:
         OverlayForwardReference(nsXULDocument* aDocument, nsIContent* aOverlay)
-            : mDocument(aDocument), mOverlay(aOverlay), mResolved(PR_FALSE) {}
+            : mDocument(aDocument), mOverlay(aOverlay), mResolved(false) {}
 
         virtual ~OverlayForwardReference();
 
@@ -565,8 +522,8 @@ protected:
 
     nsresult
     CheckBroadcasterHookup(mozilla::dom::Element* aElement,
-                           PRBool* aNeedsHookup,
-                           PRBool* aDidResolve);
+                           bool* aNeedsHookup,
+                           bool* aDidResolve);
 
     void
     SynchronizeBroadcastListener(nsIDOMElement   *aBroadcaster,
@@ -575,7 +532,7 @@ protected:
 
     static
     nsresult
-    InsertElement(nsIContent* aParent, nsIContent* aChild, PRBool aNotify);
+    InsertElement(nsIContent* aParent, nsIContent* aChild, bool aNotify);
 
     static 
     nsresult
@@ -610,7 +567,7 @@ protected:
      */
     nsresult
     CreateAndInsertPI(const nsXULPrototypePI* aProtoPI,
-                      nsINode* aParent, PRUint32 aIndex);
+                      nsINode* aParent, uint32_t aIndex);
 
     /**
      * Inserts the passed <?xml-stylesheet ?> PI at the specified
@@ -624,7 +581,7 @@ protected:
     nsresult
     InsertXMLStylesheetPI(const nsXULPrototypePI* aProtoPI,
                           nsINode* aParent,
-                          PRUint32 aIndex,
+                          uint32_t aIndex,
                           nsIContent* aPINode);
 
     /**
@@ -634,7 +591,7 @@ protected:
     nsresult
     InsertXULOverlayPI(const nsXULPrototypePI* aProtoPI,
                        nsINode* aParent,
-                       PRUint32 aIndex,
+                       uint32_t aIndex,
                        nsIContent* aPINode);
 
     /**
@@ -661,22 +618,17 @@ protected:
      * @param aURI the URI of the overlay that failed to load
      */
     void ReportMissingOverlay(nsIURI* aURI);
-    
-#if defined(DEBUG_waterson) || defined(DEBUG_hyatt)
-    // timing
-    nsTime mLoadStart;
-#endif
 
     class CachedChromeStreamListener : public nsIStreamListener {
     protected:
         nsXULDocument* mDocument;
-        PRPackedBool   mProtoLoaded;
+        bool           mProtoLoaded;
 
         virtual ~CachedChromeStreamListener();
 
     public:
         CachedChromeStreamListener(nsXULDocument* aDocument,
-                                   PRBool aProtoLoaded);
+                                   bool aProtoLoaded);
 
         NS_DECL_ISUPPORTS
         NS_DECL_NSIREQUESTOBSERVER
@@ -710,7 +662,7 @@ protected:
     nsInterfaceHashtable<nsURIHashKey,nsIObserver> mOverlayLoadObservers;
     nsInterfaceHashtable<nsURIHashKey,nsIObserver> mPendingOverlayLoadNotifications;
     
-    PRBool mInitialLayoutComplete;
+    bool mInitialLayoutComplete;
 
     class nsDelayedBroadcastUpdate
     {
@@ -719,14 +671,14 @@ protected:
                                nsIDOMElement* aListener,
                                const nsAString &aAttr)
       : mBroadcaster(aBroadcaster), mListener(aListener), mAttr(aAttr),
-        mSetAttr(PR_FALSE), mNeedsAttrChange(PR_FALSE) {}
+        mSetAttr(false), mNeedsAttrChange(false) {}
 
       nsDelayedBroadcastUpdate(nsIDOMElement* aBroadcaster,
                                nsIDOMElement* aListener,
                                nsIAtom* aAttrName,
                                const nsAString &aAttr,
-                               PRBool aSetAttr,
-                               PRBool aNeedsAttrChange)
+                               bool aSetAttr,
+                               bool aNeedsAttrChange)
       : mBroadcaster(aBroadcaster), mListener(aListener), mAttr(aAttr),
         mAttrName(aAttrName), mSetAttr(aSetAttr),
         mNeedsAttrChange(aNeedsAttrChange) {}
@@ -742,12 +694,12 @@ protected:
       // this is the value of the attribute.
       nsString                mAttr;
       nsCOMPtr<nsIAtom>       mAttrName;
-      PRPackedBool            mSetAttr;
-      PRPackedBool            mNeedsAttrChange;
+      bool                    mSetAttr;
+      bool                    mNeedsAttrChange;
 
       class Comparator {
         public:
-          static PRBool Equals(const nsDelayedBroadcastUpdate& a, const nsDelayedBroadcastUpdate& b) {
+          static bool Equals(const nsDelayedBroadcastUpdate& a, const nsDelayedBroadcastUpdate& b) {
             return a.mBroadcaster == b.mBroadcaster && a.mListener == b.mListener && a.mAttrName == b.mAttrName;
           }
       };
@@ -755,8 +707,8 @@ protected:
 
     nsTArray<nsDelayedBroadcastUpdate> mDelayedBroadcasters;
     nsTArray<nsDelayedBroadcastUpdate> mDelayedAttrChangeBroadcasts;
-    PRPackedBool                       mHandlingDelayedAttrChange;
-    PRPackedBool                       mHandlingDelayedBroadcasters;
+    bool                               mHandlingDelayedAttrChange;
+    bool                               mHandlingDelayedBroadcasters;
 
     void MaybeBroadcast();
 private:

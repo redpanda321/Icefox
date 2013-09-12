@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Zip Writer Component.
- *
- * The Initial Developer of the Original Code is
- * Dave Townsend <dtownsend@oxymoronical.com>.
- *
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK *****
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
 #include "StreamFunctions.h"
@@ -56,7 +23,7 @@
 NS_IMPL_ISUPPORTS1(nsZipHeader, nsIZipEntry)
 
 /* readonly attribute unsigned short compression; */
-NS_IMETHODIMP nsZipHeader::GetCompression(PRUint16 *aCompression)
+NS_IMETHODIMP nsZipHeader::GetCompression(uint16_t *aCompression)
 {
     NS_ASSERTION(mInited, "Not initalised");
 
@@ -65,7 +32,7 @@ NS_IMETHODIMP nsZipHeader::GetCompression(PRUint16 *aCompression)
 }
 
 /* readonly attribute unsigned long size; */
-NS_IMETHODIMP nsZipHeader::GetSize(PRUint32 *aSize)
+NS_IMETHODIMP nsZipHeader::GetSize(uint32_t *aSize)
 {
     NS_ASSERTION(mInited, "Not initalised");
 
@@ -74,7 +41,7 @@ NS_IMETHODIMP nsZipHeader::GetSize(PRUint32 *aSize)
 }
 
 /* readonly attribute unsigned long realSize; */
-NS_IMETHODIMP nsZipHeader::GetRealSize(PRUint32 *aRealSize)
+NS_IMETHODIMP nsZipHeader::GetRealSize(uint32_t *aRealSize)
 {
     NS_ASSERTION(mInited, "Not initalised");
 
@@ -83,7 +50,7 @@ NS_IMETHODIMP nsZipHeader::GetRealSize(PRUint32 *aRealSize)
 }
 
 /* readonly attribute unsigned long CRC32; */
-NS_IMETHODIMP nsZipHeader::GetCRC32(PRUint32 *aCRC32)
+NS_IMETHODIMP nsZipHeader::GetCRC32(uint32_t *aCRC32)
 {
     NS_ASSERTION(mInited, "Not initalised");
 
@@ -92,14 +59,14 @@ NS_IMETHODIMP nsZipHeader::GetCRC32(PRUint32 *aCRC32)
 }
 
 /* readonly attribute boolean isDirectory; */
-NS_IMETHODIMP nsZipHeader::GetIsDirectory(PRBool *aIsDirectory)
+NS_IMETHODIMP nsZipHeader::GetIsDirectory(bool *aIsDirectory)
 {
     NS_ASSERTION(mInited, "Not initalised");
 
     if (mName.Last() == '/')
-        *aIsDirectory = PR_TRUE;
+        *aIsDirectory = true;
     else
-        *aIsDirectory = PR_FALSE;
+        *aIsDirectory = false;
     return NS_OK;
 }
 
@@ -109,11 +76,11 @@ NS_IMETHODIMP nsZipHeader::GetLastModifiedTime(PRTime *aLastModifiedTime)
     NS_ASSERTION(mInited, "Not initalised");
 
     // Try to read timestamp from extra field
-    PRUint16 blocksize;
-    const PRUint8 *tsField = GetExtraField(ZIP_EXTENDED_TIMESTAMP_FIELD, PR_FALSE, &blocksize);
+    uint16_t blocksize;
+    const uint8_t *tsField = GetExtraField(ZIP_EXTENDED_TIMESTAMP_FIELD, false, &blocksize);
     if (tsField && blocksize >= 5) {
-        PRUint32 pos = 4;
-        PRUint8 flags;
+        uint32_t pos = 4;
+        uint8_t flags;
         flags = READ8(tsField, &pos);
         if (flags & ZIP_EXTENDED_TIMESTAMP_MODTIME) {
             *aLastModifiedTime = (PRTime)(READ32(tsField, &pos))
@@ -151,16 +118,16 @@ NS_IMETHODIMP nsZipHeader::GetLastModifiedTime(PRTime *aLastModifiedTime)
 }
 
 /* readonly attribute boolean isSynthetic; */
-NS_IMETHODIMP nsZipHeader::GetIsSynthetic(PRBool *aIsSynthetic)
+NS_IMETHODIMP nsZipHeader::GetIsSynthetic(bool *aIsSynthetic)
 {
     NS_ASSERTION(mInited, "Not initalised");
 
-    *aIsSynthetic = PR_FALSE;
+    *aIsSynthetic = false;
     return NS_OK;
 }
 
-void nsZipHeader::Init(const nsACString & aPath, PRTime aDate, PRUint32 aAttr,
-                       PRUint32 aOffset)
+void nsZipHeader::Init(const nsACString & aPath, PRTime aDate, uint32_t aAttr,
+                       uint32_t aOffset)
 {
     NS_ASSERTION(!mInited, "Already initalised");
 
@@ -174,18 +141,18 @@ void nsZipHeader::Init(const nsACString & aPath, PRTime aDate, PRUint32 aAttr,
     // Store modification timestamp as extra field
     // First fill CDS extra field
     mFieldLength = 9;
-    mExtraField = new PRUint8[mFieldLength];
+    mExtraField = new uint8_t[mFieldLength];
     if (!mExtraField) {
         mFieldLength = 0;
     } else {
-        PRUint32 pos = 0;
+        uint32_t pos = 0;
         WRITE16(mExtraField.get(), &pos, ZIP_EXTENDED_TIMESTAMP_FIELD);
         WRITE16(mExtraField.get(), &pos, 5);
         WRITE8(mExtraField.get(), &pos, ZIP_EXTENDED_TIMESTAMP_MODTIME);
         WRITE32(mExtraField.get(), &pos, aDate / PR_USEC_PER_SEC);
 
         // Fill local extra field
-        mLocalExtraField = new PRUint8[mFieldLength];
+        mLocalExtraField = new uint8_t[mFieldLength];
         if (mLocalExtraField) {
             mLocalFieldLength = mFieldLength;
             memcpy(mLocalExtraField.get(), mExtraField.get(), mLocalFieldLength);
@@ -198,10 +165,10 @@ void nsZipHeader::Init(const nsACString & aPath, PRTime aDate, PRUint32 aAttr,
     mComment = NS_LITERAL_CSTRING("");
     // Claim a UTF-8 path in case it needs it.
     mFlags |= FLAGS_IS_UTF8;
-    mInited = PR_TRUE;
+    mInited = true;
 }
 
-PRUint32 nsZipHeader::GetFileHeaderLength()
+uint32_t nsZipHeader::GetFileHeaderLength()
 {
     return ZIP_FILE_HEADER_SIZE + mName.Length() + mLocalFieldLength;
 }
@@ -210,8 +177,8 @@ nsresult nsZipHeader::WriteFileHeader(nsIOutputStream *aStream)
 {
     NS_ASSERTION(mInited, "Not initalised");
 
-    PRUint8 buf[ZIP_FILE_HEADER_SIZE];
-    PRUint32 pos = 0;
+    uint8_t buf[ZIP_FILE_HEADER_SIZE];
+    uint32_t pos = 0;
     WRITE32(buf, &pos, ZIP_FILE_HEADER_SIGNATURE);
     WRITE16(buf, &pos, mVersionNeeded);
     WRITE16(buf, &pos, mFlags);
@@ -239,7 +206,7 @@ nsresult nsZipHeader::WriteFileHeader(nsIOutputStream *aStream)
     return NS_OK;
 }
 
-PRUint32 nsZipHeader::GetCDSHeaderLength()
+uint32_t nsZipHeader::GetCDSHeaderLength()
 {
     return ZIP_CDS_HEADER_SIZE + mName.Length() + mComment.Length() +
            mFieldLength;
@@ -249,8 +216,8 @@ nsresult nsZipHeader::WriteCDSHeader(nsIOutputStream *aStream)
 {
     NS_ASSERTION(mInited, "Not initalised");
 
-    PRUint8 buf[ZIP_CDS_HEADER_SIZE];
-    PRUint32 pos = 0;
+    uint8_t buf[ZIP_CDS_HEADER_SIZE];
+    uint32_t pos = 0;
     WRITE32(buf, &pos, ZIP_CDS_HEADER_SIGNATURE);
     WRITE16(buf, &pos, mVersionMade);
     WRITE16(buf, &pos, mVersionNeeded);
@@ -285,13 +252,13 @@ nsresult nsZipHeader::ReadCDSHeader(nsIInputStream *stream)
 {
     NS_ASSERTION(!mInited, "Already initalised");
 
-    PRUint8 buf[ZIP_CDS_HEADER_SIZE];
+    uint8_t buf[ZIP_CDS_HEADER_SIZE];
 
     nsresult rv = ZW_ReadData(stream, (char *)buf, ZIP_CDS_HEADER_SIZE);
     NS_ENSURE_SUCCESS(rv, rv);
 
-    PRUint32 pos = 0;
-    PRUint32 signature = READ32(buf, &pos);
+    uint32_t pos = 0;
+    uint32_t signature = READ32(buf, &pos);
     if (signature != ZIP_CDS_HEADER_SIGNATURE)
         return NS_ERROR_FILE_CORRUPTED;
 
@@ -304,9 +271,9 @@ nsresult nsZipHeader::ReadCDSHeader(nsIInputStream *stream)
     mCRC = READ32(buf, &pos);
     mCSize = READ32(buf, &pos);
     mUSize = READ32(buf, &pos);
-    PRUint16 namelength = READ16(buf, &pos);
+    uint16_t namelength = READ16(buf, &pos);
     mFieldLength = READ16(buf, &pos);
-    PRUint16 commentlength = READ16(buf, &pos);
+    uint16_t commentlength = READ16(buf, &pos);
     mDisk = READ16(buf, &pos);
     mIAttr = READ16(buf, &pos);
     mEAttr = READ32(buf, &pos);
@@ -323,7 +290,7 @@ nsresult nsZipHeader::ReadCDSHeader(nsIInputStream *stream)
         mName = NS_LITERAL_CSTRING("");
 
     if (mFieldLength > 0) {
-        mExtraField = new PRUint8[mFieldLength];
+        mExtraField = new uint8_t[mFieldLength];
         NS_ENSURE_TRUE(mExtraField, NS_ERROR_OUT_OF_MEMORY);
         rv = ZW_ReadData(stream, (char *)mExtraField.get(), mFieldLength);
         NS_ENSURE_SUCCESS(rv, rv);
@@ -339,16 +306,16 @@ nsresult nsZipHeader::ReadCDSHeader(nsIInputStream *stream)
     else
         mComment = NS_LITERAL_CSTRING("");
 
-    mInited = PR_TRUE;
+    mInited = true;
     return NS_OK;
 }
 
-const PRUint8 * nsZipHeader::GetExtraField(PRUint16 aTag, PRBool aLocal, PRUint16 *aBlockSize)
+const uint8_t * nsZipHeader::GetExtraField(uint16_t aTag, bool aLocal, uint16_t *aBlockSize)
 {
-    const PRUint8 *buf = aLocal ? mLocalExtraField : mExtraField;
-    PRUint32 buflen = aLocal ? mLocalFieldLength : mFieldLength;
-    PRUint32 pos = 0;
-    PRUint16 tag, blocksize;
+    const uint8_t *buf = aLocal ? mLocalExtraField : mExtraField;
+    uint32_t buflen = aLocal ? mLocalFieldLength : mFieldLength;
+    uint32_t pos = 0;
+    uint16_t tag, blocksize;
 
     while (buf && (pos + 4) <= buflen) {
       tag = READ16(buf, &pos);

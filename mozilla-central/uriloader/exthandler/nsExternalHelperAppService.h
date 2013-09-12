@@ -1,44 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla browser.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications, Inc.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Scott MacGregor <mscott@netscape.com>
- *   Christian Biesinger <cbiesinger@web.de>
- *   Dan Mosedale <dmose@mozilla.org>
- *   Myk Melez <myk@mozilla.org>
- *   Ehsan Akhgari <ehsan.akhgari@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsExternalHelperAppService_h__
 #define nsExternalHelperAppService_h__
@@ -55,7 +18,6 @@
 #include "nsIHelperAppLauncherDialog.h"
 
 #include "nsIMIMEInfo.h"
-#include "nsMIMEInfoImpl.h"
 #include "nsIMIMEService.h"
 #include "nsIStreamListener.h"
 #include "nsIFile.h"
@@ -64,9 +26,9 @@
 #include "nsString.h"
 #include "nsIInterfaceRequestor.h"
 #include "nsIInterfaceRequestorUtils.h"
-#include "nsILocalFile.h"
 #include "nsIChannel.h"
 #include "nsITimer.h"
+#include "nsIBackgroundFileSaver.h"
 
 #include "nsIHandlerService.h"
 #include "nsCOMPtr.h"
@@ -74,11 +36,13 @@
 #include "nsCOMArray.h"
 #include "nsWeakReference.h"
 #include "nsIPrompt.h"
+#include "nsAutoPtr.h"
+#include "mozilla/Attributes.h"
 
 class nsExternalAppHandler;
 class nsIMIMEInfo;
 class nsITransfer;
-class nsIDOMWindowInternal;
+class nsIDOMWindow;
 
 /**
  * The helper app service. Responsible for handling content that Mozilla
@@ -117,8 +81,8 @@ public:
    * nsOSHelperAppService!
    * @param aFileExt The file extension; may be empty. UTF-8 encoded.
    * @param [out] aFound
-   *        Should be set to PR_TRUE if the os has a mapping, to
-   *        PR_FALSE otherwise. Must not be null.
+   *        Should be set to true if the os has a mapping, to
+   *        false otherwise. Must not be null.
    * @return A MIMEInfo. This function must return a MIMEInfo object if it
    *         can allocate one.  The only justifiable reason for not
    *         returning one is an out-of-memory error.
@@ -126,7 +90,7 @@ public:
    */
   virtual already_AddRefed<nsIMIMEInfo> GetMIMEInfoFromOS(const nsACString& aMIMEType,
                                                           const nsACString& aFileExt,
-                                                          PRBool     * aFound) = 0;
+                                                          bool       * aFound) = 0;
 
   /**
    * Given a string identifying an application, create an nsIFile representing
@@ -146,13 +110,7 @@ public:
                                        nsIFile ** aFile);
 
   virtual NS_HIDDEN_(nsresult) OSProtocolHandlerExists(const char *aScheme,
-                                                       PRBool *aExists) = 0;
-
-  /**
-   * Simple accessor to let nsExternalAppHandler know if we are currently
-   * inside the private browsing mode.
-   */
-  PRBool InPrivateBrowsing() const { return mInPrivateBrowsing; }
+                                                       bool *aExists) = 0;
 
 protected:
   /**
@@ -180,9 +138,9 @@ protected:
    * Searches the "extra" array for a MIME type, and gets its extension.
    * @param aExtension The extension to search for
    * @param aMIMEType [out] The found MIME type.
-   * @return PR_TRUE if the extension was found, PR_FALSE otherwise.
+   * @return true if the extension was found, false otherwise.
    */
-  NS_HIDDEN_(PRBool) GetTypeFromExtras(const nsACString& aExtension,
+  NS_HIDDEN_(bool) GetTypeFromExtras(const nsACString& aExtension,
                                        nsACString& aMIMEType);
 
   /**
@@ -190,7 +148,7 @@ protected:
    * implementation, subclasses can use this to correctly inherit ACLs from the
    * parent directory, to make the permissions obey the umask, etc.
    */
-  virtual void FixFilePermissions(nsILocalFile* aFile);
+  virtual void FixFilePermissions(nsIFile* aFile);
 
 #ifdef PR_LOGGING
   /**
@@ -208,7 +166,12 @@ protected:
   /**
    * Helper function for ExpungeTemporaryFiles and ExpungeTemporaryPrivateFiles
    */
-  static void ExpungeTemporaryFilesHelper(nsCOMArray<nsILocalFile> &fileList);
+  static void ExpungeTemporaryFilesHelper(nsCOMArray<nsIFile> &fileList);
+  /**
+   * Helper function for DeleteTemporaryFileOnExit and DeleteTemporaryPrivateFileWhenPossible
+   */
+  static nsresult DeleteTemporaryFileHelper(nsIFile* aTemporaryFile,
+                                            nsCOMArray<nsIFile> &aFileList);
   /**
    * Functions related to the tempory file cleanup service provided by
    * nsExternalHelperAppService
@@ -223,16 +186,12 @@ protected:
   /**
    * Array for the files that should be deleted
    */
-  nsCOMArray<nsILocalFile> mTemporaryFilesList;
+  nsCOMArray<nsIFile> mTemporaryFilesList;
   /**
    * Array for the files that should be deleted (for the temporary files
    * added during the private browsing mode)
    */
-  nsCOMArray<nsILocalFile> mTemporaryPrivateFilesList;
-  /**
-   * Whether we are in private browsing mode
-   */
-  PRBool mInPrivateBrowsing;
+  nsCOMArray<nsIFile> mTemporaryPrivateFilesList;
 };
 
 /**
@@ -243,9 +202,10 @@ protected:
  * stored the data into.  We create a handler every time we have to process
  * data using a helper app.
  */
-class nsExternalAppHandler : public nsIStreamListener,
-                             public nsIHelperAppLauncher,
-                             public nsITimerCallback
+class nsExternalAppHandler MOZ_FINAL : public nsIStreamListener,
+                                       public nsIHelperAppLauncher,
+                                       public nsITimerCallback,
+                                       public nsIBackgroundFileSaverObserver
 {
 public:
   NS_DECL_ISUPPORTS
@@ -254,6 +214,7 @@ public:
   NS_DECL_NSIHELPERAPPLAUNCHER
   NS_DECL_NSICANCELABLE
   NS_DECL_NSITIMERCALLBACK
+  NS_DECL_NSIBACKGROUNDFILESAVEROBSERVER
 
   /**
    * @param aMIMEInfo      MIMEInfo object, representing the type of the
@@ -261,14 +222,16 @@ public:
    * @param aFileExtension The extension we need to append to our temp file,
    *                       INCLUDING the ".". e.g. .mp3
    * @param aWindowContext Window context, as passed to DoContent
+   * @param mExtProtSvc    nsExternalHelperAppService on creation
    * @param aFileName      The filename to use
    * @param aReason        A constant from nsIHelperAppLauncherDialog indicating
    *                       why the request is handled by a helper app.
    */
   nsExternalAppHandler(nsIMIMEInfo * aMIMEInfo, const nsCSubstring& aFileExtension,
                        nsIInterfaceRequestor * aWindowContext,
+                       nsExternalHelperAppService * aExtProtSvc,
                        const nsAString& aFilename,
-                       PRUint32 aReason, PRBool aForceSave);
+                       uint32_t aReason, bool aForceSave);
 
   ~nsExternalAppHandler();
 
@@ -280,14 +243,13 @@ protected:
    * The MIME Info for this load. Will never be null.
    */
   nsCOMPtr<nsIMIMEInfo> mMimeInfo;
-  nsCOMPtr<nsIOutputStream> mOutStream; /**< output stream to the temp file */
   nsCOMPtr<nsIInterfaceRequestor> mWindowContext;
 
   /**
    * Used to close the window on a timer, to avoid any exceptions that are
    * thrown if we try to close the window before it's fully loaded.
    */
-  nsCOMPtr<nsIDOMWindowInternal> mWindowToClose;
+  nsCOMPtr<nsIDOMWindow> mWindowToClose;
   nsCOMPtr<nsITimer> mTimer;
 
   /**
@@ -302,46 +264,46 @@ protected:
    * MIME info settings or anything else, without ever popping up the 
    * unknown content type handling dialog.
    */
-  PRPackedBool mForceSave;
+  bool mForceSave;
   
   /**
    * The canceled flag is set if the user canceled the launching of this
    * application before we finished saving the data to a temp file.
    */
-  PRPackedBool mCanceled;
+  bool mCanceled;
 
   /**
    * This is set based on whether the channel indicates that a new window
    * was opened specifically for this download.  If so, then we
    * close it.
    */
-  PRPackedBool mShouldCloseWindow;
+  bool mShouldCloseWindow;
 
   /**
    * have we received information from the user about how they want to
    * dispose of this content
    */
-  PRPackedBool mReceivedDispositionInfo;
-  PRPackedBool mStopRequestIssued; 
-  PRPackedBool mProgressListenerInitialized;
+  bool mReceivedDispositionInfo;
+  bool mStopRequestIssued; 
+  bool mProgressListenerInitialized;
 
-  PRPackedBool mIsFileChannel;
+  bool mIsFileChannel;
 
   /**
    * One of the REASON_ constants from nsIHelperAppLauncherDialog. Indicates the
    * reason the dialog was shown (unknown content type, server requested it,
    * etc).
    */
-  PRUint32 mReason;
+  uint32_t mReason;
 
   /**
    * Track the executable-ness of the temporary file.
    */
-  PRBool mTempFileIsExecutable;
+  bool mTempFileIsExecutable;
 
   PRTime mTimeDownloadStarted;
-  PRInt64 mContentLength;
-  PRInt64 mProgress; /**< Number of bytes received (for sending progress notifications). */
+  int64_t mContentLength;
+  int64_t mProgress; /**< Number of bytes received (for sending progress notifications). */
 
   /**
    * When we are told to save the temp file to disk (in a more permament
@@ -350,14 +312,20 @@ protected:
    */
   nsCOMPtr<nsIFile> mFinalFileDestination;
 
-  PRUint32 mBufferSize;
-  char    *mDataBuffer;
+  uint32_t mBufferSize;
+
+  /**
+   * This object handles saving the data received from the network to a
+   * temporary location first, and then move the file to its final location,
+   * doing all the input/output on a background thread.
+   */
+  nsCOMPtr<nsIBackgroundFileSaver> mSaver;
 
   /**
    * Creates the temporary file for the download and an output stream for it.
-   * Upon successful return, both mTempFile and mOutStream will be valid.
+   * Upon successful return, both mTempFile and mSaver will be valid.
    */
-  nsresult SetUpTempFile();
+  nsresult SetUpTempFile(nsIChannel * aChannel);
   /**
    * When we download a helper app, we are going to retarget all load
    * notifications into our own docloader and load group instead of
@@ -372,7 +340,7 @@ protected:
    * what's going on...
    */
   nsresult CreateProgressListener();
-  nsresult PromptForSaveToFile(nsILocalFile ** aNewFile,
+  nsresult PromptForSaveToFile(nsIFile ** aNewFile,
                                const nsAFlatString &aDefaultFile,
                                const nsAFlatString &aDefaultFileExt);
 
@@ -405,7 +373,7 @@ protected:
   /**
    * Helper routine that searches a pref string for a given mime type
    */
-  PRBool GetNeverAskFlagFromPref(const char * prefName, const char * aContentType);
+  bool GetNeverAskFlagFromPref(const char * prefName, const char * aContentType);
 
   /**
    * Initialize an nsITransfer object for use as a progress object
@@ -437,12 +405,19 @@ protected:
   nsCOMPtr<nsIHelperAppLauncherDialog> mDialog;
 
   /**
-   * The request that's being loaded. Not used after OnStopRequest, so a weak
-   * reference suffices. Initialized in OnStartRequest.
+   * Keep request alive in case when helper non-modal dialog shown.
+   * Thus in OnStopRequest the mRequest will not be set to null (it will be set to null further).
    */
-  nsIRequest*  mRequest;
-};
+  bool mKeepRequestAlive;
 
-extern NS_HIDDEN_(nsExternalHelperAppService*) gExtProtSvc;
+  /**
+   * The request that's being loaded. Initialized in OnStartRequest.
+   * Nulled out in OnStopRequest or once we know what we're doing
+   * with the data, whichever happens later.
+   */
+  nsCOMPtr<nsIRequest> mRequest;
+
+  nsRefPtr<nsExternalHelperAppService> mExtProtSvc;
+};
 
 #endif // nsExternalHelperAppService_h__

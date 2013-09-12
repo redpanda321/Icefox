@@ -12,9 +12,7 @@ function run_test() {
   do_test_pending();
   createAppInfo("xpcshell@tests.mozilla.org", "XPCShell", "2", "1.9.2");
 
-  dest = profileDir.clone();
-  dest.append("addon1@tests.mozilla.org");
-  writeInstallRDFToDir({
+  var dest = writeInstallRDFForExtension({
     id: "addon1@tests.mozilla.org",
     version: "1.0",
     name: "Test",
@@ -23,10 +21,10 @@ function run_test() {
       minVersion: "1",
       maxVersion: "1"
     }]
-  }, dest);
+  }, profileDir);
   // Attempt to make this look like it was added some time in the past so
   // the update makes the last modified time change.
-  dest.lastModifiedTime -= 5000;
+  setExtensionModifiedTime(dest, dest.lastModifiedTime - 5000);
 
   startupManager();
 
@@ -38,7 +36,7 @@ function run_test() {
     do_check_false(a.isActive);
     do_check_false(isExtensionInAddonsList(profileDir, a.id));
 
-    writeInstallRDFToDir({
+    writeInstallRDFForExtension({
       id: "addon1@tests.mozilla.org",
       version: "2.0",
       name: "Test",
@@ -47,7 +45,7 @@ function run_test() {
         minVersion: "1",
         maxVersion: "2"
       }]
-    }, dest);
+    }, profileDir);
 
     restartManager();
 

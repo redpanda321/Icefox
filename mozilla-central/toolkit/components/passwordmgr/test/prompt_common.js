@@ -1,8 +1,6 @@
-netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
-
-const Ci = Components.interfaces;
+var Ci = SpecialPowers.Ci;
 ok(Ci != null, "Access Ci");
-const Cc = Components.classes;
+var Cc = SpecialPowers.Cc;
 ok(Cc != null, "Access Cc");
 
 var didDialog;
@@ -26,14 +24,11 @@ var observer = {
                             Ci.nsISupports, Ci.nsISupportsWeakReference];
 
         if (!interfaces.some( function(v) { return iid.equals(v) } ))
-            throw Components.results.NS_ERROR_NO_INTERFACE;
+            throw SpecialPowers.Components.results.NS_ERROR_NO_INTERFACE;
         return this;
     },
 
     observe : function (subject, topic, data) {
-        netscape.security.PrivilegeManager
-                         .enablePrivilege('UniversalXPConnect');
-
         var doc = getDialogDoc();
         if (doc)
             handleDialog(doc, testNum);

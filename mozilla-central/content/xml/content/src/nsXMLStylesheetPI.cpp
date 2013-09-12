@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Jonas Sicking (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsIDOMLinkStyle.h"
 #include "nsIDOMStyleSheet.h"
@@ -45,9 +12,11 @@
 #include "nsNetUtil.h"
 #include "nsXMLProcessingInstruction.h"
 #include "nsUnicharUtils.h"
-#include "nsParserUtils.h"
 #include "nsGkAtoms.h"
 #include "nsThreadUtils.h"
+#include "nsContentUtils.h"
+
+using namespace mozilla;
 
 class nsXMLStylesheetPI : public nsXMLProcessingInstruction,
                           public nsStyleLinkElement
@@ -59,15 +28,20 @@ public:
   // nsISupports
   NS_DECL_ISUPPORTS_INHERITED
 
+  // CC
+  NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED(nsXMLStylesheetPI,
+                                           nsXMLProcessingInstruction)
+
   // nsIDOMNode
-  NS_IMETHOD SetNodeValue(const nsAString& aData);
+  virtual void SetNodeValueInternal(const nsAString& aNodeValue,
+                                    mozilla::ErrorResult& aError);
 
   // nsIContent
   virtual nsresult BindToTree(nsIDocument* aDocument, nsIContent* aParent,
                               nsIContent* aBindingParent,
-                              PRBool aCompileEventHandlers);
-  virtual void UnbindFromTree(PRBool aDeep = PR_TRUE,
-                              PRBool aNullParent = PR_TRUE);
+                              bool aCompileEventHandlers);
+  virtual void UnbindFromTree(bool aDeep = true,
+                              bool aNullParent = true);
 
   // nsIStyleSheetLinkingElement
   virtual void OverrideBaseURI(nsIURI* aNewBaseURI);
@@ -79,20 +53,20 @@ public:
 protected:
   nsCOMPtr<nsIURI> mOverriddenBaseURI;
 
-  already_AddRefed<nsIURI> GetStyleSheetURL(PRBool* aIsInline);
+  already_AddRefed<nsIURI> GetStyleSheetURL(bool* aIsInline);
   void GetStyleSheetInfo(nsAString& aTitle,
                          nsAString& aType,
                          nsAString& aMedia,
-                         PRBool* aIsAlternate);
+                         bool* aIsAlternate);
   virtual nsGenericDOMDataNode* CloneDataNode(nsINodeInfo *aNodeInfo,
-                                              PRBool aCloneText) const;
+                                              bool aCloneText) const;
 };
 
 // nsISupports implementation
 
 DOMCI_NODE_DATA(XMLStylesheetProcessingInstruction, nsXMLStylesheetPI)
 
-NS_INTERFACE_TABLE_HEAD(nsXMLStylesheetPI)
+NS_INTERFACE_TABLE_HEAD_CYCLE_COLLECTION_INHERITED(nsXMLStylesheetPI)
   NS_NODE_INTERFACE_TABLE4(nsXMLStylesheetPI, nsIDOMNode,
                            nsIDOMProcessingInstruction, nsIDOMLinkStyle,
                            nsIStyleSheetLinkingElement)
@@ -102,11 +76,20 @@ NS_INTERFACE_MAP_END_INHERITING(nsXMLProcessingInstruction)
 NS_IMPL_ADDREF_INHERITED(nsXMLStylesheetPI, nsXMLProcessingInstruction)
 NS_IMPL_RELEASE_INHERITED(nsXMLStylesheetPI, nsXMLProcessingInstruction)
 
+NS_IMPL_CYCLE_COLLECTION_CLASS(nsXMLStylesheetPI)
+NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(nsXMLStylesheetPI,
+                                                  nsXMLProcessingInstruction)
+  tmp->nsStyleLinkElement::Traverse(cb);
+NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
+NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(nsXMLStylesheetPI,
+                                                nsXMLProcessingInstruction)
+  tmp->nsStyleLinkElement::Unlink();
+NS_IMPL_CYCLE_COLLECTION_UNLINK_END
+
 
 nsXMLStylesheetPI::nsXMLStylesheetPI(already_AddRefed<nsINodeInfo> aNodeInfo,
                                      const nsAString& aData)
-  : nsXMLProcessingInstruction(aNodeInfo, NS_LITERAL_STRING("xml-stylesheet"),
-                               aData)
+  : nsXMLProcessingInstruction(aNodeInfo, aData)
 {
 }
 
@@ -119,7 +102,7 @@ nsXMLStylesheetPI::~nsXMLStylesheetPI()
 nsresult
 nsXMLStylesheetPI::BindToTree(nsIDocument* aDocument, nsIContent* aParent,
                               nsIContent* aBindingParent,
-                              PRBool aCompileEventHandlers)
+                              bool aCompileEventHandlers)
 {
   nsresult rv = nsXMLProcessingInstruction::BindToTree(aDocument, aParent,
                                                        aBindingParent,
@@ -133,7 +116,7 @@ nsXMLStylesheetPI::BindToTree(nsIDocument* aDocument, nsIContent* aParent,
 }
 
 void
-nsXMLStylesheetPI::UnbindFromTree(PRBool aDeep, PRBool aNullParent)
+nsXMLStylesheetPI::UnbindFromTree(bool aDeep, bool aNullParent)
 {
   nsCOMPtr<nsIDocument> oldDoc = GetCurrentDoc();
 
@@ -143,14 +126,14 @@ nsXMLStylesheetPI::UnbindFromTree(PRBool aDeep, PRBool aNullParent)
 
 // nsIDOMNode
 
-NS_IMETHODIMP
-nsXMLStylesheetPI::SetNodeValue(const nsAString& aNodeValue)
+void
+nsXMLStylesheetPI::SetNodeValueInternal(const nsAString& aNodeValue,
+                                        ErrorResult& aError)
 {
-  nsresult rv = nsGenericDOMDataNode::SetNodeValue(aNodeValue);
-  if (NS_SUCCEEDED(rv)) {
-    UpdateStyleSheetInternal(nsnull, PR_TRUE);
+  nsGenericDOMDataNode::SetNodeValueInternal(aNodeValue, aError);
+  if (!aError.Failed()) {
+    UpdateStyleSheetInternal(nullptr, true);
   }
-  return rv;
 }
 
 // nsStyleLinkElement
@@ -168,26 +151,22 @@ nsXMLStylesheetPI::OverrideBaseURI(nsIURI* aNewBaseURI)
 }
 
 already_AddRefed<nsIURI>
-nsXMLStylesheetPI::GetStyleSheetURL(PRBool* aIsInline)
+nsXMLStylesheetPI::GetStyleSheetURL(bool* aIsInline)
 {
-  *aIsInline = PR_FALSE;
+  *aIsInline = false;
 
   nsAutoString href;
   if (!GetAttrValue(nsGkAtoms::href, href)) {
-    return nsnull;
+    return nullptr;
   }
 
   nsIURI *baseURL;
-  nsCAutoString charset;
-  nsIDocument *document = GetOwnerDoc();
-  if (document) {
-    baseURL = mOverriddenBaseURI ?
-              mOverriddenBaseURI.get() :
-              document->GetDocBaseURI();
-    charset = document->GetDocumentCharacterSet();
-  } else {
-    baseURL = mOverriddenBaseURI;
-  }
+  nsAutoCString charset;
+  nsIDocument *document = OwnerDoc();
+  baseURL = mOverriddenBaseURI ?
+            mOverriddenBaseURI.get() :
+            document->GetDocBaseURI();
+  charset = document->GetDocumentCharacterSet();
 
   nsCOMPtr<nsIURI> aURI;
   NS_NewURI(getter_AddRefs(aURI), href, charset.get(), baseURL);
@@ -198,12 +177,12 @@ void
 nsXMLStylesheetPI::GetStyleSheetInfo(nsAString& aTitle,
                                      nsAString& aType,
                                      nsAString& aMedia,
-                                     PRBool* aIsAlternate)
+                                     bool* aIsAlternate)
 {
   aTitle.Truncate();
   aType.Truncate();
   aMedia.Truncate();
-  *aIsAlternate = PR_FALSE;
+  *aIsAlternate = false;
 
   // xml-stylesheet PI is special only in prolog
   if (!nsContentUtils::InProlog(this)) {
@@ -213,10 +192,12 @@ nsXMLStylesheetPI::GetStyleSheetInfo(nsAString& aTitle,
   nsAutoString data;
   GetData(data);
 
-  nsParserUtils::GetQuotedAttributeValue(data, nsGkAtoms::title, aTitle);
+  nsContentUtils::GetPseudoAttributeValue(data, nsGkAtoms::title, aTitle);
 
   nsAutoString alternate;
-  nsParserUtils::GetQuotedAttributeValue(data, nsGkAtoms::alternate, alternate);
+  nsContentUtils::GetPseudoAttributeValue(data,
+                                          nsGkAtoms::alternate,
+                                          alternate);
 
   // if alternate, does it have title?
   if (alternate.EqualsLiteral("yes")) {
@@ -224,16 +205,16 @@ nsXMLStylesheetPI::GetStyleSheetInfo(nsAString& aTitle,
       return;
     }
 
-    *aIsAlternate = PR_TRUE;
+    *aIsAlternate = true;
   }
 
-  nsParserUtils::GetQuotedAttributeValue(data, nsGkAtoms::media, aMedia);
+  nsContentUtils::GetPseudoAttributeValue(data, nsGkAtoms::media, aMedia);
 
   nsAutoString type;
-  nsParserUtils::GetQuotedAttributeValue(data, nsGkAtoms::type, type);
+  nsContentUtils::GetPseudoAttributeValue(data, nsGkAtoms::type, type);
 
   nsAutoString mimeType, notUsed;
-  nsParserUtils::SplitMimeType(type, mimeType, notUsed);
+  nsContentUtils::SplitMimeType(type, mimeType, notUsed);
   if (!mimeType.IsEmpty() && !mimeType.LowerCaseEqualsLiteral("text/css")) {
     aType.Assign(type);
     return;
@@ -247,7 +228,7 @@ nsXMLStylesheetPI::GetStyleSheetInfo(nsAString& aTitle,
 }
 
 nsGenericDOMDataNode*
-nsXMLStylesheetPI::CloneDataNode(nsINodeInfo *aNodeInfo, PRBool aCloneText) const
+nsXMLStylesheetPI::CloneDataNode(nsINodeInfo *aNodeInfo, bool aCloneText) const
 {
   nsAutoString data;
   nsGenericDOMDataNode::GetData(data);
@@ -262,11 +243,13 @@ NS_NewXMLStylesheetProcessingInstruction(nsIContent** aInstancePtrResult,
 {
   NS_PRECONDITION(aNodeInfoManager, "Missing nodeinfo manager");
 
-  *aInstancePtrResult = nsnull;
+  *aInstancePtrResult = nullptr;
   
   nsCOMPtr<nsINodeInfo> ni;
   ni = aNodeInfoManager->GetNodeInfo(nsGkAtoms::processingInstructionTagName,
-                                     nsnull, kNameSpaceID_None);
+                                     nullptr, kNameSpaceID_None,
+                                     nsIDOMNode::PROCESSING_INSTRUCTION_NODE,
+                                     nsGkAtoms::xml_stylesheet);
   NS_ENSURE_TRUE(ni, NS_ERROR_OUT_OF_MEMORY);
 
   nsXMLStylesheetPI *instance = new nsXMLStylesheetPI(ni.forget(), aData);

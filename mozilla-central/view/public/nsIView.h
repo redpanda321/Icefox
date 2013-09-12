@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsIView_h___
 #define nsIView_h___
@@ -49,8 +17,8 @@
 class nsIViewManager;
 class nsViewManager;
 class nsView;
-class nsWeakView;
 class nsIWidget;
+class nsIFrame;
 
 // Enumerated type to indicate the visibility of a layer.
 // hide - the layer is not shown.
@@ -62,14 +30,8 @@ enum nsViewVisibility {
 };
 
 #define NS_IVIEW_IID    \
-  { 0xba00349c, 0xe58a, 0x436a, \
-    { 0x9f, 0x1f, 0x05, 0xb3, 0xdd, 0x9d, 0x9d, 0x36 } }
-
-// Public view flags are defined in this file
-#define NS_VIEW_FLAGS_PUBLIC              0x00FF
-// Private view flags are private to the view module,
-// and are defined in nsView.h
-#define NS_VIEW_FLAGS_PRIVATE             0xFF00
+  { 0xa4577c1d, 0xbc80, 0x444c, \
+    { 0xb0, 0x9d, 0x5b, 0xef, 0x94, 0x7c, 0x43, 0x31 } }
 
 // Public view flags
 
@@ -83,15 +45,6 @@ enum nsViewVisibility {
 // displayed above z-index:auto views if this view 
 // is z-index:auto also
 #define NS_VIEW_FLAG_TOPMOST              0x0010
-
-struct nsViewZIndex {
-  PRBool mIsAuto;
-  PRInt32 mZIndex;
-  PRBool mIsTopmost;
-  
-  nsViewZIndex(PRBool aIsAuto, PRInt32 aZIndex, PRBool aIsTopmost)
-    : mIsAuto(aIsAuto), mZIndex(aZIndex), mIsTopmost(aIsTopmost) {}
-};
 
 //----------------------------------------------------------------------
 
@@ -174,6 +127,14 @@ public:
   nsRect GetBounds() const { return mDimBounds; }
 
   /**
+   * The bounds of this view relative to this view. So this is the same as
+   * GetBounds except this is relative to this view instead of the parent view.
+   */
+  nsRect GetDimensions() const {
+    nsRect r = mDimBounds; r.MoveBy(-mPosX, -mPosY); return r;
+  }
+
+  /**
    * Get the offset between the coordinate systems of |this| and aOther.
    * Adding the return value to a point in the coordinate system of |this|
    * will transform the point to the coordinate system of aOther.
@@ -203,23 +164,17 @@ public:
   nsPoint GetOffsetToWidget(nsIWidget* aWidget) const;
 
   /**
+   * Takes a point aPt that is in the coordinate system of |this|'s parent view
+   * and converts it to be in the coordinate system of |this| taking into
+   * account the offset and any app unit per dev pixel ratio differences.
+   */
+  nsPoint ConvertFromParentCoords(nsPoint aPt) const;
+
+  /**
    * Called to query the visibility state of a view.
    * @result current visibility state
    */
   nsViewVisibility GetVisibility() const { return mVis; }
-
-  /**
-   * Called to query the z-index of a view.
-   * The z-index is relative to all siblings of the view.
-   * @result mZIndex: explicit z-index value or 0 if none is set
-   *         mIsAuto: PR_TRUE if the view is zindex:auto
-   *         mIsTopMost: used when this view is zindex:auto
-   *                     PR_TRUE if the view is topmost when compared
-   *                     with another z-index:auto view
-   */
-  nsViewZIndex GetZIndex() const { return nsViewZIndex((mVFlags & NS_VIEW_FLAG_AUTO_ZINDEX) != 0,
-                                                       mZIndex,
-                                                       (mVFlags & NS_VIEW_FLAG_TOPMOST) != 0); }
 
   /**
    * Get whether the view "floats" above all other views,
@@ -227,9 +182,9 @@ public:
    * the view hierarchy that would geometrically intersect with
    * this view. This is a hack, but it fixes some problems with
    * views that need to be drawn in front of all other views.
-   * @result PR_TRUE if the view floats, PR_FALSE otherwise.
+   * @result true if the view floats, false otherwise.
    */
-  PRBool GetFloating() const { return (mVFlags & NS_VIEW_FLAG_FLOATING) != 0; }
+  bool GetFloating() const { return (mVFlags & NS_VIEW_FLAG_FLOATING) != 0; }
 
   /**
    * Called to query the parent of the view.
@@ -248,24 +203,26 @@ public:
    * @result view's next sibling
    */
   nsIView* GetNextSibling() const { return reinterpret_cast<nsIView*>(mNextSibling); }
+  void SetNextSibling(nsIView *aSibling) {
+    mNextSibling = reinterpret_cast<nsView*>(aSibling);
+  }
 
   /**
-   * Set the view's link to client owned data.
-   * @param aData - data to associate with view. nsnull to disassociate
+   * Set the view's frame.
    */
-  void SetClientData(void *aData) { mClientData = aData; }
+  void SetFrame(nsIFrame* aRootFrame) { mFrame = aRootFrame; }
 
   /**
-   * Query the view for it's link to client owned data.
-   * @result data associated with view or nsnull if there is none.
+   * Retrieve the view's frame.
    */
-  void* GetClientData() const { return mClientData; }
+  nsIFrame* GetFrame() const { return mFrame; }
 
   /**
    * Get the nearest widget in this view or a parent of this view and
    * the offset from the widget's origin to this view's origin
-   * @param aOffset the offset from this view's origin to the widget's origin
-   * (usually positive) expressed in appunits of this.
+   * @param aOffset - if non-null the offset from this view's origin to the
+   * widget's origin (usually positive) expressed in appunits of this will be
+   * returned in aOffset.
    * @return the widget closest to this view; can be null because some view trees
    * don't have widgets at all (e.g., printing), but if any view in the view tree
    * has a widget, then it's safe to assume this will not return null
@@ -281,15 +238,11 @@ public:
    *
    * @param aWidgetInitData data used to initialize this view's widget before
    *        its create is called.
-   * @param aContentType is either content, UI or inherit from parent window.
-   *        This is used to expose what type of window this is to 
-   *        assistive technology like screen readers.
    * @return error status
    */
-  nsresult CreateWidget(nsWidgetInitData *aWidgetInitData = nsnull,
-                        PRBool aEnableDragDrop = PR_TRUE,
-                        PRBool aResetVisibility = PR_TRUE,
-                        nsContentType aContentType = eContentTypeInherit);
+  nsresult CreateWidget(nsWidgetInitData *aWidgetInitData = nullptr,
+                        bool aEnableDragDrop = true,
+                        bool aResetVisibility = true);
 
   /**
    * Create a widget for this view with an explicit parent widget.
@@ -297,10 +250,9 @@ public:
    * as for |CreateWidget()|.
    */
   nsresult CreateWidgetForParent(nsIWidget* aParentWidget,
-                                 nsWidgetInitData *aWidgetInitData = nsnull,
-                                 PRBool aEnableDragDrop = PR_TRUE,
-                                 PRBool aResetVisibility = PR_TRUE,
-                                 nsContentType aContentType = eContentTypeInherit);
+                                 nsWidgetInitData *aWidgetInitData = nullptr,
+                                 bool aEnableDragDrop = true,
+                                 bool aResetVisibility = true);
 
   /**
    * Create a popup widget for this view.  Pass |aParentWidget| to
@@ -310,10 +262,16 @@ public:
    * |aWidgetInitData| must be nonnull.
    */
   nsresult CreateWidgetForPopup(nsWidgetInitData *aWidgetInitData,
-                                nsIWidget* aParentWidget = nsnull,
-                                PRBool aEnableDragDrop = PR_TRUE,
-                                PRBool aResetVisibility = PR_TRUE,
-                                nsContentType aContentType = eContentTypeInherit);
+                                nsIWidget* aParentWidget = nullptr,
+                                bool aEnableDragDrop = true,
+                                bool aResetVisibility = true);
+
+  /**
+   * Destroys the associated widget for this view.  If this method is
+   * not called explicitly, the widget when be destroyed when its
+   * view gets destroyed.
+   */
+  void DestroyWidget();
 
   /**
    * Attach/detach a top level widget from this view. When attached, the view
@@ -333,28 +291,35 @@ public:
    * Returns a flag indicating whether the view owns it's widget
    * or is attached to an existing top level widget.
    */
-  PRBool IsAttachedToTopLevel() const { return mWidgetIsTopLevel; }
+  bool IsAttachedToTopLevel() const { return mWidgetIsTopLevel; }
 
   /**
    * In 4.0, the "cutout" nature of a view is queryable.
    * If we believe that all cutout view have a native widget, this
    * could be a replacement.
    * @param aWidget out parameter for widget that this view contains,
-   *        or nsnull if there is none.
+   *        or nullptr if there is none.
    */
   nsIWidget* GetWidget() const { return mWindow; }
 
   /**
-   * Returns PR_TRUE if the view has a widget associated with it.
+   * Returns true if the view has a widget associated with it.
    */
-  PRBool HasWidget() const { return mWindow != nsnull; }
+  bool HasWidget() const { return mWindow != nullptr; }
+  
+  void SetForcedRepaint(bool aForceRepaint) { 
+    if (!mInAlternatePaint) { 
+      mForcedRepaint = aForceRepaint; 
+    }
+  }
+  bool ForcedRepaint() { return mForcedRepaint; }
 
   /**
    * Make aWidget direct its events to this view.
    * The caller must call DetachWidgetEventHandler before this view
    * is destroyed.
    */
-  EVENT_CALLBACK AttachWidgetEventHandler(nsIWidget* aWidget);
+  void AttachWidgetEventHandler(nsIWidget* aWidget);
   /**
    * Stop aWidget directing its events to this view.
    */
@@ -367,21 +332,19 @@ public:
    * @param aIndent indentation depth
    * NOTE: virtual so that debugging tools not linked into gklayout can access it
    */
-  virtual void List(FILE* out, PRInt32 aIndent = 0) const;
+  virtual void List(FILE* out, int32_t aIndent = 0) const;
 #endif // DEBUG
 
   /**
    * @result true iff this is the root view for its view manager
    */
-  PRBool IsRoot() const;
+  bool IsRoot() const;
 
-  virtual PRBool ExternalIsRoot() const;
-
-  void SetDeletionObserver(nsWeakView* aDeletionObserver);
+  virtual bool ExternalIsRoot() const;
 
   nsIntRect CalcWidgetBounds(nsWindowType aType);
 
-  PRBool IsEffectivelyVisible();
+  bool IsEffectivelyVisible();
 
   // This is an app unit offset to add when converting view coordinates to
   // widget coordinates.  It is the offset in view coordinates from widget
@@ -390,14 +353,13 @@ public:
   nsPoint ViewToWidgetOffset() const { return mViewToWidgetOffset; }
 
 protected:
-  friend class nsWeakView;
   nsViewManager     *mViewManager;
   nsView            *mParent;
   nsIWidget         *mWindow;
   nsView            *mNextSibling;
   nsView            *mFirstChild;
-  void              *mClientData;
-  PRInt32           mZIndex;
+  nsIFrame          *mFrame;
+  int32_t           mZIndex;
   nsViewVisibility  mVis;
   // position relative our parent view origin but in our appunits
   nscoord           mPosX, mPosY;
@@ -406,9 +368,10 @@ protected:
   // in our appunits
   nsPoint           mViewToWidgetOffset;
   float             mOpacity;
-  PRUint32          mVFlags;
-  nsWeakView*       mDeletionObserver;
-  PRBool            mWidgetIsTopLevel;
+  uint32_t          mVFlags;
+  bool              mWidgetIsTopLevel;
+  bool              mForcedRepaint;
+  bool              mInAlternatePaint;
 
   virtual ~nsIView() {}
 
@@ -418,48 +381,5 @@ private:
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsIView, NS_IVIEW_IID)
-
-// nsWeakViews must *not* be used in heap!
-class nsWeakView
-{
-public:
-  nsWeakView(nsIView* aView) : mPrev(nsnull), mView(aView)
-  {
-    if (mView) {
-      mView->SetDeletionObserver(this);
-    }
-  }
-
-  ~nsWeakView()
-  {
-    if (mView) {
-      NS_ASSERTION(mView->mDeletionObserver == this,
-                   "nsWeakViews deleted in wrong order!");
-      // Clear deletion observer temporarily.
-      mView->SetDeletionObserver(nsnull);
-      // Put back the previous deletion observer.
-      mView->SetDeletionObserver(mPrev);
-    }
-  }
-
-  PRBool IsAlive() { return !!mView; }
-
-  nsIView* GetView() { return mView; }
-
-  void SetPrevious(nsWeakView* aWeakView) { mPrev = aWeakView; }
-
-  void Clear()
-  {
-    if (mPrev) {
-      mPrev->Clear();
-    }
-    mView = nsnull;
-  }
-private:
-  static void* operator new(size_t) CPP_THROW_NEW { return 0; }
-  static void operator delete(void*, size_t) {}
-  nsWeakView* mPrev;
-  nsIView*    mView;
-};
 
 #endif

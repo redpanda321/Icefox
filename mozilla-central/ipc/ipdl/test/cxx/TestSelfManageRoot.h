@@ -29,18 +29,15 @@ public:
     ActorDestroyReason mWhy;
 
 protected:    
-    NS_OVERRIDE
-    virtual PTestSelfManageParent* AllocPTestSelfManage() {
+    virtual PTestSelfManageParent* AllocPTestSelfManage() MOZ_OVERRIDE {
         return new TestSelfManageParent();
     }
 
-    NS_OVERRIDE
-    virtual bool DeallocPTestSelfManage(PTestSelfManageParent* a) {
+    virtual bool DeallocPTestSelfManage(PTestSelfManageParent* a) MOZ_OVERRIDE {
         return true;
     }
 
-    NS_OVERRIDE
-    virtual void ActorDestroy(ActorDestroyReason why) {
+    virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE {
         mWhy = why;
     }
 };
@@ -56,21 +53,21 @@ public:
         MOZ_COUNT_DTOR(TestSelfManageRootParent);
     }
 
+    static bool RunTestInProcesses() { return true; }
+    static bool RunTestInThreads() { return true; }
+
     void Main();
 
 protected:    
-    NS_OVERRIDE
-    virtual PTestSelfManageParent* AllocPTestSelfManage() {
+    virtual PTestSelfManageParent* AllocPTestSelfManage() MOZ_OVERRIDE {
         return new TestSelfManageParent();
     }
 
-    NS_OVERRIDE
-    virtual bool DeallocPTestSelfManage(PTestSelfManageParent* a) {
+    virtual bool DeallocPTestSelfManage(PTestSelfManageParent* a) MOZ_OVERRIDE {
         return true;
     }
 
-    NS_OVERRIDE
-    virtual void ActorDestroy(ActorDestroyReason why)
+    virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE
     {
         if (NormalShutdown != why)
             fail("unexpected destruction!");  
@@ -94,19 +91,16 @@ public:
     }
 
 protected:    
-    NS_OVERRIDE
-    virtual PTestSelfManageChild* AllocPTestSelfManage() {
+    virtual PTestSelfManageChild* AllocPTestSelfManage() MOZ_OVERRIDE {
         return new TestSelfManageChild();
     }
 
-    NS_OVERRIDE
-    virtual bool DeallocPTestSelfManage(PTestSelfManageChild* a) {
+    virtual bool DeallocPTestSelfManage(PTestSelfManageChild* a) MOZ_OVERRIDE {
         delete a;
         return true;
     }
 
-    NS_OVERRIDE
-    virtual void ActorDestroy(ActorDestroyReason why) { }
+    virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE { }
 };
 
 class TestSelfManageRootChild :
@@ -123,19 +117,16 @@ public:
     void Main();
 
 protected:    
-    NS_OVERRIDE
-    virtual PTestSelfManageChild* AllocPTestSelfManage() {
+    virtual PTestSelfManageChild* AllocPTestSelfManage() MOZ_OVERRIDE {
         return new TestSelfManageChild();
     }
 
-    NS_OVERRIDE
-    virtual bool DeallocPTestSelfManage(PTestSelfManageChild* a) {
+    virtual bool DeallocPTestSelfManage(PTestSelfManageChild* a) MOZ_OVERRIDE {
         delete a;
         return true;
     }
 
-    NS_OVERRIDE
-    virtual void ActorDestroy(ActorDestroyReason why)
+    virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE
     {
         if (NormalShutdown != why)
             fail("unexpected destruction!");  

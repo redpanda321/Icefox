@@ -1,45 +1,10 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /* vim:set ts=4 sw=4 sts=4 ci et: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Benjamin Smedberg <benjamin@smedbergs.us>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifdef MOZ_IPC
 #include "base/basictypes.h"
-#endif
 
 #include "mozilla/XPCOM.h"
 #include "nsXULAppAPI.h"
@@ -58,6 +23,7 @@
 #include "nsBinaryStream.h"
 #include "nsStorageStream.h"
 #include "nsPipe.h"
+#include "nsScriptableBase64Encoder.h"
 
 #include "nsMemoryImpl.h"
 #include "nsDebugImpl.h"
@@ -79,9 +45,6 @@
 #include "nsThreadManager.h"
 #include "nsThreadPool.h"
 
-#include "nsIProxyObjectManager.h"
-#include "nsProxyEventPrivate.h"  // access to the impl of nsProxyObjectManager for the generic factory registration.
-
 #include "xptinfo.h"
 #include "nsIInterfaceInfoManager.h"
 #include "xptiprivate.h"
@@ -94,7 +57,7 @@
 #include "nsEnvironment.h"
 #include "nsVersionComparatorImpl.h"
 
-#include "nsILocalFile.h"
+#include "nsIFile.h"
 #include "nsLocalFile.h"
 #if defined(XP_UNIX) || defined(XP_OS2)
 #include "nsNativeCharsetUtils.h"
@@ -108,12 +71,9 @@
 #include "nsStringStream.h"
 extern nsresult nsStringInputStreamConstructor(nsISupports *, REFNSIID, void **);
 
-#include "nsFastLoadService.h"
-
 #include "nsAtomService.h"
 #include "nsAtomTable.h"
 #include "nsTraceRefcnt.h"
-#include "nsTimelineService.h"
 
 #include "nsHashPropertyBag.h"
 
@@ -123,8 +83,6 @@ extern nsresult nsStringInputStreamConstructor(nsISupports *, REFNSIID, void **)
 #include "nsUUIDGenerator.h"
 
 #include "nsIOUtil.h"
-
-#include "nsRecyclingAllocator.h"
 
 #include "SpecialSystemDirectory.h"
 
@@ -138,21 +96,33 @@ extern nsresult nsStringInputStreamConstructor(nsISupports *, REFNSIID, void **)
 
 #include "nsSystemInfo.h"
 #include "nsMemoryReporterManager.h"
+#include "nsMemoryInfoDumper.h"
+#include "nsMessageLoop.h"
 
 #include <locale.h>
 #include "mozilla/Services.h"
-#include "mozilla/FunctionTimer.h"
 #include "mozilla/Omnijar.h"
+#include "mozilla/HangMonitor.h"
+#include "mozilla/Telemetry.h"
 
 #include "nsChromeRegistry.h"
 #include "nsChromeProtocolHandler.h"
+#include "mozilla/mozPoisonWrite.h"
 
-#ifdef MOZ_IPC
+#include "mozilla/scache/StartupCache.h"
+
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/message_loop.h"
 
 #include "mozilla/ipc/BrowserProcessSubThread.h"
+#include "mozilla/MapsMemoryReporter.h"
+#include "mozilla/AvailableMemoryTracker.h"
+#include "mozilla/ClearOnShutdown.h"
+
+#include "mozilla/VisualEventTracer.h"
+
+#include "sampler.h"
 
 using base::AtExitManager;
 using mozilla::ipc::BrowserProcessSubThread;
@@ -165,7 +135,6 @@ static bool sCommandLineWasInitialized;
 static BrowserProcessSubThread* sIOThread;
 
 } /* anonymous namespace */
-#endif
 
 // Registry Factory creation function defined in nsRegistry.cpp
 // We hook into this function locally to create and register the registry
@@ -175,8 +144,8 @@ static BrowserProcessSubThread* sIOThread;
 extern nsresult NS_RegistryGetFactory(nsIFactory** aFactory);
 extern nsresult NS_CategoryManagerGetFactory( nsIFactory** );
 
-#ifdef DEBUG
-extern void _FreeAutoLockStatics();
+#ifdef XP_WIN
+extern nsresult CreateAnonTempFileRemover();
 #endif
 
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsProcess)
@@ -207,14 +176,9 @@ NS_GENERIC_FACTORY_CONSTRUCTOR(nsBinaryOutputStream)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsBinaryInputStream)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsStorageStream)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsVersionComparatorImpl)
+NS_GENERIC_FACTORY_CONSTRUCTOR(nsScriptableBase64Encoder)
 
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsVariant)
-
-NS_GENERIC_FACTORY_CONSTRUCTOR(nsRecyclingAllocatorImpl)
-
-#ifdef MOZ_TIMELINE
-NS_GENERIC_FACTORY_CONSTRUCTOR(nsTimelineService)
-#endif
 
 NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsHashPropertyBag, Init)
 
@@ -229,6 +193,8 @@ NS_GENERIC_FACTORY_CONSTRUCTOR(nsMacUtilsImpl)
 NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsSystemInfo, Init)
 
 NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsMemoryReporterManager, Init)
+
+NS_GENERIC_FACTORY_CONSTRUCTOR(nsMemoryInfoDumper)
 
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsIOUtil)
 
@@ -262,7 +228,7 @@ nsXPTIInterfaceInfoManagerGetSingleton(nsISupports* outer,
 }
 
 nsComponentManagerImpl* nsComponentManagerImpl::gComponentManager = NULL;
-PRBool gXPCOMShuttingDown = PR_FALSE;
+bool gXPCOMShuttingDown = false;
 
 static NS_DEFINE_CID(kComponentManagerCID, NS_COMPONENTMANAGER_CID);
 static NS_DEFINE_CID(kINIParserFactoryCID, NS_INIPARSERFACTORY_CID);
@@ -276,7 +242,6 @@ NS_GENERIC_FACTORY_SINGLETON_CONSTRUCTOR(nsChromeRegistry,
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsChromeProtocolHandler)
 
 #define NS_PERSISTENTPROPERTIES_CID NS_IPERSISTENTPROPERTIES_CID /* sigh */
-#define NS_XPCOMPROXY_CID NS_PROXYEVENT_MANAGER_CID
 
 static already_AddRefed<nsIFactory>
 CreateINIParserFactory(const mozilla::Module& module,
@@ -323,12 +288,12 @@ const mozilla::Module::ContractIDEntry kXPCOMContracts[] = {
 const mozilla::Module kXPCOMModule = { mozilla::Module::kVersion, kXPCOMCIDEntries, kXPCOMContracts };
 
 // gDebug will be freed during shutdown.
-static nsIDebug* gDebug = nsnull;
+static nsIDebug* gDebug = nullptr;
 
 EXPORT_XPCOM_API(nsresult)
 NS_GetDebug(nsIDebug** result)
 {
-    return nsDebugImpl::Create(nsnull, 
+    return nsDebugImpl::Create(nullptr, 
                                NS_GET_IID(nsIDebug), 
                                (void**) result);
 }
@@ -336,7 +301,7 @@ NS_GetDebug(nsIDebug** result)
 EXPORT_XPCOM_API(nsresult)
 NS_GetTraceRefcnt(nsITraceRefcnt** result)
 {
-    return nsTraceRefcntImpl::Create(nsnull, 
+    return nsTraceRefcntImpl::Create(nullptr, 
                                      NS_GET_IID(nsITraceRefcnt), 
                                      (void**) result);
 }
@@ -345,7 +310,7 @@ EXPORT_XPCOM_API(nsresult)
 NS_InitXPCOM(nsIServiceManager* *result,
                              nsIFile* binDirectory)
 {
-    return NS_InitXPCOM2(result, binDirectory, nsnull);
+    return NS_InitXPCOM2(result, binDirectory, nullptr);
 }
 
 EXPORT_XPCOM_API(nsresult)
@@ -353,19 +318,17 @@ NS_InitXPCOM2(nsIServiceManager* *result,
               nsIFile* binDirectory,
               nsIDirectoryServiceProvider* appFileLocationProvider)
 {
-    NS_TIME_FUNCTION;
-
+    SAMPLER_INIT();
     nsresult rv = NS_OK;
 
      // We are not shutting down
-    gXPCOMShuttingDown = PR_FALSE;
+    gXPCOMShuttingDown = false;
 
-    NS_TIME_FUNCTION_MARK("Next: log init");
+    // Initialize the available memory tracker before other threads have had a
+    // chance to start up, because the initialization is not thread-safe.
+    mozilla::AvailableMemoryTracker::Init();
 
     NS_LogInit();
-
-#ifdef MOZ_IPC
-    NS_TIME_FUNCTION_MARK("Next: IPC init");
 
     // Set up chromium libs
     NS_ASSERTION(!sExitManager && !sMessageLoop, "Bad logic!");
@@ -392,23 +355,16 @@ NS_InitXPCOM2(nsIServiceManager* *result,
 
         sIOThread = ioThread.release();
     }
-#endif
-
-    NS_TIME_FUNCTION_MARK("Next: thread manager init");
 
     // Establish the main thread here.
     rv = nsThreadManager::get()->Init();
     if (NS_FAILED(rv)) return rv;
 
-    NS_TIME_FUNCTION_MARK("Next: timer startup");
-
     // Set up the timer globals/timer thread
     rv = nsTimerImpl::Startup();
     NS_ENSURE_SUCCESS(rv, rv);
 
-#if !defined(WINCE) && !defined(ANDROID)
-    NS_TIME_FUNCTION_MARK("Next: setlocale");
-
+#ifndef ANDROID
     // If the locale hasn't already been setup by our embedder,
     // get us out of the "C" locale and into the system 
     if (strcmp(setlocale(LC_ALL, NULL), "C") == 0)
@@ -416,75 +372,49 @@ NS_InitXPCOM2(nsIServiceManager* *result,
 #endif
 
 #if defined(XP_UNIX) || defined(XP_OS2)
-    NS_TIME_FUNCTION_MARK("Next: startup native charset utils");
-
     NS_StartupNativeCharsetUtils();
 #endif
-
-    NS_TIME_FUNCTION_MARK("Next: startup local file");
 
     NS_StartupLocalFile();
 
     StartupSpecialSystemDirectory();
 
-    rv = nsDirectoryService::RealInit();
-    if (NS_FAILED(rv))
-        return rv;
+    nsDirectoryService::RealInit();
 
-    nsCOMPtr<nsIFile> xpcomLib;
-            
-    PRBool value;
+    bool value;
+
     if (binDirectory)
     {
         rv = binDirectory->IsDirectory(&value);
 
         if (NS_SUCCEEDED(rv) && value) {
             nsDirectoryService::gService->Set(NS_XPCOM_INIT_CURRENT_PROCESS_DIR, binDirectory);
-            binDirectory->Clone(getter_AddRefs(xpcomLib));
         }
     }
-    else {
-        nsDirectoryService::gService->Get(NS_XPCOM_CURRENT_PROCESS_DIR, 
-                                          NS_GET_IID(nsIFile), 
-                                          getter_AddRefs(xpcomLib));
-    }
 
-    if (xpcomLib) {
-        xpcomLib->AppendNative(nsDependentCString(XPCOM_DLL));
-        nsDirectoryService::gService->Set(NS_XPCOM_LIBRARY_FILE, xpcomLib);
-    }
-    
     if (appFileLocationProvider) {
         rv = nsDirectoryService::gService->RegisterProvider(appFileLocationProvider);
         if (NS_FAILED(rv)) return rv;
     }
 
-#ifdef MOZ_OMNIJAR
-    NS_TIME_FUNCTION_MARK("Next: Omnijar init");
+    nsCOMPtr<nsIFile> xpcomLib;
 
-    if (!mozilla::OmnijarPath()) {
-        nsCOMPtr<nsILocalFile> omnijar;
-        nsCOMPtr<nsIFile> file;
+    nsDirectoryService::gService->Get(NS_GRE_DIR,
+                                      NS_GET_IID(nsIFile),
+                                      getter_AddRefs(xpcomLib));
 
-        rv = NS_ERROR_FAILURE;
-        nsDirectoryService::gService->Get(NS_GRE_DIR,
-                                          NS_GET_IID(nsIFile),
-                                          getter_AddRefs(file));
-        if (file)
-            rv = file->Append(NS_LITERAL_STRING("omni.jar"));
-        if (NS_SUCCEEDED(rv))
-            omnijar = do_QueryInterface(file);
-        if (NS_SUCCEEDED(rv))
-            mozilla::SetOmnijar(omnijar);
+    if (xpcomLib) {
+        xpcomLib->AppendNative(nsDependentCString(XPCOM_DLL));
+        nsDirectoryService::gService->Set(NS_XPCOM_LIBRARY_FILE, xpcomLib);
     }
-#endif
 
-#ifdef MOZ_IPC
+    if (!mozilla::Omnijar::IsInitialized()) {
+        mozilla::Omnijar::Init();
+    }
+
     if ((sCommandLineWasInitialized = !CommandLine::IsInitialized())) {
-        NS_TIME_FUNCTION_MARK("Next: IPC command line init");
-
 #ifdef OS_WIN
-        CommandLine::Init(0, nsnull);
+        CommandLine::Init(0, nullptr);
 #else
         nsCOMPtr<nsIFile> binaryFile;
         nsDirectoryService::gService->Get(NS_XPCOM_CURRENT_PROCESS_DIR, 
@@ -503,11 +433,8 @@ NS_InitXPCOM2(nsIServiceManager* *result,
         CommandLine::Init(1, &argv);
 #endif
     }
-#endif
 
     NS_ASSERTION(nsComponentManagerImpl::gComponentManager == NULL, "CompMgr not null at init");
-
-    NS_TIME_FUNCTION_MARK("Next: component manager init");
 
     // Create the Component/Service Manager
     nsComponentManagerImpl::gComponentManager = new nsComponentManagerImpl();
@@ -527,28 +454,34 @@ NS_InitXPCOM2(nsIServiceManager* *result,
         NS_ADDREF(*result = nsComponentManagerImpl::gComponentManager);
     }
 
-    NS_TIME_FUNCTION_MARK("Next: cycle collector startup");
-
-    NS_TIME_FUNCTION_MARK("Next: interface info manager init");
-
     // The iimanager constructor searches and registers XPT files.
     // (We trigger the singleton's lazy construction here to make that happen.)
     (void) xptiInterfaceInfoManager::GetSingleton();
-
-    NS_TIME_FUNCTION_MARK("Next: register category providers");
 
     // After autoreg, but before we actually instantiate any components,
     // add any services listed in the "xpcom-directory-providers" category
     // to the directory service.
     nsDirectoryService::gService->RegisterCategoryProviders();
 
-    NS_TIME_FUNCTION_MARK("Next: create services from category");
+    mozilla::scache::StartupCache::GetSingleton();
+    mozilla::AvailableMemoryTracker::Activate();
 
     // Notify observers of xpcom autoregistration start
     NS_CreateServicesFromCategory(NS_XPCOM_STARTUP_CATEGORY, 
-                                  nsnull,
+                                  nullptr,
                                   NS_XPCOM_STARTUP_OBSERVER_ID);
-    
+#ifdef XP_WIN
+    CreateAnonTempFileRemover();
+#endif
+
+    mozilla::MapsMemoryReporter::Init();
+
+    mozilla::Telemetry::Init();
+
+    mozilla::HangMonitor::Startup();
+
+    mozilla::eventtracer::Init();
+
     return NS_OK;
 }
 
@@ -585,6 +518,9 @@ namespace mozilla {
 nsresult
 ShutdownXPCOM(nsIServiceManager* servMgr)
 {
+    // Make sure the hang monitor is enabled for shutdown.
+    HangMonitor::NotifyActivity();
+
     NS_ENSURE_STATE(NS_IsMainThread());
 
     nsresult rv;
@@ -605,8 +541,8 @@ ShutdownXPCOM(nsIServiceManager* servMgr)
         if (observerService)
         {
             (void) observerService->
-                NotifyObservers(nsnull, NS_XPCOM_WILL_SHUTDOWN_OBSERVER_ID,
-                                nsnull);
+                NotifyObservers(nullptr, NS_XPCOM_WILL_SHUTDOWN_OBSERVER_ID,
+                                nullptr);
 
             nsCOMPtr<nsIServiceManager> mgr;
             rv = NS_GetServiceManager(getter_AddRefs(mgr));
@@ -614,16 +550,18 @@ ShutdownXPCOM(nsIServiceManager* servMgr)
             {
                 (void) observerService->
                     NotifyObservers(mgr, NS_XPCOM_SHUTDOWN_OBSERVER_ID,
-                                    nsnull);
+                                    nullptr);
             }
         }
 
         NS_ProcessPendingEvents(thread);
-
+        mozilla::scache::StartupCache::DeleteSingleton();
         if (observerService)
             (void) observerService->
-                NotifyObservers(nsnull, NS_XPCOM_SHUTDOWN_THREADS_OBSERVER_ID,
-                                nsnull);
+                NotifyObservers(nullptr, NS_XPCOM_SHUTDOWN_THREADS_OBSERVER_ID,
+                                nullptr);
+
+        nsCycleCollector_shutdownThreads();
 
         NS_ProcessPendingEvents(thread);
 
@@ -640,6 +578,8 @@ ShutdownXPCOM(nsIServiceManager* servMgr)
 
         NS_ProcessPendingEvents(thread);
 
+        HangMonitor::NotifyActivity();
+
         // We save the "xpcom-shutdown-loaders" observers to notify after
         // the observerservice is gone.
         if (observerService) {
@@ -650,6 +590,11 @@ ShutdownXPCOM(nsIServiceManager* servMgr)
             observerService->Shutdown();
         }
     }
+
+    // Free ClearOnShutdown()'ed smart pointers.  This needs to happen *after*
+    // we've finished notifying observers of XPCOM shutdown, because shutdown
+    // observers themselves might call ClearOnShutdown().
+    mozilla::KillClearOnShutdown();
 
     // XPCOM is officially in shutdown mode NOW
     // Set this only after the observers have been notified as this
@@ -668,15 +613,16 @@ ShutdownXPCOM(nsIServiceManager* servMgr)
         nsComponentManagerImpl::gComponentManager->FreeServices();
     }
 
-    nsProxyObjectManager::Shutdown();
-
     // Release the directory service
     NS_IF_RELEASE(nsDirectoryService::gService);
+
+    SAMPLE_MARKER("Shutdown xpcom");
+    mozilla::PoisonWrite();
 
     nsCycleCollector_shutdown();
 
     if (moduleLoaders) {
-        PRBool more;
+        bool more;
         nsCOMPtr<nsISupports> el;
         while (NS_SUCCEEDED(moduleLoaders->HasMoreElements(&more)) &&
                more) {
@@ -688,12 +634,12 @@ ShutdownXPCOM(nsIServiceManager* servMgr)
 
             nsCOMPtr<nsIObserver> obs(do_QueryInterface(el));
             if (obs)
-                (void) obs->Observe(nsnull,
+                (void) obs->Observe(nullptr,
                                     NS_XPCOM_SHUTDOWN_LOADERS_OBSERVER_ID,
-                                    nsnull);
+                                    nullptr);
         }
 
-        moduleLoaders = nsnull;
+        moduleLoaders = nullptr;
     }
 
     // Shutdown nsLocalFile string conversion
@@ -723,28 +669,20 @@ ShutdownXPCOM(nsIServiceManager* servMgr)
       NS_RELEASE2(nsComponentManagerImpl::gComponentManager, cnt);
       NS_ASSERTION(cnt == 0, "Component Manager being held past XPCOM shutdown.");
     }
-    nsComponentManagerImpl::gComponentManager = nsnull;
+    nsComponentManagerImpl::gComponentManager = nullptr;
     nsCategoryManager::Destroy();
-
-#ifdef DEBUG
-    // FIXME BUG 456272: this should disappear
-    _FreeAutoLockStatics();
-#endif
-
-    ShutdownSpecialSystemDirectory();
 
     NS_PurgeAtomTable();
 
     NS_IF_RELEASE(gDebug);
 
-#ifdef MOZ_IPC
     if (sIOThread) {
         delete sIOThread;
-        sIOThread = nsnull;
+        sIOThread = nullptr;
     }
     if (sMessageLoop) {
         delete sMessageLoop;
-        sMessageLoop = nsnull;
+        sMessageLoop = nullptr;
     }
     if (sCommandLineWasInitialized) {
         CommandLine::Terminate();
@@ -752,13 +690,14 @@ ShutdownXPCOM(nsIServiceManager* servMgr)
     }
     if (sExitManager) {
         delete sExitManager;
-        sExitManager = nsnull;
+        sExitManager = nullptr;
     }
-#endif
 
-#ifdef MOZ_OMNIJAR
-    mozilla::SetOmnijar(nsnull);
-#endif
+    Omnijar::CleanUp();
+
+    HangMonitor::Shutdown();
+
+    eventtracer::Shutdown();
 
     NS_LogTerm();
 

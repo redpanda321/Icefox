@@ -1,41 +1,8 @@
 /* -*- Mode: Java; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is MozJSHTTP code.
- *
- * The Initial Developer of the Original Code is
- * Jeff Walden <jwalden+code@mit.edu>.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Robert Sayre <sayrer@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // Note that the server script itself already defines Cc, Ci, and Cr for us,
 // and because they're constants it's not safe to redefine them.  Scope leakage
@@ -141,6 +108,7 @@ if (this["nsHttpServer"]) {
 }
 
 var serverBasePath;
+var displayResults = true;
 
 //
 // SERVER SETUP
@@ -174,10 +142,15 @@ function runServer()
   }
 
   if (typeof(_SERVER_PORT) != "undefined") {
-    if (parseInt(_SERVER_PORT) > 0 && parseInt(_SERVER_PORT) < 32000)
+    if (parseInt(_SERVER_PORT) > 0 && parseInt(_SERVER_PORT) < 65536)
       SERVER_PORT = _SERVER_PORT;
   } else {
     throw "please define _SERVER_PORT (as a port number) before running server.js";
+  }
+
+  // If DISPLAY_RESULTS is not specified, it defaults to true
+  if (typeof(_DISPLAY_RESULTS) != "undefined") {
+    displayResults = _DISPLAY_RESULTS;
   }
 
   server._start(SERVER_PORT, gServerAddress);
@@ -200,7 +173,7 @@ function runServer()
   if (serverAlive.exists()) {
     serverAlive.append("server_alive.txt");
     foStream.init(serverAlive,
-                  0x02 | 0x08 | 0x20, 0664, 0); // write, create, truncate
+                  0x02 | 0x08 | 0x20, 436, 0); // write, create, truncate
     data = "It's alive!";
     foStream.write(data, data.length);
     foStream.close();
@@ -237,8 +210,13 @@ function createMochitestServer(serverBasePath)
   server.registerContentType("sjs", "sjs"); // .sjs == CGI-like functionality
   server.registerContentType("jar", "application/x-jar");
   server.registerContentType("ogg", "application/ogg");
+  server.registerContentType("pdf", "application/pdf");
   server.registerContentType("ogv", "video/ogg");
   server.registerContentType("oga", "audio/ogg");
+  server.registerContentType("opus", "audio/ogg; codecs=opus");
+  server.registerContentType("dat", "text/plain; charset=utf-8");
+  server.registerContentType("frag", "text/plain"); // .frag == WebGL fragment shader
+  server.registerContentType("vert", "text/plain"); // .vert == WebGL vertex shader
   server.setIndexHandler(defaultDirHandler);
 
   var serverRoot =
@@ -272,7 +250,7 @@ function processLocations(server)
   serverLocations.append("server-locations.txt");
 
   const PR_RDONLY = 0x01;
-  var fis = new FileInputStream(serverLocations, PR_RDONLY, 0444,
+  var fis = new FileInputStream(serverLocations, PR_RDONLY, 292 /* 0444 */,
                                 Ci.nsIFileInputStream.CLOSE_ON_EOF);
 
   var lis = new ConverterInputStream(fis, "UTF-8", 1024, 0x0);
@@ -458,7 +436,14 @@ function isTest(filename, pattern)
   if (pattern)
     return pattern.test(filename);
 
-  return filename.indexOf("test_") > -1 &&
+  // File name is a URL style path to a test file, make sure that we check for
+  // tests that start with the appropriate prefix.
+  var testPrefix = typeof(_TEST_PREFIX) == "string" ? _TEST_PREFIX : "test_";
+  var testPattern = new RegExp("^" + testPrefix);
+
+  pathPieces = filename.split('/');
+    
+  return testPattern.test(pathPieces[pathPieces.length - 1]) &&
          filename.indexOf(".js") == -1 &&
          filename.indexOf(".css") == -1 &&
          !/\^headers\^$/.test(filename);
@@ -546,7 +531,7 @@ function linksToTableRows(links, recursionLevel)
 }
 
 function arrayOfTestFiles(linkArray, fileArray, testPattern) {
-  for (var [link, value] in linkArray) {
+  for (var [link, value] in Iterator(linkArray)) {
     if (value instanceof Object) {
       arrayOfTestFiles(value, fileArray, testPattern);
     } else if (isTest(link, testPattern)) {
@@ -596,6 +581,8 @@ function testListing(metadata, response)
   var [links, count] = list(metadata.path,
                             metadata.getProperty("directory"),
                             true);
+  var table_class = metadata.queryString.indexOf("hideResultsTable=1") > -1 ? "invisible": "";
+
   dumpn("count: " + count);
   var tests = jsonArrayOfTestFiles(links);
   response.write(
@@ -605,17 +592,16 @@ function testListing(metadata, response)
         LINK({rel: "stylesheet",
               type: "text/css", href: "/static/harness.css"}
         ),
-        SCRIPT({type: "text/javascript", src: "/MochiKit/packed.js"}),
+        SCRIPT({type: "text/javascript",
+                 src: "/tests/SimpleTest/LogController.js"}),
         SCRIPT({type: "text/javascript",
                  src: "/tests/SimpleTest/TestRunner.js"}),
         SCRIPT({type: "text/javascript",
-                 src: "/tests/SimpleTest/MozillaFileLogger.js"}),
-        SCRIPT({type: "text/javascript",
-                 src: "/tests/SimpleTest/quit.js"}),
+                 src: "/tests/SimpleTest/MozillaLogger.js"}),
         SCRIPT({type: "text/javascript",
                  src: "/tests/SimpleTest/setup.js"}),
         SCRIPT({type: "text/javascript"},
-               "connect(window, 'onload', hookup); gTestList=" + tests + ";"
+               "window.onload =  hookup; gTestList=" + tests + ";"
         )
       ),
       BODY(
@@ -649,11 +635,19 @@ function testListing(metadata, response)
             A({href: "#", id: "toggleNonTests"}, "Show Non-Tests"),
             BR()
           ),
-    
-          TABLE({cellpadding: 0, cellspacing: 0, id: "test-table"},
-            TR(TD("Passed"), TD("Failed"), TD("Todo"), TD("Test Files")),
-            linksToTableRows(links, 0)
+
+          (
+           displayResults ?
+            TABLE({cellpadding: 0, cellspacing: 0, class: table_class, id: "test-table"},
+              TR(TD("Passed"), TD("Failed"), TD("Todo"), TD("Test Files")),
+              linksToTableRows(links, 0)
+            ) : ""
           ),
+
+          BR(),
+          TABLE({cellpadding: 0, cellspacing: 0, border: 1, bordercolor: "red", id: "fail-table"}
+          ),
+
           DIV({class: "clear"})
         )
       )

@@ -1,46 +1,10 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Marco Bonardo <mak77@bonardo.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  * Tests the bookmarks Properties dialog.
  */
-
-const Cc = Components.classes;
-const Ci = Components.interfaces;
 
 // DOM ids of Places sidebar trees.
 const SIDEBAR_HISTORY_TREE_ID = "historyTree";
@@ -65,7 +29,7 @@ const ACTION_ADD = 1;
 const TYPE_FOLDER = 0;
 const TYPE_BOOKMARK = 1;
 
-const TEST_URL = "http://www.mozilla.org/";
+const TEST_URL = "http://www.example.com/";
 
 const DIALOG_URL = "chrome://browser/content/places/bookmarkProperties.xul";
 const DIALOG_URL_MINIMAL_UI = "chrome://browser/content/places/bookmarkProperties2.xul";
@@ -203,6 +167,7 @@ gTests.push({
   itemType: null,
   window: null,
   _itemId: null,
+  _cleanShutdown: false,
 
   setup: function() {
     // Add a bookmark in unsorted bookmarks folder.
@@ -225,31 +190,27 @@ gTests.push({
     var tagsField = this.window.document.getElementById("editBMPanel_tagsField");
     var self = this;
 
-    function windowObserver(aSubject, aTopic, aData) {
-      if (aTopic == "domwindowclosed" &&
-          aSubject.QueryInterface(Ci.nsIDOMWindow).location == DIALOG_URL) {
-        ww.unregisterNotification(windowObserver);
-        tagsField.popup.removeEventListener("popuphidden", popupListener, true);
-        ok(false, "Dialog window should not be closed by pressing Enter on the autocomplete popup");
+    this.window.addEventListener("unload", function(event) {
+      self.window.removeEventListener("unload", arguments.callee, true);
+      tagsField.popup.removeEventListener("popuphidden", popupListener, true);
+      ok(self._cleanShutdown, "Dialog window should not be closed by pressing Enter on the autocomplete popup");
+      executeSoon(function () {
         self.finish();
-      }
-    }
+      });
+    }, true);
 
     var popupListener = {
       handleEvent: function(aEvent) {
         switch (aEvent.type) {
           case "popuphidden":
             // Everything worked fine, we can stop observing the window.
-            ww.unregisterNotification(windowObserver);
-            tagsField.popup.removeEventListener("popuphidden", this, true);
+            self._cleanShutdown = true;
             self.window.document.documentElement.cancelDialog();
-            self.finish();
             break;
           case "popupshown":
             tagsField.popup.removeEventListener("popupshown", this, true);
-            // In case this test fails the window will close, we should mark the
-            // failure and continue, to avoid timing out.
-            ww.registerNotification(windowObserver);
+            // In case this test fails the window will close, the test will fail
+            // since we didn't set _cleanShutdown.
             var tree = tagsField.popup.tree;
             // Focus and select first result.
             isnot(tree, null, "Autocomplete results tree exists");
@@ -319,16 +280,16 @@ gTests.push({
     this._itemId = this.window.gEditItemOverlay._itemId;
     // Change folder name
     var namePicker = this.window.document.getElementById("editBMPanel_namePicker");
-    var userEnteredName = this.window.document.getElementById("editBMPanel_userEnteredName");
     var self = this;
+
     this.window.addEventListener("unload", function(event) {
-        this.window.removeEventListener("unload", arguments.callee, false);
-        executeSoon(function() {
-          self.finish();
-        });
-      }, false);
+      self.window.removeEventListener("unload", arguments.callee, false);
+      executeSoon(function () {
+        self.finish();
+      });
+    }, false);
+
     namePicker.value = "n";
-    userEnteredName.label = "n";
     info("About to focus the namePicker field");
     namePicker.focus();
     EventUtils.synthesizeKey("VK_RETURN", {}, this.window);
@@ -360,6 +321,7 @@ gTests.push({
   itemType: null,
   window: null,
   _itemId: null,
+  _cleanShutdown: false,
 
   setup: function() {
     // Add a bookmark in unsorted bookmarks folder.
@@ -382,31 +344,27 @@ gTests.push({
     var tagsField = this.window.document.getElementById("editBMPanel_tagsField");
     var self = this;
 
-    function windowObserver(aSubject, aTopic, aData) {
-      if (aTopic == "domwindowclosed" &&
-          aSubject.QueryInterface(Ci.nsIDOMWindow).location == DIALOG_URL) {
-        ww.unregisterNotification(windowObserver);
-        tagsField.popup.removeEventListener("popuphidden", popupListener, true);
-        ok(false, "Dialog window should not be closed by pressing Escape on the autocomplete popup");
+    this.window.addEventListener("unload", function(event) {
+      self.window.removeEventListener("unload", arguments.callee, true);
+      tagsField.popup.removeEventListener("popuphidden", popupListener, true);
+      ok(self._cleanShutdown, "Dialog window should not be closed by pressing Escape on the autocomplete popup");
+      executeSoon(function () {
         self.finish();
-      }
-    }
+      });
+    }, true);
 
     var popupListener = {
       handleEvent: function(aEvent) {
         switch (aEvent.type) {
           case "popuphidden":
-            // Everything worked fine, we can stop observing the window.
-            ww.unregisterNotification(windowObserver);
-            tagsField.popup.removeEventListener("popuphidden", this, true);
+            // Everything worked fine.
+            self._cleanShutdown = true;
             self.window.document.documentElement.cancelDialog();
-            self.finish();
             break;
           case "popupshown":
             tagsField.popup.removeEventListener("popupshown", this, true);
-            // In case this test fails the window will close, we should mark the
-            // failure and continue, to avoid timing out.
-            ww.registerNotification(windowObserver);
+            // In case this test fails the window will close, the test will fail
+            // since we didn't set _cleanShutdown.
             var tree = tagsField.popup.tree;
             // Focus and select first result.
             isnot(tree, null, "Autocomplete results tree exists");
@@ -482,16 +440,13 @@ gTests.push({
     var folderTree = this.window.document.getElementById("editBMPanel_folderTree");
     var self = this;
 
-    function windowObserver(aSubject, aTopic, aData) {
-      if (aTopic == "domwindowclosed" &&
-          aSubject.QueryInterface(Ci.nsIDOMWindow).location == DIALOG_URL_MINIMAL_UI) {
-        ww.unregisterNotification(windowObserver);
-        ok(self._cleanShutdown,
-           "Dialog window should not be closed by pressing ESC in folder name textbox");
+    this.window.addEventListener("unload", function(event) {
+      self.window.removeEventListener("unload", arguments.callee, true);
+      ok(self._cleanShutdown, "Dialog window should not be closed by pressing ESC in folder name textbox");
+      executeSoon(function () {
         self.finish();
-      }
-    }
-    ww.registerNotification(windowObserver);
+      });
+    }, true);
 
     folderTree.addEventListener("DOMAttrModified", function onDOMAttrModified(event) {
       if (event.attrName != "place")
@@ -548,7 +503,7 @@ function runNextTest() {
     gCurrentTest.cleanup();
     info("End of test: " + gCurrentTest.desc);
     gCurrentTest = null;
-    executeSoon(runNextTest);
+    waitForAsyncUpdates(runNextTest);
     return;
   }
 

@@ -18,28 +18,31 @@ function run_test() {
 
 // Finds the test plugin library
 function get_test_plugin() {
-  var plugins = Services.dirsvc.get("CurProcD", AM_Ci.nsILocalFile);
-  plugins.append("plugins");
-  do_check_true(plugins.exists());
-
-  var plugin = plugins.clone();
-  // OSX plugin
-  plugin.append("Test.plugin");
-  if (plugin.exists())
-    return plugin;
-
-  plugin = plugins.clone();
-  // *nix plugin
-  plugin.append("libnptest.so");
-  if (plugin.exists())
-    return plugin;
-
-  // Windows plugin
-  plugin = plugins.clone();
-  plugin.append("nptest.dll");
-  if (plugin.exists())
-    return plugin;
-
+  var pluginEnum = Services.dirsvc.get("APluginsDL", AM_Ci.nsISimpleEnumerator);
+  while (pluginEnum.hasMoreElements()) {
+    let dir = pluginEnum.getNext().QueryInterface(AM_Ci.nsILocalFile);
+    let plugin = dir.clone();
+    // OSX plugin
+    plugin.append("Test.plugin");
+    if (plugin.exists()) {
+      plugin.normalize();
+      return plugin;
+    }
+    plugin = dir.clone();
+    // *nix plugin
+    plugin.append("libnptest.so");
+    if (plugin.exists()) {
+      plugin.normalize();
+      return plugin;
+    }
+    // Windows plugin
+    plugin = dir.clone();
+    plugin.append("nptest.dll");
+    if (plugin.exists()) {
+      plugin.normalize();
+      return plugin;
+    }
+  }
   return null;
 }
 
@@ -61,7 +64,7 @@ function run_test_1() {
   var testPlugin = get_test_plugin();
   do_check_neq(testPlugin, null);
 
-  AddonManager.getAddonsByTypes("plugin", function(addons) {
+  AddonManager.getAddonsByTypes(["plugin"], function(addons) {
     do_check_true(addons.length > 0);
 
     addons.forEach(function(p) {
@@ -74,7 +77,11 @@ function run_test_1() {
     AddonManager.getAddonByID(gID, function(p) {
       do_check_neq(p, null);
       do_check_eq(p.name, "Test Plug-in");
-      do_check_eq(p.description, "Plug-in for testing purposes.");
+      do_check_eq(p.description,
+                  "Plug-in for testing purposes.\u2122 " +
+                    "(\u0939\u093f\u0928\u094d\u0926\u0940 " + 
+                    "\u4e2d\u6587 " +
+                    "\u0627\u0644\u0639\u0631\u0628\u064a\u0629)");
       do_check_eq(p.creator, null);
       do_check_eq(p.version, "1.0.0.0");
       do_check_eq(p.type, "plugin");
@@ -91,17 +98,6 @@ function run_test_1() {
       do_check_true(p.updateDate > 0);
       do_check_eq(p.updateDate.getTime(), testPlugin.lastModifiedTime);
       do_check_eq(p.installDate.getTime(), testPlugin.lastModifiedTime);
-
-      // Work around the fact that on Linux source builds, if we're using
-      // symlinks (i.e. objdir), then Linux will see these as a different scope
-      // to non-symlinks.
-      // See Bug 562886 and Bug 568027.
-      if (testPlugin.isSymlink()) {
-        do_check_neq(p.scope, AddonManager.SCOPE_APPLICATION);
-        do_check_neq(p.scope, AddonManager.SCOPE_PROFILE);
-      } else {
-        do_check_eq(p.scope, AddonManager.SCOPE_APPLICATION);
-      }
       do_check_true("isCompatibleWith" in p);
       do_check_true("findUpdates" in p);
 
@@ -160,6 +156,18 @@ function run_test_3(p) {
     do_check_false(p.userDisabled);
     do_check_false(p.appDisabled);
     do_check_true(p.isActive);
+    do_check_eq(p.name, "Test Plug-in");
+
+    run_test_4();
+  });
+}
+
+// Verify that after a restart the test plugin has the same ID
+function run_test_4() {
+  restartManager();
+
+  AddonManager.getAddonByID(gID, function(p) {
+    do_check_neq(p, null);
     do_check_eq(p.name, "Test Plug-in");
 
     do_test_finished();

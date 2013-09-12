@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=559526
 -->
 <head>
   <title>Test for Bug 559526</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
 </head>
@@ -44,6 +43,7 @@ function filter(node) {
       ex = e;
     }
     ++testCount;
+    is(ex.name, "InvalidStateError", "Should have thrown an exception!");
     is(ex.code, DOMException.INVALID_STATE_ERR, "Should have thrown an exception!");
     recurse = false;
   }

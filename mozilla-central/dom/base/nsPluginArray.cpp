@@ -1,69 +1,40 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsPluginArray.h"
 #include "nsMimeTypeArray.h"
-#include "nsGlobalWindow.h"
+#include "Navigator.h"
 #include "nsIScriptGlobalObject.h"
 #include "nsIDOMNavigator.h"
 #include "nsIDOMMimeType.h"
 #include "nsIPluginHost.h"
 #include "nsIDocShell.h"
 #include "nsIWebNavigation.h"
-#include "nsDOMClassInfo.h"
-#include "nsPluginError.h"
-#include "nsContentUtils.h"
+#include "nsDOMClassInfoID.h"
+#include "nsError.h"
+#include "nsPluginHost.h"
+#include "nsIContentViewer.h"
+#include "nsIDocument.h"
 
-nsPluginArray::nsPluginArray(nsNavigator* navigator,
+using namespace mozilla;
+using namespace mozilla::dom;
+
+nsPluginArray::nsPluginArray(Navigator* navigator,
                              nsIDocShell *aDocShell)
+  : mNavigator(navigator),
+    mPluginHost(do_GetService(MOZ_PLUGIN_HOST_CONTRACTID)),
+    mPluginCount(0),
+    mPluginArray(nullptr),
+    mDocShell(do_GetWeakReference(aDocShell))
 {
-  nsresult rv;
-  mNavigator = navigator; // don't ADDREF here, needed for parent of script object.
-  mPluginHost = do_GetService(MOZ_PLUGIN_HOST_CONTRACTID, &rv);
-  mPluginCount = 0;
-  mPluginArray = nsnull;
-  mDocShell = aDocShell;
 }
 
 nsPluginArray::~nsPluginArray()
 {
-  if (mPluginArray != nsnull) {
-    for (PRUint32 i = 0; i < mPluginCount; i++) {
+  if (mPluginArray != nullptr) {
+    for (uint32_t i = 0; i < mPluginCount; i++) {
       NS_IF_RELEASE(mPluginArray[i]);
     }
     delete[] mPluginArray;
@@ -83,45 +54,47 @@ NS_IMPL_ADDREF(nsPluginArray)
 NS_IMPL_RELEASE(nsPluginArray)
 
 NS_IMETHODIMP
-nsPluginArray::GetLength(PRUint32* aLength)
+nsPluginArray::GetLength(uint32_t* aLength)
 {
-  if (AllowPlugins() && mPluginHost)
-    return mPluginHost->GetPluginCount(aLength);
+  nsPluginHost *pluginHost = static_cast<nsPluginHost*>(mPluginHost.get());
+  if (AllowPlugins() && pluginHost)
+    return pluginHost->GetPluginCount(aLength);
   
   *aLength = 0;
   return NS_OK;
 }
 
-PRBool
+bool
 nsPluginArray::AllowPlugins()
 {
-  PRBool allowPlugins = PR_FALSE;
-  if (mDocShell)
-    if (NS_FAILED(mDocShell->GetAllowPlugins(&allowPlugins)))
-      allowPlugins = PR_FALSE;
+  nsCOMPtr<nsIDocShell> docShell = do_QueryReferent(mDocShell);
 
-  return allowPlugins;
+  if (!docShell) {
+    return false;
+  }
+
+  return docShell->PluginsAllowedInCurrentDoc();
 }
 
 nsIDOMPlugin*
-nsPluginArray::GetItemAt(PRUint32 aIndex, nsresult* aResult)
+nsPluginArray::GetItemAt(uint32_t aIndex, nsresult* aResult)
 {
   *aResult = NS_OK;
 
   if (!AllowPlugins())
-    return nsnull;
+    return nullptr;
 
-  if (mPluginArray == nsnull) {
+  if (mPluginArray == nullptr) {
     *aResult = GetPlugins();
     if (*aResult != NS_OK)
-      return nsnull;
+      return nullptr;
   }
 
-  return aIndex < mPluginCount ? mPluginArray[aIndex] : nsnull;
+  return aIndex < mPluginCount ? mPluginArray[aIndex] : nullptr;
 }
 
 NS_IMETHODIMP
-nsPluginArray::Item(PRUint32 aIndex, nsIDOMPlugin** aReturn)
+nsPluginArray::Item(uint32_t aIndex, nsIDOMPlugin** aReturn)
 {
   nsresult rv;
 
@@ -136,15 +109,15 @@ nsPluginArray::GetNamedItem(const nsAString& aName, nsresult* aResult)
   *aResult = NS_OK;
 
   if (!AllowPlugins())
-    return nsnull;
+    return nullptr;
 
-  if (mPluginArray == nsnull) {
+  if (mPluginArray == nullptr) {
     *aResult = GetPlugins();
     if (*aResult != NS_OK)
-      return nsnull;
+      return nullptr;
   }
 
-  for (PRUint32 i = 0; i < mPluginCount; i++) {
+  for (uint32_t i = 0; i < mPluginCount; i++) {
     nsAutoString pluginName;
     nsIDOMPlugin* plugin = mPluginArray[i];
     if (plugin->GetName(pluginName) == NS_OK && pluginName.Equals(aName)) {
@@ -152,13 +125,13 @@ nsPluginArray::GetNamedItem(const nsAString& aName, nsresult* aResult)
     }
   }
 
-  return nsnull;
+  return nullptr;
 }
 
 NS_IMETHODIMP
 nsPluginArray::NamedItem(const nsAString& aName, nsIDOMPlugin** aReturn)
 {
-  NS_PRECONDITION(nsnull != aReturn, "null arg");
+  NS_PRECONDITION(nullptr != aReturn, "null arg");
 
   nsresult rv;
 
@@ -189,20 +162,14 @@ nsPluginArray::GetPluginHost(nsIPluginHost** aPluginHost)
 }
 
 void
-nsPluginArray::SetDocShell(nsIDocShell *aDocShell)
-{
-  mDocShell = aDocShell;
-}
-
-void
 nsPluginArray::Invalidate()
 {
-  mDocShell = nsnull;
-  mNavigator = nsnull;
+  mDocShell = nullptr;
+  mNavigator = nullptr;
 }
 
 NS_IMETHODIMP
-nsPluginArray::Refresh(PRBool aReloadDocuments)
+nsPluginArray::Refresh(bool aReloadDocuments)
 {
   nsresult res = NS_OK;
   if (!AllowPlugins())
@@ -218,7 +185,7 @@ nsPluginArray::Refresh(PRBool aReloadDocuments)
 
   // NS_ERROR_PLUGINS_PLUGINSNOTCHANGED on reloading plugins indicates
   // that plugins did not change and was not reloaded
-  PRBool pluginsNotChanged = PR_FALSE;
+  bool pluginsNotChanged = false;
   if(mPluginHost)
     pluginsNotChanged = (NS_ERROR_PLUGINS_PLUGINSNOTCHANGED == mPluginHost->ReloadPlugins(aReloadDocuments));
 
@@ -227,17 +194,17 @@ nsPluginArray::Refresh(PRBool aReloadDocuments)
   if(pluginsNotChanged)
     return res;
 
-  nsCOMPtr<nsIWebNavigation> webNav = do_QueryInterface(mDocShell);
+  nsCOMPtr<nsIWebNavigation> webNav = do_QueryReferent(mDocShell);
 
-  if (mPluginArray != nsnull) {
-    for (PRUint32 i = 0; i < mPluginCount; i++) 
+  if (mPluginArray != nullptr) {
+    for (uint32_t i = 0; i < mPluginCount; i++) 
       NS_IF_RELEASE(mPluginArray[i]);
 
     delete[] mPluginArray;
   }
 
   mPluginCount = 0;
-  mPluginArray = nsnull;
+  mPluginArray = nullptr;
 
   if (mNavigator)
     mNavigator->RefreshMIMEArray();
@@ -260,11 +227,12 @@ nsPluginArray::GetPlugins()
     if (!mPluginCount)
       return NS_OK;
 
-    rv = mPluginHost->GetPlugins(mPluginCount, mPluginArray);
+    nsPluginHost *pluginHost = static_cast<nsPluginHost*>(mPluginHost.get());
+    rv = pluginHost->GetPlugins(mPluginCount, mPluginArray);
     if (NS_SUCCEEDED(rv)) {
       // need to wrap each of these with a nsPluginElement, which
       // is scriptable.
-      for (PRUint32 i = 0; i < mPluginCount; i++) {
+      for (uint32_t i = 0; i < mPluginCount; i++) {
         nsIDOMPlugin* wrapper = new nsPluginElement(mPluginArray[i]);
         NS_IF_ADDREF(wrapper);
         mPluginArray[i] = wrapper;
@@ -286,15 +254,15 @@ nsPluginElement::nsPluginElement(nsIDOMPlugin* plugin)
 {
   mPlugin = plugin;  // don't AddRef, see nsPluginArray::Item.
   mMimeTypeCount = 0;
-  mMimeTypeArray = nsnull;
+  mMimeTypeArray = nullptr;
 }
 
 nsPluginElement::~nsPluginElement()
 {
   NS_IF_RELEASE(mPlugin);
 
-  if (mMimeTypeArray != nsnull) {
-    for (PRUint32 i = 0; i < mMimeTypeCount; i++) {
+  if (mMimeTypeArray != nullptr) {
+    for (uint32_t i = 0; i < mMimeTypeCount; i++) {
       nsMimeType* mt = static_cast<nsMimeType*>(mMimeTypeArray[i]);
       if (mt) {
         mt->DetachPlugin();
@@ -345,24 +313,24 @@ nsPluginElement::GetName(nsAString& aName)
 }
 
 NS_IMETHODIMP
-nsPluginElement::GetLength(PRUint32* aLength)
+nsPluginElement::GetLength(uint32_t* aLength)
 {
   return mPlugin->GetLength(aLength);
 }
 
 nsIDOMMimeType*
-nsPluginElement::GetItemAt(PRUint32 aIndex, nsresult *aResult)
+nsPluginElement::GetItemAt(uint32_t aIndex, nsresult *aResult)
 {
-  if (mMimeTypeArray == nsnull) {
+  if (mMimeTypeArray == nullptr) {
     *aResult = GetMimeTypes();
     if (*aResult != NS_OK)
-      return nsnull;
+      return nullptr;
   }
 
   if (aIndex >= mMimeTypeCount) {
     *aResult = NS_ERROR_FAILURE;
 
-    return nsnull;
+    return nullptr;
   }
 
   *aResult = NS_OK;
@@ -371,7 +339,7 @@ nsPluginElement::GetItemAt(PRUint32 aIndex, nsresult *aResult)
 }
 
 NS_IMETHODIMP
-nsPluginElement::Item(PRUint32 aIndex, nsIDOMMimeType** aReturn)
+nsPluginElement::Item(uint32_t aIndex, nsIDOMMimeType** aReturn)
 {
   nsresult rv;
 
@@ -383,14 +351,14 @@ nsPluginElement::Item(PRUint32 aIndex, nsIDOMMimeType** aReturn)
 nsIDOMMimeType*
 nsPluginElement::GetNamedItem(const nsAString& aName, nsresult *aResult)
 {
-  if (mMimeTypeArray == nsnull) {
+  if (mMimeTypeArray == nullptr) {
     *aResult = GetMimeTypes();
     if (*aResult != NS_OK)
-      return nsnull;
+      return nullptr;
   }
 
   *aResult = NS_OK;
-  for (PRUint32 i = 0; i < mMimeTypeCount; i++) {
+  for (uint32_t i = 0; i < mMimeTypeCount; i++) {
     nsAutoString type;
     nsIDOMMimeType* mimeType = mMimeTypeArray[i];
     if (mimeType->GetType(type) == NS_OK && type.Equals(aName)) {
@@ -398,7 +366,7 @@ nsPluginElement::GetNamedItem(const nsAString& aName, nsresult *aResult)
     }
   }
 
-  return nsnull;
+  return nullptr;
 }
 
 NS_IMETHODIMP
@@ -417,9 +385,9 @@ nsPluginElement::GetMimeTypes()
   nsresult rv = mPlugin->GetLength(&mMimeTypeCount);
   if (rv == NS_OK) {
     mMimeTypeArray = new nsIDOMMimeType*[mMimeTypeCount];
-    if (mMimeTypeArray == nsnull)
+    if (mMimeTypeArray == nullptr)
       return NS_ERROR_OUT_OF_MEMORY;
-    for (PRUint32 i = 0; i < mMimeTypeCount; i++) {
+    for (uint32_t i = 0; i < mMimeTypeCount; i++) {
       nsCOMPtr<nsIDOMMimeType> mimeType;
       rv = mPlugin->Item(i, getter_AddRefs(mimeType));
       if (rv != NS_OK)

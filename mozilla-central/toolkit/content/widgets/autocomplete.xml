@@ -1,46 +1,9 @@
 <?xml version="1.0"?>
 
 # -*- Mode: HTML -*-
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org browser.
-#
-# The Initial Developer of the Original Code is
-# Joe Hewitt.
-# Portions created by the Initial Developer are Copyright (C) 2003
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Pierre Chanial (p_ch@verizon.net)
-#   Dean Tessman   (dean_tessman@hotmail.com)
-#   Masayuki Nakano (masayuki@d-toybox.com)
-#   Pamela Greene (pamg.bugs@gmail.com)
-#   Edward Lee (edward.lee@engineering.uiuc.edu)
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 <!DOCTYPE bindings [
 <!ENTITY % actionsDTD SYSTEM "chrome://global/locale/actions.dtd">
@@ -68,8 +31,8 @@
         <xul:hbox anonid="textbox-input-box" class="textbox-input-box" flex="1" xbl:inherits="tooltiptext=inputtooltiptext">
           <children/>
           <html:input anonid="input" class="autocomplete-textbox textbox-input"
-                      flex="1" allowevents="true"
-                      xbl:inherits="tooltiptext=inputtooltiptext,onfocus,onblur,value,type,maxlength,disabled,size,readonly,placeholder,tabindex,accesskey"/>
+                      allowevents="true"
+                      xbl:inherits="tooltiptext=inputtooltiptext,value,type,maxlength,disabled,size,readonly,placeholder,tabindex,accesskey,mozactionhint"/>
         </xul:hbox>
         <children includes="hbox"/>
       </xul:hbox>
@@ -79,6 +42,8 @@
                       xbl:inherits="open,enablehistory,parentfocused=focused"/>
 
       <xul:popupset anonid="popupset" class="autocomplete-result-popupset"/>
+
+      <children includes="toolbarbutton"/>
     </content>
 
     <implementation implements="nsIAccessibleProvider, nsIAutoCompleteInput, nsIDOMXULMenuListElement">
@@ -86,12 +51,28 @@
       <field name="mSearchNames">null</field>
       <field name="mIgnoreInput">false</field>
       <field name="mEnterEvent">null</field>
-      <field name="mConsumeRollupEvent">false</field>
+
+      <field name="_searchBeginHandler">null</field>
+      <field name="_searchCompleteHandler">null</field>
+      <field name="_textEnteredHandler">null</field>
+      <field name="_textRevertedHandler">null</field>
 
       <constructor><![CDATA[
-        mController = Components.classes["@mozilla.org/autocomplete/controller;1"].
-                        getService(Components.interfaces.nsIAutoCompleteController);
+        this.mController = Components.classes["@mozilla.org/autocomplete/controller;1"].
+          getService(Components.interfaces.nsIAutoCompleteController);
+
+        this._searchBeginHandler = this.initEventHandler("searchbegin");
+        this._searchCompleteHandler = this.initEventHandler("searchcomplete");
+        this._textEnteredHandler = this.initEventHandler("textentered");
+        this._textRevertedHandler = this.initEventHandler("textreverted");
+
+        // For security reasons delay searches on pasted values.
+        this.inputField.controllers.insertControllerAt(0, this._pasteController);
       ]]></constructor>
+
+      <destructor><![CDATA[
+        this.inputField.controllers.removeController(this._pasteController);
+      ]]></destructor>
 
       <!-- =================== nsIAccessibleProvider =================== -->
 
@@ -107,20 +88,24 @@
       <!-- =================== nsIAutoCompleteInput =================== -->
 
       <field name="popup"><![CDATA[
-        var popup = null;
-        var popupId = this.getAttribute("autocompletepopup");
-        if (popupId)
-          popup = document.getElementById(popupId);
-        if (!popup) {
-          popup = document.createElement("panel");
-          popup.setAttribute("type", "autocomplete");
-          popup.setAttribute("noautofocus", "true");
+        // Wrap in a block so that the let statements don't
+        // create properties on 'this' (bug 635252).
+        {
+          let popup = null;
+          let popupId = this.getAttribute("autocompletepopup");
+          if (popupId)
+            popup = document.getElementById(popupId);
+          if (!popup) {
+            popup = document.createElement("panel");
+            popup.setAttribute("type", "autocomplete");
+            popup.setAttribute("noautofocus", "true");
 
-          var popupset = document.getAnonymousElementByAttribute(this, "anonid", "popupset");
-          popupset.appendChild(popup);
+            let popupset = document.getAnonymousElementByAttribute(this, "anonid", "popupset");
+            popupset.appendChild(popup);
+          }
+          popup.mInput = this;
+          popup;
         }
-        popup.mInput = this;
-        popup;
       ]]></field>
 
       <property name="controller" onget="return this.mController;" readonly="true"/>
@@ -158,8 +143,18 @@
                 onget="return this.getAttribute('showimagecolumn') == 'true';"/>
 
       <property name="timeout"
-                onset="this.setAttribute('timeout', val); return val;"
-                onget="return parseInt(this.getAttribute('timeout')) || 50;"/>
+                onset="this.setAttribute('timeout', val); return val;">
+        <getter><![CDATA[
+          // For security reasons delay searches on pasted values. 
+          if (this._valueIsPasted) {
+            let t = parseInt(this.getAttribute('pastetimeout'));
+            return isNaN(t) ? 1000 : t;
+          }
+
+          let t = parseInt(this.getAttribute('timeout'));
+          return isNaN(t) ? 50 : t;
+        ]]></getter>
+      </property>
 
       <property name="searchParam"
                 onget="return this.getAttribute('autocompletesearchparam') || '';"
@@ -168,8 +163,14 @@
       <property name="searchCount" readonly="true"
                 onget="this.initSearchNames(); return this.mSearchNames.length;"/>
 
-      <property name="consumeRollupEvent" readonly="true"
-                onget="return this.mConsumeRollupEvent;"/>
+      <field name="PrivateBrowsingUtils" readonly="true">
+        let utils = {};
+        Components.utils.import("resource://gre/modules/PrivateBrowsingUtils.jsm", utils);
+        utils.PrivateBrowsingUtils
+      </field>
+
+      <property name="inPrivateContext" readonly="true"
+                onget="return this.PrivateBrowsingUtils.isWindowPrivate(window);"/>
 
       <!-- This is the maximum number of drop-down rows we get when we
             hit the drop marker beside fields that have it (like the URLbar).-->
@@ -188,7 +189,13 @@
         <setter><![CDATA[
           // Completing a result should simulate the user typing the result,
           // so fire an input event.
+          // Trim popup selected values, but never trim results coming from
+          // autofill.
+          if (this.popup.selectedIndex == -1)
+            this._disableTrim = true;
           this.value = val;
+          this._disableTrim = false;
+
           var evt = document.createEvent("UIEvents");
           evt.initUIEvent("input", true, false, window, 0);
           this.mIgnoreInput = true;
@@ -208,7 +215,8 @@
 
       <method name="onSearchBegin">
         <body><![CDATA[
-          this.fireEvent("searchbegin");
+          if (this._searchBeginHandler)
+            this._searchBeginHandler();
         ]]></body>
       </method>
 
@@ -219,13 +227,16 @@
           else
             this.removeAttribute("nomatch");
 
-          this.fireEvent("searchcomplete");
+          if (this._searchCompleteHandler)
+            this._searchCompleteHandler();
         ]]></body>
       </method>
 
       <method name="onTextEntered">
         <body><![CDATA[
-          var rv = this.fireEvent("textentered", this.mEnterEvent);
+          let rv = false;
+          if (this._textEnteredHandler)
+            rv = this._textEnteredHandler(this.mEnterEvent);
           this.mEnterEvent = null;
           return rv;
         ]]></body>
@@ -233,7 +244,9 @@
 
       <method name="onTextReverted">
         <body><![CDATA[
-          return this.fireEvent("textreverted");
+          if (this._textRevertedHandler)
+            return this._textRevertedHandler();
+          return false;
         ]]></body>
       </method>
 
@@ -258,6 +271,8 @@
 
       <!-- =================== PUBLIC MEMBERS =================== -->
 
+      <field name="valueIsTyped">false</field>
+      <field name="_disableTrim">false</field>
       <property name="value">
         <getter><![CDATA[
           if (typeof this.onBeforeValueGet == "function") {
@@ -273,7 +288,15 @@
           if (typeof this.onBeforeValueSet == "function")
             val = this.onBeforeValueSet(val);
 
+          if (typeof this.trimValue == "function" && !this._disableTrim)
+            val = this.trimValue(val);
+
+          this.valueIsTyped = false;
           this.inputField.value = val;
+
+          if (typeof this.formatValue == "function")
+            this.formatValue();
+
           this.mIgnoreInput = false;
           var event = document.createEvent('Events');
           event.initEvent('ValueChange', true, true);
@@ -347,7 +370,7 @@
 
       <method name="closePopup">
         <body><![CDATA[
-          this.mConsumeRollupEvent = false;
+          this.popup.setAttribute("consumeoutsideclicks", "false");
           this.popup.closePopup();
         ]]></body>
       </method>
@@ -364,7 +387,7 @@
             input.setAttribute("open", "true");
             function onHide() {
               input.removeAttribute("open");
-              input.mConsumeRollupEvent = false;
+              popup.setAttribute("consumeoutsideclicks", "false");
               popup.removeEventListener("popuphiding", onHide, false);
             }
             popup.addEventListener("popuphiding", onHide, false);
@@ -384,7 +407,7 @@
           // Ensure that we have focus.
           if (!this.focused)
             this.focus();
-          this.mConsumeRollupEvent = true;
+          this.popup.setAttribute("consumeoutsideclicks", "true");
           this.attachController();
           this.mController.startSearch("");
         ]]></body>
@@ -401,18 +424,14 @@
 
       <!-- ::::::::::::: event dispatching ::::::::::::: -->
 
-      <method name="fireEvent">
+      <method name="initEventHandler">
         <parameter name="aEventType"/>
         <body><![CDATA[
-          var cancel = false;
-          // handle any xml attribute event handlers
-          var handler = this.getAttribute("on"+aEventType);
-          if (handler) {
-            var fn = new Function("eventType", "param", handler);
-            cancel = fn.apply(this, arguments);
+          let handlerString = this.getAttribute("on" + aEventType);
+          if (handlerString) {
+            return (new Function("eventType", "param", handlerString)).bind(this, aEventType);
           }
-
-          return cancel;
+          return null;
         ]]></body>
       </method>
 
@@ -425,7 +444,7 @@
             return;  // Let child buttons of autocomplete take input
 
           //XXXpch this is so bogus...
-          if (aEvent.getPreventDefault())
+          if (aEvent.defaultPrevented)
             return false;
 
           var cancel = false;
@@ -540,12 +559,31 @@
         ]]></body>
       </method>
 
+      <field name="_valueIsPasted">false</field>
+      <field name="_pasteController"><![CDATA[
+        ({
+          _autocomplete: this,
+          _kGlobalClipboard: Components.interfaces.nsIClipboard.kGlobalClipboard,
+          supportsCommand: function(aCommand) aCommand == "cmd_paste",
+          doCommand: function(aCommand) {
+            this._autocomplete._valueIsPasted = true;
+            this._autocomplete.editor.paste(this._kGlobalClipboard);
+            this._autocomplete._valueIsPasted = false;
+          },
+          isCommandEnabled: function(aCommand) {
+            return this._autocomplete.editor.isSelectionEditable &&
+                   this._autocomplete.editor.canPaste(this._kGlobalClipboard);
+          },
+          onEvent: function() {}
+        })
+      ]]></field>
     </implementation>
 
     <handlers>
       <handler event="input"><![CDATA[
         if (!this.mIgnoreInput && this.mController.input == this) {
-          this.mController.handleText(true);
+          this.valueIsTyped = true;
+          this.mController.handleText();
         }
         this.resetActionType();
       ]]></handler>
@@ -573,7 +611,7 @@
       <stylesheet src="chrome://global/skin/autocomplete.css"/>
     </resources>
 
-    <content ignorekeys="true" level="top">
+    <content ignorekeys="true" level="top" consumeoutsideclicks="false">
       <xul:tree anonid="tree" class="autocomplete-tree plain" hidecolumnpicker="true" flex="1" seltype="single">
         <xul:treecols anonid="treecols">
           <xul:treecol id="treecolAutoCompleteValue" class="autocomplete-treecol" flex="1" overflow="true"/>
@@ -712,8 +750,6 @@
             this.showCommentColumn = this.mInput.showCommentColumn;
             this.showImageColumn = this.mInput.showImageColumn;
 
-            document.popupNode = null;
-
             var rect = aElement.getBoundingClientRect();
             var nav = aElement.ownerDocument.defaultView.QueryInterface(Components.interfaces.nsIInterfaceRequestor)
                               .getInterface(Components.interfaces.nsIWebNavigation);
@@ -722,12 +758,10 @@
             var width = (rect.right - rect.left) * docViewer.fullZoom;
             this.setAttribute("width", width > 100 ? width : 100);
 
-            // setConsumeRollupEvent() before we call openPopup()
-            var nsIPopupBO = Components.interfaces.nsIPopupBoxObject;
-            this.popupBoxObject.setConsumeRollupEvent(
-              this.mInput.consumeRollupEvent ?
-                nsIPopupBO.ROLLUP_CONSUME :
-                nsIPopupBO.ROLLUP_NO_CONSUME);
+            // Adjust the direction of the autocomplete popup list based on the textbox direction, bug 649840
+            var popupDirection = aElement.ownerDocument.defaultView.getComputedStyle(aElement).direction;
+            this.style.direction = popupDirection;
+
             this.openPopup(aElement, "after_start", 0, 0, false, false);
           }
         ]]></body>
@@ -807,7 +841,6 @@
           <![CDATA[
           if (this.mPopupOpen) {
             this.hidePopup();
-            document.popupNode = null;
             this.removeAttribute("width");
           }
         ]]>
@@ -911,7 +944,7 @@
       <stylesheet src="chrome://global/skin/autocomplete.css"/>
     </resources>
 
-    <content ignorekeys="true" level="top">
+    <content ignorekeys="true" level="top" consumeoutsideclicks="false">
       <xul:richlistbox anonid="richlistbox" class="autocomplete-richlistbox" flex="1"/>
       <xul:hbox>
         <children/>
@@ -920,6 +953,7 @@
 
     <implementation implements="nsIAutoCompletePopup">
       <field name="_currentIndex">0</field>
+      <field name="_rowHeight">0</field>
 
       <!-- =================== nsIAutoCompletePopup =================== -->
 
@@ -961,19 +995,12 @@
             this.mInput = aInput;
             // clear any previous selection, see bugs 400671 and 488357
             this.selectedIndex = -1;
-            document.popupNode = null;
 
             var width = aElement.getBoundingClientRect().width;
             this.setAttribute("width", width > 100 ? width : 100);
             // invalidate() depends on the width attribute
             this._invalidate();
 
-            // setConsumeRollupEvent() before we call openPopup()
-            var nsIPopupBO = Components.interfaces.nsIPopupBoxObject;
-            this.popupBoxObject.setConsumeRollupEvent(
-              this.mInput.consumeRollupEvent ?
-                nsIPopupBO.ROLLUP_CONSUME :
-                nsIPopupBO.ROLLUP_NO_CONSUME);
             this.openPopup(aElement, "after_start", 0, 0, false, false);
           }
         ]]>
@@ -1045,11 +1072,13 @@
           // Default the height to 0 if we have no rows to show
           let height = 0;
           if (numRows) {
-            let firstRowRect = rows[0].getBoundingClientRect();
-            let lastRowRect = rows[numRows - 1].getBoundingClientRect();
+            if (!this._rowHeight) {
+              let firstRowRect = rows[0].getBoundingClientRect();
+              this._rowHeight = firstRowRect.height;
+            }
 
             // Calculate the height to have the first row to last row shown
-            height = lastRowRect.bottom - firstRowRect.top;
+            height = this._rowHeight * numRows;
           }
 
           // Only update the height if we have a non-zero height and if it
@@ -1082,6 +1111,9 @@
               getService(Components.interfaces.nsITextToSubURI).
               unEscapeURIForUI("UTF-8", controller.getValueAt(this._currentIndex));
 
+            if (typeof this.input.trimValue == "function")
+              url = this.input.trimValue(url);
+
             if (this._currentIndex < existingItemsCount) {
               // re-use the existing item
               item = this.richlistbox.childNodes[this._currentIndex];
@@ -1100,7 +1132,7 @@
             }
 
             // set these attributes before we set the class
-            // so that we can use them from the contructor
+            // so that we can use them from the constructor
             item.setAttribute("image", controller.getImageAt(this._currentIndex));
             item.setAttribute("url", url);
             item.setAttribute("title", controller.getCommentAt(this._currentIndex));
@@ -1166,11 +1198,12 @@
       <xul:hbox align="center" class="ac-title-box">
         <xul:image xbl:inherits="src=image" class="ac-site-icon"/>
         <xul:hbox anonid="title-box" class="ac-title" flex="1"
-                  onunderflow="_doUnderflow('_title');">
+                  onunderflow="_doUnderflow('_title');"
+                  onoverflow="_doOverflow('_title');">
           <xul:description anonid="title" class="ac-normal-text ac-comment" xbl:inherits="selected"/>
         </xul:hbox>
         <xul:label anonid="title-overflow-ellipsis" xbl:inherits="selected"
-                   class="ac-ellipsis-after ac-comment" hidden="true"/>
+                   class="ac-ellipsis-after ac-comment"/>
         <xul:hbox anonid="extra-box" class="ac-extra" align="center" hidden="true">
           <xul:image class="ac-result-type-tag"/>
           <xul:label class="ac-normal-text ac-comment" xbl:inherits="selected" value=":"/>
@@ -1182,11 +1215,15 @@
         <xul:spacer class="ac-site-icon"/>
         <xul:image class="ac-action-icon"/>
         <xul:hbox anonid="url-box" class="ac-url" flex="1"
-                  onunderflow="_doUnderflow('_url');">
-          <xul:description anonid="url" class="ac-normal-text ac-url-text" xbl:inherits="selected"/>
+                  onunderflow="_doUnderflow('_url');"
+                  onoverflow="_doOverflow('_url');">
+          <xul:description anonid="url" class="ac-normal-text ac-url-text"
+                           xbl:inherits="selected type"/>
+          <xul:description anonid="action" class="ac-normal-text ac-action-text"
+                           xbl:inherits="selected type"/>
         </xul:hbox>
         <xul:label anonid="url-overflow-ellipsis" xbl:inherits="selected"
-                   class="ac-ellipsis-after ac-url-text" hidden="true"/>
+                   class="ac-ellipsis-after ac-url-text"/>
         <xul:spacer class="ac-type-icon"/>
       </xul:hbox>
     </content>
@@ -1213,6 +1250,7 @@
 
             this._urlBox = document.getAnonymousElementByAttribute(this, "anonid", "url-box");
             this._url = document.getAnonymousElementByAttribute(this, "anonid", "url");
+            this._action = document.getAnonymousElementByAttribute(this, "anonid", "action");
 
             this._titleBox = document.getAnonymousElementByAttribute(this, "anonid", "title-box");
             this._title = document.getAnonymousElementByAttribute(this, "anonid", "title");
@@ -1334,23 +1372,6 @@
         </body>
       </method>
 
-      <method name="_needsAlternateEmphasis">
-        <parameter name="aText"/>
-        <body>
-          <![CDATA[
-          for (let i = aText.length; --i >= 0; ) {
-            let charCode = aText.charCodeAt(i);
-            // Arabic, Syriac, Indic languages are likely to have ligatures
-            // that are broken when using the main emphasis styling
-            if (0x0600 <= charCode && charCode <= 0x109F)
-              return true;
-          }
-
-          return false;
-          ]]>
-        </body>
-      </method>
-
       <method name="_setUpDescription">
         <parameter name="aDescriptionElement"/>
         <parameter name="aText"/>
@@ -1372,10 +1393,6 @@
           let tokens = this._getSearchTokens(search);
           let indices = this._getBoundaryIndices(aText, tokens);
 
-          // If we're searching for something that needs alternate emphasis,
-          // we'll need to check the text that we match
-          let checkAlt = this._needsAlternateEmphasis(search);
-
           let next;
           let start = 0;
           let len = indices.length;
@@ -1389,8 +1406,7 @@
               // Emphasize the text for even indices
               let span = aDescriptionElement.appendChild(
                 document.createElementNS("http://www.w3.org/1999/xhtml", "span"));
-              span.className = checkAlt && this._needsAlternateEmphasis(text) ?
-                "ac-emphasize-alt" : "ac-emphasize-text";
+              span.className = "ac-emphasize-text";
               span.textContent = text;
             } else {
               // Otherwise, it's plain text
@@ -1410,7 +1426,11 @@
 
           this.removeAttribute("actiontype");
 
-          var setupUrl = true;
+          // The ellipses are hidden via their visibility so that they always
+          // take up space and don't pop in on top of text when shown.  For
+          // keyword searches, however, the title ellipsis should not take up
+          // space when hidden.  Setting the hidden property accomplishes that.
+          this._titleOverflowEllipsis.hidden = false;
 
           // If the type includes an action, set up the item appropriately.
           var types = type.split(/\s+/);
@@ -1420,8 +1440,7 @@
             this.setAttribute("actiontype", action);
             url = param;
             let desc = "]]>&action.switchToTab.label;<![CDATA[";
-            this._setUpDescription(this._url, desc, true);
-            setupUrl = false;
+            this._setUpDescription(this._action, desc, true);
 
             // Remove the "action" substring so that the correct style, if any,
             // is applied below.
@@ -1458,6 +1477,9 @@
             this._extraBox.pack = "start";
             this._titleBox.flex = 0;
 
+            // Hide the ellipsis so it doesn't take up space.
+            this._titleOverflowEllipsis.hidden = true;
+
             // Put the parameters next to the title if we have any
             let search = this.getAttribute("text");
             let params = "";
@@ -1486,8 +1508,7 @@
 
           // Emphasize the matching search terms for the description
           this._setUpDescription(this._title, title);
-          if (setupUrl)
-            this._setUpDescription(this._url, url);
+          this._setUpDescription(this._url, url);
 
           // Set up overflow on a timeout because the contents of the box
           // might not have a width yet even though we just changed them
@@ -1503,7 +1524,7 @@
         <body>
           <![CDATA[
           // Hide the ellipsis incase there's just enough to not underflow
-          aEllipsis.hidden = true;
+          aEllipsis.style.visibility = "hidden";
 
           // Start with the parent's width and subtract off its children
           let tooltip = [];
@@ -1527,7 +1548,7 @@
           // If the children take up more space than the parent.. overflow!
           if (widthDiff < 0) {
             // Re-show the ellipsis now that we know it's needed
-            aEllipsis.hidden = false;
+            aEllipsis.style.visibility = "visible";
 
             // Separate text components with a ndash --
             aParentBox.tooltipText = tooltip.join(" \u2013 ");
@@ -1543,7 +1564,17 @@
           // Hide the ellipsis right when we know we're underflowing instead of
           // waiting for the timeout to trigger the _setUpOverflow calculations
           this[aName + "Box"].tooltipText = "";
-          this[aName + "OverflowEllipsis"].hidden = true;
+          this[aName + "OverflowEllipsis"].style.visibility = "hidden";
+          ]]>
+        </body>
+      </method>
+
+      <method name="_doOverflow">
+        <parameter name="aName"/>
+        <body>
+          <![CDATA[
+          this._setUpOverflow(this[aName + "Box"],
+                              this[aName + "OverflowEllipsis"]);
           ]]>
         </body>
       </method>

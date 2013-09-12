@@ -1,46 +1,11 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Plugin Finder Service.
- *
- * The Initial Developer of the Original Code is
- * IBM Corporation.
- * Portions created by the IBM Corporation are Copyright (C) 2004
- * IBM Corporation. All Rights Reserved.
- *
- * Contributor(s):
- *   Doron Rosenberg <doronr@us.ibm.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 function nsPluginInstallerWizard(){
 
   // create the request array
-  this.mPluginRequestArray = new Object();
-  // since the array is a hash, store the length
-  this.mPluginRequestArrayLength = 0;
+  this.mPluginRequests = new Map();
 
   // create the plugin info array.
   // a hash indexed by plugin id so we don't install 
@@ -62,17 +27,14 @@ function nsPluginInstallerWizard(){
   this.mSuccessfullPluginInstallation = 0;
   this.mNeedsRestart = false;
 
-  // arguments[0] is an array that contains two items:
-  //     an array of mimetypes that are missing
+  // arguments[0] is an object that contains two items:
+  //     a mimetype->pluginInfo map of missing plugins,
   //     a reference to the browser that needs them, 
   //        so we can notify which browser can be reloaded.
 
   if ("arguments" in window) {
-    for (var item in window.arguments[0].plugins){
-      this.mPluginRequestArray[window.arguments[0].plugins[item].mimetype] =
-        new nsPluginRequest(window.arguments[0].plugins[item]);
-
-      this.mPluginRequestArrayLength++;
+    for (let [mimetype, pluginInfo] of window.arguments[0].plugins){
+      this.mPluginRequests.set(mimetype, new nsPluginRequest(pluginInfo));
     }
 
     this.mBrowser = window.arguments[0].browser;
@@ -85,14 +47,14 @@ function nsPluginInstallerWizard(){
 }
 
 nsPluginInstallerWizard.prototype.getPluginData = function (){
-  // for each mPluginRequestArray item, call the datasource
+  // for each mPluginRequests item, call the datasource
   this.WSPluginCounter = 0;
 
   // initiate the datasource call
   var rdfUpdater = new nsRDFItemUpdater(this.getOS(), this.getChromeLocale());
 
-  for (var item in this.mPluginRequestArray) {
-    rdfUpdater.checkForPlugin(this.mPluginRequestArray[item]);
+  for (let [mimetype, pluginRequest] of this.mPluginRequests) {
+    rdfUpdater.checkForPlugin(pluginRequest);
   }
 }
 
@@ -116,9 +78,9 @@ nsPluginInstallerWizard.prototype.pluginInfoReceived = function (aPluginRequestI
     progressMeter.setAttribute("mode", "determined");
 
   progressMeter.setAttribute("value",
-      ((this.WSPluginCounter / this.mPluginRequestArrayLength) * 100) + "%");
+      ((this.WSPluginCounter / this.mPluginRequests.size) * 100) + "%");
 
-  if (this.WSPluginCounter == this.mPluginRequestArrayLength) {
+  if (this.WSPluginCounter == this.mPluginRequests.size) {
     // check if no plugins were found
     if (this.mPluginInfoArrayLength == 0) {
       this.advancePage("lastpage");
@@ -498,8 +460,8 @@ nsPluginInstallerWizard.prototype.showPluginResults = function (){
       // manual url - either returned from the webservice or the pluginspage attribute
       var manualUrl;
       if ((myPluginItem.error || (!myPluginItem.XPILocation && !myPluginItem.InstallerLocation)) &&
-          (myPluginItem.manualInstallationURL || this.mPluginRequestArray[myPluginItem.requestedMimetype].pluginsPage)){
-        manualUrl = myPluginItem.manualInstallationURL ? myPluginItem.manualInstallationURL : this.mPluginRequestArray[myPluginItem.requestedMimetype].pluginsPage;
+          (myPluginItem.manualInstallationURL || this.mPluginRequests.get(myPluginItem.requestedMimetype).pluginsPage)){
+        manualUrl = myPluginItem.manualInstallationURL ? myPluginItem.manualInstallationURL : this.mPluginRequests.get(myPluginItem.requestedMimetype).pluginsPage;
       }
 
       this.addPluginResultRow(

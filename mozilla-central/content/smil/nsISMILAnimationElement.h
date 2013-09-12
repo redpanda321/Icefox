@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SVG project.
- *
- * The Initial Developer of the Original Code is
- * the Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Daniel Holbert <dholbert@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef NS_ISMILANIMATIONELEMENT_H_
 #define NS_ISMILANIMATIONELEMENT_H_
@@ -46,8 +13,8 @@
 // some property of another element, e.g. <animate>, <set>.
 
 #define NS_ISMILANIMATIONELEMENT_IID \
-{ 0x5c891601, 0x47aa, 0x4230,        \
-  { 0xb8, 0xdc, 0xb9, 0x26, 0xd1, 0xe7, 0xd7, 0xf4 } }
+{ 0x29792cd9, 0x0f96, 0x4ba6,        \
+  { 0xad, 0xea, 0x03, 0x0e, 0x0b, 0xfe, 0x1e, 0xb7 } }
 
 class nsISMILAttr;
 class nsSMILAnimationFunction;
@@ -84,15 +51,20 @@ public:
   virtual mozilla::dom::Element& AsElement() = 0;
 
   /*
+   * Returns true if the element passes conditional processing
+   */
+  virtual bool PassesConditionalProcessingTests() = 0;
+
+  /*
    * Returns the source attribute as an nsAttrValue. The global namespace will
    * be used.
    *
    * (The 'Anim' here and below is largely to avoid conflicts for subclasses
-   * that derive from nsGenericElement)
+   * that derive from Element)
    *
    * @param aName the name of the attr
-   * @returns PR_TRUE if the attribute was set (even when set to empty string)
-   *          PR_FALSE when not set.
+   * @returns true if the attribute was set (even when set to empty string)
+   *          false when not set.
    */
   virtual const nsAttrValue* GetAnimAttr(nsIAtom* aName) const = 0;
 
@@ -102,15 +74,15 @@ public:
    *
    * @param aName the name of the attr
    * @param aResult the value (may legitimately be the empty string) [OUT]
-   * @returns PR_TRUE if the attribute was set (even when set to empty string)
-   *          PR_FALSE when not set.
+   * @returns true if the attribute was set (even when set to empty string)
+   *          false when not set.
    */
-  virtual PRBool GetAnimAttr(nsIAtom* aAttName, nsAString& aResult) const = 0;
+  virtual bool GetAnimAttr(nsIAtom* aAttName, nsAString& aResult) const = 0;
 
   /*
    * Check for the presence of an attribute in the global namespace.
    */
-  virtual PRBool HasAnimAttr(nsIAtom* aAttName) const = 0;
+  virtual bool HasAnimAttr(nsIAtom* aAttName) const = 0;
 
   /*
    * Returns the target (animated) element.
@@ -120,7 +92,8 @@ public:
   /*
    * Returns the name of the target (animated) attribute or property.
    */
-  virtual nsIAtom* GetTargetAttributeName() const = 0;
+  virtual bool GetTargetAttributeName(int32_t* aNamespaceID,
+                                        nsIAtom** aLocalName) const = 0;
 
   /*
    * Returns the type of the target (animated) attribute or property.

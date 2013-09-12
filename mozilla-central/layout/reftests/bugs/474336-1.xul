@@ -10,7 +10,8 @@
         background-color: blue;
     }
     #prog .progress-bar {
-        -moz-border-radius: 3px 3px;
+        -moz-appearance: none;
+        border-radius: 3px 3px;
         background-color: red;
     }
 </html:style>

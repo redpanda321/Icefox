@@ -1,69 +1,12 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SMIL module.
- *
- * The Initial Developer of the Original Code is Brian Birtles.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Brian Birtles <birtles@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsSMILInstanceTime.h"
 #include "nsSMILInterval.h"
 #include "nsSMILTimeValueSpec.h"
-
-//----------------------------------------------------------------------
-// Helper classes
-
-namespace
-{
-  // Utility class to set a PRPackedBool value to PR_TRUE whilst it is in scope.
-  // Saves us having to remember to clear the flag at every possible return.
-  class AutoBoolSetter
-  {
-  public:
-    AutoBoolSetter(PRPackedBool& aValue)
-    : mValue(aValue)
-    {
-      mValue = PR_TRUE;
-    }
- 
-    ~AutoBoolSetter()
-    {
-      mValue = PR_FALSE;
-    }
-
-  private:
-    PRPackedBool&   mValue;
-  };
-}
+#include "mozilla/AutoRestore.h"
 
 //----------------------------------------------------------------------
 // Implementation
@@ -74,11 +17,11 @@ nsSMILInstanceTime::nsSMILInstanceTime(const nsSMILTimeValue& aTime,
                                        nsSMILInterval* aBaseInterval)
   : mTime(aTime),
     mFlags(0),
-    mVisited(PR_FALSE),
+    mVisited(false),
     mFixedEndpointRefCnt(0),
     mSerial(0),
     mCreator(aCreator),
-    mBaseInterval(nsnull) // This will get set to aBaseInterval in a call to
+    mBaseInterval(nullptr) // This will get set to aBaseInterval in a call to
                           // SetBaseInterval() at end of constructor
 {
   switch (aSource) {
@@ -117,19 +60,24 @@ nsSMILInstanceTime::Unlink()
   nsRefPtr<nsSMILInstanceTime> deathGrip(this);
   if (mBaseInterval) {
     mBaseInterval->RemoveDependentTime(*this);
-    mBaseInterval = nsnull;
+    mBaseInterval = nullptr;
   }
-  mCreator = nsnull;
+  mCreator = nullptr;
 }
 
 void
 nsSMILInstanceTime::HandleChangedInterval(
     const nsSMILTimeContainer* aSrcContainer,
-    PRBool aBeginObjectChanged,
-    PRBool aEndObjectChanged)
+    bool aBeginObjectChanged,
+    bool aEndObjectChanged)
 {
-  NS_ABORT_IF_FALSE(mBaseInterval,
-      "Got call to HandleChangedInterval on an independent instance time.");
+  // It's possible a sequence of notifications might cause our base interval to
+  // be updated and then deleted. Furthermore, the delete might happen whilst
+  // we're still in the queue to be notified of the change. In any case, if we
+  // don't have a base interval, just ignore the change.
+  if (!mBaseInterval)
+    return;
+
   NS_ABORT_IF_FALSE(mCreator, "Base interval is set but creator is not.");
 
   if (mVisited) {
@@ -138,10 +86,11 @@ nsSMILInstanceTime::HandleChangedInterval(
     return;
   }
 
-  PRBool objectChanged = mCreator->DependsOnBegin() ? aBeginObjectChanged :
+  bool objectChanged = mCreator->DependsOnBegin() ? aBeginObjectChanged :
                                                       aEndObjectChanged;
 
-  AutoBoolSetter setVisited(mVisited);
+  mozilla::AutoRestore<bool> setVisited(mVisited);
+  mVisited = true;
 
   nsRefPtr<nsSMILInstanceTime> deathGrip(this);
   mCreator->HandleChangedInstanceTime(*GetBaseTime(), aSrcContainer, *this,
@@ -155,12 +104,12 @@ nsSMILInstanceTime::HandleDeletedInterval()
       "Got call to HandleDeletedInterval on an independent instance time");
   NS_ABORT_IF_FALSE(mCreator, "Base interval is set but creator is not");
 
-  mBaseInterval = nsnull;
+  mBaseInterval = nullptr;
   mFlags &= ~kMayUpdate; // Can't update without a base interval
 
   nsRefPtr<nsSMILInstanceTime> deathGrip(this);
   mCreator->HandleDeletedInstanceTime(*this);
-  mCreator = nsnull;
+  mCreator = nullptr;
 }
 
 void
@@ -169,12 +118,12 @@ nsSMILInstanceTime::HandleFilteredInterval()
   NS_ABORT_IF_FALSE(mBaseInterval,
       "Got call to HandleFilteredInterval on an independent instance time");
 
-  mBaseInterval = nsnull;
+  mBaseInterval = nullptr;
   mFlags &= ~kMayUpdate; // Can't update without a base interval
-  mCreator = nsnull;
+  mCreator = nullptr;
 }
 
-PRBool
+bool
 nsSMILInstanceTime::ShouldPreserve() const
 {
   return mFixedEndpointRefCnt > 0 || (mFlags & kWasDynamicEndpoint);
@@ -189,7 +138,7 @@ nsSMILInstanceTime::UnmarkShouldPreserve()
 void
 nsSMILInstanceTime::AddRefFixedEndpoint()
 {
-  NS_ABORT_IF_FALSE(mFixedEndpointRefCnt < PR_UINT16_MAX,
+  NS_ABORT_IF_FALSE(mFixedEndpointRefCnt < UINT16_MAX,
       "Fixed endpoint reference count upper limit reached");
   ++mFixedEndpointRefCnt;
   mFlags &= ~kMayUpdate; // Once fixed, always fixed
@@ -205,22 +154,38 @@ nsSMILInstanceTime::ReleaseFixedEndpoint()
   }
 }
 
-PRBool
+bool
 nsSMILInstanceTime::IsDependentOn(const nsSMILInstanceTime& aOther) const
 {
   if (mVisited)
-    return PR_FALSE;
+    return false;
 
   const nsSMILInstanceTime* myBaseTime = GetBaseTime();
   if (!myBaseTime)
-    return PR_FALSE;
+    return false;
 
   if (myBaseTime == &aOther)
-    return PR_TRUE;
+    return true;
 
-  // mVisited is mutable
-  AutoBoolSetter setVisited(const_cast<nsSMILInstanceTime*>(this)->mVisited);
+  mozilla::AutoRestore<bool> setVisited(mVisited);
+  mVisited = true;
   return myBaseTime->IsDependentOn(aOther);
+}
+
+const nsSMILInstanceTime*
+nsSMILInstanceTime::GetBaseTime() const
+{
+  if (!mBaseInterval) {
+    return nullptr;
+  }
+
+  NS_ABORT_IF_FALSE(mCreator, "Base interval is set but there is no creator.");
+  if (!mCreator) {
+    return nullptr;
+  }
+
+  return mCreator->DependsOnBegin() ? mBaseInterval->Begin() :
+                                      mBaseInterval->End();
 }
 
 void
@@ -240,20 +205,4 @@ nsSMILInstanceTime::SetBaseInterval(nsSMILInterval* aBaseInterval)
   }
 
   mBaseInterval = aBaseInterval;
-}
-
-const nsSMILInstanceTime*
-nsSMILInstanceTime::GetBaseTime() const
-{
-  if (!mBaseInterval) {
-    return nsnull;
-  }
-
-  NS_ABORT_IF_FALSE(mCreator, "Base interval is set but there is no creator.");
-  if (!mCreator) {
-    return nsnull;
-  }
-
-  return mCreator->DependsOnBegin() ? mBaseInterval->Begin() :
-                                      mBaseInterval->End();
 }

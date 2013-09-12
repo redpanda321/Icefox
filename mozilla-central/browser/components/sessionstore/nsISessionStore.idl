@@ -1,40 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Session Restore component.
- *
- * The Initial Developer of the Original Code is
- * Simon Bünzli <zeniko@gmail.com>
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dietrich Ayala <dietrich@mozilla.com>
- *   Michael Kraft <morac99-firefox@yahoo.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsISupports.idl"
 
@@ -59,13 +25,31 @@ interface nsIDOMNode;
  * |gBrowser.tabContainer| such as e.g. |gBrowser.selectedTab|.
  */
 
-[scriptable, uuid(70592a0d-87d3-459c-8db7-dcb8d47af78e)]
+[scriptable, uuid(59bfaf00-e3d8-4728-b4f0-cc0b9dfb4806)]
 interface nsISessionStore : nsISupports
 {
   /**
    * Initialize the service
    */
   void init(in nsIDOMWindow aWindow);
+
+  /**
+   * Is it possible to restore the previous session. Will always be false when
+   * in Private Browsing mode.
+   */
+  attribute boolean canRestoreLastSession;
+
+  /**
+   * Restore the previous session if possible. This will not overwrite the
+   * current session. Instead the previous session will be merged into the
+   * current session. Current windows will be reused if they were windows that
+   * pinned tabs were previously restored into. New windows will be opened as
+   * needed.
+   *
+   * Note: This will throw if there is no previous state to restore. Check with
+   * canRestoreLastSession first to avoid thrown errors.
+   */
+  void restoreLastSession();
 
   /**
    * Get the current browsing state.
@@ -84,7 +68,7 @@ interface nsISessionStore : nsISupports
 
   /**
    * @param aWindow is the browser window whose state is to be returned.
-   * 
+   *
    * @returns a JSON string representing a session state with only one window.
    */
   AString getWindowState(in nsIDOMWindow aWindow);
@@ -98,7 +82,7 @@ interface nsISessionStore : nsISupports
 
   /**
    * @param aTab is the tabbrowser tab whose state is to be returned.
-   * 
+   *
    * @returns a JSON string representing the state of the tab
    *         (note: doesn't contain cookies - if you need them, use getWindowState instead).
    */
@@ -115,9 +99,11 @@ interface nsISessionStore : nsISupports
    *
    * @param aWindow is the browser window into which the tab will be duplicated.
    * @param aTab    is the tabbrowser tab to duplicate (can be from a different window).
+   * @param aDelta  is the offset to the history entry to load in the duplicated tab.
    * @returns a reference to the newly created tab.
    */
-  nsIDOMNode duplicateTab(in nsIDOMWindow aWindow, in nsIDOMNode aTab);
+  nsIDOMNode duplicateTab(in nsIDOMWindow aWindow, in nsIDOMNode aTab,
+                          [optional] in long aDelta);
 
   /**
    * Get the number of restore-able tabs for a browser window
@@ -174,7 +160,7 @@ interface nsISessionStore : nsISupports
   /**
    * @param aWindow is the window to get the value for.
    * @param aKey    is the value's name.
-   * 
+   *
    * @returns A string value or an empty string if none is set.
    */
   AString getWindowValue(in nsIDOMWindow aWindow, in AString aKey);
@@ -185,7 +171,7 @@ interface nsISessionStore : nsISupports
    * @param aStringValue is the value itself (use JSON.stringify/parse before setting JS objects).
    */
   void setWindowValue(in nsIDOMWindow aWindow, in AString aKey, in AString aStringValue);
-  
+
   /**
    * @param aWindow is the browser window to get the value for.
    * @param aKey    is the value's name.
@@ -195,7 +181,7 @@ interface nsISessionStore : nsISupports
   /**
    * @param aTab is the tabbrowser tab to get the value for.
    * @param aKey is the value's name.
-   * 
+   *
    * @returns A string value or an empty string if none is set.
    */
   AString getTabValue(in nsIDOMNode aTab, in AString aKey);

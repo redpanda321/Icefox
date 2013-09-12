@@ -1,50 +1,16 @@
-/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "nsJSEventListener.h"
 #include "nsJSUtils.h"
 #include "nsString.h"
-#include "nsReadableUtils.h"
 #include "nsIServiceManager.h"
 #include "nsIScriptSecurityManager.h"
 #include "nsIScriptContext.h"
 #include "nsIScriptGlobalObject.h"
 #include "nsIScriptRuntime.h"
 #include "nsIXPConnect.h"
-#include "nsIPrivateDOMEvent.h"
 #include "nsGUIEvent.h"
 #include "nsContentUtils.h"
 #include "nsDOMScriptObjectHolder.h"
@@ -52,10 +18,15 @@
 #include "nsVariant.h"
 #include "nsIDOMBeforeUnloadEvent.h"
 #include "nsGkAtoms.h"
-#include "nsPIDOMEventTarget.h"
+#include "nsIDOMEventTarget.h"
 #include "nsIJSContextStack.h"
-#ifdef NS_DEBUG
+#include "xpcpublic.h"
+#include "nsJSEnvironment.h"
 #include "nsDOMJSUtils.h"
+#include "mozilla/Likely.h"
+#include "mozilla/dom/UnionTypes.h"
+
+#ifdef DEBUG
 
 #include "nspr.h" // PR_fprintf
 
@@ -69,207 +40,227 @@ public:
 static EventListenerCounter sEventListenerCounter;
 #endif
 
+using namespace mozilla;
+using namespace mozilla::dom;
+
 /*
  * nsJSEventListener implementation
  */
 nsJSEventListener::nsJSEventListener(nsIScriptContext *aContext,
-                                     void *aScopeObject,
+                                     JSObject* aScopeObject,
                                      nsISupports *aTarget,
-                                     nsIAtom* aType)
-  : nsIJSEventListener(aContext, aScopeObject, aTarget), mEventName(aType)
+                                     nsIAtom* aType,
+                                     const nsEventHandler& aHandler)
+  : nsIJSEventListener(aContext, aScopeObject, aTarget, aType, aHandler)
 {
-  // aScopeObject is the inner window's JS object, which we need to lock
-  // until we are done with it.
-  NS_ASSERTION(aScopeObject && aContext,
-               "EventListener with no context or scope?");
-  nsContentUtils::HoldScriptObject(aContext->GetScriptTypeID(), this,
-                                   &NS_CYCLE_COLLECTION_NAME(nsJSEventListener),
-                                   aScopeObject, PR_FALSE);
+  if (mScopeObject) {
+    NS_HOLD_JS_OBJECTS(this, nsJSEventListener);
+  }
 }
 
 nsJSEventListener::~nsJSEventListener() 
 {
-  if (mContext)
-    nsContentUtils::DropScriptObjects(mContext->GetScriptTypeID(), this,
-                                &NS_CYCLE_COLLECTION_NAME(nsJSEventListener));
+  if (mScopeObject) {
+    mScopeObject = nullptr;
+    NS_DROP_JS_OBJECTS(this, nsJSEventListener);
+  }
+}
+
+/* virtual */
+void
+nsJSEventListener::UpdateScopeObject(JSObject* aScopeObject)
+{
+  if (mScopeObject && !aScopeObject) {
+    mScopeObject = nullptr;
+    NS_DROP_JS_OBJECTS(this, nsJSEventListener);
+  } else if (aScopeObject && !mScopeObject) {
+    NS_HOLD_JS_OBJECTS(this, nsJSEventListener);
+  }
+  mScopeObject = aScopeObject;
 }
 
 NS_IMPL_CYCLE_COLLECTION_CLASS(nsJSEventListener)
-NS_IMPL_CYCLE_COLLECTION_ROOT_BEGIN(nsJSEventListener)
-  if (tmp->mContext &&
-      tmp->mContext->GetScriptTypeID() == nsIProgrammingLanguage::JAVASCRIPT) {
-    NS_DROP_JS_OBJECTS(tmp, nsJSEventListener);
-    tmp->mScopeObject = nsnull;
-  }
-NS_IMPL_CYCLE_COLLECTION_ROOT_END
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(nsJSEventListener)
-  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mTarget)
-  if (tmp->mContext) {
-    if (tmp->mScopeObject) {
-      nsContentUtils::DropScriptObjects(tmp->mContext->GetScriptTypeID(), tmp,
-                                  &NS_CYCLE_COLLECTION_NAME(nsJSEventListener));
-      tmp->mScopeObject = nsnull;
-    }
-    NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mContext)
+  if (tmp->mScopeObject) {
+    tmp->mScopeObject = nullptr;
+    NS_DROP_JS_OBJECTS(tmp, nsJSEventListener);
+    NS_IMPL_CYCLE_COLLECTION_UNLINK(mContext)
   }
+  tmp->mHandler.ForgetHandler();
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
-NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN(nsJSEventListener)
-  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mTarget)
-  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mContext)
+NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INTERNAL(nsJSEventListener)
+  if (MOZ_UNLIKELY(cb.WantDebugInfo()) && tmp->mEventName) {
+    nsAutoCString name;
+    name.AppendLiteral("nsJSEventListener handlerName=");
+    name.Append(
+      NS_ConvertUTF16toUTF8(nsDependentAtomString(tmp->mEventName)).get());
+    cb.DescribeRefCountedNode(tmp->mRefCnt.get(), name.get());
+  } else {
+    NS_IMPL_CYCLE_COLLECTION_DESCRIBE(nsJSEventListener, tmp->mRefCnt.get())
+  }
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mContext)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_RAWPTR(mHandler.Ptr())
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_SCRIPT_OBJECTS
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
 NS_IMPL_CYCLE_COLLECTION_TRACE_BEGIN(nsJSEventListener)
-  NS_IMPL_CYCLE_COLLECTION_TRACE_MEMBER_CALLBACK(tmp->mContext->GetScriptTypeID(),
-                                                 mScopeObject)
+  NS_IMPL_CYCLE_COLLECTION_TRACE_JS_MEMBER_CALLBACK(mScopeObject)
 NS_IMPL_CYCLE_COLLECTION_TRACE_END
+
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_BEGIN(nsJSEventListener)
+  if (tmp->IsBlackForCC()) {
+    return true;
+  }
+  // If we have a target, it is the one which has tmp as onfoo handler.
+  if (tmp->mTarget) {
+    nsXPCOMCycleCollectionParticipant* cp = nullptr;
+    CallQueryInterface(tmp->mTarget, &cp);
+    nsISupports* canonical = nullptr;
+    tmp->mTarget->QueryInterface(NS_GET_IID(nsCycleCollectionISupports),
+                                 reinterpret_cast<void**>(&canonical));
+    // Usually CanSkip ends up unmarking the event listeners of mTarget,
+    // so tmp may become black.
+    if (cp && canonical && cp->CanSkip(canonical, true)) {
+      return tmp->IsBlackForCC();
+    }
+  }
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_END
+
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_IN_CC_BEGIN(nsJSEventListener)
+  return tmp->IsBlackForCC();
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_IN_CC_END
+
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_THIS_BEGIN(nsJSEventListener)
+  return tmp->IsBlackForCC();
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_THIS_END
 
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(nsJSEventListener)
   NS_INTERFACE_MAP_ENTRY(nsIDOMEventListener)
   NS_INTERFACE_MAP_ENTRY(nsIJSEventListener)
-  NS_INTERFACE_MAP_ENTRY_AMBIGUOUS(nsISupports, nsIDOMEventListener)
+  NS_INTERFACE_MAP_ENTRY(nsISupports)
 NS_INTERFACE_MAP_END
 
-NS_IMPL_CYCLE_COLLECTING_ADDREF_AMBIGUOUS(nsJSEventListener, nsIDOMEventListener)
-NS_IMPL_CYCLE_COLLECTING_RELEASE_AMBIGUOUS(nsJSEventListener, nsIDOMEventListener)
+NS_IMPL_CYCLE_COLLECTING_ADDREF(nsJSEventListener)
+NS_IMPL_CYCLE_COLLECTING_RELEASE(nsJSEventListener)
 
-nsresult
-nsJSEventListener::GetJSVal(const nsAString& aEventName, jsval* aJSVal)
+bool
+nsJSEventListener::IsBlackForCC()
 {
-  nsCOMPtr<nsPIDOMEventTarget> target = do_QueryInterface(mTarget);
-  if (target && mContext) {
-    nsAutoString eventString = NS_LITERAL_STRING("on") + aEventName;
-    nsCOMPtr<nsIAtom> atomName = do_GetAtom(eventString);
-    nsScriptObjectHolder funcval(mContext);
-    nsresult rv = mContext->GetBoundEventHandler(mTarget, mScopeObject,
-                                                 atomName, funcval);
-    NS_ENSURE_SUCCESS(rv, rv);
-    jsval funval =
-      OBJECT_TO_JSVAL(static_cast<JSObject*>(static_cast<void*>(funcval)));
-    *aJSVal = funval;
-    return NS_OK;
+  // We can claim to be black if all the things we reference are
+  // effectively black already.
+  if ((!mScopeObject || !xpc_IsGrayGCThing(mScopeObject)) &&
+      (!mHandler.HasEventHandler() ||
+       !mHandler.Ptr()->HasGrayCallable())) {
+    if (!mContext) {
+      // Well, we certainly won't be marking it, so move on!
+      return true;
+    }
+    nsIScriptGlobalObject* sgo =
+      static_cast<nsJSContext*>(mContext.get())->GetCachedGlobalObject();
+    return sgo && sgo->IsBlackForCC();
   }
-  return NS_ERROR_FAILURE;
+  return false;
 }
 
 nsresult
 nsJSEventListener::HandleEvent(nsIDOMEvent* aEvent)
 {
-  nsresult rv;
-  nsCOMPtr<nsIMutableArray> iargv;
+  nsCOMPtr<nsIDOMEventTarget> target = do_QueryInterface(mTarget);
+  if (!target || !mHandler.HasEventHandler())
+    return NS_ERROR_FAILURE;
 
-  nsScriptObjectHolder funcval(mContext);
-  rv = mContext->GetBoundEventHandler(mTarget, mScopeObject, mEventName,
-                                      funcval);
-  NS_ENSURE_SUCCESS(rv, rv);
-  if (!funcval)
-    return NS_OK;
+  if (mHandler.Type() == nsEventHandler::eOnError) {
+    MOZ_ASSERT(mEventName == nsGkAtoms::onerror);
 
-  PRBool handledScriptError = PR_FALSE;
-  if (mEventName == nsGkAtoms::onerror) {
-    nsCOMPtr<nsIPrivateDOMEvent> priv(do_QueryInterface(aEvent));
-    NS_ENSURE_TRUE(priv, NS_ERROR_UNEXPECTED);
+    nsString errorMsg, file;
+    EventOrString msgOrEvent;
+    Optional<nsAString> fileName;
+    Optional<uint32_t> lineNumber;
+    Optional<uint32_t> columnNumber;
 
-    nsEvent *event = priv->GetInternalNSEvent();
+    NS_ENSURE_TRUE(aEvent, NS_ERROR_UNEXPECTED);
+    nsEvent* event = aEvent->GetInternalNSEvent();
     if (event->message == NS_LOAD_ERROR &&
         event->eventStructType == NS_SCRIPT_ERROR_EVENT) {
       nsScriptErrorEvent *scriptEvent =
         static_cast<nsScriptErrorEvent*>(event);
-      // Create a temp argv for the error event.
-      iargv = do_CreateInstance(NS_ARRAY_CONTRACTID, &rv);
-      if (NS_FAILED(rv)) return rv;
-      // Append the event args.
-      nsCOMPtr<nsIWritableVariant>
-          var(do_CreateInstance(NS_VARIANT_CONTRACTID, &rv));
-      NS_ENSURE_SUCCESS(rv, rv);
-      rv = var->SetAsWString(scriptEvent->errorMsg);
-      NS_ENSURE_SUCCESS(rv, rv);
-      rv = iargv->AppendElement(var, PR_FALSE);
-      NS_ENSURE_SUCCESS(rv, rv);
-      // filename
-      var = do_CreateInstance(NS_VARIANT_CONTRACTID, &rv);
-      NS_ENSURE_SUCCESS(rv, rv);
-      rv = var->SetAsWString(scriptEvent->fileName);
-      NS_ENSURE_SUCCESS(rv, rv);
-      rv = iargv->AppendElement(var, PR_FALSE);
-      NS_ENSURE_SUCCESS(rv, rv);
-      // line number
-      var = do_CreateInstance(NS_VARIANT_CONTRACTID, &rv);
-      NS_ENSURE_SUCCESS(rv, rv);
-      rv = var->SetAsUint32(scriptEvent->lineNr);
-      NS_ENSURE_SUCCESS(rv, rv);
-      rv = iargv->AppendElement(var, PR_FALSE);
-      NS_ENSURE_SUCCESS(rv, rv);
+      errorMsg = scriptEvent->errorMsg;
+      msgOrEvent.SetAsString() = static_cast<nsAString*>(&errorMsg);
 
-      handledScriptError = PR_TRUE;
+      file = scriptEvent->fileName;
+      fileName = &file;
+
+      lineNumber.Construct();
+      lineNumber.Value() = scriptEvent->lineNr;
+    } else {
+      msgOrEvent.SetAsEvent() = aEvent;
     }
+
+    nsRefPtr<OnErrorEventHandlerNonNull> handler =
+      mHandler.OnErrorEventHandler();
+    ErrorResult rv;
+    bool handled = handler->Call(mTarget, msgOrEvent, fileName, lineNumber,
+                                 columnNumber, rv);
+    if (rv.Failed()) {
+      return rv.ErrorCode();
+    }
+
+    if (handled) {
+      aEvent->PreventDefault();
+    }
+    return NS_OK;
   }
 
-  if (!handledScriptError) {
-    iargv = do_CreateInstance(NS_ARRAY_CONTRACTID, &rv);
-    if (NS_FAILED(rv)) return rv;
-    NS_ENSURE_TRUE(iargv != nsnull, NS_ERROR_OUT_OF_MEMORY);
-    rv = iargv->AppendElement(aEvent, PR_FALSE);
-    NS_ENSURE_SUCCESS(rv, rv);
-  }
+  if (mHandler.Type() == nsEventHandler::eOnBeforeUnload) {
+    MOZ_ASSERT(mEventName == nsGkAtoms::onbeforeunload);
 
-  // mContext is the same context which event listener manager pushes
-  // to JS context stack.
-#ifdef NS_DEBUG
-  JSContext* cx = nsnull;
-  nsCOMPtr<nsIJSContextStack> stack =
-    do_GetService("@mozilla.org/js/xpc/ContextStack;1");
-  NS_ASSERTION(stack && NS_SUCCEEDED(stack->Peek(&cx)) && cx &&
-               GetScriptContextFromJSContext(cx) == mContext,
-               "JSEventListener has wrong script context?");
-#endif
-  nsCOMPtr<nsIVariant> vrv;
-  rv = mContext->CallEventHandler(mTarget, mScopeObject, funcval, iargv,
-                                  getter_AddRefs(vrv));
+    nsRefPtr<BeforeUnloadEventHandlerNonNull> handler =
+      mHandler.BeforeUnloadEventHandler();
+    ErrorResult rv;
+    nsString retval;
+    handler->Call(mTarget, aEvent, retval, rv);
+    if (rv.Failed()) {
+      return rv.ErrorCode();
+    }
 
-  if (NS_SUCCEEDED(rv)) {
-    PRUint16 dataType = nsIDataType::VTYPE_VOID;
-    if (vrv)
-      vrv->GetDataType(&dataType);
+    nsCOMPtr<nsIDOMBeforeUnloadEvent> beforeUnload = do_QueryInterface(aEvent);
+    NS_ENSURE_STATE(beforeUnload);
 
-    if (mEventName == nsGkAtoms::onbeforeunload) {
-      nsCOMPtr<nsIDOMBeforeUnloadEvent> beforeUnload = do_QueryInterface(aEvent);
-      NS_ENSURE_STATE(beforeUnload);
+    if (!DOMStringIsNull(retval)) {
+      aEvent->PreventDefault();
 
-      if (dataType != nsIDataType::VTYPE_VOID) {
-        aEvent->PreventDefault();
-        nsAutoString text;
-        beforeUnload->GetReturnValue(text);
+      nsAutoString text;
+      beforeUnload->GetReturnValue(text);
 
-        // Set the text in the beforeUnload event as long as it wasn't
-        // already set (through event.returnValue, which takes
-        // precedence over a value returned from a JS function in IE)
-        if ((dataType == nsIDataType::VTYPE_DOMSTRING ||
-             dataType == nsIDataType::VTYPE_CHAR_STR ||
-             dataType == nsIDataType::VTYPE_WCHAR_STR ||
-             dataType == nsIDataType::VTYPE_STRING_SIZE_IS ||
-             dataType == nsIDataType::VTYPE_WSTRING_SIZE_IS ||
-             dataType == nsIDataType::VTYPE_CSTRING ||
-             dataType == nsIDataType::VTYPE_ASTRING)
-            && text.IsEmpty()) {
-          vrv->GetAsDOMString(text);
-          beforeUnload->SetReturnValue(text);
-        }
-      }
-    } else if (dataType == nsIDataType::VTYPE_BOOL) {
-      // If the handler returned false and its sense is not reversed,
-      // or the handler returned true and its sense is reversed from
-      // the usual (false means cancel), then prevent default.
-      PRBool brv;
-      if (NS_SUCCEEDED(vrv->GetAsBool(&brv)) &&
-          brv == (mEventName == nsGkAtoms::onerror ||
-                  mEventName == nsGkAtoms::onmouseover)) {
-        aEvent->PreventDefault();
+      // Set the text in the beforeUnload event as long as it wasn't
+      // already set (through event.returnValue, which takes
+      // precedence over a value returned from a JS function in IE)
+      if (text.IsEmpty()) {
+        beforeUnload->SetReturnValue(retval);
       }
     }
+
+    return NS_OK;
   }
 
-  return rv;
+  MOZ_ASSERT(mHandler.Type() == nsEventHandler::eNormal);
+  ErrorResult rv;
+  nsRefPtr<EventHandlerNonNull> handler = mHandler.EventHandler();
+  JS::Value retval = handler->Call(mTarget, aEvent, rv);
+  if (rv.Failed()) {
+    return rv.ErrorCode();
+  }
+
+  // If the handler returned false and its sense is not reversed,
+  // or the handler returned true and its sense is reversed from
+  // the usual (false means cancel), then prevent default.
+  if (retval.isBoolean() &&
+      retval.toBoolean() == (mEventName == nsGkAtoms::onerror ||
+                             mEventName == nsGkAtoms::onmouseover)) {
+    aEvent->PreventDefault();
+  }
+
+  return NS_OK;
 }
 
 /*
@@ -277,16 +268,17 @@ nsJSEventListener::HandleEvent(nsIDOMEvent* aEvent)
  */
 
 nsresult
-NS_NewJSEventListener(nsIScriptContext *aContext, void *aScopeObject,
+NS_NewJSEventListener(nsIScriptContext* aContext, JSObject* aScopeObject,
                       nsISupports*aTarget, nsIAtom* aEventType,
-                      nsIDOMEventListener ** aReturn)
+                      const nsEventHandler& aHandler,
+                      nsIJSEventListener** aReturn)
 {
+  MOZ_ASSERT(aContext || aHandler.HasEventHandler(),
+             "Must have a handler if we don't have an nsIScriptContext");
   NS_ENSURE_ARG(aEventType);
   nsJSEventListener* it =
-    new nsJSEventListener(aContext, aScopeObject, aTarget, aEventType);
-  if (!it) {
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
+    new nsJSEventListener(aContext, aScopeObject, aTarget, aEventType,
+                          aHandler);
   NS_ADDREF(*aReturn = it);
 
   return NS_OK;

@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 4 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Novell code.
- *
- * The Initial Developer of the Original Code is Novell.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Robert O'Callahan <robert@ocallahan.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "gfxSkipChars.h"
 
@@ -42,8 +10,8 @@
 #define SHORTCUT_FREQUENCY 256
 
 // Even numbered list entries are "keep" entries
-static PRBool
-IsKeepEntry(PRUint32 aEntry)
+static bool
+IsKeepEntry(uint32_t aEntry)
 {
     return !(aEntry & 1);
 }
@@ -58,12 +26,12 @@ gfxSkipChars::BuildShortcuts()
     if (!mShortcuts)
         return;
   
-    PRUint32 i;
-    PRUint32 nextShortcutIndex = 0;
-    PRUint32 originalCharOffset = 0;
-    PRUint32 skippedCharOffset = 0;
+    uint32_t i;
+    uint32_t nextShortcutIndex = 0;
+    uint32_t originalCharOffset = 0;
+    uint32_t skippedCharOffset = 0;
     for (i = 0; i < mListLength; ++i) {
-        PRUint8 len = mList[i];
+        uint8_t len = mList[i];
     
         // We use >= here to ensure that when mCharCount is a multiple of
         // SHORTCUT_FREQUENCY, we fill in the final shortcut with a reference
@@ -86,7 +54,7 @@ gfxSkipChars::BuildShortcuts()
 }
 
 void
-gfxSkipCharsIterator::SetOffsets(PRUint32 aOffset, PRBool aInOriginalString)
+gfxSkipCharsIterator::SetOffsets(uint32_t aOffset, bool aInOriginalString)
 {
     NS_ASSERTION(aOffset <= mSkipChars->mCharCount,
                  "Invalid offset");
@@ -110,10 +78,10 @@ gfxSkipCharsIterator::SetOffsets(PRUint32 aOffset, PRBool aInOriginalString)
     }
   
     if (aInOriginalString && mSkipChars->mShortcuts &&
-        abs(PRInt32(aOffset) - PRInt32(mListPrefixCharCount)) > SHORTCUT_FREQUENCY) {
-        // Take a shortcut. This makes SetOffsets(..., PR_TRUE) O(1) by bounding
+        abs(int32_t(aOffset) - int32_t(mListPrefixCharCount)) > SHORTCUT_FREQUENCY) {
+        // Take a shortcut. This makes SetOffsets(..., true) O(1) by bounding
         // the iterations in the loop below to at most SHORTCUT_FREQUENCY iterations
-        PRUint32 shortcutIndex = aOffset/SHORTCUT_FREQUENCY;
+        uint32_t shortcutIndex = aOffset/SHORTCUT_FREQUENCY;
         if (shortcutIndex == 0) {
             mListPrefixLength = 0;
             mListPrefixKeepCharCount = 0;
@@ -126,14 +94,14 @@ gfxSkipCharsIterator::SetOffsets(PRUint32 aOffset, PRBool aInOriginalString)
         }
     }
   
-    PRInt32 currentRunLength = mSkipChars->mList[mListPrefixLength];
+    int32_t currentRunLength = mSkipChars->mList[mListPrefixLength];
     for (;;) {
         // See if aOffset is in the string segment described by
         // mSkipChars->mList[mListPrefixLength]
-        PRUint32 segmentOffset = aInOriginalString ? mListPrefixCharCount : mListPrefixKeepCharCount;
+        uint32_t segmentOffset = aInOriginalString ? mListPrefixCharCount : mListPrefixKeepCharCount;
         if ((aInOriginalString || IsKeepEntry(mListPrefixLength)) &&
             aOffset >= segmentOffset && aOffset < segmentOffset + currentRunLength) {
-            PRInt32 offsetInSegment = aOffset - segmentOffset;
+            int32_t offsetInSegment = aOffset - segmentOffset;
             mOriginalStringOffset = mListPrefixCharCount + offsetInSegment;
             mSkippedStringOffset = mListPrefixKeepCharCount;
             if (IsKeepEntry(mListPrefixLength)) {
@@ -178,19 +146,19 @@ gfxSkipCharsIterator::SetOffsets(PRUint32 aOffset, PRBool aInOriginalString)
     }
 }
 
-PRBool
-gfxSkipCharsIterator::IsOriginalCharSkipped(PRInt32* aRunLength) const
+bool
+gfxSkipCharsIterator::IsOriginalCharSkipped(int32_t* aRunLength) const
 {
     if (mSkipChars->mListLength == 0) {
         if (aRunLength) {
             *aRunLength = mSkipChars->mCharCount - mOriginalStringOffset;
         }
-        return mSkipChars->mCharCount == PRUint32(mOriginalStringOffset);
+        return mSkipChars->mCharCount == uint32_t(mOriginalStringOffset);
     }
   
-    PRUint32 listPrefixLength = mListPrefixLength;
+    uint32_t listPrefixLength = mListPrefixLength;
     // figure out which segment we're in
-    PRUint32 currentRunLength = mSkipChars->mList[listPrefixLength];
+    uint32_t currentRunLength = mSkipChars->mList[listPrefixLength];
     // Zero-length list entries are possible. Advance until mListPrefixLength
     // is pointing to a run with real characters (or we're at the end of the
     // string).
@@ -200,10 +168,10 @@ gfxSkipCharsIterator::IsOriginalCharSkipped(PRInt32* aRunLength) const
         // or kept characters are being added
         currentRunLength = mSkipChars->mList[listPrefixLength];
     }
-    NS_ASSERTION(PRUint32(mOriginalStringOffset) >= mListPrefixCharCount,
+    NS_ASSERTION(uint32_t(mOriginalStringOffset) >= mListPrefixCharCount,
                  "Invariant violation");
-    PRUint32 offsetIntoCurrentRun =
-      PRUint32(mOriginalStringOffset) - mListPrefixCharCount;
+    uint32_t offsetIntoCurrentRun =
+      uint32_t(mOriginalStringOffset) - mListPrefixCharCount;
     if (listPrefixLength >= mSkipChars->mListLength - 1 &&
         offsetIntoCurrentRun >= currentRunLength) {
         NS_ASSERTION(listPrefixLength == mSkipChars->mListLength - 1 &&
@@ -213,16 +181,16 @@ gfxSkipCharsIterator::IsOriginalCharSkipped(PRInt32* aRunLength) const
         if (aRunLength) {
             *aRunLength = 0;
         }
-        return PR_TRUE;
+        return true;
     }
   
-    PRBool isSkipped = !IsKeepEntry(listPrefixLength);
+    bool isSkipped = !IsKeepEntry(listPrefixLength);
     if (aRunLength) {
         // Long runs of all-skipped or all-kept characters will be encoded as
         // sequences of 255, 0, 255, 0 etc. Compute the maximum run length by skipping
         // over zero entries.
-        PRUint32 runLength = currentRunLength - offsetIntoCurrentRun;
-        for (PRUint32 i = listPrefixLength + 2; i < mSkipChars->mListLength; i += 2) {
+        uint32_t runLength = currentRunLength - offsetIntoCurrentRun;
+        for (uint32_t i = listPrefixLength + 2; i < mSkipChars->mListLength; i += 2) {
             if (mSkipChars->mList[i - 1] != 0)
                 break;
             runLength += mSkipChars->mList[i];
@@ -238,18 +206,18 @@ gfxSkipCharsBuilder::FlushRun()
     NS_ASSERTION((mBuffer.Length() & 1) == mRunSkipped,
                  "out of sync?");
     // Fill in buffer entries starting at mBufferLength, as many as necessary
-    PRUint32 charCount = mRunCharCount;
+    uint32_t charCount = mRunCharCount;
     for (;;) {
-        PRUint32 chars = PR_MIN(255, charCount);
+        uint32_t chars = NS_MIN<uint32_t>(255, charCount);
         if (!mBuffer.AppendElement(chars)) {
-            mInErrorState = PR_TRUE;
+            mInErrorState = true;
             return;
         }
         charCount -= chars;
         if (charCount == 0)
             break;
         if (!mBuffer.AppendElement(0)) {
-            mInErrorState = PR_TRUE;
+            mInErrorState = true;
             return;
         }
     }

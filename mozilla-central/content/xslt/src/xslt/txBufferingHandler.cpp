@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is TransforMiiX XSLT processor code.
- *
- * The Initial Developer of the Original Code is
- * Jonas Sicking.
- * Portions created by the Initial Developer are Copyright (C) 2003
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Jonas Sicking <jonas@sicking.cc>
- *   Peter Van der Beken <peterv@propagandism.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "txBufferingHandler.h"
 
@@ -58,9 +24,11 @@ public:
     txOutputTransaction(txTransactionType aType)
         : mType(aType)
     {
+        MOZ_COUNT_CTOR(txOutputTransaction);
     }
     virtual ~txOutputTransaction()
     {
+        MOZ_COUNT_DTOR(txOutputTransaction);
     }
     txTransactionType mType;
 };
@@ -68,12 +36,17 @@ public:
 class txCharacterTransaction : public txOutputTransaction
 {
 public:
-    txCharacterTransaction(txTransactionType aType, PRUint32 aLength)
+    txCharacterTransaction(txTransactionType aType, uint32_t aLength)
         : txOutputTransaction(aType),
           mLength(aLength)
     {
+        MOZ_COUNT_CTOR_INHERITED(txCharacterTransaction, txOutputTransaction);
     }
-    PRUint32 mLength;
+    virtual ~txCharacterTransaction()
+    {
+        MOZ_COUNT_DTOR_INHERITED(txCharacterTransaction, txOutputTransaction);
+    }
+    uint32_t mLength;
 };
 
 class txCommentTransaction : public txOutputTransaction
@@ -83,6 +56,11 @@ public:
         : txOutputTransaction(eCommentTransaction),
           mValue(aValue)
     {
+        MOZ_COUNT_CTOR_INHERITED(txCommentTransaction, txOutputTransaction);
+    }
+    virtual ~txCommentTransaction()
+    {
+        MOZ_COUNT_DTOR_INHERITED(txCommentTransaction, txOutputTransaction);
     }
     nsString mValue;
 };
@@ -95,6 +73,11 @@ public:
           mTarget(aTarget),
           mData(aData)
     {
+        MOZ_COUNT_CTOR_INHERITED(txPITransaction, txOutputTransaction);
+    }
+    virtual ~txPITransaction()
+    {
+        MOZ_COUNT_DTOR_INHERITED(txPITransaction, txOutputTransaction);
     }
     nsString mTarget;
     nsString mData;
@@ -104,41 +87,51 @@ class txStartElementAtomTransaction : public txOutputTransaction
 {
 public:
     txStartElementAtomTransaction(nsIAtom* aPrefix, nsIAtom* aLocalName,
-                                  nsIAtom* aLowercaseLocalName, PRInt32 aNsID)
+                                  nsIAtom* aLowercaseLocalName, int32_t aNsID)
         : txOutputTransaction(eStartElementAtomTransaction),
           mPrefix(aPrefix),
           mLocalName(aLocalName),
           mLowercaseLocalName(aLowercaseLocalName),
           mNsID(aNsID)
     {
+        MOZ_COUNT_CTOR_INHERITED(txStartElementAtomTransaction, txOutputTransaction);
+    }
+    virtual ~txStartElementAtomTransaction()
+    {
+        MOZ_COUNT_DTOR_INHERITED(txStartElementAtomTransaction, txOutputTransaction);
     }
     nsCOMPtr<nsIAtom> mPrefix;
     nsCOMPtr<nsIAtom> mLocalName;
     nsCOMPtr<nsIAtom> mLowercaseLocalName;
-    PRInt32 mNsID;
+    int32_t mNsID;
 };
 
 class txStartElementTransaction : public txOutputTransaction
 {
 public:
     txStartElementTransaction(nsIAtom* aPrefix,
-                              const nsSubstring& aLocalName, PRInt32 aNsID)
+                              const nsSubstring& aLocalName, int32_t aNsID)
         : txOutputTransaction(eStartElementTransaction),
           mPrefix(aPrefix),
           mLocalName(aLocalName),
           mNsID(aNsID)
     {
+        MOZ_COUNT_CTOR_INHERITED(txStartElementTransaction, txOutputTransaction);
+    }
+    virtual ~txStartElementTransaction()
+    {
+        MOZ_COUNT_DTOR_INHERITED(txStartElementTransaction, txOutputTransaction);
     }
     nsCOMPtr<nsIAtom> mPrefix;
     nsString mLocalName;
-    PRInt32 mNsID;
+    int32_t mNsID;
 };
 
 class txAttributeTransaction : public txOutputTransaction
 {
 public:
     txAttributeTransaction(nsIAtom* aPrefix,
-                           const nsSubstring& aLocalName, PRInt32 aNsID,
+                           const nsSubstring& aLocalName, int32_t aNsID,
                            const nsString& aValue)
         : txOutputTransaction(eAttributeTransaction),
           mPrefix(aPrefix),
@@ -146,10 +139,15 @@ public:
           mNsID(aNsID),
           mValue(aValue)
     {
+        MOZ_COUNT_CTOR_INHERITED(txAttributeTransaction, txOutputTransaction);
+    }
+    virtual ~txAttributeTransaction()
+    {
+        MOZ_COUNT_DTOR_INHERITED(txAttributeTransaction, txOutputTransaction);
     }
     nsCOMPtr<nsIAtom> mPrefix;
     nsString mLocalName;
-    PRInt32 mNsID;
+    int32_t mNsID;
     nsString mValue;
 };
 
@@ -158,7 +156,7 @@ class txAttributeAtomTransaction : public txOutputTransaction
 public:
     txAttributeAtomTransaction(nsIAtom* aPrefix, nsIAtom* aLocalName,
                                nsIAtom* aLowercaseLocalName,
-                               PRInt32 aNsID, const nsString& aValue)
+                               int32_t aNsID, const nsString& aValue)
         : txOutputTransaction(eAttributeAtomTransaction),
           mPrefix(aPrefix),
           mLocalName(aLocalName),
@@ -166,22 +164,33 @@ public:
           mNsID(aNsID),
           mValue(aValue)
     {
+        MOZ_COUNT_CTOR_INHERITED(txAttributeAtomTransaction, txOutputTransaction);
+    }
+    virtual ~txAttributeAtomTransaction()
+    {
+        MOZ_COUNT_DTOR_INHERITED(txAttributeAtomTransaction, txOutputTransaction);
     }
     nsCOMPtr<nsIAtom> mPrefix;
     nsCOMPtr<nsIAtom> mLocalName;
     nsCOMPtr<nsIAtom> mLowercaseLocalName;
-    PRInt32 mNsID;
+    int32_t mNsID;
     nsString mValue;
 };
 
-txBufferingHandler::txBufferingHandler() : mCanAddAttribute(PR_FALSE)
+txBufferingHandler::txBufferingHandler() : mCanAddAttribute(false)
 {
+    MOZ_COUNT_CTOR(txBufferingHandler);
     mBuffer = new txResultBuffer();
+}
+
+txBufferingHandler::~txBufferingHandler()
+{
+    MOZ_COUNT_DTOR(txBufferingHandler);
 }
 
 nsresult
 txBufferingHandler::attribute(nsIAtom* aPrefix, nsIAtom* aLocalName,
-                              nsIAtom* aLowercaseLocalName, PRInt32 aNsID,
+                              nsIAtom* aLowercaseLocalName, int32_t aNsID,
                               const nsString& aValue)
 {
     NS_ENSURE_TRUE(mBuffer, NS_ERROR_OUT_OF_MEMORY);
@@ -202,7 +211,7 @@ txBufferingHandler::attribute(nsIAtom* aPrefix, nsIAtom* aLocalName,
 
 nsresult
 txBufferingHandler::attribute(nsIAtom* aPrefix, const nsSubstring& aLocalName,
-                              const PRInt32 aNsID, const nsString& aValue)
+                              const int32_t aNsID, const nsString& aValue)
 {
     NS_ENSURE_TRUE(mBuffer, NS_ERROR_OUT_OF_MEMORY);
 
@@ -219,11 +228,11 @@ txBufferingHandler::attribute(nsIAtom* aPrefix, const nsSubstring& aLocalName,
 }
 
 nsresult
-txBufferingHandler::characters(const nsSubstring& aData, PRBool aDOE)
+txBufferingHandler::characters(const nsSubstring& aData, bool aDOE)
 {
     NS_ENSURE_TRUE(mBuffer, NS_ERROR_OUT_OF_MEMORY);
 
-    mCanAddAttribute = PR_FALSE;
+    mCanAddAttribute = false;
 
     txOutputTransaction::txTransactionType type =
          aDOE ? txOutputTransaction::eCharacterNoOETransaction
@@ -249,7 +258,7 @@ txBufferingHandler::comment(const nsString& aData)
 {
     NS_ENSURE_TRUE(mBuffer, NS_ERROR_OUT_OF_MEMORY);
 
-    mCanAddAttribute = PR_FALSE;
+    mCanAddAttribute = false;
 
     txOutputTransaction* transaction = new txCommentTransaction(aData);
     NS_ENSURE_TRUE(transaction, NS_ERROR_OUT_OF_MEMORY);
@@ -274,7 +283,7 @@ txBufferingHandler::endElement()
 {
     NS_ENSURE_TRUE(mBuffer, NS_ERROR_OUT_OF_MEMORY);
 
-    mCanAddAttribute = PR_FALSE;
+    mCanAddAttribute = false;
 
     txOutputTransaction* transaction =
         new txOutputTransaction(txOutputTransaction::eEndElementTransaction);
@@ -289,7 +298,7 @@ txBufferingHandler::processingInstruction(const nsString& aTarget,
 {
     NS_ENSURE_TRUE(mBuffer, NS_ERROR_OUT_OF_MEMORY);
 
-    mCanAddAttribute = PR_FALSE;
+    mCanAddAttribute = false;
 
     txOutputTransaction* transaction =
         new txPITransaction(aTarget, aData);
@@ -313,11 +322,11 @@ txBufferingHandler::startDocument()
 nsresult
 txBufferingHandler::startElement(nsIAtom* aPrefix, nsIAtom* aLocalName,
                                  nsIAtom* aLowercaseLocalName,
-                                 PRInt32 aNsID)
+                                 int32_t aNsID)
 {
     NS_ENSURE_TRUE(mBuffer, NS_ERROR_OUT_OF_MEMORY);
 
-    mCanAddAttribute = PR_TRUE;
+    mCanAddAttribute = true;
 
     txOutputTransaction* transaction =
         new txStartElementAtomTransaction(aPrefix, aLocalName,
@@ -330,11 +339,11 @@ txBufferingHandler::startElement(nsIAtom* aPrefix, nsIAtom* aLocalName,
 nsresult
 txBufferingHandler::startElement(nsIAtom* aPrefix,
                                  const nsSubstring& aLocalName,
-                                 const PRInt32 aNsID)
+                                 const int32_t aNsID)
 {
     NS_ENSURE_TRUE(mBuffer, NS_ERROR_OUT_OF_MEMORY);
 
-    mCanAddAttribute = PR_TRUE;
+    mCanAddAttribute = true;
 
     txOutputTransaction* transaction =
         new txStartElementTransaction(aPrefix, aLocalName, aNsID);
@@ -343,9 +352,15 @@ txBufferingHandler::startElement(nsIAtom* aPrefix,
     return mBuffer->addTransaction(transaction);
 }
 
+txResultBuffer::txResultBuffer()
+{
+    MOZ_COUNT_CTOR(txResultBuffer);
+}
+
 txResultBuffer::~txResultBuffer()
 {
-    for (PRUint32 i = 0, len = mTransactions.Length(); i < len; ++i) {
+    MOZ_COUNT_DTOR(txResultBuffer);
+    for (uint32_t i = 0, len = mTransactions.Length(); i < len; ++i) {
         delete mTransactions[i];
     }
 }
@@ -353,136 +368,117 @@ txResultBuffer::~txResultBuffer()
 nsresult
 txResultBuffer::addTransaction(txOutputTransaction* aTransaction)
 {
-    if (mTransactions.AppendElement(aTransaction) == nsnull) {
+    if (mTransactions.AppendElement(aTransaction) == nullptr) {
         return NS_ERROR_OUT_OF_MEMORY;
     }
     return NS_OK;
 }
 
-struct Holder
+static nsresult
+flushTransaction(txOutputTransaction* aTransaction,
+                 txAXMLEventHandler* aHandler,
+                 nsAFlatString::const_char_iterator& aIter)
 {
-    txAXMLEventHandler** mHandler;
-    nsresult mResult;
-    nsAFlatString::const_char_iterator mIter;
-};
-
-static PRBool
-flushTransaction(txOutputTransaction* aElement, Holder* aData)
-{
-    Holder* holder = aData;
-    txAXMLEventHandler* handler = *holder->mHandler;
-    txOutputTransaction* transaction = aElement;
-
-    nsresult rv;
-    switch (transaction->mType) {
+    switch (aTransaction->mType) {
         case txOutputTransaction::eAttributeAtomTransaction:
         {
             txAttributeAtomTransaction* transaction =
-                static_cast<txAttributeAtomTransaction*>(aElement);
-            rv = handler->attribute(transaction->mPrefix,
-                                    transaction->mLocalName,
-                                    transaction->mLowercaseLocalName,
-                                    transaction->mNsID,
-                                    transaction->mValue);
-            break;
+                static_cast<txAttributeAtomTransaction*>(aTransaction);
+            return aHandler->attribute(transaction->mPrefix,
+                                       transaction->mLocalName,
+                                       transaction->mLowercaseLocalName,
+                                       transaction->mNsID,
+                                       transaction->mValue);
         }
         case txOutputTransaction::eAttributeTransaction:
         {
             txAttributeTransaction* attrTransaction =
-                static_cast<txAttributeTransaction*>(aElement);
-            rv = handler->attribute(attrTransaction->mPrefix,
-                                    attrTransaction->mLocalName,
-                                    attrTransaction->mNsID,
-                                    attrTransaction->mValue);
-            break;
+                static_cast<txAttributeTransaction*>(aTransaction);
+            return aHandler->attribute(attrTransaction->mPrefix,
+                                       attrTransaction->mLocalName,
+                                       attrTransaction->mNsID,
+                                       attrTransaction->mValue);
         }
         case txOutputTransaction::eCharacterTransaction:
         case txOutputTransaction::eCharacterNoOETransaction:
         {
             txCharacterTransaction* charTransaction =
-                static_cast<txCharacterTransaction*>(aElement);
-            nsAFlatString::const_char_iterator& start =
-                holder->mIter;
+                static_cast<txCharacterTransaction*>(aTransaction);
+            nsAFlatString::const_char_iterator start = aIter;
             nsAFlatString::const_char_iterator end =
                 start + charTransaction->mLength;
-            rv = handler->characters(Substring(start, end),
-                                     transaction->mType ==
-                                     txOutputTransaction::eCharacterNoOETransaction);
-            start = end;
-            break;
+            aIter = end;
+            return aHandler->characters(Substring(start, end),
+                                        aTransaction->mType ==
+                                        txOutputTransaction::eCharacterNoOETransaction);
         }
         case txOutputTransaction::eCommentTransaction:
         {
             txCommentTransaction* commentTransaction =
-                static_cast<txCommentTransaction*>(aElement);
-            rv = handler->comment(commentTransaction->mValue);
-            break;
+                static_cast<txCommentTransaction*>(aTransaction);
+            return aHandler->comment(commentTransaction->mValue);
         }
         case txOutputTransaction::eEndElementTransaction:
         {
-            rv = handler->endElement();
-            break;
+            return aHandler->endElement();
         }
         case txOutputTransaction::ePITransaction:
         {
             txPITransaction* piTransaction =
-                static_cast<txPITransaction*>(aElement);
-            rv = handler->processingInstruction(piTransaction->mTarget,
-                                                piTransaction->mData);
-            break;
+                static_cast<txPITransaction*>(aTransaction);
+            return aHandler->processingInstruction(piTransaction->mTarget,
+                                                   piTransaction->mData);
         }
         case txOutputTransaction::eStartDocumentTransaction:
         {
-            rv = handler->startDocument();
-            break;
+            return aHandler->startDocument();
         }
         case txOutputTransaction::eStartElementAtomTransaction:
         {
             txStartElementAtomTransaction* transaction =
-                static_cast<txStartElementAtomTransaction*>(aElement);
-            rv = handler->startElement(transaction->mPrefix,
-                                       transaction->mLocalName,
-                                       transaction->mLowercaseLocalName,
-                                       transaction->mNsID);
-            break;
+                static_cast<txStartElementAtomTransaction*>(aTransaction);
+            return aHandler->startElement(transaction->mPrefix,
+                                          transaction->mLocalName,
+                                          transaction->mLowercaseLocalName,
+                                          transaction->mNsID);
         }
         case txOutputTransaction::eStartElementTransaction:
         {
             txStartElementTransaction* transaction =
-                static_cast<txStartElementTransaction*>(aElement);
-            rv = handler->startElement(transaction->mPrefix,
-                                       transaction->mLocalName,
-                                       transaction->mNsID);
-            break;
+                static_cast<txStartElementTransaction*>(aTransaction);
+            return aHandler->startElement(transaction->mPrefix,
+                                          transaction->mLocalName,
+                                          transaction->mNsID);
+        }
+        default:
+        {
+            NS_NOTREACHED("Unexpected transaction type");
         }
     }
 
-    holder->mResult = rv;
-
-    return NS_SUCCEEDED(rv);
+    return NS_ERROR_UNEXPECTED;
 }
 
 nsresult
-txResultBuffer::flushToHandler(txAXMLEventHandler** aHandler)
+txResultBuffer::flushToHandler(txAXMLEventHandler* aHandler)
 {
-    Holder data = { aHandler, NS_OK };
-    mStringValue.BeginReading(data.mIter);
+    nsAFlatString::const_char_iterator iter;
+    mStringValue.BeginReading(iter);
 
-    for (PRUint32 i = 0, len = mTransactions.Length(); i < len; ++i) {
-        if (!flushTransaction(mTransactions[i], &data)) {
-            break;
-        }
+    for (uint32_t i = 0, len = mTransactions.Length(); i < len; ++i) {
+        nsresult rv = flushTransaction(mTransactions[i], aHandler, iter);
+        NS_ENSURE_SUCCESS(rv, rv);
     }
 
-    return data.mResult;
+    return NS_OK;
 }
 
 txOutputTransaction*
 txResultBuffer::getLastTransaction()
 {
-    PRInt32 last = mTransactions.Length() - 1;
+    int32_t last = mTransactions.Length() - 1;
     if (last < 0) {
-        return nsnull;
+        return nullptr;
     }
     return mTransactions[last];
 }

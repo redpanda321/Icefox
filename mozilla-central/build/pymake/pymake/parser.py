@@ -233,7 +233,7 @@ def itercommandchars(d, offset, tokenlist, it):
 
     yield s[offset:d.lend].replace('\n\t', '\n'), None, None, None
 
-_redefines = re.compile('define|endef')
+_redefines = re.compile('\s*define|\s*endef')
 def iterdefinelines(it, startloc):
     """
     Process the insides of a define. Most characters are included literally. Escaped newlines are treated
@@ -246,7 +246,7 @@ def iterdefinelines(it, startloc):
     for d in it:
         m = _redefines.match(d.s, d.lstart, d.lend)
         if m is not None:
-            directive = m.group(0)
+            directive = m.group(0).strip()
             if directive == 'endef':
                 definecount -= 1
                 if definecount == 0:
@@ -498,9 +498,9 @@ def parsestring(s, filename):
                 e.rstrip()
 
                 if token is None:
-                    condstack[-1].append(parserdata.ExportDirective(e, single=False))
+                    condstack[-1].append(parserdata.ExportDirective(e, concurrent_set=False))
                 else:
-                    condstack[-1].append(parserdata.ExportDirective(e, single=True))
+                    condstack[-1].append(parserdata.ExportDirective(e, concurrent_set=True))
 
                     value = flattenmakesyntax(d, offset).lstrip()
                     condstack[-1].append(parserdata.SetVariable(e, value=value, valueloc=d.getloc(offset), token=token, targetexp=None))

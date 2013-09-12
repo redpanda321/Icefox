@@ -1,49 +1,28 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998-1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "IMETextTxn.h"
-#include "nsIDOMCharacterData.h"
-#include "nsIDOMRange.h"
-#include "nsIPrivateTextRange.h"
-#include "nsISelection.h"
-#include "nsISelectionPrivate.h"
-#include "nsISelectionController.h"
-#include "nsComponentManagerUtils.h"
+#include "mozilla/mozalloc.h"           // for operator new
+#include "nsAString.h"                  // for nsAString_internal::Length, etc
+#include "nsAutoPtr.h"                  // for nsRefPtr
+#include "nsDebug.h"                    // for NS_ASSERTION, etc
+#include "nsError.h"                    // for NS_SUCCEEDED, NS_FAILED, etc
+#include "nsGUIEvent.h"                 // for nsTextRangeStyle
+#include "nsIDOMCharacterData.h"        // for nsIDOMCharacterData
+#include "nsIDOMRange.h"                // for nsRange::SetEnd, etc
+#include "nsIEditor.h"                  // for nsIEditor
+#include "nsIPresShell.h"               // for SelectionType
+#include "nsIPrivateTextRange.h"        // for nsIPrivateTextRange, etc
+#include "nsISelection.h"               // for nsISelection
+#include "nsISelectionController.h"     // for nsISelectionController, etc
+#include "nsISelectionPrivate.h"        // for nsISelectionPrivate
+#include "nsISupportsImpl.h"            // for nsRange::AddRef, etc
+#include "nsISupportsUtils.h"           // for NS_ADDREF_THIS, NS_RELEASE
+#include "nsITransaction.h"             // for nsITransaction
+#include "nsRange.h"                    // for nsRange
+#include "nsString.h"                   // for nsString
 
 // #define DEBUG_IMETXN
 
@@ -55,12 +34,12 @@ IMETextTxn::IMETextTxn()
 NS_IMPL_CYCLE_COLLECTION_CLASS(IMETextTxn)
 
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(IMETextTxn, EditTxn)
-  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mElement)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK(mElement)
   // mRangeList can't lead to cycles
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(IMETextTxn, EditTxn)
-  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mElement)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mElement)
   // mRangeList can't lead to cycles
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
@@ -73,11 +52,11 @@ NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(IMETextTxn)
 NS_INTERFACE_MAP_END_INHERITING(EditTxn)
 
 NS_IMETHODIMP IMETextTxn::Init(nsIDOMCharacterData     *aElement,
-                               PRUint32                 aOffset,
-                               PRUint32                 aReplaceLength,
+                               uint32_t                 aOffset,
+                               uint32_t                 aReplaceLength,
                                nsIPrivateTextRangeList *aTextRangeList,
                                const nsAString         &aStringToInsert,
-                               nsWeakPtr                aSelConWeak)
+                               nsIEditor               *aEditor)
 {
   NS_ASSERTION(aElement, "illegal value- null ptr- aElement");
   NS_ASSERTION(aTextRangeList, "illegal value- null ptr - aTextRangeList");
@@ -86,9 +65,9 @@ NS_IMETHODIMP IMETextTxn::Init(nsIDOMCharacterData     *aElement,
   mOffset = aOffset;
   mReplaceLength = aReplaceLength;
   mStringToInsert = aStringToInsert;
-  mSelConWeak = aSelConWeak;
+  mEditor = aEditor;
   mRangeList = do_QueryInterface(aTextRangeList);
-  mFixed = PR_FALSE;
+  mFixed = false;
   return NS_OK;
 }
 
@@ -99,7 +78,8 @@ NS_IMETHODIMP IMETextTxn::DoTransaction(void)
   printf("Do IME Text element = %p replace = %d len = %d\n", mElement.get(), mReplaceLength, mStringToInsert.Length());
 #endif
 
-  nsCOMPtr<nsISelectionController> selCon = do_QueryReferent(mSelConWeak);
+  nsCOMPtr<nsISelectionController> selCon;
+  mEditor->GetSelectionController(getter_AddRefs(selCon));
   NS_ENSURE_TRUE(selCon, NS_ERROR_NOT_INITIALIZED);
 
   // advance caret: This requires the presentation shell to get the selection.
@@ -122,7 +102,8 @@ NS_IMETHODIMP IMETextTxn::UndoTransaction(void)
   printf("Undo IME Text element = %p\n", mElement.get());
 #endif
 
-  nsCOMPtr<nsISelectionController> selCon = do_QueryReferent(mSelConWeak);
+  nsCOMPtr<nsISelectionController> selCon;
+  mEditor->GetSelectionController(getter_AddRefs(selCon));
   NS_ENSURE_TRUE(selCon, NS_ERROR_NOT_INITIALIZED);
 
   nsresult result = mElement->DeleteData(mOffset, mStringToInsert.Length());
@@ -138,7 +119,7 @@ NS_IMETHODIMP IMETextTxn::UndoTransaction(void)
   return result;
 }
 
-NS_IMETHODIMP IMETextTxn::Merge(nsITransaction *aTransaction, PRBool *aDidMerge)
+NS_IMETHODIMP IMETextTxn::Merge(nsITransaction *aTransaction, bool *aDidMerge)
 {
   NS_ASSERTION(aDidMerge, "illegal vaule- null ptr- aDidMerge");
   NS_ASSERTION(aTransaction, "illegal vaule- null ptr- aTransaction");
@@ -152,14 +133,14 @@ NS_IMETHODIMP IMETextTxn::Merge(nsITransaction *aTransaction, PRBool *aDidMerge)
   // check to make sure we aren't fixed, if we are then nothing get's absorbed
   //
   if (mFixed) {
-    *aDidMerge = PR_FALSE;
+    *aDidMerge = false;
     return NS_OK;
   }
 
   //
   // if aTransaction is another IMETextTxn then absorb it
   //
-  IMETextTxn*  otherTxn = nsnull;
+  IMETextTxn*  otherTxn = nullptr;
   nsresult result = aTransaction->QueryInterface(IMETextTxn::GetCID(),(void**)&otherTxn);
   if (otherTxn && NS_SUCCEEDED(result))
   {
@@ -169,7 +150,7 @@ NS_IMETHODIMP IMETextTxn::Merge(nsITransaction *aTransaction, PRBool *aDidMerge)
     nsIPrivateTextRangeList* newTextRangeList;
     otherTxn->GetData(mStringToInsert,&newTextRangeList);
     mRangeList = do_QueryInterface(newTextRangeList);
-    *aDidMerge = PR_TRUE;
+    *aDidMerge = true;
 #ifdef DEBUG_IMETXN
     printf("IMETextTxn assimilated IMETextTxn:%p\n", aTransaction);
 #endif
@@ -177,13 +158,13 @@ NS_IMETHODIMP IMETextTxn::Merge(nsITransaction *aTransaction, PRBool *aDidMerge)
     return NS_OK;
   }
 
-  *aDidMerge = PR_FALSE;
+  *aDidMerge = false;
   return NS_OK;
 }
 
 NS_IMETHODIMP IMETextTxn::MarkFixed(void)
 {
-  mFixed = PR_TRUE;
+  mFixed = true;
   return NS_OK;
 }
 
@@ -233,10 +214,10 @@ static SelectionType sel[4]=
 NS_IMETHODIMP IMETextTxn::CollapseTextSelection(void)
 {
     nsresult      result;
-    PRUint16      i;
+    uint16_t      i;
 
 #ifdef DEBUG_IMETXN
-    PRUint16 listlen,start,stop,type;
+    uint16_t listlen,start,stop,type;
     result = mRangeList->GetLength(&listlen);
     printf("nsIPrivateTextRangeList[%p]\n",mRangeList);
     nsIPrivateTextRange* rangePtr;
@@ -263,10 +244,11 @@ NS_IMETHODIMP IMETextTxn::CollapseTextSelection(void)
     //
     // run through the text range list, if any
     //
-    nsCOMPtr<nsISelectionController> selCon = do_QueryReferent(mSelConWeak);
+    nsCOMPtr<nsISelectionController> selCon;
+    mEditor->GetSelectionController(getter_AddRefs(selCon));
     NS_ENSURE_TRUE(selCon, NS_ERROR_NOT_INITIALIZED);
 
-    PRUint16      textRangeListLength,selectionStart,selectionEnd,
+    uint16_t      textRangeListLength,selectionStart,selectionEnd,
                   textRangeType;
     
     textRangeListLength = mRangeList->GetLength();
@@ -279,7 +261,7 @@ NS_IMETHODIMP IMETextTxn::CollapseTextSelection(void)
       if (NS_SUCCEEDED(result))
       {
         nsCOMPtr<nsISelection> imeSel;
-        for(PRInt8 selIdx = 0; selIdx < 4;selIdx++)
+        for(int8_t selIdx = 0; selIdx < 4;selIdx++)
         {
           result = selCon->GetSelection(sel[selIdx], getter_AddRefs(imeSel));
           if (NS_SUCCEEDED(result))
@@ -291,7 +273,7 @@ NS_IMETHODIMP IMETextTxn::CollapseTextSelection(void)
         }
 
         nsCOMPtr<nsIPrivateTextRange> textRange;
-        PRBool setCaret=PR_FALSE;
+        bool setCaret=false;
         for(i=0;i<textRangeListLength;i++)
         {
           textRange = mRangeList->Item(i);
@@ -322,7 +304,7 @@ NS_IMETHODIMP IMETextTxn::CollapseTextSelection(void)
                       mOffset+selectionStart);
              NS_ASSERTION(NS_SUCCEEDED(result), "Cannot Collapse");
              if(NS_SUCCEEDED(result))
-             setCaret = PR_TRUE;
+             setCaret = true;
           } else {
              // NS_ASSERTION(selectionStart != selectionEnd, "end == start");
              if(selectionStart == selectionEnd)
@@ -334,12 +316,7 @@ NS_IMETHODIMP IMETextTxn::CollapseTextSelection(void)
              if(NS_FAILED(result))
                 break;
 
-             nsCOMPtr<nsIDOMRange> newRange = do_CreateInstance(
-                                      "@mozilla.org/content/range;1", &result);
-             NS_ASSERTION(NS_SUCCEEDED(result), "Cannot create new nsIDOMRange");
-             if(NS_FAILED(result))
-                break;
-
+             nsRefPtr<nsRange> newRange = new nsRange();
              result = newRange->SetStart(mElement,mOffset+selectionStart);
              NS_ASSERTION(NS_SUCCEEDED(result), "Cannot SetStart");
              if(NS_FAILED(result))

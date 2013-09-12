@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=147777
 -->
 <head>
   <title>Test for Bug 147777</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/WindowSnapshot.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
@@ -76,10 +75,14 @@ var gTests = [
   "== subject-of-selector-adj-sibling-1.html subject-of-selector-1-ref.html",
   "== subject-of-selector-any-sibling-1.html subject-of-selector-1-ref.html",
   "== inherit-keyword-1.xhtml inherit-keyword-1-ref.html",
+  "!= svg-image-visited-1-helper.svg lime100x100.svg",
+  "!= svg-image-visited-2-helper.svg lime100x100.svg",
   // FIXME: commented out because dynamic changes on the non-first-line
   // part of the test don't work right when the link becomes visited.
   //"== first-line-1.html first-line-1-ref.html",
   "== white-to-transparent-1.html white-to-transparent-1-ref.html",
+  "== link-root-1.xhtml link-root-1-ref.xhtml",
+  "== mathml-links.html mathml-links-ref.html",
 ];
 
 // Maintain a reference count of how many things we're waiting for until
@@ -89,6 +92,15 @@ function AddFinishDependency()
   { ++gDelayCount; }
 function RemoveFinishDependency()
   { if (--gDelayCount == 0) SimpleTest.finish(); }
+
+// We record the maximum number of times we had to look at a test before
+// it switched to the passing state (though we assume it's 10 to start
+// rather than 0 so that we have a reasonable default).  Then we make a
+// test "time out" if it takes more than gTimeoutFactor times that
+// amount of time.  This allows us to report a test failure rather than
+// making a test failure just show up as a timeout.
+var gMaxPassingTries = 10;
+var gTimeoutFactor = 10;
 
 function loadVisitedPage()
 {
@@ -124,6 +136,7 @@ function startTest(i)
   var splitData = testLine.split(" ");
   var testData =
     { op: splitData[0], test: splitData[1], reference: splitData[2] };
+  var tries = 0;
 
   // Maintain state specific to this test in the closure exposed to all
   // the functions nested inside this one.
@@ -154,17 +167,28 @@ function startTest(i)
     {
       var test_snapshot = takeSnapshot(test.element);
       if (passes(testData.op, test_snapshot, reference.snapshot)) {
-        reportSuccess();
+        if (tries > gMaxPassingTries) {
+          gMaxPassingTries = tries;
+        }
+        report(true);
       } else {
-        // Links might not have been colored yet.  Try again in 100ms.
-        setTimeout(checkTest, 100);
+        ++tries;
+        if (tries > gMaxPassingTries * gTimeoutFactor) {
+          info("Giving up after " + tries + " tries, " +
+               "maxp=" + gMaxPassingTries +
+               "fact=" + gTimeoutFactor);
+          report(false);
+        } else {
+          // Links might not have been colored yet.  Try again in 100ms.
+          setTimeout(checkTest, 100);
+        }
       }
     }
-    function reportSuccess()
+    function report(result)
     {
+      ok(result, "(" + i + ") " +
+                 testData.op + " " + testData.test + " " + testData.reference);
       RemoveFinishDependency();
-      ok(true, "(" + i + ") " +
-               testData.op + " " + testData.test + " " + testData.reference);
     }
     var iframe = { element: element, loaded: false };
 

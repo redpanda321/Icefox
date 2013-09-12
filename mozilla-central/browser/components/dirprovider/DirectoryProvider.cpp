@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla Firefox browser.
- *
- * The Initial Developer of the Original Code is
- * Benjamin Smedberg <benjamin@smedbergs.us>
- *
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsIDirectoryService.h"
 #include "DirectoryProvider.h"
@@ -56,6 +23,7 @@
 #include "nsServiceManagerUtils.h"
 #include "nsStringAPI.h"
 #include "nsXULAppAPI.h"
+#include "nsIPrefLocalizedString.h"
 
 namespace mozilla {
 namespace browser {
@@ -65,18 +33,18 @@ NS_IMPL_ISUPPORTS2(DirectoryProvider,
                    nsIDirectoryServiceProvider2)
 
 NS_IMETHODIMP
-DirectoryProvider::GetFile(const char *aKey, PRBool *aPersist, nsIFile* *aResult)
+DirectoryProvider::GetFile(const char *aKey, bool *aPersist, nsIFile* *aResult)
 {
   nsresult rv;
 
-  *aResult = nsnull;
+  *aResult = nullptr;
 
   // NOTE: This function can be reentrant through the NS_GetSpecialDirectory
   // call, so be careful not to cause infinite recursion.
 
   nsCOMPtr<nsIFile> file;
 
-  char const* leafName = nsnull;
+  char const* leafName = nullptr;
 
   if (!strcmp(aKey, NS_APP_BOOKMARKS_50_FILE)) {
     leafName = "bookmarks.html";
@@ -86,7 +54,7 @@ DirectoryProvider::GetFile(const char *aKey, PRBool *aPersist, nsIFile* *aResult
       nsCString path;
       rv = prefs->GetCharPref("browser.bookmarks.file", getter_Copies(path));
       if (NS_SUCCEEDED(rv)) {
-        NS_NewNativeLocalFile(path, PR_TRUE, (nsILocalFile**)(nsIFile**) getter_AddRefs(file));
+        NS_NewNativeLocalFile(path, true, getter_AddRefs(file));
       }
     }
   }
@@ -123,7 +91,7 @@ DirectoryProvider::GetFile(const char *aKey, PRBool *aPersist, nsIFile* *aResult
     file->AppendNative(leafstr);
   }
 
-  *aPersist = PR_TRUE;
+  *aPersist = true;
   NS_ADDREF(*aResult = file);
 
   return NS_OK;
@@ -138,7 +106,7 @@ AppendFileKey(const char *key, nsIProperties* aDirSvc,
   if (NS_FAILED(rv))
     return;
 
-  PRBool exists;
+  bool exists;
   rv = file->Exists(&exists);
   if (NS_FAILED(rv) || !exists)
     return;
@@ -175,7 +143,7 @@ AppendDistroSearchDirs(nsIProperties* aDirSvc, nsCOMArray<nsIFile> &array)
   searchPlugins->AppendNative(NS_LITERAL_CSTRING("distribution"));
   searchPlugins->AppendNative(NS_LITERAL_CSTRING("searchplugins"));
 
-  PRBool exists;
+  bool exists;
   rv = searchPlugins->Exists(&exists);
   if (NS_FAILED(rv) || !exists)
     return;
@@ -200,7 +168,18 @@ AppendDistroSearchDirs(nsIProperties* aDirSvc, nsCOMArray<nsIFile> &array)
     localePlugins->AppendNative(NS_LITERAL_CSTRING("locale"));
 
     nsCString locale;
-    rv = prefs->GetCharPref("general.useragent.locale", getter_Copies(locale));
+    nsCOMPtr<nsIPrefLocalizedString> prefString;
+    rv = prefs->GetComplexValue("general.useragent.locale",
+                                NS_GET_IID(nsIPrefLocalizedString),
+                                getter_AddRefs(prefString));
+    if (NS_SUCCEEDED(rv)) {
+      nsAutoString wLocale;
+      prefString->GetData(getter_Copies(wLocale));
+      CopyUTF16toUTF8(wLocale, locale);
+    } else {
+      rv = prefs->GetCharPref("general.useragent.locale", getter_Copies(locale));
+    }
+
     if (NS_SUCCEEDED(rv)) {
 
       nsCOMPtr<nsIFile> curLocalePlugins;
@@ -248,9 +227,18 @@ DirectoryProvider::GetFiles(const char *aKey, nsISimpleEnumerator* *aResult)
 
     nsCOMArray<nsIFile> baseFiles;
 
+    /**
+     * We want to preserve the following order, since the search service loads
+     * engines in first-loaded-wins order.
+     *   - extension search plugin locations (prepended below using
+     *     NS_NewUnionEnumerator)
+     *   - distro search plugin locations
+     *   - user search plugin locations (profile)
+     *   - app search plugin location (shipped engines)
+     */
     AppendDistroSearchDirs(dirSvc, baseFiles);
-    AppendFileKey(NS_APP_SEARCH_DIR, dirSvc, baseFiles);
     AppendFileKey(NS_APP_USER_SEARCH_DIR, dirSvc, baseFiles);
+    AppendFileKey(NS_APP_SEARCH_DIR, dirSvc, baseFiles);
 
     nsCOMPtr<nsISimpleEnumerator> baseEnum;
     rv = NS_NewArrayEnumerator(getter_AddRefs(baseEnum), baseFiles);
@@ -263,7 +251,7 @@ DirectoryProvider::GetFiles(const char *aKey, nsISimpleEnumerator* *aResult)
     if (NS_FAILED(rv))
       return rv;
 
-    static char const *const kAppendSPlugins[] = {"searchplugins", nsnull};
+    static char const *const kAppendSPlugins[] = {"searchplugins", nullptr};
 
     nsCOMPtr<nsISimpleEnumerator> extEnum =
       new AppendingEnumerator(list, kAppendSPlugins);
@@ -279,9 +267,9 @@ DirectoryProvider::GetFiles(const char *aKey, nsISimpleEnumerator* *aResult)
 NS_IMPL_ISUPPORTS1(DirectoryProvider::AppendingEnumerator, nsISimpleEnumerator)
 
 NS_IMETHODIMP
-DirectoryProvider::AppendingEnumerator::HasMoreElements(PRBool *aResult)
+DirectoryProvider::AppendingEnumerator::HasMoreElements(bool *aResult)
 {
-  *aResult = mNext ? PR_TRUE : PR_FALSE;
+  *aResult = mNext ? true : false;
   return NS_OK;
 }
 
@@ -291,13 +279,13 @@ DirectoryProvider::AppendingEnumerator::GetNext(nsISupports* *aResult)
   if (aResult)
     NS_ADDREF(*aResult = mNext);
 
-  mNext = nsnull;
+  mNext = nullptr;
 
   nsresult rv;
 
   // Ignore all errors
 
-  PRBool more;
+  bool more;
   while (NS_SUCCEEDED(mBase->HasMoreElements(&more)) && more) {
     nsCOMPtr<nsISupports> nextbasesupp;
     mBase->GetNext(getter_AddRefs(nextbasesupp));
@@ -316,12 +304,12 @@ DirectoryProvider::AppendingEnumerator::GetNext(nsISupports* *aResult)
       ++i;
     }
 
-    PRBool exists;
+    bool exists;
     rv = mNext->Exists(&exists);
     if (NS_SUCCEEDED(rv) && exists)
       break;
 
-    mNext = nsnull;
+    mNext = nullptr;
   }
 
   return NS_OK;
@@ -334,7 +322,7 @@ DirectoryProvider::AppendingEnumerator::AppendingEnumerator
   mAppendList(aAppendList)
 {
   // Initialize mNext to begin.
-  GetNext(nsnull);
+  GetNext(nullptr);
 }
 
 } // namespace browser

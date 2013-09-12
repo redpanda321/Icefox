@@ -11,8 +11,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=415498
 
   <title>Test for Bug 415498</title>
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
   <script type="application/javascript"
           src="chrome://mochikit/content/chrome-harness.js"></script>
@@ -80,7 +78,7 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=415498
       browser.loadURI(chromeDir + "bug415498-doc1.html");
       yield;
 
-      ok(verifyErrorReceived("NS_ERROR_DOM_HIERARCHY_REQUEST_ERR"),
+      ok(verifyErrorReceived("HierarchyRequestError"),
          "Error message not reported in event listener callback!");
       gMessages = [];
 
@@ -89,7 +87,7 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=415498
       browser.loadURI(chromeDir + "bug415498-doc2.html");
       yield;
 
-      ok(verifyErrorReceived("NS_ERROR_DOM_HIERARCHY_REQUEST_ERR"),
+      ok(verifyErrorReceived("HierarchyRequestError"),
          "Error message not reported in window.onload!");
     }
     

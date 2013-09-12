@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 // No appearance at all.
 #define NS_THEME_NONE                                      0
 
@@ -98,6 +102,12 @@
 
 // A vertical progress chunk
 #define NS_THEME_PROGRESSBAR_CHUNK_VERTICAL                54
+
+// A horizontal meter bar.
+#define NS_THEME_METERBAR                                  55
+
+// The meter bar's meter indicator
+#define NS_THEME_METERBAR_CHUNK                            56
 
 // A single tab in a tab widget.
 #define NS_THEME_TAB                                       61
@@ -251,3 +261,7 @@
 #define NS_THEME_WINDOW_BUTTON_RESTORE                     239
 #define NS_THEME_WINDOW_BUTTON_BOX                         240
 #define NS_THEME_WINDOW_BUTTON_BOX_MAXIMIZED               241
+
+// moz-apperance style used in setting proper glass margins
+#define NS_THEME_WIN_EXCLUDE_GLASS                         242
+

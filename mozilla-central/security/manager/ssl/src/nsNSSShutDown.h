@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Kai Engert <kaie@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef _INC_NSSShutDown_H
 #define _INC_NSSShutDown_H
@@ -41,6 +8,8 @@
 #include "nscore.h"
 #include "nspr.h"
 #include "pldhash.h"
+#include "mozilla/CondVar.h"
+#include "mozilla/Mutex.h"
 
 class nsNSSShutDownObject;
 class nsOnPK11LogoutCancelObject;
@@ -63,17 +32,17 @@ public:
   void leaveBlockingUIState();
   
   // Is the activity aware of any blocking PSM UI currently shown?
-  PRBool isBlockingUIActive();
+  bool isBlockingUIActive();
 
   // Is it forbidden to bring up an UI while holding resources?
-  PRBool isUIForbidden();
+  bool isUIForbidden();
   
   // Check whether setting the current thread restriction is possible.
   // If it is possible, and the "do_it_for_real" flag is used,
   // the state tracking will have ensured that we will stay in this state.
   // As of writing, this includes forbidding PSM UI.
   enum RealOrTesting {test_only, do_it_for_real};
-  PRBool ifPossibleDisallowUI(RealOrTesting rot);
+  bool ifPossibleDisallowUI(RealOrTesting rot);
 
   // Notify the state tracking that going to the restricted state is
   // no longer planned.
@@ -89,12 +58,12 @@ public:
 
 private:
   // The lock protecting all our member variables.
-  PRLock *mNSSActivityStateLock;
+  mozilla::Mutex mNSSActivityStateLock;
 
   // The activity variable, bound to our lock,
   // used either to signal the activity counter reaches zero,
   // or a thread restriction has been released.
-  PRCondVar *mNSSActivityChanged;
+  mozilla::CondVar mNSSActivityChanged;
 
   // The number of active scopes holding resources.
   int mNSSActivityCounter;
@@ -104,10 +73,10 @@ private:
   int mBlockingUICounter;
 
   // Whether bringing up UI is currently forbidden
-  PRBool mIsUIForbidden;
+  bool mIsUIForbidden;
 
-  // nsnull means "no restriction"
-  // if != nsnull, activity is only allowed on that thread
+  // nullptr means "no restriction"
+  // if not null, activity is only allowed on that thread
   PRThread* mNSSRestrictedThread;
 };
 
@@ -126,7 +95,7 @@ public:
   nsPSMUITracker();
   ~nsPSMUITracker();
   
-  PRBool isUIForbidden();
+  bool isUIForbidden();
 };
 
 // Singleton, used by nsNSSComponent to track the list of PSM objects,
@@ -151,15 +120,15 @@ public:
   // performed by clients using PSM services
   static void trackSSLSocketCreate();
   static void trackSSLSocketClose();
-  static PRBool areSSLSocketsActive();
+  static bool areSSLSocketsActive();
   
   // Are we able to do the early cleanup?
   // Returns failure if at the current time "early cleanup" is not possible.
-  PRBool isUIActive();
+  bool isUIActive();
 
   // If possible to do "early cleanup" at the current time, remember that we want to
   // do it, and disallow actions that would change the possibility.
-  PRBool ifPossibleDisallowUI();
+  bool ifPossibleDisallowUI();
 
   // Notify that it is no longer planned to do the "early cleanup".
   void allowUI();
@@ -173,23 +142,23 @@ public:
   
   static nsNSSActivityState *getActivityState()
   {
-    return singleton ? &singleton->mActivityState : nsnull;
+    return singleton ? &singleton->mActivityState : nullptr;
   }
   
 private:
   nsNSSShutDownList();
-  static PLDHashOperator PR_CALLBACK
+  static PLDHashOperator
   evaporateAllNSSResourcesHelper(PLDHashTable *table, PLDHashEntryHdr *hdr,
-                                                        PRUint32 number, void *arg);
+                                                        uint32_t number, void *arg);
 
-  static PLDHashOperator PR_CALLBACK
+  static PLDHashOperator
   doPK11LogoutHelper(PLDHashTable *table, PLDHashEntryHdr *hdr,
-                                                    PRUint32 number, void *arg);
+                                                    uint32_t number, void *arg);
 protected:
-  PRLock* mListLock;
+  mozilla::Mutex mListLock;
   static nsNSSShutDownList *singleton;
   PLDHashTable mObjects;
-  PRUint32 mActiveSSLSockets;
+  uint32_t mActiveSSLSockets;
   PLDHashTable mPK11LogoutCancelObjects;
   nsNSSActivityState mActivityState;
 };
@@ -271,7 +240,7 @@ public:
 
   nsNSSShutDownObject()
   {
-    mAlreadyShutDown = PR_FALSE;
+    mAlreadyShutDown = false;
     nsNSSShutDownList::remember(this);
   }
   
@@ -291,23 +260,23 @@ public:
       if (calledFromList == calledFrom) {
         virtualDestroyNSSReference();
       }
-      mAlreadyShutDown = PR_TRUE;
+      mAlreadyShutDown = true;
     }
   }
   
-  PRBool isAlreadyShutDown() { return mAlreadyShutDown; }
+  bool isAlreadyShutDown() { return mAlreadyShutDown; }
 
 protected:
   virtual void virtualDestroyNSSReference() = 0;
 private:
-  volatile PRBool mAlreadyShutDown;
+  volatile bool mAlreadyShutDown;
 };
 
 class nsOnPK11LogoutCancelObject
 {
 public:
   nsOnPK11LogoutCancelObject()
-  :mIsLoggedOut(PR_FALSE)
+  :mIsLoggedOut(false)
   {
     nsNSSShutDownList::remember(this);
   }
@@ -324,16 +293,16 @@ public:
     // later calls to isPK11LoggedOut() will see it.
     // This is a one-time change from 0 to 1.
     
-    mIsLoggedOut = PR_TRUE;
+    mIsLoggedOut = true;
   }
   
-  PRBool isPK11LoggedOut()
+  bool isPK11LoggedOut()
   {
     return mIsLoggedOut;
   }
 
 private:
-  volatile PRBool mIsLoggedOut;
+  volatile bool mIsLoggedOut;
 };
 
 #endif

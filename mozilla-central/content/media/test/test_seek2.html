@@ -2,17 +2,16 @@
 <html>
 <head>
   <title>Media test: seek test 2</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
 <body>
-<video id='v' onerror="event.stopPropagation();"></video>
+<video id='v'></video>
 <pre id="test">
 <script class="testbody" type="text/javascript">
 // http://www.whatwg.org/specs/web-apps/current-work/#dom-media-seek
 // If the media element's readyState is HAVE_NOTHING, then the user agent
-// must raise an INVALID_STATE_ERR exception.
+// must raise an InvalidStateError exception.
 var v = document.getElementById('v');
 var passed = false;
 

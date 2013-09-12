@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et cindent: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is Google Inc.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Darin Fisher <darin@meer.net>
- *  Masayuki Nakano <masayuki@d-toybox.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include <stdio.h>
 #include <windows.h>
@@ -43,18 +10,10 @@
 #include <process.h>
 #include <io.h>
 
-#ifdef WINCE_WINDOWS_MOBILE
-#include <aygshell.h>
-#endif
-
 #include "resource.h"
 #include "progressui.h"
 #include "readstrings.h"
 #include "errors.h"
-
-#ifdef WINCE
-#include "updater_wince.h"
-#endif
 
 #define TIMER_ID 1
 #define TIMER_INTERVAL 100
@@ -82,6 +41,8 @@
 
 static float sProgress;  // between 0 and 100
 static BOOL  sQuit = FALSE;
+static BOOL sIndeterminate = FALSE;
+static StringTable sUIStrings;
 
 static BOOL
 GetStringsFile(WCHAR filename[MAX_PATH])
@@ -142,21 +103,13 @@ CenterDialog(HWND hDlg)
 static void
 InitDialog(HWND hDlg)
 {
-  WCHAR filename[MAX_PATH];
-  if (!GetStringsFile(filename))
-    return;
-
-  StringTable uiStrings;
-  if (ReadStrings(filename, &uiStrings) != OK)
-    return;
-
   WCHAR szwTitle[MAX_TEXT_LEN];
   WCHAR szwInfo[MAX_TEXT_LEN];
 
-  MultiByteToWideChar(CP_UTF8, 0, uiStrings.title, strlen(uiStrings.title) + 1,
-                      szwTitle, sizeof(szwTitle)/sizeof(szwTitle[0]));
-  MultiByteToWideChar(CP_UTF8, 0, uiStrings.info, strlen(uiStrings.info) + 1,
-                      szwInfo, sizeof(szwInfo)/sizeof(szwInfo[0]));
+  MultiByteToWideChar(CP_UTF8, 0, sUIStrings.title, -1, szwTitle,
+                      sizeof(szwTitle)/sizeof(szwTitle[0]));
+  MultiByteToWideChar(CP_UTF8, 0, sUIStrings.info, -1, szwInfo,
+                      sizeof(szwInfo)/sizeof(szwInfo[0]));
 
   SetWindowTextW(hDlg, szwTitle);
   SetWindowTextW(GetDlgItem(hDlg, IDC_INFO), szwInfo);
@@ -168,6 +121,11 @@ InitDialog(HWND hDlg)
 
   HWND hWndPro = GetDlgItem(hDlg, IDC_PROGRESS);
   SendMessage(hWndPro, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
+  if (sIndeterminate) {
+    LONG_PTR val = GetWindowLongPtr(hWndPro, GWL_STYLE);
+    SetWindowLongPtr(hWndPro, GWL_STYLE, val|PBS_MARQUEE); 
+    SendMessage(hWndPro,(UINT) PBM_SETMARQUEE,(WPARAM) TRUE,(LPARAM)50 );
+  }
 
   // Resize the dialog to fit all of the text if necessary.
   RECT infoSize, textSize;
@@ -181,88 +139,6 @@ InitDialog(HWND hDlg)
   if (hInfoFont)
     hOldFont = (HFONT)SelectObject(hDCInfo, hInfoFont);
 
-  // There are three scenarios that need to be handled differently
-  // 1. Windows Mobile where dialog should be full screen.
-  // 2. Windows CE where the dialog might wrap.
-  // 3. Windows where the dialog should never wrap. The Windows CE and Windows
-  //    scenarios could be combined but then we would have to calculate the
-  //    extra border space added by the Aero theme which just adds complexity.
-#ifdef WINCE
-#ifdef WINCE_WINDOWS_MOBILE
-  RECT rcDlgInner1, rcDlgInner2, rcInfoOuter1, rcInfoOuter2;
-  // The dialog's client rectangle and the window rectangle for the text before
-  // making the dialog full screen are needed to calculate the change in border
-  // sizes.
-  GetClientRect(hDlg, &rcDlgInner1);
-  GetWindowRect(hWndInfo, &rcInfoOuter1);
-
-  // Make the dialog fullscreen
-  SHINITDLGINFO shidi;
-  shidi.dwMask = SHIDIM_FLAGS;
-  shidi.dwFlags = SHIDIF_SIZEDLGFULLSCREEN;
-  shidi.hDlg = hDlg;
-  SHInitDialog(&shidi);
-  if (!SHInitDialog(&shidi))
-    return;
-
-  // Hide the OK button
-  SHDoneButton(hDlg, SHDB_HIDE);
-
-  GetClientRect(hDlg, &rcDlgInner2);
-  GetWindowRect(hWndInfo, &rcInfoOuter2);
-  textSize.left = 0;
-  // Calculate the maximum possible width for the text by adding to the
-  // existing text rectangle's window width the change in the dialog rectangle's
-  // client width and the change in the text rectangle's window left position
-  // after the dialog has been made full screen.
-  textSize.right = (rcInfoOuter2.right - rcInfoOuter2.left) + \
-                   (rcDlgInner2.right - rcDlgInner1.right) + \
-                   (rcInfoOuter1.left - rcInfoOuter2.left);
-#else
-  RECT rcWorkArea, rcInfoOuter1;
-  GetWindowRect(hWndInfo, &rcInfoOuter1);
-  SystemParametersInfo(SPI_GETWORKAREA, NULL, &rcWorkArea, NULL);
-  textSize.left = 0;
-  // Calculate the maximum possible width for the text by subtracting from the
-  // existing working area's width the text rectangle's margin.
-  textSize.right = (rcWorkArea.right - rcWorkArea.left) - \
-                   (rcInfoOuter1.left + rcInfoOuter1.right);
-#endif
-  // Measure the space needed for the text allowing multiple lines if necessary.
-  // DT_CALCRECT means nothing is drawn.
-  if (DrawText(hDCInfo, szwInfo, -1, &textSize,
-               DT_CALCRECT | DT_NOCLIP | DT_WORDBREAK)) {
-    GetClientRect(hWndInfo, &infoSize);
-    SIZE extra;
-    // Calculate the additional space needed for the text by subtracting from
-    // the rectangle returned by DrawText the existing client rectangle's width
-    // and height.
-    extra.cx = (textSize.right - textSize.left) - \
-               (infoSize.right - infoSize.left);
-    extra.cy = (textSize.bottom - textSize.top) - \
-               (infoSize.bottom - infoSize.top);
-    // XXX rstrong - add 2 pixels to the width to prevent the text from wrapping
-    // due to Windows CE and Windows Mobile adding an extra pixel to the
-    // beginning and the end of the text. Though I have found no good reason for
-    // this it has been consistent with multiple font sizes.
-    extra.cx += 2;
-
-    RESIZE_WINDOW(hWndInfo, extra.cx, extra.cy);
-    RESIZE_WINDOW(hWndPro, extra.cx, 0);
-
-#ifdef WINCE_WINDOWS_MOBILE
-    // Move the controls 1 pixel to the left on Windows Mobile to compensate for
-    // the 2 extra pixels added to the controls above. This isn't needed on
-    // Windows CE for reasons of the unknown variety.
-    MOVE_WINDOW(hWndInfo, -1, 0);
-    MOVE_WINDOW(hWndPro, -1, extra.cy);
-#else
-    RESIZE_WINDOW(hDlg, extra.cx, extra.cy);
-    MOVE_WINDOW(hWndPro, 0, extra.cy);
-#endif
-  }
-
-#else
   // Measure the space needed for the text on a single line. DT_CALCRECT means
   // nothing is drawn.
   if (DrawText(hDCInfo, szwInfo, -1, &textSize,
@@ -287,22 +163,18 @@ InitDialog(HWND hDlg)
       MOVE_WINDOW(hWndPro, 0, extra.cy);
     }
   }
-#endif
 
   if (hOldFont)
     SelectObject(hDCInfo, hOldFont);
 
   ReleaseDC(hWndInfo, hDCInfo);
 
-  // On Windows Mobile the dialog is full screen so don't center it.
-#ifndef WINCE_WINDOWS_MOBILE
   CenterDialog(hDlg);  // make dialog appear in the center of the screen
-#endif
 
   SetTimer(hDlg, TIMER_ID, TIMER_INTERVAL, NULL);
 }
 
-// Message handler for about box.
+// Message handler for update dialog.
 static LRESULT CALLBACK
 DialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -332,23 +204,49 @@ InitProgressUI(int *argc, NS_tchar ***argv)
   return 0;
 }
 
+/**
+ * Initializes the progress UI strings
+ * 
+ * @return 0 on success, -1 on error
+*/
 int
-ShowProgressUI()
-{
-  // Only show the Progress UI if the process is taking significant time.
-  // Here we measure significant time as taking more than one second.
-
-  Sleep(500);
-
-  if (sQuit || sProgress > 50.0f)
-    return 0;
-
+InitProgressUIStrings() {
   // If we do not have updater.ini, then we should not bother showing UI.
   WCHAR filename[MAX_PATH];
-  if (!GetStringsFile(filename))
+  if (!GetStringsFile(filename)) {
     return -1;
-  if (_waccess(filename, 04))
+  }
+
+  if (_waccess(filename, 04)) {
     return -1;
+  }
+  
+  // If the updater.ini doesn't have the required strings, then we should not
+  // bother showing UI.
+  if (ReadStrings(filename, &sUIStrings) != OK) {
+    return -1;
+  }
+
+  return 0;
+}
+
+int
+ShowProgressUI(bool indeterminate, bool initUIStrings)
+{
+  sIndeterminate = indeterminate;
+  if (!indeterminate) {
+    // Only show the Progress UI if the process is taking a significant amount of
+    // time where a significant amount of time is defined as .5 seconds after
+    // ShowProgressUI is called sProgress is less than 70.
+    Sleep(500);
+
+    if (sQuit || sProgress > 70.0f)
+      return 0;
+  }
+
+  if (initUIStrings && InitProgressUIStrings() == -1) {
+    return -1;
+  }
 
   INITCOMMONCONTROLSEX icc = {
     sizeof(INITCOMMONCONTROLSEX),

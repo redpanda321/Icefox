@@ -146,7 +146,7 @@ function commonInit() {
     var disabledHosts = pwmgr.getAllDisabledHosts();
     if (disabledHosts.length) {
         //todo(false, "Warning: wasn't expecting disabled hosts to be present.");
-        for each (var host in disabledHosts)
+        for (var host of disabledHosts)
             pwmgr.setLoginSavingEnabled(host, true);
     }
 
@@ -197,4 +197,30 @@ function logoutMasterPassword() {
     var sdr = Cc["@mozilla.org/security/sdr;1"].
             getService(Ci.nsISecretDecoderRing);
     sdr.logoutAndTeardown();
+}
+
+function dumpLogins(pwmgr) {
+    var logins = pwmgr.getAllLogins();
+    ok(true, "----- dumpLogins: have " + logins.length + " logins. -----");
+    for (var i = 0; i < logins.length; i++)
+        dumpLogin("login #" + i + " --- ", logins[i]);
+}
+
+function dumpLogin(label, login) {
+    loginText = "";
+    loginText += "host: ";
+    loginText += login.hostname;
+    loginText += " / formURL: ";
+    loginText += login.formSubmitURL;
+    loginText += " / realm: ";
+    loginText += login.httpRealm;
+    loginText += " / user: ";
+    loginText += login.username;
+    loginText += " / pass: ";
+    loginText += login.password;
+    loginText += " / ufield: ";
+    loginText += login.usernameField;
+    loginText += " / pfield: ";
+    loginText += login.passwordField;
+    ok(true, label + loginText);
 }

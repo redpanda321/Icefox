@@ -1,4 +1,8 @@
 <?xml version="1.0"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 
 <bindings id="htmlBindings"
    xmlns="http://www.mozilla.org/xbl"
@@ -106,8 +110,8 @@
       <handler event="keypress" keycode="VK_RIGHT" modifiers="shift" command="cmd_selectCharNext" />
       <handler event="keypress" keycode="VK_UP" modifiers="shift" command="cmd_selectLinePrevious" />
       <handler event="keypress" keycode="VK_DOWN" modifiers="shift" command="cmd_selectLineNext" />
-      <handler event="keypress" keycode="VK_UP" modifiers="accel" command="cmd_scrollTop"/>
-      <handler event="keypress" keycode="VK_DOWN" modifiers="accel" command="cmd_scrollBottom"/>      
+      <handler event="keypress" keycode="VK_UP" modifiers="accel" command="cmd_moveTop"/>
+      <handler event="keypress" keycode="VK_DOWN" modifiers="accel" command="cmd_moveBottom"/>
 	</handlers>
   </binding>
 
@@ -158,6 +162,8 @@
       <handler event="keypress" key="u" modifiers="control" command="cmd_deleteToBeginningOfLine"/>
       <handler event="keypress" key="w" modifiers="control" command="cmd_deleteWordBackward"/>
       <handler event="keypress" key="v" modifiers="control" command="cmd_scrollPageDown"/>
+
+      <handler event="keypress" key="v" command="cmd_pasteNoFormatting" modifiers="accel,alt,shift"/>
     </handlers>
   </binding>
 

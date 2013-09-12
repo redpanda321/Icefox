@@ -2,22 +2,28 @@ This color conversion code is from the Chromium open source project available he
 
 http://code.google.com/chromium/
 
-The code comes from svn revision 40876.
+The code comes from svn revision 63840 on 2010-10-26.
+
+If you just want to check out this individual directory, use:
+
+svn co -r 63840 http://src.chromium.org/svn/trunk/src/media/base
 
 The code was copied from a Chromium svn checkout using the 'update.sh' script which then applies patches for our build and to add dynamic CPU detection.
 
-convert.patch: Change Chromium code to build using Mozilla build system.
-               Add runtime CPU detection for MMX
-               Move default C implementation to work on all platforms.
+convert.patch contains the following changes:
 
-picture_region.patch: Change Chromium code to allow a picture region.
-                      The YUV conversion will convert within this 
-                      picture region only.
+  * Change Chromium code to build using Mozilla build system.
+  * Add runtime CPU detection for MMX
+  * Move default C implementation to work on all platforms.
+  * Change Chromium code to allow a picture region.
+  * The YUV conversion will convert within this picture region only.
+  * Add YCbCr 4:4:4 support
+  * Bug 619178 - Update CPU detection in yuv_convert to new SSE.h interface.
+  * Bug 616778 - Split yuv_convert FilterRows vectorized code into separate files so it can
+    be properly guarded with cpuid() calls.
 
-remove_scale.patch: Removes Chromium scaling code.
-export.patch: Fix export for building on comm-central
-win64_mac64.patch: Fallback to C implementation on Windows and Mac OS X 64 bit
-yv24.patch: Adds YCbCr 4:4:4 support
-row_c_fix.patch: Fix broken C fallback code (See bug 561385).
-bug572034_mac_64bit.patch: Fix x86_64 linux code so it works on OS X.
-solaris.patch: Adds Solaris support, fallback to C implementation on SPARC
+win64.patch: SSE2 optimization for Microsoft Visual C++ x64 version
+
+TypeFromSize.patch: Bug 656185 - Add a method to detect YUVType from plane sizes.
+
+QuellGccWarnings.patch: Bug 711895 - Avoid some GCC compilation warnings.

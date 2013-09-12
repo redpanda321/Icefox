@@ -1,45 +1,12 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #include "nsXMLDocument.h"
 #include "nsParserCIID.h"
-#include "nsIParser.h"
+#include "nsCharsetSource.h"
 #include "nsIXMLContentSink.h"
 #include "nsPresContext.h" 
 #include "nsIContent.h"
@@ -49,9 +16,7 @@
 #include "nsIMarkupDocumentViewer.h"
 #include "nsHTMLParts.h"
 #include "nsIComponentManager.h"
-#include "nsIDOMComment.h"
 #include "nsIDOMElement.h"
-#include "nsIDOMText.h"
 #include "nsIBaseWindow.h"
 #include "nsIDOMWindow.h"
 #include "nsIDOMDocumentType.h"
@@ -61,21 +26,16 @@
 #include "nsIHttpChannel.h"
 #include "nsIURI.h"
 #include "nsIServiceManager.h"
-#include "nsICharsetAlias.h"
-#include "nsICharsetAlias.h"
 #include "nsNetUtil.h"
-#include "nsDOMError.h"
+#include "nsError.h"
 #include "nsIScriptSecurityManager.h"
 #include "nsIPrincipal.h"
 #include "nsLayoutCID.h"
 #include "nsDOMAttribute.h"
 #include "nsGUIEvent.h"
-#include "nsIFIXptr.h"
-#include "nsIXPointer.h"
 #include "nsCExternalHandlerService.h"
-#include "nsNetUtil.h"
 #include "nsMimeTypes.h"
-#include "nsIEventListenerManager.h"
+#include "nsEventListenerManager.h"
 #include "nsContentUtils.h"
 #include "nsThreadUtils.h"
 #include "nsJSUtils.h"
@@ -85,14 +45,13 @@
 #include "nsIJSContextStack.h"
 #include "nsContentCreatorFunctions.h"
 #include "nsContentPolicyUtils.h"
-#include "nsContentErrors.h"
 #include "nsIDOMUserDataHandler.h"
 #include "nsEventDispatcher.h"
 #include "nsNodeUtils.h"
 #include "nsIConsoleService.h"
 #include "nsIScriptError.h"
 #include "nsIHTMLDocument.h"
-#include "nsGenericElement.h"
+#include "mozilla/dom/Element.h" // DOMCI_NODE_DATA
 
 // ==================================================================
 // =
@@ -107,7 +66,9 @@ NS_NewDOMDocument(nsIDOMDocument** aInstancePtrResult,
                   nsIURI* aDocumentURI,
                   nsIURI* aBaseURI,
                   nsIPrincipal* aPrincipal,
-                  PRBool aLoadedAsData)
+                  bool aLoadedAsData,
+                  nsIScriptGlobalObject* aEventObject,
+                  DocumentFlavor aFlavor)
 {
   // Note: can't require that aDocumentURI/aBaseURI/aPrincipal be non-null,
   // since at least one caller (XMLHttpRequest) doesn't have decent args to
@@ -115,34 +76,41 @@ NS_NewDOMDocument(nsIDOMDocument** aInstancePtrResult,
   
   nsresult rv;
 
-  *aInstancePtrResult = nsnull;
+  *aInstancePtrResult = nullptr;
 
   nsCOMPtr<nsIDocument> d;
-  PRBool isHTML = PR_FALSE;
-  PRBool isXHTML = PR_FALSE;
-  if (aDoctype) {
-    nsAutoString publicId;
+  bool isHTML = false;
+  bool isXHTML = false;
+  if (aFlavor == DocumentFlavorSVG) {
+    rv = NS_NewSVGDocument(getter_AddRefs(d));
+  } else if (aFlavor == DocumentFlavorHTML) {
+    rv = NS_NewHTMLDocument(getter_AddRefs(d));
+    isHTML = true;
+  } else if (aDoctype) {
+    nsAutoString publicId, name;
     aDoctype->GetPublicId(publicId);
-    if (publicId.EqualsLiteral("-//W3C//DTD HTML 4.01//EN") ||
+    if (publicId.IsEmpty()) {
+      aDoctype->GetName(name);
+    }
+    if (name.EqualsLiteral("html") ||
+        publicId.EqualsLiteral("-//W3C//DTD HTML 4.01//EN") ||
         publicId.EqualsLiteral("-//W3C//DTD HTML 4.01 Frameset//EN") ||
         publicId.EqualsLiteral("-//W3C//DTD HTML 4.01 Transitional//EN") ||
         publicId.EqualsLiteral("-//W3C//DTD HTML 4.0//EN") ||
         publicId.EqualsLiteral("-//W3C//DTD HTML 4.0 Frameset//EN") ||
         publicId.EqualsLiteral("-//W3C//DTD HTML 4.0 Transitional//EN")) {
       rv = NS_NewHTMLDocument(getter_AddRefs(d));
-      isHTML = PR_TRUE;
+      isHTML = true;
     } else if (publicId.EqualsLiteral("-//W3C//DTD XHTML 1.0 Strict//EN") ||
                publicId.EqualsLiteral("-//W3C//DTD XHTML 1.0 Transitional//EN") ||
                publicId.EqualsLiteral("-//W3C//DTD XHTML 1.0 Frameset//EN")) {
       rv = NS_NewHTMLDocument(getter_AddRefs(d));
-      isHTML = PR_TRUE;
-      isXHTML = PR_TRUE;
+      isHTML = true;
+      isXHTML = true;
     }
-#ifdef MOZ_SVG
     else if (publicId.EqualsLiteral("-//W3C//DTD SVG 1.1//EN")) {
       rv = NS_NewSVGDocument(getter_AddRefs(d));
     }
-#endif
     // XXX Add support for XUL documents.
     else {
       rv = NS_NewXMLDocument(getter_AddRefs(d));
@@ -155,6 +123,8 @@ NS_NewDOMDocument(nsIDOMDocument** aInstancePtrResult,
     return rv;
   }
 
+  d->SetScriptHandlingObject(aEventObject);
+  
   if (isHTML) {
     nsCOMPtr<nsIHTMLDocument> htmlDoc = do_QueryInterface(d);
     NS_ASSERTION(htmlDoc, "HTML Document doesn't implement nsIHTMLDocument?");
@@ -198,7 +168,7 @@ NS_NewDOMDocument(nsIDOMDocument** aInstancePtrResult,
 
 
 nsresult
-NS_NewXMLDocument(nsIDocument** aInstancePtrResult)
+NS_NewXMLDocument(nsIDocument** aInstancePtrResult, bool aLoadedAsData)
 {
   nsXMLDocument* doc = new nsXMLDocument();
   NS_ENSURE_TRUE(doc, NS_ERROR_OUT_OF_MEMORY);
@@ -211,8 +181,30 @@ NS_NewXMLDocument(nsIDocument** aInstancePtrResult)
   }
 
   *aInstancePtrResult = doc;
+  doc->SetLoadedAsData(aLoadedAsData);
 
   return rv;
+}
+
+nsresult
+NS_NewXBLDocument(nsIDOMDocument** aInstancePtrResult,
+                  nsIURI* aDocumentURI,
+                  nsIURI* aBaseURI,
+                  nsIPrincipal* aPrincipal)
+{
+  nsresult rv = NS_NewDOMDocument(aInstancePtrResult,
+                                  NS_LITERAL_STRING("http://www.mozilla.org/xbl"),
+                                  NS_LITERAL_STRING("bindings"), nullptr,
+                                  aDocumentURI, aBaseURI, aPrincipal, false,
+                                  nullptr, DocumentFlavorLegacyGuess);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  nsCOMPtr<nsIDocument> idoc = do_QueryInterface(*aInstancePtrResult);
+  nsDocument* doc = static_cast<nsDocument*>(idoc.get());
+  doc->SetLoadedAsInteractiveData(true);
+  doc->SetReadyStateInternal(nsIDocument::READYSTATE_COMPLETE);
+
+  return NS_OK;
 }
 
   // NOTE! nsDocument::operator new() zeroes out all members, so don't
@@ -220,7 +212,7 @@ NS_NewXMLDocument(nsIDocument** aInstancePtrResult)
 
 nsXMLDocument::nsXMLDocument(const char* aContentType)
   : nsDocument(aContentType),
-    mAsync(PR_TRUE)
+    mAsync(true)
 {
 
   // NOTE! nsDocument::operator new() zeroes out all members, so don't
@@ -230,7 +222,7 @@ nsXMLDocument::nsXMLDocument(const char* aContentType)
 nsXMLDocument::~nsXMLDocument()
 {
   // XXX We rather crash than hang
-  mLoopingForSyncLoad = PR_FALSE;
+  mLoopingForSyncLoad = false;
 }
 
 DOMCI_NODE_DATA(XMLDocument, nsXMLDocument)
@@ -271,37 +263,14 @@ nsXMLDocument::ResetToURI(nsIURI *aURI, nsILoadGroup *aLoadGroup,
   if (mChannelIsPending) {
     StopDocumentLoad();
     mChannel->Cancel(NS_BINDING_ABORTED);
-    mChannelIsPending = nsnull;
+    mChannelIsPending = false;
   }
 
   nsDocument::ResetToURI(aURI, aLoadGroup, aPrincipal);
 }
 
 NS_IMETHODIMP
-nsXMLDocument::EvaluateFIXptr(const nsAString& aExpression, nsIDOMRange **aRange)
-{
-  nsresult rv;
-  nsCOMPtr<nsIFIXptrEvaluator> e =
-    do_CreateInstance("@mozilla.org/xmlextras/fixptrevaluator;1", &rv);
-  NS_ENSURE_SUCCESS(rv, rv);
-  
-  return e->Evaluate(this, aExpression, aRange);
-}
-
-NS_IMETHODIMP
-nsXMLDocument::EvaluateXPointer(const nsAString& aExpression,
-                                nsIXPointerResult **aResult)
-{
-  nsresult rv;
-  nsCOMPtr<nsIXPointerEvaluator> e =
-    do_CreateInstance("@mozilla.org/xmlextras/xpointerevaluator;1", &rv);
-  NS_ENSURE_SUCCESS(rv, rv);
-  
-  return e->Evaluate(this, aExpression, aResult);
-}
-
-NS_IMETHODIMP
-nsXMLDocument::GetAsync(PRBool *aAsync)
+nsXMLDocument::GetAsync(bool *aAsync)
 {
   NS_ENSURE_ARG_POINTER(aAsync);
   *aAsync = mAsync;
@@ -309,7 +278,7 @@ nsXMLDocument::GetAsync(PRBool *aAsync)
 }
 
 NS_IMETHODIMP
-nsXMLDocument::SetAsync(PRBool aAsync)
+nsXMLDocument::SetAsync(bool aAsync)
 {
   mAsync = aAsync;
   return NS_OK;
@@ -318,28 +287,30 @@ nsXMLDocument::SetAsync(PRBool aAsync)
 static void
 ReportUseOfDeprecatedMethod(nsIDocument *aDoc, const char* aWarning)
 {
-  nsContentUtils::ReportToConsole(nsContentUtils::eDOM_PROPERTIES,
-                                  aWarning,
-                                  nsnull, 0,
-                                  aDoc->GetDocumentURI(),
-                                  EmptyString(), 0, 0,
-                                  nsIScriptError::warningFlag,
-                                  "DOM3 Load");
+  nsContentUtils::ReportToConsole(nsIScriptError::warningFlag,
+                                  "DOM3 Load", aDoc,
+                                  nsContentUtils::eDOM_PROPERTIES,
+                                  aWarning);
 }
 
 NS_IMETHODIMP
-nsXMLDocument::Load(const nsAString& aUrl, PRBool *aReturn)
+nsXMLDocument::Load(const nsAString& aUrl, bool *aReturn)
 {
+  bool hasHadScriptObject = true;
+  nsIScriptGlobalObject* scriptObject =
+    GetScriptHandlingObject(hasHadScriptObject);
+  NS_ENSURE_STATE(scriptObject || !hasHadScriptObject);
+
   ReportUseOfDeprecatedMethod(this, "UseOfDOM3LoadMethodWarning");
 
   NS_ENSURE_ARG_POINTER(aReturn);
-  *aReturn = PR_FALSE;
+  *aReturn = false;
 
   nsCOMPtr<nsIDocument> callingDoc =
     do_QueryInterface(nsContentUtils::GetDocumentFromContext());
 
   nsIURI *baseURI = mDocumentURI;
-  nsCAutoString charset;
+  nsAutoCString charset;
 
   if (callingDoc) {
     baseURI = callingDoc->GetDocBaseURI();
@@ -363,17 +334,17 @@ nsXMLDocument::Load(const nsAString& aUrl, PRBool *aReturn)
   // chrome document.
   nsCOMPtr<nsIPrincipal> principal = NodePrincipal();
   if (!nsContentUtils::IsSystemPrincipal(principal)) {
-    rv = principal->CheckMayLoad(uri, PR_FALSE);
+    rv = principal->CheckMayLoad(uri, false, false);
     NS_ENSURE_SUCCESS(rv, rv);
 
-    PRInt16 shouldLoad = nsIContentPolicy::ACCEPT;
+    int16_t shouldLoad = nsIContentPolicy::ACCEPT;
     rv = NS_CheckContentLoadPolicy(nsIContentPolicy::TYPE_XMLHTTPREQUEST,
                                    uri,
                                    principal,
                                    callingDoc ? callingDoc.get() :
                                      static_cast<nsIDocument*>(this),
                                    NS_LITERAL_CSTRING("application/xml"),
-                                   nsnull,
+                                   nullptr,
                                    &shouldLoad,
                                    nsContentUtils::GetContentPolicy(),
                                    nsContentUtils::GetSecurityManager());
@@ -385,9 +356,9 @@ nsXMLDocument::Load(const nsAString& aUrl, PRBool *aReturn)
     // We're called from chrome, check to make sure the URI we're
     // about to load is also chrome.
 
-    PRBool isChrome = PR_FALSE;
+    bool isChrome = false;
     if (NS_FAILED(uri->SchemeIs("chrome", &isChrome)) || !isChrome) {
-      nsCAutoString spec;
+      nsAutoCString spec;
       if (mDocumentURI)
         mDocumentURI->GetSpec(spec);
 
@@ -397,9 +368,16 @@ nsXMLDocument::Load(const nsAString& aUrl, PRBool *aReturn)
       nsCOMPtr<nsIScriptError> errorObject =
           do_CreateInstance(NS_SCRIPTERROR_CONTRACTID, &rv);
       NS_ENSURE_SUCCESS(rv, rv);
-      rv = errorObject->Init(error.get(), NS_ConvertUTF8toUTF16(spec).get(),
-                             nsnull, 0, 0, nsIScriptError::warningFlag,
-                             "DOM");
+
+      rv = errorObject->InitWithWindowID(error,
+                                         NS_ConvertUTF8toUTF16(spec),
+                                         EmptyString(),
+                                         0, 0, nsIScriptError::warningFlag,
+                                         "DOM",
+                                         callingDoc ?
+                                           callingDoc->InnerWindowID() :
+                                           this->InnerWindowID());
+
       NS_ENSURE_SUCCESS(rv, rv);
 
       nsCOMPtr<nsIConsoleService> consoleService =
@@ -419,8 +397,8 @@ nsXMLDocument::Load(const nsAString& aUrl, PRBool *aReturn)
   // be loaded.  Note that we need to hold a strong ref to |principal|
   // here, because ResetToURI will null out our node principal before
   // setting the new one.
-  nsCOMPtr<nsIEventListenerManager> elm(mListenerManager);
-  mListenerManager = nsnull;
+  nsRefPtr<nsEventListenerManager> elm(mListenerManager);
+  mListenerManager = nullptr;
 
   // When we are called from JS we can find the load group for the page,
   // and add ourselves to it. This way any pending requests
@@ -442,18 +420,26 @@ nsXMLDocument::Load(const nsAString& aUrl, PRBool *aReturn)
   nsCOMPtr<nsIChannel> channel;
   // nsIRequest::LOAD_BACKGROUND prevents throbber from becoming active,
   // which in turn keeps STOP button from becoming active  
-  rv = NS_NewChannel(getter_AddRefs(channel), uri, nsnull, loadGroup, req, 
+  rv = NS_NewChannel(getter_AddRefs(channel), uri, nullptr, loadGroup, req, 
                      nsIRequest::LOAD_BACKGROUND);
   if (NS_FAILED(rv)) {
     return rv;
   }
 
+  // StartDocumentLoad asserts that readyState is uninitialized, so
+  // uninitialize it. SetReadyStateInternal make this transition invisible to
+  // Web content. But before doing that, assert that the current readyState
+  // is complete as it should be after the call to ResetToURI() above.
+  MOZ_ASSERT(GetReadyStateEnum() == nsIDocument::READYSTATE_COMPLETE,
+             "Bad readyState");
+  SetReadyStateInternal(nsIDocument::READYSTATE_UNINITIALIZED);
+
   // Prepare for loading the XML document "into oneself"
   nsCOMPtr<nsIStreamListener> listener;
   if (NS_FAILED(rv = StartDocumentLoad(kLoadAsData, channel, 
-                                       loadGroup, nsnull, 
+                                       loadGroup, nullptr, 
                                        getter_AddRefs(listener),
-                                       PR_FALSE))) {
+                                       false))) {
     NS_ERROR("nsXMLDocument::Load: Failed to start the document load.");
     return rv;
   }
@@ -462,16 +448,17 @@ nsXMLDocument::Load(const nsAString& aUrl, PRBool *aReturn)
   // mChannelIsPending.
 
   // Start an asynchronous read of the XML document
-  rv = channel->AsyncOpen(listener, nsnull);
+  rv = channel->AsyncOpen(listener, nullptr);
   if (NS_FAILED(rv)) {
-    mChannelIsPending = PR_FALSE;
+    mChannelIsPending = false;
     return rv;
   }
 
   if (!mAsync) {
     nsCOMPtr<nsIThread> thread = do_GetCurrentThread();
 
-    mLoopingForSyncLoad = PR_TRUE;
+    nsAutoSyncOperation sync(this);
+    mLoopingForSyncLoad = true;
     while (mLoopingForSyncLoad) {
       if (!NS_ProcessNextEvent(thread))
         break;
@@ -487,11 +474,11 @@ nsXMLDocument::Load(const nsAString& aUrl, PRBool *aReturn)
           ns.EqualsLiteral("http://www.mozilla.org/newlayout/xml/parsererror.xml")) {
         //return is already false
       } else {
-        *aReturn = PR_TRUE;
+        *aReturn = true;
       }
     }
   } else {
-    *aReturn = PR_TRUE;
+    *aReturn = true;
   }
 
   return NS_OK;
@@ -503,7 +490,7 @@ nsXMLDocument::StartDocumentLoad(const char* aCommand,
                                  nsILoadGroup* aLoadGroup,
                                  nsISupports* aContainer,
                                  nsIStreamListener **aDocListener,
-                                 PRBool aReset,
+                                 bool aReset,
                                  nsIContentSink* aSink)
 {
   nsresult rv = nsDocument::StartDocumentLoad(aCommand,
@@ -513,14 +500,14 @@ nsXMLDocument::StartDocumentLoad(const char* aCommand,
   if (NS_FAILED(rv)) return rv;
 
   if (nsCRT::strcmp("loadAsInteractiveData", aCommand) == 0) {
-    mLoadedAsInteractiveData = PR_TRUE;
+    mLoadedAsInteractiveData = true;
     aCommand = kLoadAsData; // XBL, for example, needs scripts and styles
   }
 
 
-  PRInt32 charsetSource = kCharsetFromDocTypeDefault;
-  nsCAutoString charset(NS_LITERAL_CSTRING("UTF-8"));
-  TryChannelCharset(aChannel, charsetSource, charset);
+  int32_t charsetSource = kCharsetFromDocTypeDefault;
+  nsAutoCString charset(NS_LITERAL_CSTRING("UTF-8"));
+  TryChannelCharset(aChannel, charsetSource, charset, nullptr);
 
   nsCOMPtr<nsIURI> aUrl;
   rv = aChannel->GetURI(getter_AddRefs(aUrl));
@@ -552,13 +539,13 @@ nsXMLDocument::StartDocumentLoad(const char* aCommand,
   NS_ENSURE_SUCCESS(rv, rv);
 
   NS_ASSERTION(mChannel, "How can we not have a channel here?");
-  mChannelIsPending = PR_TRUE;
+  mChannelIsPending = true;
   
   SetDocumentCharacterSet(charset);
   mParser->SetDocumentCharset(charset, charsetSource);
   mParser->SetCommand(aCommand);
   mParser->SetContentSink(sink);
-  mParser->Parse(aUrl, nsnull, (void *)this);
+  mParser->Parse(aUrl, nullptr, (void *)this);
 
   return NS_OK;
 }
@@ -566,23 +553,29 @@ nsXMLDocument::StartDocumentLoad(const char* aCommand,
 void
 nsXMLDocument::EndLoad()
 {
-  mChannelIsPending = PR_FALSE;
-  mLoopingForSyncLoad = PR_FALSE;
+  mChannelIsPending = false;
+  mLoopingForSyncLoad = false;
 
   mSynchronousDOMContentLoaded = (mLoadedAsData || mLoadedAsInteractiveData);
   nsDocument::EndLoad();
   if (mSynchronousDOMContentLoaded) {
-    mSynchronousDOMContentLoaded = PR_FALSE;
+    mSynchronousDOMContentLoaded = false;
     nsDocument::SetReadyStateInternal(nsIDocument::READYSTATE_COMPLETE);
     // Generate a document load event for the case when an XML
     // document was loaded as pure data without any presentation
     // attached to it.
-    nsEvent event(PR_TRUE, NS_LOAD);
-    nsEventDispatcher::Dispatch(static_cast<nsIDocument*>(this), nsnull,
+    nsEvent event(true, NS_LOAD);
+    nsEventDispatcher::Dispatch(static_cast<nsIDocument*>(this), nullptr,
                                 &event);
   }    
 }
  
+/* virtual */ void
+nsXMLDocument::DocSizeOfExcludingThis(nsWindowSizes* aWindowSizes) const
+{
+  nsDocument::DocSizeOfExcludingThis(aWindowSizes);
+}
+
 // nsIDOMDocument interface
 
 nsresult

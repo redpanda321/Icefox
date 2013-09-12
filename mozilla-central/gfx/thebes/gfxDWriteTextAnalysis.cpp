@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 4 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Foundation code.
- *
- * The Initial Developer of the Original Code is Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Bas Schouten <bschouten@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "gfxDWriteTextAnalysis.h"
 
@@ -45,16 +13,14 @@ TextAnalysis::TextAnalysis(const wchar_t* text,
   , mTextLength(textLength)
   , mLocaleName(localeName)
   , mReadingDirection(readingDirection)
-  , mBreakpoints(NULL)
-  , mRunHead(NULL)
   , mCurrentRun(NULL)
 {
 }
 
 TextAnalysis::~TextAnalysis()
 {
-    delete [] mBreakpoints;
-    for (Run *run = mRunHead; run;) {
+    // delete runs, except mRunHead which is part of the TextAnalysis object
+    for (Run *run = mRunHead.nextRun; run;) {
         Run *origRun = run;
         run = run->nextRun;
         delete origRun;
@@ -63,52 +29,28 @@ TextAnalysis::~TextAnalysis()
 
 STDMETHODIMP 
 TextAnalysis::GenerateResults(IDWriteTextAnalyzer* textAnalyzer,
-                              OUT Run **runHead,
-                              OUT DWRITE_LINE_BREAKPOINT **breakpoints)
+                              OUT Run **runHead)
 {
-    // Analyzes the text using each of the analyzers and returns
-    // their results as a series of runs.
+    // Analyzes the text using the script analyzer and returns
+    // the result as a series of runs.
 
     HRESULT hr = S_OK;
 
     // Initially start out with one result that covers the entire range.
     // This result will be subdivided by the analysis processes.
-    mRunHead = new Run;
-    
-    mRunHead->mTextStart = 0;
-    mRunHead->mTextLength = mTextLength;
-    mRunHead->mBidiLevel = 
+    mRunHead.mTextStart = 0;
+    mRunHead.mTextLength = mTextLength;
+    mRunHead.mBidiLevel = 
         (mReadingDirection == DWRITE_READING_DIRECTION_RIGHT_TO_LEFT);
-    mRunHead->nextRun = NULL;
-    mCurrentRun = mRunHead;
-#ifdef USE_DWRITE_BREAKPOINTS
-    delete [] mBreakpoints;
-    mBreakpoints = new DWRITE_LINE_BREAKPOINT[mTextLength];
-#endif
+    mRunHead.nextRun = NULL;
+    mCurrentRun = &mRunHead;
 
     // Call each of the analyzers in sequence, recording their results.
-    if (
-#ifdef USE_DWRITE_BREAKPOINTS
-        SUCCEEDED(hr = textAnalyzer->AnalyzeLineBreakpoints(this,
-                                                            0,
-                                                            mTextLength,
-                                                            this)) && 
-#endif
-        SUCCEEDED(hr = textAnalyzer->AnalyzeBidi(this,
-                                                 0,
-                                                 mTextLength,
-                                                 this)) &&
-        SUCCEEDED(hr = textAnalyzer->AnalyzeScript(this,
+    if (SUCCEEDED(hr = textAnalyzer->AnalyzeScript(this,
                                                    0,
                                                    mTextLength,
-                                                   this)) &&
-        SUCCEEDED(hr = textAnalyzer->AnalyzeNumberSubstitution(this,
-                                                               0,
-                                                               mTextLength,
-                                                               this))) {
-        *breakpoints = mBreakpoints;
-
-        *runHead = mRunHead;
+                                                   this))) {
+        *runHead = &mRunHead;
     }
 
     return hr;
@@ -195,11 +137,7 @@ TextAnalysis::SetLineBreakpoints(UINT32 textPosition,
                                  UINT32 textLength,
                                  DWRITE_LINE_BREAKPOINT const* lineBreakpoints)
 {
-    if (textLength > 0) {
-        memcpy(mBreakpoints + textPosition,
-               lineBreakpoints,
-               textLength * sizeof(DWRITE_LINE_BREAKPOINT));
-    }
+    // We don't use this for now.
     return S_OK;
 }
 
@@ -226,13 +164,7 @@ TextAnalysis::SetBidiLevel(UINT32 textPosition,
                            UINT8 explicitLevel,
                            UINT8 resolvedLevel)
 {
-    SetCurrentRun(textPosition);
-    SplitCurrentRun(textPosition);
-    while (textLength > 0) {
-        Run *run = FetchNextRun(&textLength);
-        run->mBidiLevel = resolvedLevel;
-    }
-
+    // We don't use this for now.
     return S_OK;
 }
 
@@ -284,7 +216,7 @@ void TextAnalysis::SetCurrentRun(UINT32 textPosition)
         return;
     }
 
-    for (Run *run = mRunHead; run; run = run->nextRun) {
+    for (Run *run = &mRunHead; run; run = run->nextRun) {
         if (run->ContainsTextPosition(textPosition)) {
             mCurrentRun = run;
             return;

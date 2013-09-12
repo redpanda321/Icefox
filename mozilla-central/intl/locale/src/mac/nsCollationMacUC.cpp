@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsCollationMacUC.h"
 #include "nsILocaleService.h"
@@ -44,12 +11,12 @@
 NS_IMPL_ISUPPORTS1(nsCollationMacUC, nsICollation)
 
 nsCollationMacUC::nsCollationMacUC() 
-  : mInit(PR_FALSE)
-  , mHasCollator(PR_FALSE)
+  : mInit(false)
+  , mHasCollator(false)
   , mLocale(NULL)
   , mLastStrength(-1)
   , mCollator(NULL)
-  , mBuffer(NULL)
+  , mBuffer(nullptr)
   , mBufferLen(1)
 {
 }
@@ -57,14 +24,17 @@ nsCollationMacUC::nsCollationMacUC()
 nsCollationMacUC::~nsCollationMacUC() 
 {
   if (mHasCollator) {
-    OSStatus err = ::UCDisposeCollator(&mCollator);
-    mHasCollator = PR_FALSE;
+#ifdef DEBUG
+    OSStatus err =
+#endif
+      ::UCDisposeCollator(&mCollator);
+    mHasCollator = false;
     NS_ASSERTION((err == noErr), "UCDisposeCollator failed");
   }
   PR_FREEIF(mBuffer);
 }
 
-nsresult nsCollationMacUC::StrengthToOptions(const PRInt32 aStrength,
+nsresult nsCollationMacUC::StrengthToOptions(const int32_t aStrength,
                                              UCCollateOptions* aOptions)
 {
   NS_ENSURE_ARG_POINTER(aOptions);
@@ -86,7 +56,8 @@ nsresult nsCollationMacUC::ConvertLocale(nsILocale* aNSLocale, LocaleRef* aMacLo
 
   nsAutoString localeString;
   nsresult res = aNSLocale->GetCategory(NS_LITERAL_STRING("NSILOCALE_COLLATE"), localeString);
-  NS_ENSURE_TRUE(res == noErr && !localeString.IsEmpty(), NS_ERROR_FAILURE);
+  NS_ENSURE_TRUE(NS_SUCCEEDED(res) && !localeString.IsEmpty(),
+                 NS_ERROR_FAILURE);
   NS_LossyConvertUTF16toASCII tmp(localeString);
   tmp.ReplaceChar('-', '_');
   OSStatus err;
@@ -96,7 +67,7 @@ nsresult nsCollationMacUC::ConvertLocale(nsILocale* aNSLocale, LocaleRef* aMacLo
   return NS_OK;
 }
 
-nsresult nsCollationMacUC::EnsureCollator(const PRInt32 newStrength) 
+nsresult nsCollationMacUC::EnsureCollator(const int32_t newStrength) 
 {
   NS_ENSURE_TRUE(mInit, NS_ERROR_NOT_INITIALIZED);
   if (mHasCollator && (mLastStrength == newStrength))
@@ -105,7 +76,7 @@ nsresult nsCollationMacUC::EnsureCollator(const PRInt32 newStrength)
   OSStatus err;
   if (mHasCollator) {
     err = ::UCDisposeCollator(&mCollator);
-    mHasCollator = PR_FALSE;
+    mHasCollator = false;
     NS_ENSURE_TRUE((err == noErr), NS_ERROR_FAILURE);
   }
 
@@ -116,7 +87,7 @@ nsresult nsCollationMacUC::EnsureCollator(const PRInt32 newStrength)
   LocaleOperationVariant opVariant = 0; // default variant for now
   err = ::UCCreateCollator(mLocale, opVariant, newOptions, &mCollator);
   NS_ENSURE_TRUE((err == noErr), NS_ERROR_FAILURE);
-  mHasCollator = PR_TRUE;
+  mHasCollator = true;
 
   mLastStrength = newStrength;
   return NS_OK;
@@ -139,12 +110,12 @@ NS_IMETHODIMP nsCollationMacUC::Initialize(nsILocale* locale)
   rv = ConvertLocale(locale, &mLocale);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  mInit = PR_TRUE;
+  mInit = true;
   return NS_OK;
 }
 
-NS_IMETHODIMP nsCollationMacUC::AllocateRawSortKey(PRInt32 strength, const nsAString& stringIn,
-                                                   PRUint8** key, PRUint32* outLen)
+NS_IMETHODIMP nsCollationMacUC::AllocateRawSortKey(int32_t strength, const nsAString& stringIn,
+                                                   uint8_t** key, uint32_t* outLen)
 {
   NS_ENSURE_TRUE(mInit, NS_ERROR_NOT_INITIALIZED);
   NS_ENSURE_ARG_POINTER(key);
@@ -153,10 +124,10 @@ NS_IMETHODIMP nsCollationMacUC::AllocateRawSortKey(PRInt32 strength, const nsASt
   nsresult res = EnsureCollator(strength);
   NS_ENSURE_SUCCESS(res, res);
 
-  PRUint32 stringInLen = stringIn.Length();
-  PRUint32 maxKeyLen = (1 + stringInLen) * kCollationValueSizeFactor * sizeof(UCCollationValue);
+  uint32_t stringInLen = stringIn.Length();
+  uint32_t maxKeyLen = (1 + stringInLen) * kCollationValueSizeFactor * sizeof(UCCollationValue);
   if (maxKeyLen > mBufferLen) {
-    PRUint32 newBufferLen = mBufferLen;
+    uint32_t newBufferLen = mBufferLen;
     do {
       newBufferLen *= 2;
     } while (newBufferLen < maxKeyLen);
@@ -176,20 +147,20 @@ NS_IMETHODIMP nsCollationMacUC::AllocateRawSortKey(PRInt32 strength, const nsASt
                                      &actual, (UCCollationValue *)mBuffer);
   NS_ENSURE_TRUE((err == noErr), NS_ERROR_FAILURE);
 
-  PRUint32 keyLength = actual * sizeof(UCCollationValue);
+  uint32_t keyLength = actual * sizeof(UCCollationValue);
   void *newKey = PR_Malloc(keyLength);
   if (!newKey)
     return NS_ERROR_OUT_OF_MEMORY;
 
   memcpy(newKey, mBuffer, keyLength);
-  *key = (PRUint8 *)newKey;
+  *key = (uint8_t *)newKey;
   *outLen = keyLength;
 
   return NS_OK;
 }
 
-NS_IMETHODIMP nsCollationMacUC::CompareString(PRInt32 strength, const nsAString& string1,
-                                              const nsAString& string2, PRInt32* result) 
+NS_IMETHODIMP nsCollationMacUC::CompareString(int32_t strength, const nsAString& string1,
+                                              const nsAString& string2, int32_t* result) 
 {
   NS_ENSURE_TRUE(mInit, NS_ERROR_NOT_INITIALIZED);
   NS_ENSURE_ARG_POINTER(result);
@@ -209,9 +180,9 @@ NS_IMETHODIMP nsCollationMacUC::CompareString(PRInt32 strength, const nsAString&
   return NS_OK;
 }
 
-NS_IMETHODIMP nsCollationMacUC::CompareRawSortKey(const PRUint8* key1, PRUint32 len1,
-                                                  const PRUint8* key2, PRUint32 len2,
-                                                  PRInt32* result)
+NS_IMETHODIMP nsCollationMacUC::CompareRawSortKey(const uint8_t* key1, uint32_t len1,
+                                                  const uint8_t* key2, uint32_t len2,
+                                                  int32_t* result)
 {
   NS_ENSURE_TRUE(mInit, NS_ERROR_NOT_INITIALIZED);
   NS_ENSURE_ARG_POINTER(key1);

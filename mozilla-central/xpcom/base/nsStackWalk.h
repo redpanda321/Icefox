@@ -1,39 +1,7 @@
 /* vim: set shiftwidth=4 tabstop=8 autoindent cindent expandtab: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is NS_WalkTheStack.
- *
- * The Initial Developer of the Original Code is the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   L. David Baron <dbaron@dbaron.org>, Mozilla Corporation (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* API for getting a stack trace of the C/C++ stack on the current thread */
 
@@ -43,11 +11,17 @@
 /* WARNING: This file is intended to be included from C or C++ files. */
 
 #include "nscore.h"
+#include <mozilla/StandardInteger.h>
 
-PR_BEGIN_EXTERN_C
+#ifdef __cplusplus
+extern "C" {
+#endif
 
+// aSP will be the best approximation possible of what the stack pointer will be
+// pointing to when the execution returns to executing that at that PC.
+// If no approximation can be made it will be NULL.
 typedef void
-(* NS_WalkStackCallback)(void *aPC, void *aClosure);
+(* NS_WalkStackCallback)(void *aPC, void *aSP, void *aClosure);
 
 /**
  * Call aCallback for the C/C++ stack frames on the current thread, from
@@ -58,6 +32,15 @@ typedef void
  *                     the first callback will be for the caller of
  *                     NS_StackWalk.
  * @param aClosure     Caller-supplied data passed through to aCallback.
+ * @param aThread      The thread for which the stack is to be retrieved.
+ *                     Passing null causes us to walk the stack of the
+ *                     current thread. On Windows, this is a thread HANDLE.
+ *                     It is currently not supported on any other platform.
+ * @param aPlatformData Platform specific data that can help in walking the
+ *                      stack, this should be NULL unless you really know
+ *                      what you're doing! This needs to be a pointer to a
+ *                      CONTEXT on Windows and should not be passed on other
+ *                      platforms.
  *
  * Returns NS_ERROR_NOT_IMPLEMENTED on platforms where it is
  * unimplemented.
@@ -69,8 +52,8 @@ typedef void
  * generation.
  */
 XPCOM_API(nsresult)
-NS_StackWalk(NS_WalkStackCallback aCallback, PRUint32 aSkipFrames,
-             void *aClosure);
+NS_StackWalk(NS_WalkStackCallback aCallback, uint32_t aSkipFrames,
+             void *aClosure, uintptr_t aThread, void *aPlatformData);
 
 typedef struct {
     /*
@@ -79,7 +62,7 @@ typedef struct {
      * string and zero if unknown.
      */
     char library[256];
-    PRUptrdiff loffset;
+    ptrdiff_t loffset;
     /*
      * The name of the file name and line number of the code
      * corresponding to the address, or empty string and zero if
@@ -92,7 +75,7 @@ typedef struct {
      * offset within that function, or empty string and zero if unknown.
      */
     char function[256];
-    PRUptrdiff foffset;
+    ptrdiff_t foffset;
 } nsCodeAddressDetails;
 
 /**
@@ -124,8 +107,10 @@ NS_DescribeCodeAddress(void *aPC, nsCodeAddressDetails *aDetails);
  */
 XPCOM_API(nsresult)
 NS_FormatCodeAddressDetails(void *aPC, const nsCodeAddressDetails *aDetails,
-                            char *aBuffer, PRUint32 aBufferSize);
+                            char *aBuffer, uint32_t aBufferSize);
 
-PR_END_EXTERN_C
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !defined(nsStackWalk_h_) */

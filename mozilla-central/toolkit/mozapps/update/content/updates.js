@@ -1,42 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Update Service.
- *
- * The Initial Developer of the Original Code is Google Inc.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Ben Goodger <ben@mozilla.org> (Original Author)
- *  Asaf Romano <mozilla.mano@sent.com>
- *  Jeff Walden <jwalden+code@mit.edu>
- *  Robert Strong <robert.bugzilla@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 Components.utils.import("resource://gre/modules/DownloadUtils.jsm");
 Components.utils.import("resource://gre/modules/AddonManager.jsm");
@@ -50,7 +15,9 @@ const CoR = Components.results;
 
 const XMLNS_XUL               = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
 
+const PREF_APP_UPDATE_BACKGROUNDERRORS   = "app.update.backgroundErrors";
 const PREF_APP_UPDATE_BILLBOARD_TEST_URL = "app.update.billboard.test_url";
+const PREF_APP_UPDATE_CERT_ERRORS        = "app.update.cert.errors";
 const PREF_APP_UPDATE_ENABLED            = "app.update.enabled";
 const PREF_APP_UPDATE_LOG                = "app.update.log";
 const PREF_APP_UPDATE_MANUAL_URL         = "app.update.url.manual";
@@ -58,19 +25,28 @@ const PREF_APP_UPDATE_NEVER_BRANCH       = "app.update.never.";
 const PREF_APP_UPDATE_TEST_LOOP          = "app.update.test.loop";
 const PREF_PLUGINS_UPDATEURL             = "plugins.update.url";
 
+const PREF_EM_HOTFIX_ID                  = "extensions.hotfix.id";
+
 const UPDATE_TEST_LOOP_INTERVAL     = 2000;
 
 const URI_UPDATES_PROPERTIES  = "chrome://mozapps/locale/update/updates.properties";
 
 const STATE_DOWNLOADING       = "downloading";
 const STATE_PENDING           = "pending";
+const STATE_PENDING_SVC       = "pending-service";
 const STATE_APPLYING          = "applying";
+const STATE_APPLIED           = "applied";
+const STATE_APPLIED_SVC       = "applied-service";
 const STATE_SUCCEEDED         = "succeeded";
 const STATE_DOWNLOAD_FAILED   = "download-failed";
 const STATE_FAILED            = "failed";
 
 const SRCEVT_FOREGROUND       = 1;
 const SRCEVT_BACKGROUND       = 2;
+
+const CERT_ATTR_CHECK_FAILED_NO_UPDATE  = 100;
+const CERT_ATTR_CHECK_FAILED_HAS_UPDATE = 101;
+const BACKGROUNDCHECK_MULTIPLE_FAILURES = 110;
 
 var gLogEnabled = false;
 var gUpdatesFoundPageId;
@@ -399,6 +375,13 @@ var gUpdates = {
         // user that the background checking found an update that requires
         // their permission to install, and it's ready for download.
         this.setUpdate(arg0);
+        if (this.update.errorCode == CERT_ATTR_CHECK_FAILED_NO_UPDATE ||
+            this.update.errorCode == CERT_ATTR_CHECK_FAILED_HAS_UPDATE ||
+            this.update.errorCode == BACKGROUNDCHECK_MULTIPLE_FAILURES) {
+          aCallback("errorextra");
+          return;
+        }
+
         var p = this.update.selectedPatch;
         if (p) {
           var state = p.state;
@@ -428,6 +411,9 @@ var gUpdates = {
           // the Update.
           switch (state) {
           case STATE_PENDING:
+          case STATE_PENDING_SVC:
+          case STATE_APPLIED:
+          case STATE_APPLIED_SVC:
             this.sourceEvent = SRCEVT_BACKGROUND;
             aCallback("finishedBackground");
             return;
@@ -508,10 +494,26 @@ var gUpdates = {
       return;
     }
 
+    try {
+      var hotfixID = Services.prefs.getCharPref(PREF_EM_HOTFIX_ID);
+    }
+    catch (e) { }
+
     var self = this;
     AddonManager.getAllAddons(function(addons) {
       self.addons = [];
       addons.forEach(function(addon) {
+        // Protect against code that overrides the add-ons manager and doesn't
+        // implement the isCompatibleWith or the findUpdates method.
+        if (!("isCompatibleWith" in addon) || !("findUpdates" in addon)) {
+          let errMsg = "Add-on doesn't implement either the isCompatibleWith " +
+                       "or the findUpdates method!";
+          if (addon.id)
+            errMsg += " Add-on ID: " + addon.id;
+          Components.utils.reportError(errMsg);
+          return;
+        }
+
         // If an add-on isn't appDisabled and isn't userDisabled then it is
         // either active now or the user expects it to be active after the
         // restart. If that is the case and the add-on is not installed by the
@@ -520,13 +522,20 @@ var gUpdates = {
         // incompatible. If an addon's type equals plugin it is skipped since
         // checking plugins compatibility information isn't supported and
         // getting the scope property of a plugin breaks in some environments
-        // (see bug 566787).
-        if (addon.type != "plugin" &&
-            !addon.appDisabled && !addon.userDisabled &&
-            addon.scope != AddonManager.SCOPE_APPLICATION &&
-            !addon.isCompatibleWith(self.update.appVersion,
-                                    self.update.platformVersion))
-          self.addons.push(addon);
+        // (see bug 566787). The hotfix add-on is also ignored as it shouldn't
+        // block the user from upgrading.
+        try {
+          if (addon.type != "plugin" && addon.id != hotfixID &&
+              !addon.appDisabled && !addon.userDisabled &&
+              addon.scope != AddonManager.SCOPE_APPLICATION &&
+              addon.isCompatible &&
+              !addon.isCompatibleWith(self.update.appVersion,
+                                      self.update.platformVersion))
+            self.addons.push(addon);
+        }
+        catch (e) {
+          Components.utils.reportError(e);
+        }
       });
 
       aCallback(self.addons.length != 0);
@@ -579,6 +588,11 @@ var gCheckingPage = {
     // then canceled.  If we don't clear the "never" prefs future
     // notifications will never happen.
     Services.prefs.deleteBranch(PREF_APP_UPDATE_NEVER_BRANCH);
+
+    // The user will be notified if there is an error so clear the background
+    // check error count.
+    if (Services.prefs.prefHasUserValue(PREF_APP_UPDATE_BACKGROUNDERRORS))
+      Services.prefs.clearUserPref(PREF_APP_UPDATE_BACKGROUNDERRORS);
 
     this._checker = CoC["@mozilla.org/updates/update-checker;1"].
                     createInstance(CoI.nsIUpdateChecker);
@@ -653,7 +667,14 @@ var gCheckingPage = {
     onError: function(request, update) {
       LOG("gCheckingPage", "onError - proceeding to error page");
       gUpdates.setUpdate(update);
-      gUpdates.wiz.goTo("errors");
+      if (update.errorCode &&
+          (update.errorCode == CERT_ATTR_CHECK_FAILED_NO_UPDATE ||
+           update.errorCode == CERT_ATTR_CHECK_FAILED_HAS_UPDATE)) {
+        gUpdates.wiz.goTo("errorextra");
+      }
+      else {
+        gUpdates.wiz.goTo("errors");
+      }
     },
 
     /**
@@ -966,7 +987,7 @@ var gUpdatesFoundBillboardPage = {
     var remoteContent = document.getElementById("updateMoreInfoContent");
     // Note: may be called multiple times due to multiple onLoad events.
     var state = remoteContent.getAttribute("state");
-    if (state == "loading" || !aEvent.originalTarget.isSameNode(remoteContent))
+    if (state == "loading" || aEvent.originalTarget != remoteContent)
       return;
 
     remoteContent.removeEventListener("load", gUpdatesFoundBillboardPage.onBillboardLoad, false);
@@ -1054,7 +1075,7 @@ var gLicensePage = {
     // licenseContent.
     // Note: may be called multiple times due to multiple onLoad events.
     var state = licenseContent.getAttribute("state");
-    if (state == "loading" || !aEvent.originalTarget.isSameNode(licenseContent))
+    if (state == "loading" || aEvent.originalTarget != licenseContent)
       return;
 
     licenseContent.removeEventListener("load", gLicensePage.onLicenseLoad, false);
@@ -1197,6 +1218,11 @@ var gDownloadingPage = {
   _hiding: false,
 
   /**
+   * Have we registered an observer for a background update being staged
+   */
+  _updateApplyingObserver: false,
+
+  /**
    * Initialize
    */
   onPageShow: function() {
@@ -1243,7 +1269,7 @@ var gDownloadingPage = {
         // we fell back from a partial patch to a complete patch and even
         // then we couldn't validate. Show a validation error with instructions
         // on how to manually update.
-        this.removeDownloadListener();
+        this.cleanUp();
         gUpdates.wiz.goTo("errors");
         return;
       }
@@ -1331,12 +1357,30 @@ var gDownloadingPage = {
   },
 
   /**
-   * Removes the download listener.
+   * Wait for an update being staged in the background.
    */
-  removeDownloadListener: function() {
+  _setUpdateApplying: function() {
+    this._downloadProgress.mode = "undetermined";
+    this._pauseButton.hidden = true;
+    let applyingStatus = gUpdates.getAUSString("applyingUpdate");
+    this._setStatus(applyingStatus);
+
+    Services.obs.addObserver(this, "update-staged", false);
+    this._updateApplyingObserver = true;
+  },
+
+  /**
+   * Clean up the listener and observer registered for the wizard.
+   */
+  cleanUp: function() {
     var aus = CoC["@mozilla.org/updates/update-service;1"].
               getService(CoI.nsIApplicationUpdateService);
     aus.removeDownloadListener(this);
+
+    if (this._updateApplyingObserver) {
+      Services.obs.removeObserver(this, "update-staged");
+      this._updateApplyingObserver = false;
+    }
   },
 
   /**
@@ -1367,7 +1411,7 @@ var gDownloadingPage = {
     if (this._hiding)
       return;
 
-    this.removeDownloadListener();
+    this.cleanUp();
   },
 
   /**
@@ -1381,7 +1425,7 @@ var gDownloadingPage = {
     // Remove ourself as a download listener so that we don't continue to be
     // fed progress and state notifications after the UI we're updating has
     // gone away.
-    this.removeDownloadListener();
+    this.cleanUp();
 
     var aus = CoC["@mozilla.org/updates/update-service;1"].
               getService(CoI.nsIApplicationUpdateService);
@@ -1425,8 +1469,6 @@ var gDownloadingPage = {
    *          Additional data
    */
   onStartRequest: function(request, context) {
-    if (request instanceof CoI.nsIIncrementalDownload)
-      LOG("gDownloadingPage", "onStartRequest - spec: " + request.URI.spec);
     // This !paused test is necessary because onStartRequest may fire after
     // the download was paused (for those speedy clickers...)
     if (this._paused)
@@ -1449,8 +1491,6 @@ var gDownloadingPage = {
    *          The total number of bytes that must be transferred
    */
   onProgress: function(request, context, progress, maxProgress) {
-    LOG("gDownloadingPage", "onProgress - progress: " + progress + "/" +
-        maxProgress);
     let status = this._updateDownloadStatus(progress, maxProgress);
     var currentProgress = Math.round(100 * (progress / maxProgress));
 
@@ -1496,8 +1536,6 @@ var gDownloadingPage = {
    *          Human readable version of |status|
    */
   onStatus: function(request, context, status, statusText) {
-    LOG("gDownloadingPage", "onStatus - status: " + status + ", text: " +
-        statusText);
     this._setStatus(statusText);
   },
 
@@ -1511,21 +1549,18 @@ var gDownloadingPage = {
    *          Status code containing the reason for the cessation.
    */
   onStopRequest: function(request, context, status) {
-    if (request instanceof CoI.nsIIncrementalDownload)
-      LOG("gDownloadingPage", "onStopRequest - spec: " + request.URI.spec +
-          ", status: " + status);
-
     if (this._downloadProgress.mode != "normal")
       this._downloadProgress.mode = "normal";
 
     var u = gUpdates.update;
     switch (status) {
+    case CoR.NS_ERROR_CORRUPTED_CONTENT:
     case CoR.NS_ERROR_UNEXPECTED:
       if (u.selectedPatch.state == STATE_DOWNLOAD_FAILED &&
-          u.isCompleteUpdate) {
+          (u.isCompleteUpdate || u.patchCount != 2)) {
         // Verification error of complete patch, informational text is held in
         // the update object.
-        this.removeDownloadListener();
+        this.cleanUp();
         gUpdates.wiz.goTo("errors");
         break;
       }
@@ -1544,15 +1579,48 @@ var gDownloadingPage = {
       break;
     case CoR.NS_OK:
       LOG("gDownloadingPage", "onStopRequest - patch verification succeeded");
-      this.removeDownloadListener();
-      gUpdates.wiz.goTo("finished");
+      // If the background update pref is set, we should wait until the update
+      // is actually staged in the background.
+      var aus = CoC["@mozilla.org/updates/update-service;1"].
+                getService(CoI.nsIApplicationUpdateService);
+      if (aus.canStageUpdates) {
+        this._setUpdateApplying();
+      } else {
+        this.cleanUp();
+        gUpdates.wiz.goTo("finished");
+      }
       break;
     default:
       LOG("gDownloadingPage", "onStopRequest - transfer failed");
       // Some kind of transfer error, die.
-      this.removeDownloadListener();
+      this.cleanUp();
       gUpdates.wiz.goTo("errors");
       break;
+    }
+  },
+
+  /**
+   * See nsIObserver.idl
+   */
+  observe: function(aSubject, aTopic, aData) {
+    if (aTopic == "update-staged") {
+      if (aData == STATE_DOWNLOADING) {
+        // We've fallen back to downloding the full update because the
+        // partial update failed to get staged in the background.
+        this._setStatus("downloading");
+        return;
+      }
+      this.cleanUp();
+      if (aData == STATE_APPLIED ||
+          aData == STATE_APPLIED_SVC ||
+          aData == STATE_PENDING ||
+          aData == STATE_PENDING_SVC) {
+        // If the update is successfully applied, or if the updater has
+        // fallen back to non-staged updates, go to the finish page.
+        gUpdates.wiz.goTo("finished");
+      } else {
+        gUpdates.wiz.goTo("errors");
+      }
     }
   },
 
@@ -1562,6 +1630,7 @@ var gDownloadingPage = {
   QueryInterface: function(iid) {
     if (!iid.equals(CoI.nsIRequestObserver) &&
         !iid.equals(CoI.nsIProgressEventSink) &&
+        !iid.equals(CoI.nsIObserver) &&
         !iid.equals(CoI.nsISupports))
       throw CoR.NS_ERROR_NO_INTERFACE;
     return this;
@@ -1592,6 +1661,47 @@ var gErrorsPage = {
 };
 
 /**
+ * The page shown when there is a background check or a certificate attribute
+ * error.
+ */
+var gErrorExtraPage = {
+  /**
+   * Initialize
+   */
+  onPageShow: function() {
+    gUpdates.setButtons(null, null, "okButton", true);
+    gUpdates.wiz.getButton("finish").focus();
+    let secHistogram = CoC["@mozilla.org/base/telemetry;1"].
+                                  getService(CoI.nsITelemetry).
+                                  getHistogramById("SECURITY_UI");
+
+    if (Services.prefs.prefHasUserValue(PREF_APP_UPDATE_CERT_ERRORS))
+      Services.prefs.clearUserPref(PREF_APP_UPDATE_CERT_ERRORS);
+
+    if (Services.prefs.prefHasUserValue(PREF_APP_UPDATE_BACKGROUNDERRORS))
+      Services.prefs.clearUserPref(PREF_APP_UPDATE_BACKGROUNDERRORS);
+
+    if (gUpdates.update.errorCode == CERT_ATTR_CHECK_FAILED_HAS_UPDATE) {
+      document.getElementById("errorCertAttrHasUpdateLabel").hidden = false;
+      secHistogram.add(CoI.nsISecurityUITelemetry.WARNING_INSECURE_UPDATE);
+    }
+    else {
+      if (gUpdates.update.errorCode == CERT_ATTR_CHECK_FAILED_NO_UPDATE){
+        document.getElementById("errorCertCheckNoUpdateLabel").hidden = false;
+        secHistogram.add(CoI.nsISecurityUITelemetry.WARNING_NO_SECURE_UPDATE);
+      }
+      else
+        document.getElementById("genericBackgroundErrorLabel").hidden = false;
+      var manualURL = Services.urlFormatter.formatURLPref(PREF_APP_UPDATE_MANUAL_URL);
+      var errorLinkLabel = document.getElementById("errorExtraLinkLabel");
+      errorLinkLabel.value = manualURL;
+      errorLinkLabel.setAttribute("url", manualURL);
+      errorLinkLabel.hidden = false;
+    }
+  }
+};
+
+/**
  * The "There was an error applying a partial patch" page.
  */
 var gErrorPatchingPage = {
@@ -1605,6 +1715,7 @@ var gErrorPatchingPage = {
   onWizardNext: function() {
     switch (gUpdates.update.selectedPatch.state) {
     case STATE_PENDING:
+    case STATE_PENDING_SVC: 
       gUpdates.wiz.goTo("finished");
       break;
     case STATE_DOWNLOADING:
@@ -1677,15 +1788,21 @@ var gFinishedPage = {
     gUpdates.wiz.getButton("extra1").disabled = true;
 
     // Notify all windows that an application quit has been requested.
-    var os = CoC["@mozilla.org/observer-service;1"].
-             getService(CoI.nsIObserverService);
     var cancelQuit = CoC["@mozilla.org/supports-PRBool;1"].
                      createInstance(CoI.nsISupportsPRBool);
-    os.notifyObservers(cancelQuit, "quit-application-requested", "restart");
+    Services.obs.notifyObservers(cancelQuit, "quit-application-requested",
+                                 "restart");
 
     // Something aborted the quit process.
     if (cancelQuit.data)
       return;
+
+    // If already in safe mode restart in safe mode (bug 327119)
+    if (Services.appinfo.inSafeMode) {
+      let env = CoC["@mozilla.org/process/environment;1"].
+                getService(CoI.nsIEnvironment);
+      env.set("MOZ_SAFE_MODE_RESTART", "1");
+    }
 
     // Restart the application
     CoC["@mozilla.org/toolkit/app-startup;1"].getService(CoI.nsIAppStartup).

@@ -1,117 +1,192 @@
 /* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set ts=2 et sw=2 tw=80: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Indexed Database.
- *
- * The Initial Developer of the Original Code is
- * The Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Ben Turner <bent.mozilla@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef mozilla_dom_indexeddb_databaseinfo_h__
 #define mozilla_dom_indexeddb_databaseinfo_h__
 
-// Only meant to be included in IndexedDB source files, not exported.
-#include "IndexedDatabase.h"
+#include "mozilla/dom/indexedDB/IndexedDatabase.h"
 
-#include "IDBObjectStore.h"
+#include "mozilla/dom/indexedDB/Key.h"
+#include "mozilla/dom/indexedDB/KeyPath.h"
+#include "mozilla/dom/indexedDB/IDBObjectStore.h"
+
+#include "nsRefPtrHashtable.h"
+#include "nsHashKeys.h"
 
 BEGIN_INDEXEDDB_NAMESPACE
 
-struct DatabaseInfo
+class IndexedDBDatabaseChild;
+struct ObjectStoreInfo;
+
+typedef nsRefPtrHashtable<nsStringHashKey, ObjectStoreInfo>
+        ObjectStoreInfoHash;
+
+struct DatabaseInfoGuts
 {
+  DatabaseInfoGuts()
+  : nextObjectStoreId(1), nextIndexId(1)
+  { }
+
+  bool operator==(const DatabaseInfoGuts& aOther) const
+  {
+    return this->name == aOther.name &&
+           this->origin == aOther.origin &&
+           this->version == aOther.version &&
+           this->nextObjectStoreId == aOther.nextObjectStoreId &&
+           this->nextIndexId == aOther.nextIndexId;
+  };
+
+  // Make sure to update ipc/SerializationHelpers.h when changing members here!
   nsString name;
-  nsString description;
-  nsString version;
-  PRUint32 id;
-  nsString filePath;
+  nsCString origin;
+  uint64_t version;
+  int64_t nextObjectStoreId;
+  int64_t nextIndexId;
+};
 
-  nsAutoRefCnt referenceCount;
-
+struct DatabaseInfo : public DatabaseInfoGuts
+{
   DatabaseInfo()
-  : id(0) { }
+  : cloned(false)
+  { }
 
-  static bool Get(PRUint32 aId,
+  ~DatabaseInfo();
+
+  static bool Get(nsIAtom* aId,
                   DatabaseInfo** aInfo);
 
   static bool Put(DatabaseInfo* aInfo);
 
-  static void Remove(PRUint32 aId);
+  static void Remove(nsIAtom* aId);
 
   bool GetObjectStoreNames(nsTArray<nsString>& aNames);
   bool ContainsStoreName(const nsAString& aName);
+
+  ObjectStoreInfo* GetObjectStore(const nsAString& aName);
+
+  bool PutObjectStore(ObjectStoreInfo* aInfo);
+
+  void RemoveObjectStore(const nsAString& aName);
+
+  already_AddRefed<DatabaseInfo> Clone();
+
+  nsCOMPtr<nsIAtom> id;
+  nsString filePath;
+  bool cloned;
+
+  nsAutoPtr<ObjectStoreInfoHash> objectStoreHash;
+
+  NS_INLINE_DECL_REFCOUNTING(DatabaseInfo)
 };
 
 struct IndexInfo
 {
+#ifdef NS_BUILD_REFCNT_LOGGING
+  IndexInfo();
+  IndexInfo(const IndexInfo& aOther);
+  ~IndexInfo();
+#else
   IndexInfo()
-  : id(LL_MININT), unique(false), autoIncrement(false) { }
+  : id(INT64_MIN), keyPath(0), unique(false), multiEntry(false) { }
+#endif
 
-  PRInt64 id;
+  bool operator==(const IndexInfo& aOther) const
+  {
+    return this->name == aOther.name &&
+           this->id == aOther.id &&
+           this->keyPath == aOther.keyPath &&
+           this->unique == aOther.unique &&
+           this->multiEntry == aOther.multiEntry;
+  };
+
+  // Make sure to update ipc/SerializationHelpers.h when changing members here!
   nsString name;
-  nsString keyPath;
+  int64_t id;
+  KeyPath keyPath;
   bool unique;
-  bool autoIncrement;
+  bool multiEntry;
 };
 
-struct ObjectStoreInfo
+struct ObjectStoreInfoGuts
 {
+  ObjectStoreInfoGuts()
+  : id(0), keyPath(0), autoIncrement(false)
+  { }
+
+  bool operator==(const ObjectStoreInfoGuts& aOther) const
+  {
+    return this->name == aOther.name &&
+           this->id == aOther.id;
+  };
+
+  // Make sure to update ipc/SerializationHelpers.h when changing members here!
+
+  // Constant members, can be gotten on any thread
   nsString name;
-  PRInt64 id;
-  nsString keyPath;
+  int64_t id;
+  KeyPath keyPath;
   bool autoIncrement;
-  PRUint32 databaseId;
+
+  // Main-thread only members. This must *not* be touched on the database
+  // thread.
   nsTArray<IndexInfo> indexes;
+};
 
+struct ObjectStoreInfo : public ObjectStoreInfoGuts
+{
+#ifdef NS_BUILD_REFCNT_LOGGING
+  ObjectStoreInfo();
+#else
   ObjectStoreInfo()
-  : id(0), autoIncrement(false), databaseId(0) { }
+  : nextAutoIncrementId(0), comittedAutoIncrementId(0) { }
+#endif
 
-  static bool Get(PRUint32 aDatabaseId,
-                  const nsAString& aName,
-                  ObjectStoreInfo** aInfo);
+  ObjectStoreInfo(ObjectStoreInfo& aOther);
 
-  static bool Put(ObjectStoreInfo* aInfo);
+private:
+#ifdef NS_BUILD_REFCNT_LOGGING
+  ~ObjectStoreInfo();
+#else
+  ~ObjectStoreInfo() {}
+#endif
+public:
 
-  static void Remove(PRUint32 aDatabaseId,
-                     const nsAString& aName);
+  // Database-thread members. After the ObjectStoreInfo has been initialized,
+  // these can *only* be touced on the database thread.
+  int64_t nextAutoIncrementId;
+  int64_t comittedAutoIncrementId;
+
+  // This is threadsafe since the ObjectStoreInfos are created on the database
+  // thread but then only used from the main thread. Ideal would be if we
+  // could transfer ownership from the database thread to the main thread, but
+  // we don't have that ability yet.
+  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(ObjectStoreInfo)
 };
 
 struct IndexUpdateInfo
 {
-  IndexInfo info;
+#ifdef NS_BUILD_REFCNT_LOGGING
+  IndexUpdateInfo();
+  IndexUpdateInfo(const IndexUpdateInfo& aOther);
+  ~IndexUpdateInfo();
+#endif
+
+  bool operator==(const IndexUpdateInfo& aOther) const
+  {
+    return this->indexId == aOther.indexId &&
+           this->indexUnique == aOther.indexUnique &&
+           this->value == aOther.value;
+  };
+
+  // Make sure to update ipc/SerializationHelpers.h when changing members here!
+  int64_t indexId;
+  bool indexUnique;
   Key value;
 };
 
 END_INDEXEDDB_NAMESPACE
 
 #endif // mozilla_dom_indexeddb_databaseinfo_h__
-

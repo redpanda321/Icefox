@@ -1,43 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Henrik Gemal <mozilla@gemal.dk>
- *   Darin Fisher <darin@netscape.com>
- *   Alexey Chernyak <alexeyc@bigfoot.com> (XHTML 1.1 conversion)
- *   Steffen Wilberg <steffen.wilberg@web.de> (new layout)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsAboutCache.h"
 #include "nsIIOService.h"
@@ -49,20 +13,18 @@
 #include "nsIURI.h"
 #include "nsCOMPtr.h"
 #include "nsNetUtil.h"
-#include "prtime.h"
 #include "nsEscape.h"
 
 #include "nsICacheService.h"
 
-static PRTime SecondsToPRTime(PRUint32 t_sec)
+static PRTime SecondsToPRTime(uint32_t t_sec)
 {
     PRTime t_usec, usec_per_sec;
-    LL_I2L(t_usec, t_sec);
-    LL_I2L(usec_per_sec, PR_USEC_PER_SEC);
-    LL_MUL(t_usec, t_usec, usec_per_sec);
-    return t_usec;
+    t_usec = t_sec;
+    usec_per_sec = PR_USEC_PER_SEC;
+    return t_usec *= usec_per_sec;
 }
-static void PrintTimeString(char *buf, PRUint32 bufsize, PRUint32 t_sec)
+static void PrintTimeString(char *buf, uint32_t bufsize, uint32_t t_sec)
 {
     PRExplodedTime et;
     PRTime t_usec = SecondsToPRTime(t_sec);
@@ -78,9 +40,9 @@ nsAboutCache::NewChannel(nsIURI *aURI, nsIChannel **result)
 {
     NS_ENSURE_ARG_POINTER(aURI);
     nsresult rv;
-    PRUint32 bytesWritten;
+    uint32_t bytesWritten;
 
-    *result = nsnull;
+    *result = nullptr;
     // Get the cache manager service
     nsCOMPtr<nsICacheService> cacheService = 
              do_GetService(NS_CACHESERVICE_CONTRACTID, &rv);
@@ -90,7 +52,7 @@ nsAboutCache::NewChannel(nsIURI *aURI, nsIChannel **result)
     nsCOMPtr<nsIOutputStream> outputStream;
 
     // Init: (block size, maximum length)
-    rv = NS_NewStorageStream(256, (PRUint32)-1, getter_AddRefs(storageStream));
+    rv = NS_NewStorageStream(256, (uint32_t)-1, getter_AddRefs(storageStream));
     if (NS_FAILED(rv)) return rv;
 
     rv = storageStream->GetOutputStream(0, getter_AddRefs(outputStream));
@@ -142,18 +104,18 @@ nsAboutCache::NewChannel(nsIURI *aURI, nsIChannel **result)
     rv = storageStream->NewInputStream(0, getter_AddRefs(inStr));
     if (NS_FAILED(rv)) return rv;
 
-    nsIChannel* channel;
-    rv = NS_NewInputStreamChannel(&channel, aURI, inStr,
+    nsCOMPtr<nsIChannel> channel;
+    rv = NS_NewInputStreamChannel(getter_AddRefs(channel), aURI, inStr,
                                   NS_LITERAL_CSTRING("text/html"),
                                   NS_LITERAL_CSTRING("utf-8"));
     if (NS_FAILED(rv)) return rv;
 
-    *result = channel;
+    channel.forget(result);
     return rv;
 }
 
 NS_IMETHODIMP
-nsAboutCache::GetURIFlags(nsIURI *aURI, PRUint32 *result)
+nsAboutCache::GetURIFlags(nsIURI *aURI, uint32_t *result)
 {
     *result = 0;
     return NS_OK;
@@ -162,12 +124,12 @@ nsAboutCache::GetURIFlags(nsIURI *aURI, PRUint32 *result)
 NS_IMETHODIMP
 nsAboutCache::VisitDevice(const char *deviceID,
                           nsICacheDeviceInfo *deviceInfo,
-                          PRBool *visitEntries)
+                          bool *visitEntries)
 {
-    PRUint32 bytesWritten, value, entryCount;
+    uint32_t bytesWritten, value, entryCount;
     nsXPIDLCString str;
 
-    *visitEntries = PR_FALSE;
+    *visitEntries = false;
 
     if (mDeviceID.IsEmpty() || mDeviceID.Equals(deviceID)) {
 
@@ -231,7 +193,7 @@ nsAboutCache::VisitDevice(const char *deviceID,
         } else { // The about:cache?device=disk etc. case
             mBuffer.AppendLiteral("</table>\n");
             if (entryCount != 0) {
-                *visitEntries = PR_TRUE;
+                *visitEntries = true;
                 mBuffer.AppendLiteral("<hr/>\n"
                                       "<table id=\"entries\">\n"
                                       "  <colgroup>\n"
@@ -262,17 +224,17 @@ nsAboutCache::VisitDevice(const char *deviceID,
 NS_IMETHODIMP
 nsAboutCache::VisitEntry(const char *deviceID,
                          nsICacheEntryInfo *entryInfo,
-                         PRBool *visitNext)
+                         bool *visitNext)
 {
     // We need mStream for this
     if (!mStream)
       return NS_ERROR_FAILURE;
 
     nsresult        rv;
-    PRUint32        bytesWritten;
-    nsCAutoString   key;
+    uint32_t        bytesWritten;
+    nsAutoCString   key;
     nsXPIDLCString  clientID;
-    PRBool          streamBased;
+    bool            streamBased;
     
     rv = entryInfo->GetKey(key);
     if (NS_FAILED(rv))  return rv;
@@ -284,7 +246,7 @@ nsAboutCache::VisitEntry(const char *deviceID,
     if (NS_FAILED(rv)) return rv;
 
     // Generate a about:cache-entry URL for this entry...
-    nsCAutoString url;
+    nsAutoCString url;
     url.AssignLiteral("about:cache-entry?client=");
     url += clientID;
     url.AppendLiteral("&amp;sb=");
@@ -305,14 +267,14 @@ nsAboutCache::VisitEntry(const char *deviceID,
     mBuffer.AppendLiteral("</a></td>\n");
 
     // Content length
-    PRUint32 length = 0;
+    uint32_t length = 0;
     entryInfo->GetDataSize(&length);
     mBuffer.AppendLiteral("    <td>");
     mBuffer.AppendInt(length);
     mBuffer.AppendLiteral(" bytes</td>\n");
 
     // Number of accesses
-    PRInt32 fetchCount = 0;
+    int32_t fetchCount = 0;
     entryInfo->GetFetchCount(&fetchCount);
     mBuffer.AppendLiteral("    <td>");
     mBuffer.AppendInt(fetchCount);
@@ -320,7 +282,7 @@ nsAboutCache::VisitEntry(const char *deviceID,
 
     // vars for reporting time
     char buf[255];
-    PRUint32 t;
+    uint32_t t;
 
     // Last modified time
     mBuffer.AppendLiteral("    <td>");
@@ -348,7 +310,7 @@ nsAboutCache::VisitEntry(const char *deviceID,
 
     mStream->Write(mBuffer.get(), mBuffer.Length(), &bytesWritten);
 
-    *visitNext = PR_TRUE;
+    *visitNext = true;
     return NS_OK;
 }
 
@@ -363,7 +325,7 @@ nsAboutCache::ParseURI(nsIURI * uri, nsCString &deviceID)
 
     deviceID.Truncate();
 
-    nsCAutoString path;
+    nsAutoCString path;
     rv = uri->GetPath(path);
     if (NS_FAILED(rv)) return rv;
 
@@ -384,7 +346,7 @@ nsresult
 nsAboutCache::Create(nsISupports *aOuter, REFNSIID aIID, void **aResult)
 {
     nsAboutCache* about = new nsAboutCache();
-    if (about == nsnull)
+    if (about == nullptr)
         return NS_ERROR_OUT_OF_MEMORY;
     NS_ADDREF(about);
     nsresult rv = about->QueryInterface(aIID, aResult);

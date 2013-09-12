@@ -1,46 +1,14 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla SVG Project code.
- *
- * The Initial Developer of the Original Code is the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef MOZILLA_SVGLENGTH_H__
 #define MOZILLA_SVGLENGTH_H__
 
+#include "nsDebug.h"
 #include "nsIDOMSVGLength.h"
-#include "nsIContent.h"
-#include "nsAString.h"
-#include "nsContentUtils.h"
+#include "nsMathUtils.h"
 
 class nsSVGElement;
 
@@ -69,7 +37,7 @@ public:
 #endif
   {}
 
-  SVGLength(float aValue, PRUint8 aUnit)
+  SVGLength(float aValue, uint8_t aUnit)
     : mValue(aValue)
     , mUnit(aUnit)
   {
@@ -87,17 +55,17 @@ public:
     return *this;
   }
 
-  PRBool operator==(const SVGLength &rhs) const {
+  bool operator==(const SVGLength &rhs) const {
     return mValue == rhs.mValue && mUnit == rhs.mUnit;
   }
 
   void GetValueAsString(nsAString& aValue) const;
 
   /**
-   * This method returns PR_TRUE, unless there was a parse failure, in which
-   * case it returns PR_FALSE (and the length is left unchanged).
+   * This method returns true, unless there was a parse failure, in which
+   * case it returns false (and the length is left unchanged).
    */
-  PRBool SetValueFromString(const nsAString& aValue);
+  bool SetValueFromString(const nsAString& aValue);
 
   /**
    * This will usually return a valid, finite number. There is one exception
@@ -107,7 +75,7 @@ public:
     return mValue;
   }
 
-  PRUint8 GetUnit() const {
+  uint8_t GetUnit() const {
     return mUnit;
   }
 
@@ -116,7 +84,7 @@ public:
     NS_ASSERTION(IsValid(), "Set invalid SVGLength");
   }
 
-  void SetValueAndUnit(float aValue, PRUint8 aUnit) {
+  void SetValueAndUnit(float aValue, uint8_t aUnit) {
     mValue = aValue;
     mUnit = aUnit;
 
@@ -135,7 +103,7 @@ public:
    * If it's not possible to convert this length's value to user units, then
    * this method will return numeric_limits<float>::quiet_NaN().
    */
-  float GetValueInUserUnits(const nsSVGElement *aElement, PRUint8 aAxis) const {
+  float GetValueInUserUnits(const nsSVGElement *aElement, uint8_t aAxis) const {
     return mValue * GetUserUnitsPerUnit(aElement, aAxis);
   }
 
@@ -143,21 +111,21 @@ public:
    * Sets this length's value, converting the supplied user unit value to this
    * lengths *current* unit (i.e. leaving the length's unit unchanged).
    *
-   * This method returns PR_TRUE, unless the user unit value couldn't be
-   * converted to this length's current unit, in which case it returns PR_FALSE
+   * This method returns true, unless the user unit value couldn't be
+   * converted to this length's current unit, in which case it returns false
    * (and the length is left unchanged).
    */
-  PRBool SetFromUserUnitValue(float aUserUnitValue,
+  bool SetFromUserUnitValue(float aUserUnitValue,
                               nsSVGElement *aElement,
-                              PRUint8 aAxis) {
+                              uint8_t aAxis) {
     float uuPerUnit = GetUserUnitsPerUnit(aElement, aAxis);
     float value = aUserUnitValue / uuPerUnit;
-    if (uuPerUnit > 0 && NS_FloatIsFinite(value)) {
+    if (uuPerUnit > 0 && NS_finite(value)) {
       mValue = value;
       NS_ASSERTION(IsValid(), "Set invalid SVGLength");
-      return PR_TRUE;
+      return true;
     }
-    return PR_FALSE;
+    return false;
   }
 
   /**
@@ -166,33 +134,33 @@ public:
    * This method returns numeric_limits<float>::quiet_NaN() if it is not
    * possible to convert the value to the specified unit.
    */
-  float GetValueInSpecifiedUnit(PRUint8 aUnit,
+  float GetValueInSpecifiedUnit(uint8_t aUnit,
                                 const nsSVGElement *aElement,
-                                PRUint8 aAxis) const;
+                                uint8_t aAxis) const;
 
   /**
    * Convert this length's value to the unit specified.
    *
-   * This method returns PR_TRUE, unless it isn't possible to convert the
+   * This method returns true, unless it isn't possible to convert the
    * length to the specified unit. In that case the length is left unchanged
-   * and this method returns PR_FALSE.
+   * and this method returns false.
    */
-  PRBool ConvertToUnit(PRUint32 aUnit, nsSVGElement *aElement, PRUint8 aAxis) {
+  bool ConvertToUnit(uint32_t aUnit, nsSVGElement *aElement, uint8_t aAxis) {
     float val = GetValueInSpecifiedUnit(aUnit, aElement, aAxis);
-    if (NS_FloatIsFinite(val)) {
+    if (NS_finite(val)) {
       mValue = val;
       mUnit = aUnit;
       NS_ASSERTION(IsValid(), "Set invalid SVGLength");
-      return PR_TRUE;
+      return true;
     }
-    return PR_FALSE;
+    return false;
   }
 
-  PRBool IsPercentage() const {
+  bool IsPercentage() const {
     return mUnit == nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE;
   }
 
-  static PRBool IsValidUnitType(PRUint16 unit) {
+  static bool IsValidUnitType(uint16_t unit) {
     return unit > nsIDOMSVGLength::SVG_LENGTHTYPE_UNKNOWN &&
            unit <= nsIDOMSVGLength::SVG_LENGTHTYPE_PC;
   }
@@ -200,8 +168,8 @@ public:
 private:
 
 #ifdef DEBUG
-  PRBool IsValid() const {
-    return NS_FloatIsFinite(mValue) && IsValidUnitType(mUnit);
+  bool IsValid() const {
+    return NS_finite(mValue) && IsValidUnitType(mUnit);
   }
 #endif
 
@@ -212,7 +180,7 @@ private:
    * factor between the length's current unit and user units is undefined (see
    * the comments for GetUserUnitsPerInch and GetUserUnitsPerPercent).
    */
-  float GetUserUnitsPerUnit(const nsSVGElement *aElement, PRUint8 aAxis) const;
+  float GetUserUnitsPerUnit(const nsSVGElement *aElement, uint8_t aAxis) const;
 
   /**
    * The conversion factor between user units (CSS px) and CSS inches is
@@ -232,10 +200,10 @@ private:
    * This function returns a non-negative value if the conversion factor is
    * defined, otherwise it returns numeric_limits<float>::quiet_NaN().
    */
-  static float GetUserUnitsPerPercent(const nsSVGElement *aElement, PRUint8 aAxis);
+  static float GetUserUnitsPerPercent(const nsSVGElement *aElement, uint8_t aAxis);
 
   float mValue;
-  PRUint8 mUnit;
+  uint8_t mUnit;
 };
 
 } // namespace mozilla

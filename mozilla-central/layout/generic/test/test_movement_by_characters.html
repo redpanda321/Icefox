@@ -2,7 +2,6 @@
 <html>
 <head>
   <title>Test Character Movement (including nsTextFrame::PeekOffsetCharacter)</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
@@ -17,8 +16,13 @@
 
 SimpleTest.waitForExplicitFinish();
 
-// This seems to be necessary because the selection is not set up properly otherwise
-setTimeout(test, 0);
+setTimeout(focusing, 0);
+
+function focusing() {
+  document.getElementById("editor").focus();
+  // This seems to be necessary because the selection is not set up properly otherwise
+  setTimeout(test, 0);
+}
 
 function test() {
   var sel = window.getSelection();
@@ -68,13 +72,13 @@ function test() {
   editor.innerHTML = "<pre>aa\nbb</pre>";
   sel.collapse(editor.firstChild.firstChild, 0);
   testRight(editor.firstChild.firstChild, 1);
-  // at the 'bb' but HINTLEFT so appears at the end of the first line
-  testRight(editor.firstChild.firstChild, 3);  
+  // at the end of the first line, before the \n
+  testRight(editor.firstChild.firstChild, 2);
   testRight(editor.firstChild.firstChild, 3);
   testRight(editor.firstChild.firstChild, 4);
   testLeft(editor.firstChild.firstChild, 3);
-  // at the 'bb' but HINTLEFT so appears at the end of the first line
-  testLeft(editor.firstChild.firstChild, 3);
+  // at the end of the first line, before the \n
+  testLeft(editor.firstChild.firstChild, 2);
   testLeft(editor.firstChild.firstChild, 1);
   testLeft(editor.firstChild.firstChild, 0);
 

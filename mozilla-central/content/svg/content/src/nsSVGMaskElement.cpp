@@ -1,51 +1,24 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SVG project.
- *
- * The Initial Developer of the Original Code is IBM Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "mozilla/Util.h"
 
 #include "nsCOMPtr.h"
 #include "nsGkAtoms.h"
 #include "nsSVGMaskElement.h"
 
+using namespace mozilla;
+
 //--------------------- Masks ------------------------
 
 nsSVGElement::LengthInfo nsSVGMaskElement::sLengthInfo[4] =
 {
-  { &nsGkAtoms::x, -10, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::X },
-  { &nsGkAtoms::y, -10, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::Y },
-  { &nsGkAtoms::width, 120, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::X },
-  { &nsGkAtoms::height, 120, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::Y },
+  { &nsGkAtoms::x, -10, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::X },
+  { &nsGkAtoms::y, -10, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::Y },
+  { &nsGkAtoms::width, 120, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::X },
+  { &nsGkAtoms::height, 120, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::Y },
 };
 
 nsSVGElement::EnumInfo nsSVGMaskElement::sEnumInfo[2] =
@@ -71,9 +44,9 @@ NS_IMPL_RELEASE_INHERITED(nsSVGMaskElement,nsSVGMaskElementBase)
 DOMCI_NODE_DATA(SVGMaskElement, nsSVGMaskElement)
 
 NS_INTERFACE_TABLE_HEAD(nsSVGMaskElement)
-  NS_NODE_INTERFACE_TABLE5(nsSVGMaskElement, nsIDOMNode, nsIDOMElement,
-                           nsIDOMSVGElement, nsIDOMSVGMaskElement,
-                           nsIDOMSVGUnitTypes)
+  NS_NODE_INTERFACE_TABLE6(nsSVGMaskElement, nsIDOMNode, nsIDOMElement,
+                           nsIDOMSVGElement, nsIDOMSVGTests,
+                           nsIDOMSVGMaskElement, nsIDOMSVGUnitTypes)
   NS_DOM_INTERFACE_MAP_ENTRY_CLASSINFO(SVGMaskElement)
 NS_INTERFACE_MAP_END_INHERITING(nsSVGMaskElementBase)
 
@@ -132,24 +105,33 @@ NS_IMETHODIMP nsSVGMaskElement::GetHeight(nsIDOMSVGAnimatedLength * *aHeight)
 //----------------------------------------------------------------------
 // nsSVGElement methods
 
+/* virtual */ bool
+nsSVGMaskElement::HasValidDimensions() const
+{
+  return (!mLengthAttributes[WIDTH].IsExplicitlySet() ||
+           mLengthAttributes[WIDTH].GetAnimValInSpecifiedUnits() > 0) &&
+         (!mLengthAttributes[HEIGHT].IsExplicitlySet() || 
+           mLengthAttributes[HEIGHT].GetAnimValInSpecifiedUnits() > 0);
+}
+
 nsSVGElement::LengthAttributesInfo
 nsSVGMaskElement::GetLengthInfo()
 {
   return LengthAttributesInfo(mLengthAttributes, sLengthInfo,
-                              NS_ARRAY_LENGTH(sLengthInfo));
+                              ArrayLength(sLengthInfo));
 }
 
 nsSVGElement::EnumAttributesInfo
 nsSVGMaskElement::GetEnumInfo()
 {
   return EnumAttributesInfo(mEnumAttributes, sEnumInfo,
-                            NS_ARRAY_LENGTH(sEnumInfo));
+                            ArrayLength(sEnumInfo));
 }
 
 //----------------------------------------------------------------------
 // nsIContent methods
 
-NS_IMETHODIMP_(PRBool)
+NS_IMETHODIMP_(bool)
 nsSVGMaskElement::IsAttributeMapped(const nsIAtom* name) const
 {
   static const MappedAttributeEntry* const map[] = {
@@ -157,11 +139,13 @@ nsSVGMaskElement::IsAttributeMapped(const nsIAtom* name) const
     sFiltersMap,
     sFontSpecificationMap,
     sGradientStopMap,
+    sGraphicsMap,
     sMarkersMap,
+    sMaskMap,
     sTextContentElementsMap,
     sViewportsMap
   };
 
-  return FindAttributeDependence(name, map, NS_ARRAY_LENGTH(map)) ||
+  return FindAttributeDependence(name, map) ||
     nsSVGMaskElementBase::IsAttributeMapped(name);
 }

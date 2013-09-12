@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Javier Delgadillo <javi@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef _NSSASNTREE_H_
 #define _NSSASNTREE_H_
 
@@ -77,7 +44,7 @@ protected:
     myNode *parent;
     
     myNode() {
-      child = next = parent = nsnull;
+      child = next = parent = nullptr;
     }
   };
 
@@ -93,13 +60,13 @@ protected:
   void ClearNodes();
   void ClearNodesRecursively(myNode *n);
 
-  PRInt32 CountVisibleNodes(myNode *n);
-  myNode *FindNodeFromIndex(myNode *n, PRInt32 wantedIndex,
-                            PRInt32 &index_counter, PRInt32 &level_counter,
-                            PRInt32 *optionalOutParentIndex, PRInt32 *optionalOutLevel);
-  myNode *FindNodeFromIndex(PRInt32 wantedIndex, 
-                            PRInt32 *optionalOutParentIndex = nsnull, 
-                            PRInt32 *optionalOutLevel = nsnull);
+  int32_t CountVisibleNodes(myNode *n);
+  myNode *FindNodeFromIndex(myNode *n, int32_t wantedIndex,
+                            int32_t &index_counter, int32_t &level_counter,
+                            int32_t *optionalOutParentIndex, int32_t *optionalOutLevel);
+  myNode *FindNodeFromIndex(int32_t wantedIndex, 
+                            int32_t *optionalOutParentIndex = nullptr, 
+                            int32_t *optionalOutLevel = nullptr);
 
 };
 #endif //_NSSASNTREE_H_

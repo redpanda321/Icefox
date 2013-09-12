@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsIViewManager_h___
 #define nsIViewManager_h___
@@ -41,17 +9,16 @@
 #include "nscore.h"
 #include "nsIView.h"
 #include "nsEvent.h"
-#include "nsIRenderingContext.h"
 
 class nsIWidget;
 struct nsRect;
 class nsRegion;
-class nsIDeviceContext;
-class nsIViewObserver;
+class nsDeviceContext;
+class nsIPresShell;
 
-#define NS_IVIEWMANAGER_IID   \
-  { 0x4017112c, 0x64d7, 0x47bc, \
-   { 0xab, 0x66, 0x4e, 0x5f, 0xff, 0x83, 0xec, 0x7c } }
+#define NS_IVIEWMANAGER_IID \
+{ 0x540610a6, 0x4fdd, 0x4ae3, \
+  { 0x9b, 0xdb, 0xa6, 0x4d, 0x8b, 0xca, 0x02, 0x0f } }
 
 class nsIViewManager : public nsISupports
 {
@@ -60,11 +27,11 @@ public:
   NS_DECLARE_STATIC_IID_ACCESSOR(NS_IVIEWMANAGER_IID)
   /**
    * Initialize the ViewManager
-   * Note: this instance does not hold a reference to the viewobserver
+   * Note: this instance does not hold a reference to the presshell
    * because it holds a reference to this instance.
    * @result The result of the initialization, NS_OK if no errors
    */
-  NS_IMETHOD  Init(nsIDeviceContext* aContext) = 0;
+  NS_IMETHOD  Init(nsDeviceContext* aContext) = 0;
 
   /**
    * Create an ordinary view
@@ -86,7 +53,7 @@ public:
    * Get the root of the view tree.
    * @result the root view
    */
-  NS_IMETHOD  GetRootView(nsIView *&aView) = 0;
+  NS_IMETHOD_(nsIView*) GetRootView() = 0;
 
   /**
    * Set the root of the view tree. Does not destroy the current root view.
@@ -116,25 +83,14 @@ public:
   /**
    * Do any resizes that are pending.
    */
-  NS_IMETHOD  FlushDelayedResize(PRBool aDoReflow) = 0;
-
-  /**
-   * Called to force a redrawing of any dirty areas.
-   */
-  // XXXbz why is this exposed?  Shouldn't update view batches handle this?
-  // It's not like Composite() does what's expected inside a view update batch
-  // anyway, since dirty areas may not have been invalidated on the widget yet
-  // and widget changes may not have been propagated yet.  Maybe this should
-  // call FlushPendingInvalidates()?
-  NS_IMETHOD  Composite(void) = 0;
+  NS_IMETHOD  FlushDelayedResize(bool aDoReflow) = 0;
 
   /**
    * Called to inform the view manager that the entire area of a view
    * is dirty and needs to be redrawn.
    * @param aView view to paint. should be root view
-   * @param aUpdateFlags see bottom of nsIViewManager.h for description
    */
-  NS_IMETHOD  UpdateView(nsIView *aView, PRUint32 aUpdateFlags) = 0;
+  NS_IMETHOD  InvalidateView(nsIView *aView) = 0;
 
   /**
    * Called to inform the view manager that some portion of a view is dirty and
@@ -142,17 +98,13 @@ public:
    * space. Does not check for paint suppression.
    * @param aView view to paint. should be root view
    * @param rect rect to mark as damaged
-   * @param aUpdateFlags see bottom of nsIViewManager.h for description
    */
-  NS_IMETHOD  UpdateViewNoSuppression(nsIView *aView, const nsRect &aRect,
-                                      PRUint32 aUpdateFlags) = 0;
+  NS_IMETHOD  InvalidateViewNoSuppression(nsIView *aView, const nsRect &aRect) = 0;
 
   /**
-   * Called to inform the view manager that it should redraw all views.
-   * @param aView view to paint. should be root view
-   * @param aUpdateFlags see bottom of nsIViewManager.h for description
+   * Called to inform the view manager that it should invalidate all views.
    */
-  NS_IMETHOD  UpdateAllViews(PRUint32 aUpdateFlags) = 0;
+  NS_IMETHOD  InvalidateAllViews() = 0;
 
   /**
    * Called to dispatch an event to the appropriate view. Often called
@@ -169,11 +121,11 @@ public:
    * Given a parent view, insert another view as its child.
    * aSibling and aAbove control the "document order" for the insertion.
    * If aSibling is null, the view is inserted at the end of the document order
-   * if aAfter is PR_TRUE, otherwise it is inserted at the beginning.
-   * If aSibling is non-null, then if aAfter is PR_TRUE, the view is inserted
+   * if aAfter is true, otherwise it is inserted at the beginning.
+   * If aSibling is non-null, then if aAfter is true, the view is inserted
    * after the sibling in document order (appearing above the sibling unless
    * overriden by z-order).
-   * If it is PR_FALSE, the view is inserted before the sibling.
+   * If it is false, the view is inserted before the sibling.
    * The view manager generates the appopriate dirty regions.
    * @param aParent parent view
    * @param aChild child view
@@ -181,7 +133,7 @@ public:
    * @param aAfter after or before in the document order
    */
   NS_IMETHOD  InsertChild(nsIView *aParent, nsIView *aChild, nsIView *aSibling,
-                          PRBool aAfter) = 0;
+                          bool aAfter) = 0;
 
   /**
    * Remove a specific child view from its parent. This will NOT remove its placeholder
@@ -212,11 +164,11 @@ public:
    * @param aView view to move
    * @param the new bounds relative to the current position
    * @param RepaintExposedAreaOnly
-   *     if PR_TRUE Repaint only the expanded or contracted region,
-   *     if PR_FALSE Repaint the union of the old and new rectangles.
+   *     if true Repaint only the expanded or contracted region,
+   *     if false Repaint the union of the old and new rectangles.
    */
   NS_IMETHOD  ResizeView(nsIView *aView, const nsRect &aRect,
-                         PRBool aRepaintExposedAreaOnly = PR_FALSE) = 0;
+                         bool aRepaintExposedAreaOnly = false) = 0;
 
   /**
    * Set the visibility of a view. Hidden views have the effect of hiding
@@ -244,10 +196,10 @@ public:
    * @param aZindex explicit z depth
    * @param aTopMost used when this view is z-index:auto to compare against 
    *        other z-index:auto views.
-   *        PR_TRUE if the view should be topmost when compared with 
+   *        true if the view should be topmost when compared with 
    *        other z-index:auto views.
    */
-  NS_IMETHOD  SetViewZIndex(nsIView *aView, PRBool aAutoZIndex, PRInt32 aZindex, PRBool aTopMost = PR_FALSE) = 0;
+  NS_IMETHOD  SetViewZIndex(nsIView *aView, bool aAutoZIndex, int32_t aZindex, bool aTopMost = false) = 0;
 
   /**
    * Set whether the view "floats" above all other views,
@@ -256,98 +208,61 @@ public:
    * this view. This is a hack, but it fixes some problems with
    * views that need to be drawn in front of all other views.
    */
-  NS_IMETHOD  SetViewFloating(nsIView *aView, PRBool aFloatingView) = 0;
+  NS_IMETHOD  SetViewFloating(nsIView *aView, bool aFloatingView) = 0;
 
   /**
-   * Set the view observer associated with this manager
-   * @param aObserver - new observer
-   * @result error status
+   * Set the presshell associated with this manager
+   * @param aPresShell - new presshell
    */
-  NS_IMETHOD SetViewObserver(nsIViewObserver *aObserver) = 0;
+  virtual void SetPresShell(nsIPresShell *aPresShell) = 0;
 
   /**
-   * Get the view observer associated with this manager
-   * @param aObserver - out parameter for observer
-   * @result error status
+   * Get the pres shell associated with this manager
    */
-  NS_IMETHOD GetViewObserver(nsIViewObserver *&aObserver) = 0;
+  virtual nsIPresShell* GetPresShell() = 0;
 
   /**
    * Get the device context associated with this manager
    * @result device context
    */
-  NS_IMETHOD  GetDeviceContext(nsIDeviceContext *&aContext) = 0;
+  NS_IMETHOD  GetDeviceContext(nsDeviceContext *&aContext) = 0;
 
-  class NS_STACK_CLASS UpdateViewBatch {
+  /**
+   * A stack class for disallowing changes that would enter painting. For
+   * example, popup widgets shouldn't be resized during reflow, since doing so
+   * might cause synchronous painting inside reflow which is forbidden.
+   * While refresh is disabled, widget geometry changes are deferred and will
+   * be handled later, either from the refresh driver or from an NS_WILL_PAINT
+   * event.
+   * We don't want to defer widget geometry changes all the time. Resizing a
+   * popup from script doesn't need to be deferred, for example, especially
+   * since popup widget geometry is observable from script and expected to
+   * update synchronously.
+   */
+  class NS_STACK_CLASS AutoDisableRefresh {
   public:
-    UpdateViewBatch() {}
-  /**
-   * prevents the view manager from refreshing. allows UpdateView()
-   * to notify widgets of damaged regions that should be repainted
-   * when the batch is ended. Call EndUpdateViewBatch on this object
-   * before it is destroyed
-   * @return error status
-   */
-    UpdateViewBatch(nsIViewManager* aVM) {
+    AutoDisableRefresh(nsIViewManager* aVM) {
       if (aVM) {
-        mRootVM = aVM->BeginUpdateViewBatch();
+        mRootVM = aVM->IncrementDisableRefreshCount();
       }
     }
-    ~UpdateViewBatch() {
-      NS_ASSERTION(!mRootVM, "Someone forgot to call EndUpdateViewBatch!");
-    }
-    
-    /**
-     * See the constructor, this lets you "fill in" a blank UpdateViewBatch.
-     */
-    void BeginUpdateViewBatch(nsIViewManager* aVM) {
-      NS_ASSERTION(!mRootVM, "already started a batch!");
-      if (aVM) {
-        mRootVM = aVM->BeginUpdateViewBatch();
+    ~AutoDisableRefresh() {
+      if (mRootVM) {
+        mRootVM->DecrementDisableRefreshCount();
       }
     }
-
-  /**
-   * allow the view manager to refresh any damaged areas accumulated
-   * after the BeginUpdateViewBatch() call.  this may cause a
-   * synchronous paint to occur inside the call if aUpdateFlags
-   * NS_VMREFRESH_IMMEDIATE is set.
-   *
-   * If this is not the outermost view batch command, then this does
-   * nothing except that the specified flags are remembered. When the
-   * outermost batch finally ends, we merge together all the flags for the
-   * inner batches in the following way:
-   * -- If any batch specified NS_VMREFRESH_IMMEDIATE, then we use that flag
-   * (i.e. there is a synchronous paint under the last EndUpdateViewBatch)
-   * -- Otherwise if any batch specified NS_VMREFERSH_DEFERRED, then we use
-   * that flag (i.e. invalidation is deferred until the processing of an
-   * Invalidate PLEvent)
-   * -- Otherwise all batches specified NS_VMREFRESH_NO_SYNC and we honor
-   * that; all widgets are invalidated normally and will be painted the next
-   * time the toolkit chooses to update them.
-   *
-   * @param aUpdateFlags see bottom of nsIViewManager.h for
-   * description @return error status
-   */
-    void EndUpdateViewBatch(PRUint32 aUpdateFlags) {
-      if (!mRootVM)
-        return;
-      mRootVM->EndUpdateViewBatch(aUpdateFlags);
-      mRootVM = nsnull;
-    }
-
   private:
-    UpdateViewBatch(const UpdateViewBatch& aOther);
-    const UpdateViewBatch& operator=(const UpdateViewBatch& aOther);
+    AutoDisableRefresh(const AutoDisableRefresh& aOther);
+    const AutoDisableRefresh& operator=(const AutoDisableRefresh& aOther);
 
     nsCOMPtr<nsIViewManager> mRootVM;
   };
-  
-private:
-  friend class UpdateViewBatch;
 
-  virtual nsIViewManager* BeginUpdateViewBatch(void) = 0;
-  NS_IMETHOD EndUpdateViewBatch(PRUint32 aUpdateFlags) = 0;
+private:
+  friend class AutoDisableRefresh;
+
+  virtual nsIViewManager* IncrementDisableRefreshCount() = 0;
+  virtual void DecrementDisableRefreshCount() = 0;
 
 public:
   /**
@@ -357,22 +272,12 @@ public:
   NS_IMETHOD GetRootWidget(nsIWidget **aWidget) = 0;
 
   /**
-   * Force update of view manager widget
-   * Callers should use UpdateView(view, NS_VMREFRESH_IMMEDIATE) in most cases instead
-   * @result error status
-   */
-  // XXXbz Callers seem to be confused about this one... and it doesn't play
-  // right with view update batching at all (will miss updates).  Maybe this
-  // should call FlushPendingInvalidates()?
-  NS_IMETHOD ForceUpdate() = 0;
-
-  /**
    * Indicate whether the viewmanager is currently painting
    *
-   * @param aPainting PR_TRUE if the viewmanager is painting
-   *                  PR_FALSE otherwise
+   * @param aPainting true if the viewmanager is painting
+   *                  false otherwise
    */
-  NS_IMETHOD IsPainting(PRBool& aIsPainting)=0;
+  NS_IMETHOD IsPainting(bool& aIsPainting)=0;
 
   /**
    * Retrieve the time of the last user event. User events
@@ -381,36 +286,26 @@ public:
    *
    * @param aTime Last user event time in microseconds
    */
-  NS_IMETHOD GetLastUserEventTime(PRUint32& aTime)=0;
+  NS_IMETHOD GetLastUserEventTime(uint32_t& aTime)=0;
 
   /**
-   * Dispatch a mouse move event based on the most recent mouse
-   * position.  This is used when the contents of the page moved
-   * (aFromScroll is false) or scrolled (aFromScroll is true).
+   * Find the nearest display root view for the view aView. This is the view for
+   * the nearest enclosing popup or the root view for the root document.
    */
-  NS_IMETHOD SynthesizeMouseMove(PRBool aFromScroll)=0;
+  static nsIView* GetDisplayRootFor(nsIView* aView);
+
+  /**
+   * Flush the accumulated dirty region to the widget and update widget
+   * geometry.
+   */
+  virtual void ProcessPendingUpdates()=0;
+
+  /**
+   * Just update widget geometry without flushing the dirty region
+   */
+  virtual void UpdateWidgetGeometry() = 0;
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsIViewManager, NS_IVIEWMANAGER_IID)
-
-// Paint timing mode flags
-
-// intermediate: do no special timing processing; repaint when the
-// toolkit issues an expose event (which will happen *before* PLEvent
-// processing). This is essentially the default.
-#define NS_VMREFRESH_NO_SYNC            0
-
-// least immediate: we suppress invalidation, storing dirty areas in
-// views, and post an Invalidate PLEvent. The Invalidate event gets
-// processed after toolkit events such as window resize events!
-// This is only usable with EndUpdateViewBatch and EnableRefresh.
-#define NS_VMREFRESH_DEFERRED           0x0001
-
-// most immediate: force a call to nsViewManager::Composite, which
-// synchronously updates the window(s) right away before returning
-#define NS_VMREFRESH_IMMEDIATE          0x0002
-
-//animate scroll operation
-#define NS_VMREFRESH_SMOOTHSCROLL       0x0008
 
 #endif  // nsIViewManager_h___

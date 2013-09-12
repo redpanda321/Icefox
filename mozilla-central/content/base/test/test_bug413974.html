@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=413974
 -->
 <head>
   <title>Test for Bug 413974</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -24,9 +23,8 @@ req.open("POST", window.location.href);
 req.setRequestHeader("Content-Type", "text/plain; boundary=01234567890");
 req.send("Some text");
 
-netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-is(req.channel
-      .QueryInterface(Components.interfaces.nsIHttpChannel)
+is(SpecialPowers.wrap(req).channel
+      .QueryInterface(SpecialPowers.Ci.nsIHttpChannel)
       .getRequestHeader("Content-Type"),
    "text/plain; charset=UTF-8; boundary=01234567890",
    "Charset should come before boundary");

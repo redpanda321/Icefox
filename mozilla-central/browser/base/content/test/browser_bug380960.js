@@ -38,7 +38,7 @@ var asyncTests = [
   function (tab) {
     info("closing tab with accel+w");
     gBrowser.selectedTab = tab;
-    content.focus();
+    gBrowser.selectedBrowser.focus();
     EventUtils.synthesizeKey("w", { accelKey: true });
   },
   function (tab) {
@@ -61,6 +61,7 @@ function nextAsyncText(tab) {
   var gotCloseEvent = false;
 
   tab.addEventListener("TabClose", function () {
+    tab.removeEventListener("TabClose", arguments.callee, false);
     info("got TabClose event");
     gotCloseEvent = true;
 

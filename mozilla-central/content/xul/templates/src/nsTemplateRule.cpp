@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Chris Waterson <waterson@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsTemplateRule.h"
 #include "nsTemplateMatch.h"
@@ -46,13 +13,13 @@
 nsTemplateCondition::nsTemplateCondition(nsIAtom* aSourceVariable,
                                          const nsAString& aRelation,
                                          nsIAtom* aTargetVariable,
-                                         PRBool aIgnoreCase,
-                                         PRBool aNegate)
+                                         bool aIgnoreCase,
+                                         bool aNegate)
     : mSourceVariable(aSourceVariable),
       mTargetVariable(aTargetVariable),
       mIgnoreCase(aIgnoreCase),
       mNegate(aNegate),
-      mNext(nsnull)
+      mNext(nullptr)
 {
     SetRelation(aRelation);
 
@@ -62,25 +29,25 @@ nsTemplateCondition::nsTemplateCondition(nsIAtom* aSourceVariable,
 nsTemplateCondition::nsTemplateCondition(nsIAtom* aSourceVariable,
                                          const nsAString& aRelation,
                                          const nsAString& aTargets,
-                                         PRBool aIgnoreCase,
-                                         PRBool aNegate,
-                                         PRBool aIsMultiple)
+                                         bool aIgnoreCase,
+                                         bool aNegate,
+                                         bool aIsMultiple)
     : mSourceVariable(aSourceVariable),
       mIgnoreCase(aIgnoreCase),
       mNegate(aNegate),
-      mNext(nsnull)
+      mNext(nullptr)
 {
     SetRelation(aRelation);
 
     if (aIsMultiple) {
-        PRInt32 start = 0, end = 0;
+        int32_t start = 0, end = 0;
         while ((end = aTargets.FindChar(',',start)) >= 0) {
             if (end > start) {
                 mTargetList.AppendElement(Substring(aTargets, start, end - start));
             }
             start = end + 1;
         }
-        if (start < PRInt32(aTargets.Length())) {
+        if (start < int32_t(aTargets.Length())) {
             mTargetList.AppendElement(Substring(aTargets, start));
         }
     }
@@ -94,13 +61,13 @@ nsTemplateCondition::nsTemplateCondition(nsIAtom* aSourceVariable,
 nsTemplateCondition::nsTemplateCondition(const nsAString& aSource,
                                          const nsAString& aRelation,
                                          nsIAtom* aTargetVariable,
-                                         PRBool aIgnoreCase,
-                                         PRBool aNegate)
+                                         bool aIgnoreCase,
+                                         bool aNegate)
     : mSource(aSource),
       mTargetVariable(aTargetVariable),
       mIgnoreCase(aIgnoreCase),
       mNegate(aNegate),
-      mNext(nsnull)
+      mNext(nullptr)
 {
     SetRelation(aRelation);
 
@@ -130,10 +97,10 @@ nsTemplateCondition::SetRelation(const nsAString& aRelation)
         mRelation = eUnknown;
 }
 
-PRBool
+bool
 nsTemplateCondition::CheckMatch(nsIXULTemplateResult* aResult)
 {
-    PRBool match = PR_FALSE;
+    bool match = false;
 
     nsAutoString leftString;
     if (mSourceVariable)
@@ -150,8 +117,8 @@ nsTemplateCondition::CheckMatch(nsIXULTemplateResult* aResult)
     else {
         // iterate over the strings in the target and determine
         // whether there is a match.
-        PRUint32 length = mTargetList.Length();
-        for (PRUint32 t = 0; t < length; t++) {
+        uint32_t length = mTargetList.Length();
+        for (uint32_t t = 0; t < length; t++) {
             match = CheckMatchStrings(leftString, mTargetList[t]);
 
             // stop once a match is found. In negate mode, stop once a
@@ -164,15 +131,15 @@ nsTemplateCondition::CheckMatch(nsIXULTemplateResult* aResult)
 }
 
 
-PRBool
+bool
 nsTemplateCondition::CheckMatchStrings(const nsAString& aLeftString,
                                        const nsAString& aRightString)
 {
-    PRBool match = PR_FALSE;
+    bool match = false;
 
     if (aRightString.IsEmpty()) {
         if ((mRelation == eEquals) && aLeftString.IsEmpty())
-            match = PR_TRUE;
+            match = true;
     }
     else {
         switch (mRelation) {
@@ -188,10 +155,10 @@ nsTemplateCondition::CheckMatchStrings(const nsAString& aLeftString,
             case eGreater:
             {
                 // non-numbers always compare false
-                PRInt32 err;
-                PRInt32 leftint = PromiseFlatString(aLeftString).ToInteger(&err);
+                nsresult err;
+                int32_t leftint = PromiseFlatString(aLeftString).ToInteger(&err);
                 if (NS_SUCCEEDED(err)) {
-                    PRInt32 rightint = PromiseFlatString(aRightString).ToInteger(&err);
+                    int32_t rightint = PromiseFlatString(aRightString).ToInteger(&err);
                     if (NS_SUCCEEDED(err)) {
                         match = (mRelation == eLess) ? (leftint < rightint) :
                                                        (leftint > rightint);
@@ -205,10 +172,10 @@ nsTemplateCondition::CheckMatchStrings(const nsAString& aLeftString,
             {
                 nsICollation* collation = nsXULContentUtils::GetCollation();
                 if (collation) {
-                    PRInt32 sortOrder;
+                    int32_t sortOrder;
                     collation->CompareString((mIgnoreCase ?
-                                              nsICollation::kCollationCaseInSensitive :
-                                              nsICollation::kCollationCaseSensitive),
+                                              static_cast<int32_t>(nsICollation::kCollationCaseInSensitive) :
+                                              static_cast<int32_t>(nsICollation::kCollationCaseSensitive)),
                                               aLeftString,
                                               aRightString,
                                               &sortOrder);
@@ -228,10 +195,10 @@ nsTemplateCondition::CheckMatchStrings(const nsAString& aLeftString,
             {
                 nsICollation* collation = nsXULContentUtils::GetCollation();
                 if (collation) {
-                    PRInt32 sortOrder;
+                    int32_t sortOrder;
                     collation->CompareString((mIgnoreCase ?
-                                              nsICollation::kCollationCaseInSensitive :
-                                              nsICollation::kCollationCaseSensitive),
+                                              static_cast<int32_t>(nsICollation::kCollationCaseInSensitive) :
+                                              static_cast<int32_t>(nsICollation::kCollationCaseSensitive)),
                                               aLeftString,
                                               aRightString,
                                               &sortOrder);
@@ -290,8 +257,8 @@ nsTemplateRule::nsTemplateRule(nsIContent* aRuleNode,
                                nsTemplateQuerySet* aQuerySet)
         : mQuerySet(aQuerySet),
           mAction(aAction),
-          mBindings(nsnull),
-          mConditions(nsnull)
+          mBindings(nullptr),
+          mConditions(nullptr)
 {
     MOZ_COUNT_CTOR(nsTemplateRule);
     mRuleNode = do_QueryInterface(aRuleNode);
@@ -301,8 +268,8 @@ nsTemplateRule::nsTemplateRule(const nsTemplateRule& aOtherRule)
         : mQuerySet(aOtherRule.mQuerySet),
           mRuleNode(aOtherRule.mRuleNode),
           mAction(aOtherRule.mAction),
-          mBindings(nsnull),
-          mConditions(nsnull)
+          mBindings(nullptr),
+          mConditions(nullptr)
 {
     MOZ_COUNT_CTOR(nsTemplateRule);
 }
@@ -343,14 +310,14 @@ void nsTemplateRule::SetCondition(nsTemplateCondition* aCondition)
     mConditions = aCondition;
 }
 
-PRBool
+bool
 nsTemplateRule::CheckMatch(nsIXULTemplateResult* aResult) const
 {
     // check the conditions in the rule first
     nsTemplateCondition* condition = mConditions;
     while (condition) {
         if (!condition->CheckMatch(aResult))
-            return PR_FALSE;
+            return false;
 
         condition = condition->GetNext();
     }
@@ -358,27 +325,27 @@ nsTemplateRule::CheckMatch(nsIXULTemplateResult* aResult) const
     if (mRuleFilter) {
         // if a rule filter was set, check it for a match. If an error occurs,
         // assume that the match was acceptable
-        PRBool match;
+        bool match;
         nsresult rv = mRuleFilter->Match(aResult, mRuleNode, &match);
         return NS_FAILED(rv) || match;
     }
 
-    return PR_TRUE;
+    return true;
 }
 
-PRBool
+bool
 nsTemplateRule::HasBinding(nsIAtom* aSourceVariable,
                            nsAString& aExpr,
                            nsIAtom* aTargetVariable) const
 {
-    for (Binding* binding = mBindings; binding != nsnull; binding = binding->mNext) {
+    for (Binding* binding = mBindings; binding != nullptr; binding = binding->mNext) {
         if ((binding->mSourceVariable == aSourceVariable) &&
             (binding->mExpr.Equals(aExpr)) &&
             (binding->mTargetVariable == aTargetVariable))
-            return PR_TRUE;
+            return true;
     }
 
-    return PR_FALSE;
+    return false;
 }
 
 nsresult
@@ -403,7 +370,7 @@ nsTemplateRule::AddBinding(nsIAtom* aSourceVariable,
 
     newbinding->mSourceVariable = aSourceVariable;
     newbinding->mTargetVariable = aTargetVariable;
-    newbinding->mParent         = nsnull;
+    newbinding->mParent         = nullptr;
 
     newbinding->mExpr.Assign(aExpr);
 

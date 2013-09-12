@@ -2,7 +2,6 @@
 <html>
 <head>
   <title>Wave Media test: ended</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -15,15 +14,14 @@ var completed = false;
 
 function startTest() {
   if (completed)
-    return false;
+    return;
   var v = document.getElementById('v');
   v.play();
-  return false;
 }
 
 function playbackEnded() {
   if (completed)
-    return false
+    return;
 
   var v = document.getElementById('v');
   completed = true;
@@ -31,7 +29,6 @@ function playbackEnded() {
      "Checking currentTime at end: " + v.currentTime);
   ok(v.ended, "Checking playback has ended");
   SimpleTest.finish();
-  return false;
 }
 
 SimpleTest.waitForExplicitFinish();

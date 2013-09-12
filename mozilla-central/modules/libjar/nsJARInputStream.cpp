@@ -1,43 +1,9 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /* nsJARInputStream.cpp
  * 
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Netscape Communicator source code. 
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Mitch Stoltz <mstoltz@netscape.com>
- *   Taras Glek <tglek@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsJARInputStream.h"
 #include "zipstruct.h"         // defines ZIP compression codes
@@ -47,6 +13,9 @@
 #include "nsEscape.h"
 #include "nsIFile.h"
 #include "nsDebug.h"
+#if defined(XP_WIN)
+#include <windows.h>
+#endif
 
 /*---------------------------------------------
  *  nsISupports implementation
@@ -87,8 +56,8 @@ nsJARInputStream::InitFile(nsJAR *aJar, nsZipItem *item)
     }
    
     // Must keep handle to filepointer and mmap structure as long as we need access to the mmapped data
-    mFd = aJar->mZip.GetFD();
-    mZs.next_in = aJar->mZip.GetData(item);
+    mFd = aJar->mZip->GetFD();
+    mZs.next_in = (Bytef *)aJar->mZip->GetData(item);
     if (!mZs.next_in)
         return NS_ERROR_FILE_CORRUPTED;
     mZs.avail_in = item->Size();
@@ -123,7 +92,7 @@ nsJARInputStream::InitDirectory(nsJAR* aJar,
     // iterate through dirName and copy it to escDirName, escaping chars
     // which are special at the "top" level of the regexp so FindEntries
     // works correctly
-    nsCAutoString escDirName;
+    nsAutoCString escDirName;
     const char* curr = dirName.BeginReading();
     const char* end  = dirName.EndReading();
     while (curr != end) {
@@ -145,13 +114,13 @@ nsJARInputStream::InitDirectory(nsJAR* aJar,
         }
         ++curr;
     }
-    nsCAutoString pattern = escDirName + NS_LITERAL_CSTRING("?*~") +
+    nsAutoCString pattern = escDirName + NS_LITERAL_CSTRING("?*~") +
                             escDirName + NS_LITERAL_CSTRING("?*/?*");
-    rv = mJar->mZip.FindInit(pattern.get(), &find);
+    rv = mJar->mZip->FindInit(pattern.get(), &find);
     if (NS_FAILED(rv)) return rv;
 
     const char *name;
-    PRUint16 nameLen;
+    uint16_t nameLen;
     while ((rv = find->FindNext( &name, &nameLen )) == NS_OK) {
         // Must copy, to make it zero-terminated
         mArray.AppendElement(nsCString(name,nameLen));
@@ -177,7 +146,7 @@ nsJARInputStream::InitDirectory(nsJAR* aJar,
 }
 
 NS_IMETHODIMP 
-nsJARInputStream::Available(PRUint32 *_retval)
+nsJARInputStream::Available(uint64_t *_retval)
 {
     // A lot of callers don't check the error code.
     // They just use the _retval value.
@@ -204,7 +173,7 @@ nsJARInputStream::Available(PRUint32 *_retval)
 }
 
 NS_IMETHODIMP
-nsJARInputStream::Read(char* aBuffer, PRUint32 aCount, PRUint32 *aBytesRead)
+nsJARInputStream::Read(char* aBuffer, uint32_t aCount, uint32_t *aBytesRead)
 {
     NS_ENSURE_ARG_POINTER(aBuffer);
     NS_ENSURE_ARG_POINTER(aBytesRead);
@@ -212,6 +181,7 @@ nsJARInputStream::Read(char* aBuffer, PRUint32 aCount, PRUint32 *aBytesRead)
     *aBytesRead = 0;
 
     nsresult rv = NS_OK;
+MOZ_WIN_MEM_TRY_BEGIN
     switch (mMode) {
       case MODE_NOTINITED:
         return NS_OK;
@@ -230,13 +200,13 @@ nsJARInputStream::Read(char* aBuffer, PRUint32 aCount, PRUint32 *aBytesRead)
         // note that sometimes, we will release  mFd before we've finished
         // deflating - this is because zlib buffers the input
         if (mZs.avail_in == 0) {
-            mFd = nsnull;
+            mFd = nullptr;
         }
         break;
 
       case MODE_COPY:
         if (mFd) {
-          PRUint32 count = NS_MIN(aCount, mOutSize - PRUint32(mZs.total_out));
+          uint32_t count = NS_MIN(aCount, mOutSize - uint32_t(mZs.total_out));
           if (count) {
               memcpy(aBuffer, mZs.next_in + mZs.total_out, count);
               mZs.total_out += count;
@@ -246,15 +216,16 @@ nsJARInputStream::Read(char* aBuffer, PRUint32 aCount, PRUint32 *aBytesRead)
         // be aggressive about releasing the file!
         // note that sometimes, we will release mFd before we've finished copying.
         if (mZs.total_out >= mOutSize) {
-            mFd = nsnull;
+            mFd = nullptr;
         }
         break;
     }
+MOZ_WIN_MEM_TRY_CATCH(rv = NS_ERROR_FAILURE)
     return rv;
 }
 
 NS_IMETHODIMP
-nsJARInputStream::ReadSegments(nsWriteSegmentFun writer, void * closure, PRUint32 count, PRUint32 *_retval)
+nsJARInputStream::ReadSegments(nsWriteSegmentFun writer, void * closure, uint32_t count, uint32_t *_retval)
 {
     // don't have a buffer to read from, so this better not be called!
     NS_NOTREACHED("Consumers should be using Read()!");
@@ -262,30 +233,33 @@ nsJARInputStream::ReadSegments(nsWriteSegmentFun writer, void * closure, PRUint3
 }
 
 NS_IMETHODIMP
-nsJARInputStream::IsNonBlocking(PRBool *aNonBlocking)
+nsJARInputStream::IsNonBlocking(bool *aNonBlocking)
 {
-    *aNonBlocking = PR_FALSE;
+    *aNonBlocking = false;
     return NS_OK;
 }
 
 NS_IMETHODIMP
 nsJARInputStream::Close()
 {
+    if (mMode == MODE_INFLATE) {
+        inflateEnd(&mZs);
+    }
     mMode = MODE_CLOSED;
-    mFd = nsnull;
+    mFd = nullptr;
     return NS_OK;
 }
 
 nsresult 
-nsJARInputStream::ContinueInflate(char* aBuffer, PRUint32 aCount,
-                                  PRUint32* aBytesRead)
+nsJARInputStream::ContinueInflate(char* aBuffer, uint32_t aCount,
+                                  uint32_t* aBytesRead)
 {
     // No need to check the args, ::Read did that, but assert them at least
     NS_ASSERTION(aBuffer,"aBuffer parameter must not be null");
     NS_ASSERTION(aBytesRead,"aBytesRead parameter must not be null");
 
     // Keep old total_out count
-    const PRUint32 oldTotalOut = mZs.total_out;
+    const uint32_t oldTotalOut = mZs.total_out;
     
     // make sure we aren't reading too much
     mZs.avail_out = NS_MIN(aCount, (mOutSize-oldTotalOut));
@@ -319,20 +293,20 @@ nsJARInputStream::ContinueInflate(char* aBuffer, PRUint32 aCount,
 }
 
 nsresult
-nsJARInputStream::ReadDirectory(char* aBuffer, PRUint32 aCount, PRUint32 *aBytesRead)
+nsJARInputStream::ReadDirectory(char* aBuffer, uint32_t aCount, uint32_t *aBytesRead)
 {
     // No need to check the args, ::Read did that, but assert them at least
     NS_ASSERTION(aBuffer,"aBuffer parameter must not be null");
     NS_ASSERTION(aBytesRead,"aBytesRead parameter must not be null");
 
     // If the buffer contains data, copy what's there up to the desired amount
-    PRUint32 numRead = CopyDataToBuffer(aBuffer, aCount);
+    uint32_t numRead = CopyDataToBuffer(aBuffer, aCount);
 
     if (aCount > 0) {
         // empty the buffer and start writing directory entry lines to it
         mBuffer.Truncate();
         mCurPos = 0;
-        const PRUint32 arrayLen = mArray.Length();
+        const uint32_t arrayLen = mArray.Length();
 
         for ( ;aCount > mBuffer.Length(); mArrPos++) {
             // have we consumed all the directory contents?
@@ -340,8 +314,8 @@ nsJARInputStream::ReadDirectory(char* aBuffer, PRUint32 aCount, PRUint32 *aBytes
                 break;
 
             const char * entryName = mArray[mArrPos].get();
-            PRUint32 entryNameLen = mArray[mArrPos].Length();
-            nsZipItem* ze = mJar->mZip.GetItem(entryName);
+            uint32_t entryNameLen = mArray[mArrPos].Length();
+            nsZipItem* ze = mJar->mZip->GetItem(entryName);
             NS_ENSURE_TRUE(ze, NS_ERROR_FILE_TARGET_DOES_NOT_EXIST);
 
             // Last Modified Time
@@ -382,10 +356,10 @@ nsJARInputStream::ReadDirectory(char* aBuffer, PRUint32 aCount, PRUint32 *aBytes
     return NS_OK;
 }
 
-PRUint32
-nsJARInputStream::CopyDataToBuffer(char* &aBuffer, PRUint32 &aCount)
+uint32_t
+nsJARInputStream::CopyDataToBuffer(char* &aBuffer, uint32_t &aCount)
 {
-    const PRUint32 writeLength = NS_MIN(aCount, mBuffer.Length() - mCurPos);
+    const uint32_t writeLength = NS_MIN(aCount, mBuffer.Length() - mCurPos);
 
     if (writeLength > 0) {
         memcpy(aBuffer, mBuffer.get() + mCurPos, writeLength);

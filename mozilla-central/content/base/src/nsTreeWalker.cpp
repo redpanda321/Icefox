@@ -1,42 +1,8 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /* vim: set ts=4 et sw=4 tw=80: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is this file as it was released on May 1 2001.
- *
- * The Initial Developer of the Original Code is
- * Jonas Sicking.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Jonas Sicking <sicking@bigfoot.com> (Original Author)
- *   Craig Topper  <craig.topper@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Implementation of DOM Traversal's nsIDOMTreeWalker
@@ -46,8 +12,9 @@
 
 #include "nsIDOMNode.h"
 #include "nsIDOMNodeFilter.h"
-#include "nsDOMError.h"
-
+#include "nsError.h"
+#include "nsINode.h"
+#include "nsDOMClassInfoID.h"
 #include "nsContentUtils.h"
 
 /*
@@ -55,10 +22,9 @@
  */
 
 nsTreeWalker::nsTreeWalker(nsINode *aRoot,
-                           PRUint32 aWhatToShow,
-                           nsIDOMNodeFilter *aFilter,
-                           PRBool aExpandEntityReferences) :
-    nsTraversal(aRoot, aWhatToShow, aFilter, aExpandEntityReferences),
+                           uint32_t aWhatToShow,
+                           nsIDOMNodeFilter *aFilter) :
+    nsTraversal(aRoot, aWhatToShow, aFilter),
     mCurrentNode(aRoot)
 {
 }
@@ -99,13 +65,13 @@ NS_IMETHODIMP nsTreeWalker::GetRoot(nsIDOMNode * *aRoot)
         return CallQueryInterface(mRoot, aRoot);
     }
 
-    *aRoot = nsnull;
+    *aRoot = nullptr;
 
     return NS_OK;
 }
 
 /* readonly attribute unsigned long whatToShow; */
-NS_IMETHODIMP nsTreeWalker::GetWhatToShow(PRUint32 *aWhatToShow)
+NS_IMETHODIMP nsTreeWalker::GetWhatToShow(uint32_t *aWhatToShow)
 {
     *aWhatToShow = mWhatToShow;
     return NS_OK;
@@ -123,9 +89,9 @@ NS_IMETHODIMP nsTreeWalker::GetFilter(nsIDOMNodeFilter * *aFilter)
 
 /* readonly attribute boolean expandEntityReferences; */
 NS_IMETHODIMP
-nsTreeWalker::GetExpandEntityReferences(PRBool *aExpandEntityReferences)
+nsTreeWalker::GetExpandEntityReferences(bool *aExpandEntityReferences)
 {
-    *aExpandEntityReferences = mExpandEntityReferences;
+    *aExpandEntityReferences = false;
     return NS_OK;
 }
 
@@ -136,19 +102,22 @@ NS_IMETHODIMP nsTreeWalker::GetCurrentNode(nsIDOMNode * *aCurrentNode)
         return CallQueryInterface(mCurrentNode, aCurrentNode);
     }
 
-    *aCurrentNode = nsnull;
+    *aCurrentNode = nullptr;
 
     return NS_OK;
 }
 NS_IMETHODIMP nsTreeWalker::SetCurrentNode(nsIDOMNode * aCurrentNode)
 {
     NS_ENSURE_TRUE(aCurrentNode, NS_ERROR_DOM_NOT_SUPPORTED_ERR);
+    NS_ENSURE_TRUE(mRoot, NS_ERROR_UNEXPECTED);
 
-    nsresult rv = nsContentUtils::CheckSameOrigin(mRoot, aCurrentNode);
+    nsCOMPtr<nsINode> node = do_QueryInterface(aCurrentNode);
+    NS_ENSURE_TRUE(node, NS_ERROR_UNEXPECTED);
+
+    nsresult rv = nsContentUtils::CheckSameOrigin(mRoot, node);
     NS_ENSURE_SUCCESS(rv, rv);
 
-    mCurrentNode = do_QueryInterface(aCurrentNode);
-
+    mCurrentNode.swap(node);
     return NS_OK;
 }
 
@@ -159,17 +128,17 @@ NS_IMETHODIMP nsTreeWalker::SetCurrentNode(nsIDOMNode * aCurrentNode)
 /* nsIDOMNode parentNode (); */
 NS_IMETHODIMP nsTreeWalker::ParentNode(nsIDOMNode **_retval)
 {
-    *_retval = nsnull;
+    *_retval = nullptr;
 
     nsresult rv;
 
     nsCOMPtr<nsINode> node = mCurrentNode;
 
     while (node && node != mRoot) {
-        node = node->GetNodeParent();
+        node = node->GetParentNode();
 
         if (node) {
-            PRInt16 filtered;
+            int16_t filtered;
             rv = TestNode(node, &filtered);
             NS_ENSURE_SUCCESS(rv, rv);
             if (filtered == nsIDOMNodeFilter::FILTER_ACCEPT) {
@@ -185,34 +154,34 @@ NS_IMETHODIMP nsTreeWalker::ParentNode(nsIDOMNode **_retval)
 /* nsIDOMNode firstChild (); */
 NS_IMETHODIMP nsTreeWalker::FirstChild(nsIDOMNode **_retval)
 {
-    return FirstChildInternal(PR_FALSE, _retval);
+    return FirstChildInternal(false, _retval);
 }
 
 /* nsIDOMNode lastChild (); */
 NS_IMETHODIMP nsTreeWalker::LastChild(nsIDOMNode **_retval)
 {
-    return FirstChildInternal(PR_TRUE, _retval);
+    return FirstChildInternal(true, _retval);
 }
 
 /* nsIDOMNode previousSibling (); */
 NS_IMETHODIMP nsTreeWalker::PreviousSibling(nsIDOMNode **_retval)
 {
-    return NextSiblingInternal(PR_TRUE, _retval);
+    return NextSiblingInternal(true, _retval);
 }
 
 /* nsIDOMNode nextSibling (); */
 NS_IMETHODIMP nsTreeWalker::NextSibling(nsIDOMNode **_retval)
 {
-    return NextSiblingInternal(PR_FALSE, _retval);
+    return NextSiblingInternal(false, _retval);
 }
 
 /* nsIDOMNode previousNode (); */
 NS_IMETHODIMP nsTreeWalker::PreviousNode(nsIDOMNode **_retval)
 {
     nsresult rv;
-    PRInt16 filtered;
+    int16_t filtered;
 
-    *_retval = nsnull;
+    *_retval = nullptr;
 
     nsCOMPtr<nsINode> node = mCurrentNode;
 
@@ -240,7 +209,7 @@ NS_IMETHODIMP nsTreeWalker::PreviousNode(nsIDOMNode **_retval)
         if (node == mRoot)
             break;
 
-        node = node->GetNodeParent();
+        node = node->GetParentNode();
         if (!node)
             break;
 
@@ -260,9 +229,9 @@ NS_IMETHODIMP nsTreeWalker::PreviousNode(nsIDOMNode **_retval)
 NS_IMETHODIMP nsTreeWalker::NextNode(nsIDOMNode **_retval)
 {
     nsresult rv;
-    PRInt16 filtered = nsIDOMNodeFilter::FILTER_ACCEPT; // pre-init for inner loop
+    int16_t filtered = nsIDOMNodeFilter::FILTER_ACCEPT; // pre-init for inner loop
 
-    *_retval = nsnull;
+    *_retval = nullptr;
 
     nsCOMPtr<nsINode> node = mCurrentNode;
 
@@ -283,7 +252,7 @@ NS_IMETHODIMP nsTreeWalker::NextNode(nsIDOMNode **_retval)
             }
         }
 
-        nsINode *sibling = nsnull;
+        nsINode *sibling = nullptr;
         nsINode *temp = node;
         do {
             if (temp == mRoot)
@@ -293,7 +262,7 @@ NS_IMETHODIMP nsTreeWalker::NextNode(nsIDOMNode **_retval)
             if (sibling)
                 break;
 
-            temp = temp->GetNodeParent();
+            temp = temp->GetParentNode();
         } while (temp);
 
         if (!sibling)
@@ -326,12 +295,12 @@ NS_IMETHODIMP nsTreeWalker::NextNode(nsIDOMNode **_retval)
  * @param _retval   Returned node. Null if no child is found
  * @returns         Errorcode
  */
-nsresult nsTreeWalker::FirstChildInternal(PRBool aReversed, nsIDOMNode **_retval)
+nsresult nsTreeWalker::FirstChildInternal(bool aReversed, nsIDOMNode **_retval)
 {
     nsresult rv;
-    PRInt16 filtered;
+    int16_t filtered;
 
-    *_retval = nsnull;
+    *_retval = nullptr;
 
     nsCOMPtr<nsINode> node = aReversed ? mCurrentNode->GetLastChild()
                                        : mCurrentNode->GetFirstChild();
@@ -366,11 +335,14 @@ nsresult nsTreeWalker::FirstChildInternal(PRBool aReversed, nsIDOMNode **_retval
                 node = sibling;
                 break;
             }
-            nsINode *parent = node->GetNodeParent();
+
+            nsINode *parent = node->GetParentNode();
 
             if (!parent || parent == mRoot || parent == mCurrentNode) {
                 return NS_OK;
             }
+
+            node = parent;
 
         } while (node);
     }
@@ -385,13 +357,12 @@ nsresult nsTreeWalker::FirstChildInternal(PRBool aReversed, nsIDOMNode **_retval
  * @param _retval   Returned node. Null if no child is found
  * @returns         Errorcode
  */
-nsresult nsTreeWalker::NextSiblingInternal(PRBool aReversed, nsIDOMNode **_retval)
-
+nsresult nsTreeWalker::NextSiblingInternal(bool aReversed, nsIDOMNode **_retval)
 {
     nsresult rv;
-    PRInt16 filtered;
+    int16_t filtered;
 
-    *_retval = nsnull;
+    *_retval = nullptr;
 
     nsCOMPtr<nsINode> node = mCurrentNode;
 
@@ -399,46 +370,39 @@ nsresult nsTreeWalker::NextSiblingInternal(PRBool aReversed, nsIDOMNode **_retva
         return NS_OK;
 
     while (1) {
-        nsCOMPtr<nsINode> sibling = aReversed ? node->GetPreviousSibling()
-                                              : node->GetNextSibling();
+        nsINode* sibling = aReversed ? node->GetPreviousSibling()
+                                     : node->GetNextSibling();
 
         while (sibling) {
-            rv = TestNode(sibling, &filtered);
+            node = sibling;
+
+            rv = TestNode(node, &filtered);
             NS_ENSURE_SUCCESS(rv, rv);
 
-            switch (filtered) {
-                case nsIDOMNodeFilter::FILTER_ACCEPT:
-                    // Node found
-                    mCurrentNode = sibling;
-                    return CallQueryInterface(sibling, _retval);
-                case nsIDOMNodeFilter::FILTER_SKIP: {
-                        nsINode *firstChild = aReversed ? sibling->GetLastChild()
-                                                        : sibling->GetFirstChild();
-                        if (firstChild) {
-                            sibling = firstChild;
-                            continue;
-                        }
-                    }
-                    break;
-                case nsIDOMNodeFilter::FILTER_REJECT:
-                    // Keep searching
-                    break;
+            if (filtered == nsIDOMNodeFilter::FILTER_ACCEPT) {
+                // Node found
+                mCurrentNode.swap(node);
+                return CallQueryInterface(mCurrentNode, _retval);
             }
-            sibling = aReversed ? sibling->GetPreviousSibling()
-                                : sibling->GetNextSibling();
+
+            // If rejected or no children, try a sibling
+            if (filtered == nsIDOMNodeFilter::FILTER_REJECT ||
+                !(sibling = aReversed ? node->GetLastChild()
+                                      : node->GetFirstChild())) {
+                sibling = aReversed ? node->GetPreviousSibling()
+                                    : node->GetNextSibling();
+            }
         }
 
-        node = node->GetNodeParent();
+        node = node->GetParentNode();
 
         if (!node || node == mRoot)
-            break;
+            return NS_OK;
 
         // Is parent transparent in filtered view?
         rv = TestNode(node, &filtered);
         NS_ENSURE_SUCCESS(rv, rv);
         if (filtered == nsIDOMNodeFilter::FILTER_ACCEPT)
-            break;
+            return NS_OK;
     }
-
-    return NS_OK;
 }

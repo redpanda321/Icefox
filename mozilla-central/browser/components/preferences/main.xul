@@ -1,50 +1,17 @@
 <?xml version="1.0"?>
 
 # -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is the Firefox Preferences System.
-#
-# The Initial Developer of the Original Code is
-# Ben Goodger.
-# Portions created by the Initial Developer are Copyright (C) 2005
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Ben Goodger <ben@mozilla.org>
-#   Jeff Walden <jwalden+code@mit.edu>
-#   Myk Melez <myk@mozilla.org>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 <!DOCTYPE overlay [
   <!ENTITY % brandDTD SYSTEM "chrome://branding/locale/brand.dtd">
   <!ENTITY % mainDTD SYSTEM "chrome://browser/locale/preferences/main.dtd">
+  <!ENTITY % aboutHomeDTD SYSTEM "chrome://browser/locale/aboutHome.dtd">
   %brandDTD;
   %mainDTD;
+  %aboutHomeDTD;
 ]>
 
 <overlay id="MainPaneOverlay"
@@ -77,6 +44,11 @@
                   name="pref.browser.homepage.disable_button.restore_default"
                   type="bool"/>
 
+      <preference id="browser.privatebrowsing.autostart"
+                  name="browser.privatebrowsing.autostart"
+                  type="bool"
+                  onchange="gMainPane.updateBrowserStartupLastSession();"/>
+
       <!-- Downloads -->
       <preference id="browser.download.manager.showWhenStarting"
                   name="browser.download.manager.showWhenStarting"
@@ -107,17 +79,20 @@
                control="browserStartupPage"/>
         <menulist id="browserStartupPage" preference="browser.startup.page">
           <menupopup>
-            <menuitem label="&startupHomePage.label;"     value="1"/>
-            <menuitem label="&startupBlankPage.label;"    value="0"/>
-            <menuitem label="&startupLastSession.label;"  value="3"/>
+            <menuitem label="&startupHomePage.label;"     value="1" id="browserStartupHomePage"/>
+            <menuitem label="&startupBlankPage.label;"    value="0" id="browserStartupBlank"/>
+            <menuitem label="&startupLastSession.label;"  value="3" id="browserStartupLastSession"/>
           </menupopup>
         </menulist>
       </hbox>
       <separator class="thin"/>
       <hbox align="center">
-        <label value="&location.label;" accesskey="&location.accesskey;" control="browserHomePage"/>
+        <label value="&homepage.label;" accesskey="&homepage.accesskey;" control="browserHomePage"/>
         <textbox id="browserHomePage" class="padded uri-element" flex="1"
                  type="autocomplete" autocompletesearch="history"
+                 onsyncfrompreference="return gMainPane.syncFromHomePref();"
+                 onsynctopreference="return gMainPane.syncToHomePref(this.value);"
+                 placeholder="&abouthome.pageTitle;"
                  preference="browser.startup.homepage"/>
       </hbox>
       <hbox align="center" pack="end">
@@ -127,7 +102,7 @@
                 oncommand="gMainPane.setHomePageToCurrent();"
                 id="useCurrent"
                 preference="pref.browser.homepage.disable_button.current_page"/>
-        <button label="&useBookmark.label;" accesskey="&useBookmark.accesskey;"
+        <button label="&chooseBookmark.label;" accesskey="&chooseBookmark.accesskey;"
                 oncommand="gMainPane.setHomePageToBookmark();"
                 id="useBookmark"
                 preference="pref.browser.homepage.disable_button.bookmark_page"/>
@@ -182,22 +157,6 @@
                accesskey="&alwaysAsk.accesskey;"/>
       </radiogroup>
     </groupbox>
-
-    <hbox class="bottomBox">
-      <groupbox id="addonsMgrGroup" orient="horizontal" flex="1">
-        <caption label="&addonsMgr.label;"/>
-
-        <description control="manageAddons"
-#ifdef XP_WIN
-                     flex="1">&manageAddonsDescWin.label;</description>
-#else
-                     flex="1">&manageAddonsDescUnix2.label;</description>
-#endif
-        <button id="manageAddons" label="&manageAddons.label;"
-                accesskey="&manageAddons.accesskey;"
-                oncommand="gMainPane.showAddonsMgr();"/>
-      </groupbox>
-    </hbox>
 
   </prefpane>
 

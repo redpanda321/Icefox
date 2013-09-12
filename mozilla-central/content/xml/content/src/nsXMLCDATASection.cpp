@@ -1,49 +1,13 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsIDOMCDATASection.h"
-#include "nsIDOM3Text.h"
 #include "nsGenericDOMDataNode.h"
 #include "nsGkAtoms.h"
-#include "nsIDocument.h"
-#include "nsContentUtils.h"
 
-
-class nsXMLCDATASection : public nsGenericTextNode,
+class nsXMLCDATASection : public nsGenericDOMDataNode,
                           public nsIDOMCDATASection
 {
 public:
@@ -54,7 +18,7 @@ public:
   NS_DECL_ISUPPORTS_INHERITED
 
   // nsIDOMNode
-  NS_IMPL_NSIDOMNODE_USING_GENERIC_DOM_DATA
+  NS_FORWARD_NSIDOMNODE_TO_NSINODE
 
   // nsIDOMCharacterData
   NS_FORWARD_NSIDOMCHARACTERDATA(nsGenericDOMDataNode::)
@@ -65,13 +29,18 @@ public:
   // nsIDOMCDATASection
   // Empty interface
 
-  // nsIContent
-  virtual PRBool IsNodeOfType(PRUint32 aFlags) const;
+  // nsINode
+  virtual bool IsNodeOfType(uint32_t aFlags) const;
+
+  virtual nsGenericDOMDataNode* CloneDataNode(nsINodeInfo *aNodeInfo,
+                                              bool aCloneText) const;
 
   virtual nsXPCClassInfo* GetClassInfo();
+
+  virtual nsIDOMNode* AsDOMNode() { return this; }
 #ifdef DEBUG
-  virtual void List(FILE* out, PRInt32 aIndent) const;
-  virtual void DumpContent(FILE* out, PRInt32 aIndent,PRBool aDumpAll) const;
+  virtual void List(FILE* out, int32_t aIndent) const;
+  virtual void DumpContent(FILE* out, int32_t aIndent,bool aDumpAll) const;
 #endif
 };
 
@@ -81,11 +50,12 @@ NS_NewXMLCDATASection(nsIContent** aInstancePtrResult,
 {
   NS_PRECONDITION(aNodeInfoManager, "Missing nodeinfo manager");
 
-  *aInstancePtrResult = nsnull;
+  *aInstancePtrResult = nullptr;
 
   nsCOMPtr<nsINodeInfo> ni;
   ni = aNodeInfoManager->GetNodeInfo(nsGkAtoms::cdataTagName,
-                                     nsnull, kNameSpaceID_None);
+                                     nullptr, kNameSpaceID_None,
+                                     nsIDOMNode::CDATA_SECTION_NODE);
   NS_ENSURE_TRUE(ni, NS_ERROR_OUT_OF_MEMORY);
 
   nsXMLCDATASection *instance = new nsXMLCDATASection(ni.forget());
@@ -99,8 +69,10 @@ NS_NewXMLCDATASection(nsIContent** aInstancePtrResult,
 }
 
 nsXMLCDATASection::nsXMLCDATASection(already_AddRefed<nsINodeInfo> aNodeInfo)
-  : nsGenericTextNode(aNodeInfo)
+  : nsGenericDOMDataNode(aNodeInfo)
 {
+  NS_ABORT_IF_FALSE(mNodeInfo->NodeType() == nsIDOMNode::CDATA_SECTION_NODE,
+                    "Bad NodeType in aNodeInfo");
 }
 
 nsXMLCDATASection::~nsXMLCDATASection()
@@ -114,7 +86,6 @@ DOMCI_NODE_DATA(CDATASection, nsXMLCDATASection)
 NS_INTERFACE_TABLE_HEAD(nsXMLCDATASection)
   NS_NODE_INTERFACE_TABLE4(nsXMLCDATASection, nsIDOMNode, nsIDOMCharacterData,
                            nsIDOMText, nsIDOMCDATASection)
-  NS_INTERFACE_MAP_ENTRY_TEAROFF(nsIDOM3Text, new nsText3Tearoff(this))
   NS_DOM_INTERFACE_MAP_ENTRY_CLASSINFO(CDATASection)
 NS_INTERFACE_MAP_END_INHERITING(nsGenericDOMDataNode)
 
@@ -122,40 +93,14 @@ NS_IMPL_ADDREF_INHERITED(nsXMLCDATASection, nsGenericDOMDataNode)
 NS_IMPL_RELEASE_INHERITED(nsXMLCDATASection, nsGenericDOMDataNode)
 
 
-PRBool
-nsXMLCDATASection::IsNodeOfType(PRUint32 aFlags) const
+bool
+nsXMLCDATASection::IsNodeOfType(uint32_t aFlags) const
 {
   return !(aFlags & ~(eCONTENT | eTEXT | eDATA_NODE));
 }
 
-NS_IMETHODIMP
-nsXMLCDATASection::GetNodeName(nsAString& aNodeName)
-{
-  aNodeName.AssignLiteral("#cdata-section");
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-nsXMLCDATASection::GetNodeValue(nsAString& aNodeValue)
-{
-  return nsGenericDOMDataNode::GetNodeValue(aNodeValue);
-}
-
-NS_IMETHODIMP
-nsXMLCDATASection::SetNodeValue(const nsAString& aNodeValue)
-{
-  return nsGenericDOMDataNode::SetNodeValue(aNodeValue);
-}
-
-NS_IMETHODIMP
-nsXMLCDATASection::GetNodeType(PRUint16* aNodeType)
-{
-  *aNodeType = (PRUint16)nsIDOMNode::CDATA_SECTION_NODE;
-  return NS_OK;
-}
-
 nsGenericDOMDataNode*
-nsXMLCDATASection::CloneDataNode(nsINodeInfo *aNodeInfo, PRBool aCloneText) const
+nsXMLCDATASection::CloneDataNode(nsINodeInfo *aNodeInfo, bool aCloneText) const
 {
   nsCOMPtr<nsINodeInfo> ni = aNodeInfo;
   nsXMLCDATASection *it = new nsXMLCDATASection(ni.forget());
@@ -168,9 +113,9 @@ nsXMLCDATASection::CloneDataNode(nsINodeInfo *aNodeInfo, PRBool aCloneText) cons
 
 #ifdef DEBUG
 void
-nsXMLCDATASection::List(FILE* out, PRInt32 aIndent) const
+nsXMLCDATASection::List(FILE* out, int32_t aIndent) const
 {
-  PRInt32 index;
+  int32_t index;
   for (index = aIndent; --index >= 0; ) fputs("  ", out);
 
   fprintf(out, "CDATASection refcount=%d<", mRefCnt.get());
@@ -183,7 +128,7 @@ nsXMLCDATASection::List(FILE* out, PRInt32 aIndent) const
 }
 
 void
-nsXMLCDATASection::DumpContent(FILE* out, PRInt32 aIndent,
-                               PRBool aDumpAll) const {
+nsXMLCDATASection::DumpContent(FILE* out, int32_t aIndent,
+                               bool aDumpAll) const {
 }
 #endif

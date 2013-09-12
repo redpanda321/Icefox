@@ -1,34 +1,6 @@
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# Contributor(s):
-#   Chris Jones <jones.chris.g@gmail.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either of the GNU General Public License Version 2 or later (the "GPL"),
-# or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import copy, sys
 
@@ -109,6 +81,12 @@ class Visitor:
     def visitMethodDefn(self, meth):
         meth.decl.accept(self)
         self.visitBlock(meth)
+
+    def visitFunctionDecl(self, fun):
+        self.visitMethodDecl(fun)
+
+    def visitFunctionDefn(self, fd):
+        self.visitMethodDefn(fd)
 
     def visitConstructorDecl(self, ctor):
         self.visitMethodDecl(ctor)
@@ -349,9 +327,10 @@ Any type, naked or pointer, can be const (const T) or ref (T&).
                     T=copy.deepcopy(self.T, memo))
 Type.BOOL = Type('bool')
 Type.INT = Type('int')
-Type.INT32 = Type('int32')
+Type.INT32 = Type('int32_t')
 Type.INTPTR = Type('intptr_t')
-Type.UINT32 = Type('uint32')
+Type.UINT32 = Type('uint32_t')
+Type.UINT32PTR = Type('uint32_t', ptr=1)
 Type.SIZE = Type('size_t')
 Type.VOID = Type('void')
 Type.VOIDPTR = Type('void', ptr=1)
@@ -390,6 +369,14 @@ class Typedef(Node):
         Node.__init__(self)
         self.fromtype = fromtype
         self.totypename = totypename
+
+    def __cmp__(self, o):
+        return cmp(self.totypename, o.totypename)
+    def __eq__(self, o):
+        return (self.__class__ == o.__class__
+                and 0 == cmp(self, o))
+    def __hash__(self):
+        return hash(self.totypename)
 
 class Using(Node):
     def __init__(self, type):
@@ -508,6 +495,20 @@ class MethodDefn(Block):
     def __init__(self, decl):
         Block.__init__(self)
         self.decl = decl
+
+class FunctionDecl(MethodDecl):
+    def __init__(self, name, params=[ ], ret=Type('void'),
+                 static=0, warn_unused=0,
+                 inline=0, force_inline=0,
+                 T=None):
+        MethodDecl.__init__(self, name, params=params, ret=ret,
+                            static=static, warn_unused=warn_unused,
+                            inline=inline, force_inline=force_inline,
+                            T=T)
+
+class FunctionDefn(MethodDefn):
+    def __init__(self, decl):
+        MethodDefn.__init__(self, decl)
 
 class ConstructorDecl(MethodDecl):
     def __init__(self, name, params=[ ], explicit=0, force_inline=0):

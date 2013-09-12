@@ -10,11 +10,33 @@
         onload="test_template();"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
 
   <body xmlns="http://www.w3.org/1999/xhtml" style="height: 300px; overflow: auto;"/>
+
+  <data id="output">
+    <columns>
+      <column/>
+      <column/>
+    </columns>
+    <rows>
+      <label step="3" id="http://www.some-fictitious-zoo.com/birds/wren" value="The coolest animal is: Wren"/>
+      <row id="http://www.some-fictitious-zoo.com/birds/emu">
+        <label value="Emu"/>
+        <label value="Birds"/>
+      </row>
+      <label step="-4" id="http://www.some-fictitious-zoo.com/birds/barnowl" value="The coolest animal is: Barn Owl"/>
+      <row id="http://www.some-fictitious-zoo.com/birds/raven">
+        <label value="Raven"/>
+        <label value="Birds"/>
+      </row>
+      <row step="2" id="http://www.some-fictitious-zoo.com/birds/archaeopteryx">
+        <label value="Archaeopteryx"/>
+        <label value="Birds"/>
+      </row>
+      <label step="1" id="http://www.some-fictitious-zoo.com/birds/emperorpenguin" value="The coolest animal is: Emperor Penguin"/>
+    </rows>
+  </data>
 
 <script src="templates_shared.js"/>
 
@@ -28,30 +50,7 @@ var isTreeBuilder = false;
 var needsOpen = false;
 var notWorkingYet = false;
 var notWorkingYetDynamic = false;
-var expectedOutput =
-<output>
-  <columns>
-    <column/>
-    <column/>
-  </columns>
-  <rows>
-    <label step="3" id="http://www.some-fictitious-zoo.com/birds/wren" value="The coolest animal is: Wren"/>
-    <row id="http://www.some-fictitious-zoo.com/birds/emu">
-      <label value="Emu"/>
-      <label value="Birds"/>
-    </row>
-    <label step="-4" id="http://www.some-fictitious-zoo.com/birds/barnowl" value="The coolest animal is: Barn Owl"/>
-    <row id="http://www.some-fictitious-zoo.com/birds/raven">
-      <label value="Raven"/>
-      <label value="Birds"/>
-    </row>
-    <row step="2" id="http://www.some-fictitious-zoo.com/birds/archaeopteryx">
-      <label value="Archaeopteryx"/>
-      <label value="Birds"/>
-    </row>
-    <label step="1" id="http://www.some-fictitious-zoo.com/birds/emperorpenguin" value="The coolest animal is: Emperor Penguin"/>
-  </rows>
-</output>;
+var expectedOutput = document.getElementById("output");
 
 var changes = [
   // step 1
@@ -93,7 +92,7 @@ var changes = [
 ]]>
 </script>
 
-<grid xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" id="root" datasources="animals.rdf" ref="http://www.some-fictitious-zoo.com/birds">
+<grid xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" id="root" datasources="rdf:null" ref="http://www.some-fictitious-zoo.com/birds">
 <columns>
 <column/>
 <column/>

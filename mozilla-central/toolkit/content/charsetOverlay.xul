@@ -1,4 +1,8 @@
 <?xml version="1.0"?> 
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 
 <!DOCTYPE  overlay SYSTEM "chrome://global/locale/charsetOverlay.dtd">
 
@@ -89,17 +93,6 @@
                     </menupopup>
                 </menu>
                 <menu label="&charsetMenuMore5.label;" accesskey="&charsetMenuMore5.accesskey;" datasources="rdf:charset-menu" ref="NC:BrowserMore5CharsetMenuRoot">
-                    <template>
-                        <rule>
-                            <menupopup>
-                            <menuitem uri="..." label="rdf:http://home.netscape.com/NC-rdf#Name"/>
-                            </menupopup>
-                        </rule>
-                    </template>
-                    <menupopup>
-                    </menupopup>
-                </menu>
-                <menu label="&charsetMenuUnicode.label;" accesskey="&charsetMenuUnicode.accesskey;" datasources="rdf:charset-menu" ref="NC:BrowserUnicodeCharsetMenuRoot">
                     <template>
                         <rule>
                             <menupopup>
@@ -312,17 +305,6 @@
                     </menupopup>
                 </menu>
                 <menu label="&charsetMenuMore5.label;" accesskey="&charsetMenuMore5.accesskey;" datasources="rdf:charset-menu" ref="NC:BrowserMore5CharsetMenuRoot">
-                    <template>
-                        <rule>
-                            <menupopup>
-                            <menuitem uri="..." label="rdf:http://home.netscape.com/NC-rdf#Name"/>
-                            </menupopup>
-                        </rule>
-                    </template>
-                    <menupopup>
-                    </menupopup>
-                </menu>
-                <menu label="&charsetMenuUnicode.label;" accesskey="&charsetMenuUnicode.accesskey;" datasources="rdf:charset-menu" ref="NC:BrowserUnicodeCharsetMenuRoot">
                     <template>
                         <rule>
                             <menupopup>

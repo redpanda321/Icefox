@@ -1,3 +1,7 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 package Tests;
 
 use Util;
@@ -50,7 +54,6 @@ sub global_prefs {
 
     # Suppress firefox's popup blocking
     if ($Settings::BinaryName =~ /^firefox/) {
-        Prefs::set_pref($pref_file, 'privacy.popups.firstTime', 'false');
         Prefs::set_pref($pref_file, 'dom.disable_open_during_load', 'false');
 
         # Suppress default browser dialog
@@ -58,16 +61,14 @@ sub global_prefs {
 
         # Suppress session restore dialog
         Prefs::set_pref($pref_file, 'browser.sessionstore.resume_from_crash', 'false');
+
+        # Suppress automatic safe mode after crashes
+        Prefs::set_pref($pref_file, 'toolkit.startup.max_resumed_crashes', -1);
     }
     elsif ($Settings::BinaryName eq 'Camino') {
         Prefs::set_pref($pref_file, 'camino.check_default_browser', 'false');
     }
 
-    # Suppress security warnings for QA test.
-    if ($Settings::QATest) {
-        Prefs::set_pref($pref_file, 'security.warn_submit_insecure', 'true');
-    }
-    
     #
     # Assume that we want to test modern skin for all tests.
     #

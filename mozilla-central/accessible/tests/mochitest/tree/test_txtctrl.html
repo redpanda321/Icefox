@@ -7,14 +7,12 @@
         href="chrome://mochikit/content/tests/SimpleTest/test.css" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js"></script>
+          src="../common.js"></script>
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/role.js"></script>
+          src="../role.js"></script>
 
   <script type="application/javascript">
     function doTest()
@@ -32,7 +30,7 @@
 
       testAccessibleTree("txc1", accTree);
 
-      // input@type="text"
+      // input@type="text", value
       accTree = {
         role: ROLE_ENTRY,
         children: [
@@ -45,24 +43,18 @@
 
       testAccessibleTree("txc2", accTree);
 
+      // input@type="text", no value
+      accTree =
+        { ENTRY: [ ] };
+
+      testAccessibleTree("txc3", accTree);
+
       // textarea
       accTree = {
         role: ROLE_ENTRY,
         children: [
           {
-            role: ROLE_TEXT_LEAF // hello1 text
-          },
-          {
-            role: ROLE_WHITESPACE
-          },
-          {
-            role: ROLE_TEXT_LEAF, // hello2 text
-          },
-          {
-            role: ROLE_WHITESPACE
-          },
-          {
-            role: ROLE_TEXT_LEAF, // whitepsace text
+            role: ROLE_TEXT_LEAF // hello1\nhello2 text
           },
           {
             role: ROLE_WHITESPACE
@@ -70,7 +62,7 @@
         ]
       };
 
-      testAccessibleTree("txc3", accTree);
+      testAccessibleTree("txc4", accTree);
 
       // input@type="password"
       accTree = {
@@ -83,7 +75,46 @@
         ]
       };
 
-      testAccessibleTree("txc4", accTree);
+      testAccessibleTree("txc5", accTree);
+      
+      // input@type="tel", value
+      accTree = {
+        role: ROLE_ENTRY,
+        children: [
+          { // text child
+            role: ROLE_TEXT_LEAF,
+            children: []
+          }
+        ]
+      };
+
+      testAccessibleTree("txc6", accTree);
+
+      // input@type="email", value
+      accTree = {
+        role: ROLE_ENTRY,
+        children: [
+          { // text child
+            role: ROLE_TEXT_LEAF,
+            children: []
+          }
+        ]
+      };
+
+      testAccessibleTree("txc7", accTree);
+
+      // input@type="search", value
+      accTree = {
+        role: ROLE_ENTRY,
+        children: [
+          { // text child
+            role: ROLE_TEXT_LEAF,
+            children: []
+          }
+        ]
+      };
+
+      testAccessibleTree("txc8", accTree);
 
       SimpleTest.finish();
     }
@@ -104,6 +135,11 @@
      title="Create child accessibles for text controls from native anonymous content">
     Mozilla Bug 542824
   </a>
+  <a target="_blank"
+     href="https://bugzilla.mozilla.org/show_bug.cgi?id=625652"
+     title="Make sure accessible tree is correct when rendered text is changed">
+    Mozilla Bug 625652
+  </a>
 
   <p id="display"></p>
   <div id="content" style="display: none"></div>
@@ -114,11 +150,27 @@
     1hellohello
   </div>
   <input id="txc2" value="hello">
-  <textarea id="txc3">
+  <input id="txc3">
+  <textarea id="txc4">
     hello1
     hello2
   </textarea>
-  <input id="txc4" type="password" value="hello">
+  <input id="txc5" type="password" value="hello">
+  <input id="txc6" type="tel" value="4167771234">
+
+  Email Address:
+  <input id="txc7" type="email" list="contacts" value="xyzzy">
+  <datalist id="contacts">
+    <option>xyzzy@plughs.com</option>
+    <option>nobody@mozilla.org</option>
+  </datalist>
+
+  </br>Search for:
+  <input id="txc8" type="search" list="searchhisty" value="Gamma">
+  <datalist id="searchhisty">
+    <option>Gamma Rays</option>
+    <option>Gamma Ray Bursts</option>
+  </datalist>
 
 </body>
 </html>

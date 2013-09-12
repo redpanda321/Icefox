@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #ifndef NSRECT_H
@@ -46,30 +14,35 @@
 #include "nsMargin.h"
 #include "gfxCore.h"
 #include "nsTraceRefcnt.h"
+#include "mozilla/gfx/BaseRect.h"
+#include "mozilla/Likely.h"
+#include <climits>
 
 struct nsIntRect;
 
-struct NS_GFX nsRect {
-  nscoord x, y;
-  nscoord width, height;
+struct NS_GFX nsRect :
+  public mozilla::gfx::BaseRect<nscoord, nsRect, nsPoint, nsSize, nsMargin> {
+  typedef mozilla::gfx::BaseRect<nscoord, nsRect, nsPoint, nsSize, nsMargin> Super;
+
+  static void VERIFY_COORD(nscoord aValue) { ::VERIFY_COORD(aValue); }
 
   // Constructors
-  nsRect() : x(0), y(0), width(0), height(0) {
+  nsRect() : Super()
+  {
     MOZ_COUNT_CTOR(nsRect);
   }
-  nsRect(const nsRect& aRect) {
+  nsRect(const nsRect& aRect) : Super(aRect)
+  {
     MOZ_COUNT_CTOR(nsRect);
-    *this = aRect;
   }
-  nsRect(const nsPoint& aOrigin, const nsSize &aSize) {
+  nsRect(const nsPoint& aOrigin, const nsSize &aSize) : Super(aOrigin, aSize)
+  {
     MOZ_COUNT_CTOR(nsRect);
-    x = aOrigin.x; y = aOrigin.y;
-    width = aSize.width; height = aSize.height;
   }
-  nsRect(nscoord aX, nscoord aY, nscoord aWidth, nscoord aHeight) {
+  nsRect(nscoord aX, nscoord aY, nscoord aWidth, nscoord aHeight) :
+      Super(aX, aY, aWidth, aHeight)
+  {
     MOZ_COUNT_CTOR(nsRect);
-    x = aX; y = aY; width = aWidth; height = aHeight;
-    VERIFY_COORD(x); VERIFY_COORD(y); VERIFY_COORD(width); VERIFY_COORD(height);
   }
 
 #ifdef NS_BUILD_REFCNT_LOGGING
@@ -77,264 +50,198 @@ struct NS_GFX nsRect {
     MOZ_COUNT_DTOR(nsRect);
   }
 #endif
-  
-  // Emptiness. An empty rect is one that has no area, i.e. its height or width
-  // is <= 0
-  PRBool IsEmpty() const {
-    return (PRBool) ((height <= 0) || (width <= 0));
-  }
-  void   Empty() {width = height = 0;}
 
-  // Containment
-  PRBool Contains(const nsRect& aRect) const;
-  PRBool Contains(nscoord aX, nscoord aY) const;
-  PRBool Contains(const nsPoint& aPoint) const {return Contains(aPoint.x, aPoint.y);}
+  // A version of Inflate that caps the values to the nscoord range.
+  // x & y is capped at the minimum value nscoord_MIN and
+  // width & height is capped at the maximum value nscoord_MAX.
+  void SaturatingInflate(const nsMargin& aMargin)
+  {
+#ifdef NS_COORD_IS_FLOAT
+    Inflate(aMargin);
+#else
+    int64_t nx = int64_t(x) - aMargin.left;
+    int64_t w = int64_t(width) + int64_t(aMargin.left) + aMargin.right;
+    if (MOZ_UNLIKELY(w > nscoord_MAX)) {
+      NS_WARNING("Overflowed nscoord_MAX in conversion to nscoord width");
+      int64_t xdiff = nx - nscoord_MIN / 2;
+      if (xdiff < 0) {
+        // Clamp huge negative x to nscoord_MIN / 2 and try again.
+        nx = nscoord_MIN / 2;
+        w += xdiff;
+      }
+      if (MOZ_UNLIKELY(w > nscoord_MAX)) {
+        w = nscoord_MAX;
+      }
+    }
+    width = nscoord(w);
+    if (MOZ_UNLIKELY(nx < nscoord_MIN)) {
+      NS_WARNING("Underflowed nscoord_MIN in conversion to nscoord x");
+      nx = nscoord_MIN;
+    }
+    x = nscoord(nx);
 
-  // Intersection. Returns TRUE if the receiver overlaps aRect and
-  // FALSE otherwise
-  PRBool Intersects(const nsRect& aRect) const;
-
-  // Computes the area in which aRect1 and aRect2 overlap, and fills 'this' with
-  // the result. Returns FALSE if the rectangles don't intersect, and sets 'this'
-  // rect to be an empty rect.
-  //
-  // 'this' can be the same object as either aRect1 or aRect2
-  PRBool IntersectRect(const nsRect& aRect1, const nsRect& aRect2);
-
-  // Computes the smallest rectangle that contains both aRect1 and aRect2 and
-  // fills 'this' with the result, ignoring empty input rectangles.
-  // Returns FALSE and sets 'this' rect to be an empty rect if both aRect1
-  // and aRect2 are empty.
-  //
-  // 'this' can be the same object as either aRect1 or aRect2
-  PRBool UnionRect(const nsRect& aRect1, const nsRect& aRect2);
-
-  // Computes the smallest rectangle that contains both aRect1 and aRect2,
-  // where empty input rectangles are allowed to affect the result; the
-  // top-left of an empty input rectangle will be inside or on the edge of
-  // the result.
-  //
-  // 'this' can be the same object as either aRect1 or aRect2
-  void UnionRectIncludeEmpty(const nsRect& aRect1, const nsRect& aRect2);
-  
-  // Accessors
-  void SetRect(nscoord aX, nscoord aY, nscoord aWidth, nscoord aHeight) {
-    x = aX; y = aY; width = aWidth; height = aHeight;
-  }
-  void SetRect(const nsPoint& aPt, const nsSize& aSize) {
-    SetRect(aPt.x, aPt.y, aSize.width, aSize.height);
-  }
-  void MoveTo(nscoord aX, nscoord aY) {x = aX; y = aY;}
-  void MoveTo(const nsPoint& aPoint) {x = aPoint.x; y = aPoint.y;}
-  void MoveBy(nscoord aDx, nscoord aDy) {x += aDx; y += aDy;}
-  void MoveBy(const nsPoint& aPoint) {x += aPoint.x; y += aPoint.y;}
-  void SizeTo(nscoord aWidth, nscoord aHeight) {width = aWidth; height = aHeight;}
-  void SizeTo(const nsSize& aSize) {SizeTo(aSize.width, aSize.height);}
-  void SizeBy(nscoord aDeltaWidth, nscoord aDeltaHeight) {width += aDeltaWidth;
-                                                          height += aDeltaHeight;}
-
-  // Inflate the rect by the specified width/height or margin
-  void Inflate(nscoord aDx, nscoord aDy);
-  void Inflate(const nsSize& aSize) {Inflate(aSize.width, aSize.height);}
-  void Inflate(const nsMargin& aMargin);
-
-  // Deflate the rect by the specified width/height or margin
-  void Deflate(nscoord aDx, nscoord aDy);
-  void Deflate(const nsSize& aSize) {Deflate(aSize.width, aSize.height);}
-  void Deflate(const nsMargin& aMargin);
-
-  // Overloaded operators. Note that '=' isn't defined so we'll get the
-  // compiler generated default assignment operator.
-  PRBool  operator==(const nsRect& aRect) const {
-    return (PRBool) ((IsEmpty() && aRect.IsEmpty()) ||
-                     ((x == aRect.x) && (y == aRect.y) &&
-                      (width == aRect.width) && (height == aRect.height)));
-  }
-  PRBool  operator!=(const nsRect& aRect) const {
-    return (PRBool) !operator==(aRect);
+    int64_t ny = int64_t(y) - aMargin.top;
+    int64_t h = int64_t(height) + int64_t(aMargin.top) + aMargin.bottom;
+    if (MOZ_UNLIKELY(h > nscoord_MAX)) {
+      NS_WARNING("Overflowed nscoord_MAX in conversion to nscoord height");
+      int64_t ydiff = ny - nscoord_MIN / 2;
+      if (ydiff < 0) {
+        // Clamp huge negative y to nscoord_MIN / 2 and try again.
+        ny = nscoord_MIN / 2;
+        h += ydiff;
+      }
+      if (MOZ_UNLIKELY(h > nscoord_MAX)) {
+        h = nscoord_MAX;
+      }
+    }
+    height = nscoord(h);
+    if (MOZ_UNLIKELY(ny < nscoord_MIN)) {
+      NS_WARNING("Underflowed nscoord_MIN in conversion to nscoord y");
+      ny = nscoord_MIN;
+    }
+    y = nscoord(ny);
+#endif
   }
 
-  // Useful when we care about the exact x/y/width/height values being
-  // equal (i.e. we care about differences in empty rectangles)
-  PRBool IsExactEqual(const nsRect& aRect) const {
-    return x == aRect.x && y == aRect.y &&
-           width == aRect.width && height == aRect.height;
+  // We have saturating versions of all the Union methods. These avoid
+  // overflowing nscoord values in the 'width' and 'height' fields by
+  // clamping the width and height values to nscoord_MAX if necessary.
+
+  nsRect SaturatingUnion(const nsRect& aRect) const
+  {
+    if (IsEmpty()) {
+      return aRect;
+    } else if (aRect.IsEmpty()) {
+      return *static_cast<const nsRect*>(this);
+    } else {
+      return SaturatingUnionEdges(aRect);
+    }
   }
 
-  // Arithmetic with nsPoints
-  nsRect  operator+(const nsPoint& aPoint) const {
-    return nsRect(x + aPoint.x, y + aPoint.y, width, height);
-  }
-  nsRect  operator-(const nsPoint& aPoint) const {
-    return nsRect(x - aPoint.x, y - aPoint.y, width, height);
-  }
-  nsRect& operator+=(const nsPoint& aPoint) {x += aPoint.x; y += aPoint.y; return *this;}
-  nsRect& operator-=(const nsPoint& aPoint) {x -= aPoint.x; y -= aPoint.y; return *this;}
+  nsRect SaturatingUnionEdges(const nsRect& aRect) const
+  {
+#ifdef NS_COORD_IS_FLOAT
+    return UnionEdges(aRect);
+#else
+    nsRect result;
+    result.x = NS_MIN(aRect.x, x);
+    int64_t w = NS_MAX(int64_t(aRect.x) + aRect.width, int64_t(x) + width) - result.x;
+    if (MOZ_UNLIKELY(w > nscoord_MAX)) {
+      NS_WARNING("Overflowed nscoord_MAX in conversion to nscoord width");
+      // Clamp huge negative x to nscoord_MIN / 2 and try again.
+      result.x = NS_MAX(result.x, nscoord_MIN / 2);
+      w = NS_MAX(int64_t(aRect.x) + aRect.width, int64_t(x) + width) - result.x;
+      if (MOZ_UNLIKELY(w > nscoord_MAX)) {
+        w = nscoord_MAX;
+      }
+    }
+    result.width = nscoord(w);
 
-  // Arithmetic with nsMargins
-  nsMargin operator-(const nsRect& aRect) const; // Find difference as nsMargin
-  nsRect& operator+=(const nsMargin& aMargin) { Inflate(aMargin); return *this; }
-  nsRect& operator-=(const nsMargin& aMargin) { Deflate(aMargin); return *this; }
-  nsRect  operator+(const nsMargin& aMargin) const { return nsRect(*this) += aMargin; }
-  nsRect  operator-(const nsMargin& aMargin) const { return nsRect(*this) -= aMargin; }
+    result.y = NS_MIN(aRect.y, y);
+    int64_t h = NS_MAX(int64_t(aRect.y) + aRect.height, int64_t(y) + height) - result.y;
+    if (MOZ_UNLIKELY(h > nscoord_MAX)) {
+      NS_WARNING("Overflowed nscoord_MAX in conversion to nscoord height");
+      // Clamp huge negative y to nscoord_MIN / 2 and try again.
+      result.y = NS_MAX(result.y, nscoord_MIN / 2);
+      h = NS_MAX(int64_t(aRect.y) + aRect.height, int64_t(y) + height) - result.y;
+      if (MOZ_UNLIKELY(h > nscoord_MAX)) {
+        h = nscoord_MAX;
+      }
+    }
+    result.height = nscoord(h);
+    return result;
+#endif
+  }
 
-  // Scale by aScale, converting coordinates to integers so that the result is
-  // the smallest integer-coordinate rectangle containing the unrounded result.
-  nsRect& ScaleRoundOut(float aScale);
+#ifndef NS_COORD_IS_FLOAT
+  // Make all nsRect Union methods be saturating.
+  nsRect UnionEdges(const nsRect& aRect) const
+  {
+    return SaturatingUnionEdges(aRect);
+  }
+  void UnionRectEdges(const nsRect& aRect1, const nsRect& aRect2)
+  {
+    *this = aRect1.UnionEdges(aRect2);
+  }
+  nsRect Union(const nsRect& aRect) const
+  {
+    return SaturatingUnion(aRect);
+  }
+  void UnionRect(const nsRect& aRect1, const nsRect& aRect2)
+  {
+    *this = aRect1.Union(aRect2);
+  }
+#endif
+
+  void SaturatingUnionRect(const nsRect& aRect1, const nsRect& aRect2)
+  {
+    *this = aRect1.SaturatingUnion(aRect2);
+  }
+  void SaturatingUnionRectEdges(const nsRect& aRect1, const nsRect& aRect2)
+  {
+    *this = aRect1.SaturatingUnionEdges(aRect2);
+  }
 
   // Converts this rect from aFromAPP, an appunits per pixel ratio, to aToAPP.
   // In the RoundOut version we make the rect the smallest rect containing the
   // unrounded result. In the RoundIn version we make the rect the largest rect
   // contained in the unrounded result.
-  inline nsRect ConvertAppUnitsRoundOut(PRInt32 aFromAPP, PRInt32 aToAPP) const;
-  inline nsRect ConvertAppUnitsRoundIn(PRInt32 aFromAPP, PRInt32 aToAPP) const;
+  // Note: this can turn an empty rectangle into a non-empty rectangle
+  inline nsRect ConvertAppUnitsRoundOut(int32_t aFromAPP, int32_t aToAPP) const;
+  inline nsRect ConvertAppUnitsRoundIn(int32_t aFromAPP, int32_t aToAPP) const;
 
-  // Helpers for accessing the vertices
-  nsPoint TopLeft() const { return nsPoint(x, y); }
-  nsPoint TopRight() const { return nsPoint(XMost(), y); }
-  nsPoint BottomLeft() const { return nsPoint(x, YMost()); }
-  nsPoint BottomRight() const { return nsPoint(XMost(), YMost()); }
-
-  nsSize Size() const { return nsSize(width, height); }
-
-  // Helper methods for computing the extents
-  nscoord XMost() const {return x + width;}
-  nscoord YMost() const {return y + height;}
-
+  inline nsIntRect ScaleToNearestPixels(float aXScale, float aYScale,
+                                        nscoord aAppUnitsPerPixel) const;
   inline nsIntRect ToNearestPixels(nscoord aAppUnitsPerPixel) const;
+  // Note: this can turn an empty rectangle into a non-empty rectangle
+  inline nsIntRect ScaleToOutsidePixels(float aXScale, float aYScale,
+                                        nscoord aAppUnitsPerPixel) const;
+  // Note: this can turn an empty rectangle into a non-empty rectangle
   inline nsIntRect ToOutsidePixels(nscoord aAppUnitsPerPixel) const;
+  inline nsIntRect ScaleToInsidePixels(float aXScale, float aYScale,
+                                       nscoord aAppUnitsPerPixel) const;
   inline nsIntRect ToInsidePixels(nscoord aAppUnitsPerPixel) const;
+
+  // This is here only to keep IPDL-generated code happy. DO NOT USE.
+  bool operator==(const nsRect& aRect) const
+  {
+    return IsEqualEdges(aRect);
+  }
 };
 
-struct NS_GFX nsIntRect {
-  PRInt32 x, y;
-  PRInt32 width, height;
+struct NS_GFX nsIntRect :
+  public mozilla::gfx::BaseRect<int32_t, nsIntRect, nsIntPoint, nsIntSize, nsIntMargin> {
+  typedef mozilla::gfx::BaseRect<int32_t, nsIntRect, nsIntPoint, nsIntSize, nsIntMargin> Super;
 
   // Constructors
-  nsIntRect() : x(0), y(0), width(0), height(0) {}
-  nsIntRect(const nsIntRect& aRect) {*this = aRect;}
-  nsIntRect(const nsIntPoint& aOrigin, const nsIntSize &aSize) {
-    x = aOrigin.x; y = aOrigin.y;
-    width = aSize.width; height = aSize.height;
-  }
-  nsIntRect(PRInt32 aX, PRInt32 aY, PRInt32 aWidth, PRInt32 aHeight) {
-    x = aX; y = aY; width = aWidth; height = aHeight;
-  }
-
-  // Emptiness. An empty rect is one that has no area, i.e. its height or width
-  // is <= 0
-  PRBool IsEmpty() const {
-    return (PRBool) ((height <= 0) || (width <= 0));
-  }
-  void Empty() {width = height = 0;}
-
-  // Inflate the rect by the specified width/height or margin
-  void Inflate(PRInt32 aDx, PRInt32 aDy) {
-    x -= aDx;
-    y -= aDy;
-    width += aDx*2;
-    height += aDy*2;
-  }
-  void Inflate(const nsIntMargin &aMargin) {
-    x -= aMargin.left;
-    y -= aMargin.top;
-    width += aMargin.left + aMargin.right;
-    height += aMargin.top + aMargin.bottom;
-  }
-
-  // Deflate the rect by the specified width/height or margin
-  void Deflate(PRInt32 aDx, PRInt32 aDy) {
-    x += aDx;
-    y += aDy;
-    width -= aDx*2;
-    height -= aDy*2;
-  }
-  void Deflate(const nsIntMargin &aMargin) {
-    x += aMargin.left;
-    y += aMargin.top;
-    width -= (aMargin.left + aMargin.right);
-    height -= (aMargin.top + aMargin.bottom);
-  }
-
-  // Overloaded operators. Note that '=' isn't defined so we'll get the
-  // compiler generated default assignment operator.
-  PRBool operator==(const nsIntRect& aRect) const {
-    return (PRBool) ((IsEmpty() && aRect.IsEmpty()) ||
-                     ((x == aRect.x) && (y == aRect.y) &&
-                      (width == aRect.width) && (height == aRect.height)));
-  }
-  PRBool  operator!=(const nsIntRect& aRect) const {
-    return (PRBool) !operator==(aRect);
-  }
-
-  nsIntRect  operator+(const nsIntPoint& aPoint) const {
-    return nsIntRect(x + aPoint.x, y + aPoint.y, width, height);
-  }
-  nsIntRect  operator-(const nsIntPoint& aPoint) const {
-    return nsIntRect(x - aPoint.x, y - aPoint.y, width, height);
-  }
-  nsIntRect& operator+=(const nsIntPoint& aPoint) {x += aPoint.x; y += aPoint.y; return *this;}
-  nsIntRect& operator-=(const nsIntPoint& aPoint) {x -= aPoint.x; y -= aPoint.y; return *this;}
-
-  void SetRect(PRInt32 aX, PRInt32 aY, PRInt32 aWidth, PRInt32 aHeight) {
-    x = aX; y = aY; width = aWidth; height = aHeight;
-  }
-
-  void MoveTo(PRInt32 aX, PRInt32 aY) {x = aX; y = aY;}
-  void MoveTo(const nsIntPoint& aPoint) {x = aPoint.x; y = aPoint.y;}
-  void MoveBy(PRInt32 aDx, PRInt32 aDy) {x += aDx; y += aDy;}
-  void MoveBy(const nsIntPoint& aPoint) {x += aPoint.x; y += aPoint.y;}
-  void SizeTo(PRInt32 aWidth, PRInt32 aHeight) {width = aWidth; height = aHeight;}
-  void SizeTo(const nsIntSize& aSize) {SizeTo(aSize.width, aSize.height);}
-  void SizeBy(PRInt32 aDeltaWidth, PRInt32 aDeltaHeight) {width += aDeltaWidth;
-                                                          height += aDeltaHeight;}
-
-  PRBool Contains(const nsIntRect& aRect) const
+  nsIntRect() : Super()
   {
-    return (PRBool) ((aRect.x >= x) && (aRect.y >= y) &&
-                     (aRect.XMost() <= XMost()) && (aRect.YMost() <= YMost()));
   }
-  PRBool Contains(PRInt32 aX, PRInt32 aY) const
+  nsIntRect(const nsIntRect& aRect) : Super(aRect)
   {
-    return (PRBool) ((aX >= x) && (aY >= y) &&
-                     (aX < XMost()) && (aY < YMost()));
   }
-  PRBool Contains(const nsIntPoint& aPoint) const { return Contains(aPoint.x, aPoint.y); }
-
-  // Intersection. Returns TRUE if the receiver overlaps aRect and
-  // FALSE otherwise
-  PRBool Intersects(const nsIntRect& aRect) const {
-    return (PRBool) ((x < aRect.XMost()) && (y < aRect.YMost()) &&
-                     (aRect.x < XMost()) && (aRect.y < YMost()));
+  nsIntRect(const nsIntPoint& aOrigin, const nsIntSize &aSize) : Super(aOrigin, aSize)
+  {
   }
-
-  // Computes the area in which aRect1 and aRect2 overlap, and fills 'this' with
-  // the result. Returns FALSE if the rectangles don't intersect, and sets 'this'
-  // rect to be an empty rect.
-  //
-  // 'this' can be the same object as either aRect1 or aRect2
-  PRBool IntersectRect(const nsIntRect& aRect1, const nsIntRect& aRect2);
-
-  // Computes the smallest rectangle that contains both aRect1 and aRect2 and
-  // fills 'this' with the result. Returns FALSE and sets 'this' rect to be an
-  // empty rect if both aRect1 and aRect2 are empty
-  //
-  // 'this' can be the same object as either aRect1 or aRect2
-  PRBool UnionRect(const nsIntRect& aRect1, const nsIntRect& aRect2);
-
-  // Helpers for accessing the vertices
-  nsIntPoint TopLeft() const { return nsIntPoint(x, y); }
-  nsIntPoint TopRight() const { return nsIntPoint(XMost(), y); }
-  nsIntPoint BottomLeft() const { return nsIntPoint(x, YMost()); }
-  nsIntPoint BottomRight() const { return nsIntPoint(XMost(), YMost()); }
-
-  nsIntSize Size() const { return nsIntSize(width, height); }
-
-  // Helper methods for computing the extents
-  PRInt32 XMost() const {return x + width;}
-  PRInt32 YMost() const {return y + height;}
+  nsIntRect(int32_t aX, int32_t aY, int32_t aWidth, int32_t aHeight) :
+      Super(aX, aY, aWidth, aHeight)
+  {
+  }
 
   inline nsRect ToAppUnits(nscoord aAppUnitsPerPixel) const;
+
+  // Returns a special nsIntRect that's used in some places to signify
+  // "all available space".
+  static const nsIntRect& GetMaxSizedIntRect() {
+    static const nsIntRect r(0, 0, INT_MAX, INT_MAX);
+    return r;
+  }
+
+  // This is here only to keep IPDL-generated code happy. DO NOT USE.
+  bool operator==(const nsIntRect& aRect) const
+  {
+    return IsEqualEdges(aRect);
+  }
 };
 
 /*
@@ -342,7 +249,7 @@ struct NS_GFX nsIntRect {
  */
 
 inline nsRect
-nsRect::ConvertAppUnitsRoundOut(PRInt32 aFromAPP, PRInt32 aToAPP) const
+nsRect::ConvertAppUnitsRoundOut(int32_t aFromAPP, int32_t aToAPP) const
 {
   if (aFromAPP == aToAPP) {
     return *this;
@@ -360,7 +267,7 @@ nsRect::ConvertAppUnitsRoundOut(PRInt32 aFromAPP, PRInt32 aToAPP) const
 }
 
 inline nsRect
-nsRect::ConvertAppUnitsRoundIn(PRInt32 aFromAPP, PRInt32 aToAPP) const
+nsRect::ConvertAppUnitsRoundIn(int32_t aFromAPP, int32_t aToAPP) const
 {
   if (aFromAPP == aToAPP) {
     return *this;
@@ -379,44 +286,65 @@ nsRect::ConvertAppUnitsRoundIn(PRInt32 aFromAPP, PRInt32 aToAPP) const
 
 // scale the rect but round to preserve centers
 inline nsIntRect
-nsRect::ToNearestPixels(nscoord aAppUnitsPerPixel) const
+nsRect::ScaleToNearestPixels(float aXScale, float aYScale,
+                             nscoord aAppUnitsPerPixel) const
 {
   nsIntRect rect;
-  rect.x = NSToIntRoundUp(NSAppUnitsToFloatPixels(x, float(aAppUnitsPerPixel)));
-  rect.y = NSToIntRoundUp(NSAppUnitsToFloatPixels(y, float(aAppUnitsPerPixel)));
-  rect.width  = NSToIntRoundUp(NSAppUnitsToFloatPixels(XMost(),
-                               float(aAppUnitsPerPixel))) - rect.x;
-  rect.height = NSToIntRoundUp(NSAppUnitsToFloatPixels(YMost(),
-                               float(aAppUnitsPerPixel))) - rect.y;
+  rect.x = NSToIntRoundUp(NSAppUnitsToDoublePixels(x, aAppUnitsPerPixel) * aXScale);
+  rect.y = NSToIntRoundUp(NSAppUnitsToDoublePixels(y, aAppUnitsPerPixel) * aYScale);
+  rect.width  = NSToIntRoundUp(NSAppUnitsToDoublePixels(XMost(),
+                               aAppUnitsPerPixel) * aXScale) - rect.x;
+  rect.height = NSToIntRoundUp(NSAppUnitsToDoublePixels(YMost(),
+                               aAppUnitsPerPixel) * aYScale) - rect.y;
   return rect;
 }
 
 // scale the rect but round to smallest containing rect
 inline nsIntRect
-nsRect::ToOutsidePixels(nscoord aAppUnitsPerPixel) const
+nsRect::ScaleToOutsidePixels(float aXScale, float aYScale,
+                             nscoord aAppUnitsPerPixel) const
 {
   nsIntRect rect;
-  rect.x = NSToIntFloor(NSAppUnitsToFloatPixels(x, float(aAppUnitsPerPixel)));
-  rect.y = NSToIntFloor(NSAppUnitsToFloatPixels(y, float(aAppUnitsPerPixel)));
+  rect.x = NSToIntFloor(NSAppUnitsToFloatPixels(x, float(aAppUnitsPerPixel)) * aXScale);
+  rect.y = NSToIntFloor(NSAppUnitsToFloatPixels(y, float(aAppUnitsPerPixel)) * aYScale);
   rect.width  = NSToIntCeil(NSAppUnitsToFloatPixels(XMost(),
-                            float(aAppUnitsPerPixel))) - rect.x;
+                            float(aAppUnitsPerPixel)) * aXScale) - rect.x;
   rect.height = NSToIntCeil(NSAppUnitsToFloatPixels(YMost(),
-                            float(aAppUnitsPerPixel))) - rect.y;
+                            float(aAppUnitsPerPixel)) * aYScale) - rect.y;
   return rect;
 }
 
 // scale the rect but round to largest contained rect
 inline nsIntRect
-nsRect::ToInsidePixels(nscoord aAppUnitsPerPixel) const
+nsRect::ScaleToInsidePixels(float aXScale, float aYScale,
+                            nscoord aAppUnitsPerPixel) const
 {
   nsIntRect rect;
-  rect.x = NSToIntCeil(NSAppUnitsToFloatPixels(x, float(aAppUnitsPerPixel)));
-  rect.y = NSToIntCeil(NSAppUnitsToFloatPixels(y, float(aAppUnitsPerPixel)));
+  rect.x = NSToIntCeil(NSAppUnitsToFloatPixels(x, float(aAppUnitsPerPixel)) * aXScale);
+  rect.y = NSToIntCeil(NSAppUnitsToFloatPixels(y, float(aAppUnitsPerPixel)) * aYScale);
   rect.width  = NSToIntFloor(NSAppUnitsToFloatPixels(XMost(),
-                             float(aAppUnitsPerPixel))) - rect.x;
+                             float(aAppUnitsPerPixel)) * aXScale) - rect.x;
   rect.height = NSToIntFloor(NSAppUnitsToFloatPixels(YMost(),
-                             float(aAppUnitsPerPixel))) - rect.y;
+                             float(aAppUnitsPerPixel)) * aYScale) - rect.y;
   return rect;
+}
+
+inline nsIntRect
+nsRect::ToNearestPixels(nscoord aAppUnitsPerPixel) const
+{
+  return ScaleToNearestPixels(1.0f, 1.0f, aAppUnitsPerPixel);
+}
+
+inline nsIntRect
+nsRect::ToOutsidePixels(nscoord aAppUnitsPerPixel) const
+{
+  return ScaleToOutsidePixels(1.0f, 1.0f, aAppUnitsPerPixel);
+}
+
+inline nsIntRect
+nsRect::ToInsidePixels(nscoord aAppUnitsPerPixel) const
+{
+  return ScaleToInsidePixels(1.0f, 1.0f, aAppUnitsPerPixel);
 }
 
 // app units are integer multiples of pixels, so no rounding needed

@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@netscape.com> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsStandardURL_h__
 #define nsStandardURL_h__
@@ -43,7 +10,6 @@
 #include "nsDependentString.h"
 #include "nsDependentSubstring.h"
 #include "nsISerializable.h"
-#include "nsIIPCSerializable.h"
 #include "nsIFileURL.h"
 #include "nsIStandardURL.h"
 #include "nsIFile.h"
@@ -54,7 +20,10 @@
 #include "nsCOMPtr.h"
 #include "nsURLHelper.h"
 #include "nsIClassInfo.h"
+#include "nsISizeOf.h"
 #include "prclist.h"
+#include "mozilla/Attributes.h"
+#include "nsIIPCSerializableURI.h"
 
 #ifdef NS_BUILD_REFCNT_LOGGING
 #define DEBUG_DUMP_URLS_AT_SHUTDOWN
@@ -73,8 +42,9 @@ class nsIPrefBranch;
 class nsStandardURL : public nsIFileURL
                     , public nsIStandardURL
                     , public nsISerializable
-                    , public nsIIPCSerializable
                     , public nsIClassInfo
+                    , public nsISizeOf
+                    , public nsIIPCSerializableURI
 {
 public:
     NS_DECL_ISUPPORTS
@@ -83,11 +53,15 @@ public:
     NS_DECL_NSIFILEURL
     NS_DECL_NSISTANDARDURL
     NS_DECL_NSISERIALIZABLE
-    NS_DECL_NSIIPCSERIALIZABLE
     NS_DECL_NSICLASSINFO
     NS_DECL_NSIMUTABLE
+    NS_DECL_NSIIPCSERIALIZABLEURI
 
-    nsStandardURL(PRBool aSupportsFileURL = PR_FALSE);
+    // nsISizeOf
+    virtual size_t SizeOfExcludingThis(nsMallocSizeOfFun aMallocSizeOf) const;
+    virtual size_t SizeOfIncludingThis(nsMallocSizeOfFun aMallocSizeOf) const;
+
+    nsStandardURL(bool aSupportsFileURL = false);
     virtual ~nsStandardURL();
 
     static void InitGlobalObjects();
@@ -99,18 +73,28 @@ public: /* internal -- HPUX compiler can't handle this being private */
     //
     struct URLSegment
     {
-        PRUint32 mPos;
-        PRInt32  mLen;
+        uint32_t mPos;
+        int32_t  mLen;
 
         URLSegment() : mPos(0), mLen(-1) {}
-        URLSegment(PRUint32 pos, PRInt32 len) : mPos(pos), mLen(len) {}
+        URLSegment(uint32_t pos, int32_t len) : mPos(pos), mLen(len) {}
         void Reset() { mPos = 0; mLen = -1; }
+        // Merge another segment following this one to it if they're contiguous
+        // Assumes we have something like "foo;bar" where this object is 'foo' and right
+        // is 'bar'.
+        void Merge(const nsCString &spec, const char separator, const URLSegment &right) {
+            if (mLen >= 0 && 
+                *(spec.get() + mPos + mLen) == separator &&
+                mPos + mLen + 1 == right.mPos) {
+                mLen += 1 + right.mLen;
+            }
+        }
     };
 
     //
     // Pref observer
     //
-    class nsPrefObserver : public nsIObserver
+    class nsPrefObserver MOZ_FINAL : public nsIObserver
     {
     public:
         NS_DECL_ISUPPORTS
@@ -131,20 +115,21 @@ public: /* internal -- HPUX compiler can't handle this being private */
         // Encode the given segment if necessary, and return the length of
         // the encoded segment.  The encoded segment is appended to |buf|
         // if and only if encoding is required.
-        PRInt32 EncodeSegmentCount(const char *str,
+        int32_t EncodeSegmentCount(const char *str,
                                    const URLSegment &segment,
-                                   PRInt16 mask,
+                                   int16_t mask,
                                    nsAFlatCString &buf,
-                                   PRBool& appended);
+                                   bool& appended,
+                                   uint32_t extraLen = 0);
          
         // Encode the given string if necessary, and return a reference to
         // the encoded string.  Returns a reference to |buf| if encoding
         // is required.  Otherwise, a reference to |str| is returned.
         const nsACString &EncodeSegment(const nsASingleFragmentCString &str,
-                                        PRInt16 mask,
+                                        int16_t mask,
                                         nsAFlatCString &buf);
     private:
-        PRBool InitUnicodeEncoder();
+        bool InitUnicodeEncoder();
         
         const char* mCharset;  // Caller should keep this alive for
                                // the life of the segment encoder
@@ -153,7 +138,23 @@ public: /* internal -- HPUX compiler can't handle this being private */
     friend class nsSegmentEncoder;
 
 protected:
+    // enum used in a few places to specify how .ref attribute should be handled
+    enum RefHandlingEnum {
+        eIgnoreRef,
+        eHonorRef
+    };
+
+    // Helper to share code between Equals and EqualsExceptRef
+    // NOTE: *not* virtual, because no one needs to override this so far...
+    nsresult EqualsInternal(nsIURI* unknownOther,
+                            RefHandlingEnum refHandlingMode,
+                            bool* result);
+
     virtual nsStandardURL* StartClone();
+
+    // Helper to share code between Clone methods.
+    nsresult CloneInternal(RefHandlingEnum aRefHandlingMode,
+                           nsIURI** aClone);
 
     // Helper for subclass implementation of GetFile().  Subclasses that map
     // URIs to files in a special way should implement this method.  It should
@@ -162,40 +163,40 @@ protected:
     virtual nsresult EnsureFile();
 
 private:
-    PRInt32  Port() { return mPort == -1 ? mDefaultPort : mPort; }
+    int32_t  Port() { return mPort == -1 ? mDefaultPort : mPort; }
 
     void     Clear();
-    void     InvalidateCache(PRBool invalidateCachedFile = PR_TRUE);
+    void     InvalidateCache(bool invalidateCachedFile = true);
 
-    PRBool   EscapeIPv6(const char *host, nsCString &result);
-    PRBool   NormalizeIDN(const nsCSubstring &host, nsCString &result);
+    bool     EscapeIPv6(const char *host, nsCString &result);
+    bool     NormalizeIDN(const nsCSubstring &host, nsCString &result);
     void     CoalescePath(netCoalesceFlags coalesceFlag, char *path);
 
-    PRUint32 AppendSegmentToBuf(char *, PRUint32, const char *, URLSegment &, const nsCString *esc=nsnull, PRBool useEsc = PR_FALSE);
-    PRUint32 AppendToBuf(char *, PRUint32, const char *, PRUint32);
+    uint32_t AppendSegmentToBuf(char *, uint32_t, const char *, URLSegment &, const nsCString *esc=nullptr, bool useEsc = false);
+    uint32_t AppendToBuf(char *, uint32_t, const char *, uint32_t);
 
     nsresult BuildNormalizedSpec(const char *spec);
 
-    PRBool   SegmentIs(const URLSegment &s1, const char *val, PRBool ignoreCase = PR_FALSE);
-    PRBool   SegmentIs(const char* spec, const URLSegment &s1, const char *val, PRBool ignoreCase = PR_FALSE);
-    PRBool   SegmentIs(const URLSegment &s1, const char *val, const URLSegment &s2, PRBool ignoreCase = PR_FALSE);
+    bool     SegmentIs(const URLSegment &s1, const char *val, bool ignoreCase = false);
+    bool     SegmentIs(const char* spec, const URLSegment &s1, const char *val, bool ignoreCase = false);
+    bool     SegmentIs(const URLSegment &s1, const char *val, const URLSegment &s2, bool ignoreCase = false);
 
-    PRInt32  ReplaceSegment(PRUint32 pos, PRUint32 len, const char *val, PRUint32 valLen);
-    PRInt32  ReplaceSegment(PRUint32 pos, PRUint32 len, const nsACString &val);
+    int32_t  ReplaceSegment(uint32_t pos, uint32_t len, const char *val, uint32_t valLen);
+    int32_t  ReplaceSegment(uint32_t pos, uint32_t len, const nsACString &val);
 
-    nsresult ParseURL(const char *spec, PRInt32 specLen);
-    nsresult ParsePath(const char *spec, PRUint32 pathPos, PRInt32 pathLen = -1);
+    nsresult ParseURL(const char *spec, int32_t specLen);
+    nsresult ParsePath(const char *spec, uint32_t pathPos, int32_t pathLen = -1);
 
-    char    *AppendToSubstring(PRUint32 pos, PRInt32 len, const char *tail, PRInt32 tailLen = -1);
+    char    *AppendToSubstring(uint32_t pos, int32_t len, const char *tail);
 
     // dependent substring helpers
-    const nsDependentCSubstring Segment(PRUint32 pos, PRInt32 len); // see below
+    const nsDependentCSubstring Segment(uint32_t pos, int32_t len); // see below
     const nsDependentCSubstring Segment(const URLSegment &s) { return Segment(s.mPos, s.mLen); }
 
     // dependent substring getters
     const nsDependentCSubstring Prepath();  // see below
     const nsDependentCSubstring Scheme()    { return Segment(mScheme); }
-    const nsDependentCSubstring Userpass(PRBool includeDelim = PR_FALSE); // see below
+    const nsDependentCSubstring Userpass(bool includeDelim = false); // see below
     const nsDependentCSubstring Username()  { return Segment(mUsername); }
     const nsDependentCSubstring Password()  { return Segment(mPassword); }
     const nsDependentCSubstring Hostport(); // see below
@@ -206,40 +207,32 @@ private:
     const nsDependentCSubstring Filename(); // see below
     const nsDependentCSubstring Basename()  { return Segment(mBasename); }
     const nsDependentCSubstring Extension() { return Segment(mExtension); }
-    const nsDependentCSubstring Param()     { return Segment(mParam); }
     const nsDependentCSubstring Query()     { return Segment(mQuery); }
     const nsDependentCSubstring Ref()       { return Segment(mRef); }
 
     // shift the URLSegments to the right by diff
-    void ShiftFromAuthority(PRInt32 diff) { mAuthority.mPos += diff; ShiftFromUsername(diff); }
-    void ShiftFromUsername(PRInt32 diff)  { mUsername.mPos += diff; ShiftFromPassword(diff); }
-    void ShiftFromPassword(PRInt32 diff)  { mPassword.mPos += diff; ShiftFromHost(diff); }
-    void ShiftFromHost(PRInt32 diff)      { mHost.mPos += diff; ShiftFromPath(diff); }
-    void ShiftFromPath(PRInt32 diff)      { mPath.mPos += diff; ShiftFromFilepath(diff); }
-    void ShiftFromFilepath(PRInt32 diff)  { mFilepath.mPos += diff; ShiftFromDirectory(diff); }
-    void ShiftFromDirectory(PRInt32 diff) { mDirectory.mPos += diff; ShiftFromBasename(diff); }
-    void ShiftFromBasename(PRInt32 diff)  { mBasename.mPos += diff; ShiftFromExtension(diff); }
-    void ShiftFromExtension(PRInt32 diff) { mExtension.mPos += diff; ShiftFromParam(diff); }
-    void ShiftFromParam(PRInt32 diff)     { mParam.mPos += diff; ShiftFromQuery(diff); }
-    void ShiftFromQuery(PRInt32 diff)     { mQuery.mPos += diff; ShiftFromRef(diff); }
-    void ShiftFromRef(PRInt32 diff)       { mRef.mPos += diff; }
+    void ShiftFromAuthority(int32_t diff) { mAuthority.mPos += diff; ShiftFromUsername(diff); }
+    void ShiftFromUsername(int32_t diff)  { mUsername.mPos += diff; ShiftFromPassword(diff); }
+    void ShiftFromPassword(int32_t diff)  { mPassword.mPos += diff; ShiftFromHost(diff); }
+    void ShiftFromHost(int32_t diff)      { mHost.mPos += diff; ShiftFromPath(diff); }
+    void ShiftFromPath(int32_t diff)      { mPath.mPos += diff; ShiftFromFilepath(diff); }
+    void ShiftFromFilepath(int32_t diff)  { mFilepath.mPos += diff; ShiftFromDirectory(diff); }
+    void ShiftFromDirectory(int32_t diff) { mDirectory.mPos += diff; ShiftFromBasename(diff); }
+    void ShiftFromBasename(int32_t diff)  { mBasename.mPos += diff; ShiftFromExtension(diff); }
+    void ShiftFromExtension(int32_t diff) { mExtension.mPos += diff; ShiftFromQuery(diff); }
+    void ShiftFromQuery(int32_t diff)     { mQuery.mPos += diff; ShiftFromRef(diff); }
+    void ShiftFromRef(int32_t diff)       { mRef.mPos += diff; }
 
     // fastload helper functions
     nsresult ReadSegment(nsIBinaryInputStream *, URLSegment &);
     nsresult WriteSegment(nsIBinaryOutputStream *, const URLSegment &);
 
-#ifdef MOZ_IPC
-    // ipc helper functions
-    bool ReadSegment(const IPC::Message *, void **, URLSegment &);
-    void WriteSegment(IPC::Message *, const URLSegment &);
-#endif
-
     static void PrefsChanged(nsIPrefBranch *prefs, const char *pref);
 
     // mSpec contains the normalized version of the URL spec (UTF-8 encoded).
     nsCString mSpec;
-    PRInt32   mDefaultPort;
-    PRInt32   mPort;
+    int32_t   mDefaultPort;
+    int32_t   mPort;
 
     // url parts (relative to mSpec)
     URLSegment mScheme;
@@ -252,7 +245,6 @@ private:
     URLSegment mDirectory;
     URLSegment mBasename;
     URLSegment mExtension;
-    URLSegment mParam;
     URLSegment mQuery;
     URLSegment mRef;
 
@@ -272,20 +264,20 @@ private:
         eEncoding_UTF8
     };
 
-    PRUint32 mHostEncoding    : 2; // eEncoding_xxx
-    PRUint32 mSpecEncoding    : 2; // eEncoding_xxx
-    PRUint32 mURLType         : 2; // nsIStandardURL::URLTYPE_xxx
-    PRUint32 mMutable         : 1; // nsIStandardURL::mutable
-    PRUint32 mSupportsFileURL : 1; // QI to nsIFileURL?
+    uint32_t mHostEncoding    : 2; // eEncoding_xxx
+    uint32_t mSpecEncoding    : 2; // eEncoding_xxx
+    uint32_t mURLType         : 2; // nsIStandardURL::URLTYPE_xxx
+    uint32_t mMutable         : 1; // nsIStandardURL::mutable
+    uint32_t mSupportsFileURL : 1; // QI to nsIFileURL?
 
     // global objects.  don't use COMPtr as its destructor will cause a
     // coredump if we leak it.
     static nsIIDNService               *gIDN;
     static nsICharsetConverterManager  *gCharsetMgr;
-    static PRBool                       gInitialized;
-    static PRBool                       gEscapeUTF8;
-    static PRBool                       gAlwaysEncodeInUTF8;
-    static PRBool                       gEncodeQueryInUTF8;
+    static bool                         gInitialized;
+    static bool                         gEscapeUTF8;
+    static bool                         gAlwaysEncodeInUTF8;
+    static bool                         gEncodeQueryInUTF8;
 
 public:
 #ifdef DEBUG_DUMP_URLS_AT_SHUTDOWN
@@ -307,28 +299,28 @@ public:
 //-----------------------------------------------------------------------------
 
 inline const nsDependentCSubstring
-nsStandardURL::Segment(PRUint32 pos, PRInt32 len)
+nsStandardURL::Segment(uint32_t pos, int32_t len)
 {
     if (len < 0) {
         pos = 0;
         len = 0;
     }
-    return Substring(mSpec, pos, PRUint32(len));
+    return Substring(mSpec, pos, uint32_t(len));
 }
 
 inline const nsDependentCSubstring
 nsStandardURL::Prepath()
 {
-    PRUint32 len = 0;
+    uint32_t len = 0;
     if (mAuthority.mLen >= 0)
         len = mAuthority.mPos + mAuthority.mLen;
     return Substring(mSpec, 0, len);
 }
 
 inline const nsDependentCSubstring
-nsStandardURL::Userpass(int includeDelim)
+nsStandardURL::Userpass(bool includeDelim)
 {
-    PRUint32 pos=0, len=0;
+    uint32_t pos=0, len=0;
     // if there is no username, then there can be no password
     if (mUsername.mLen > 0) {
         pos = mUsername.mPos;
@@ -344,7 +336,7 @@ nsStandardURL::Userpass(int includeDelim)
 inline const nsDependentCSubstring
 nsStandardURL::Hostport()
 {
-    PRUint32 pos=0, len=0;
+    uint32_t pos=0, len=0;
     if (mAuthority.mLen > 0) {
         pos = mHost.mPos;
         len = mAuthority.mPos + mAuthority.mLen - pos;
@@ -355,7 +347,7 @@ nsStandardURL::Hostport()
 inline const nsDependentCSubstring
 nsStandardURL::Host()
 {
-    PRUint32 pos=0, len=0;
+    uint32_t pos=0, len=0;
     if (mHost.mLen > 0) {
         pos = mHost.mPos;
         len = mHost.mLen;
@@ -370,7 +362,7 @@ nsStandardURL::Host()
 inline const nsDependentCSubstring
 nsStandardURL::Filename()
 {
-    PRUint32 pos=0, len=0;
+    uint32_t pos=0, len=0;
     // if there is no basename, then there can be no extension
     if (mBasename.mLen > 0) {
         pos = mBasename.mPos;

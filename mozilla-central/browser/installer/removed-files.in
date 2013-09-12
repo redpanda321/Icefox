@@ -1,3 +1,6 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 # Removed-files.in is processed at build time to create a list of files that
 # should be removed during an application update.
 # These files are in alphabetical order, except that files removed only on
@@ -9,6 +12,8 @@
 @DLL_PREFIX@xpcom_compat@DLL_SUFFIX@
 @DLL_PREFIX@xpistub@DLL_SUFFIX@
 @DLL_PREFIX@zlib@DLL_SUFFIX@
+@DLL_PREFIX@jemalloc@DLL_SUFFIX@
+@DLL_PREFIX@mozutils@DLL_SUFFIX@
 #ifdef MOZ_STATIC_JS
 @DLL_PREFIX@mozjs@DLL_SUFFIX@
 #endif
@@ -24,7 +29,6 @@ chrome/classic.manifest
 chrome/comm.jar
 chrome/comm.manifest
 chrome/en-win.jar
-chrome/@AB_CD@.manifest
 chrome/help.jar
 chrome/installed-chrome.txt
 chrome/m3ffxtbr.jar
@@ -42,6 +46,9 @@ components/@DLL_PREFIX@brwsrdir@DLL_SUFFIX@
 components/@DLL_PREFIX@myspell@DLL_SUFFIX@
 components/@DLL_PREFIX@spellchecker@DLL_SUFFIX@
 components/@DLL_PREFIX@spellchk@DLL_SUFFIX@
+#ifdef XP_MACOSX
+components/libalerts_s.dylib
+#endif
 components/aboutCertError.js
 components/aboutPrivateBrowsing.js
 components/aboutRights.js
@@ -67,10 +74,23 @@ components/nsUrlClassifierTable.js
 components/nsXmlRpcClient.js
 components/pluginGlue.js
 components/sidebar.xpt
+#ifdef MOZ_B2G_RIL
+components/dom_telephony.xpt
+components/dom_wifi.xpt
+components/dom_system_b2g.xpt
+#endif
+components/uconvd.dll
+components/WeaveCrypto.js
+components/WeaveCrypto.manifest
 components/xmlextras.xpt
 components/xpcom.xpt
 components/xpti.dat
 components/xptitemp.dat
+components/nsMicrosummaryService.js
+components/nsProxyAutoConfig.manifest
+components/nsProxyAutoConfig.js
+D3DCompiler_42.dll
+d3dx9_42.dll
 defaults/pref/all.js
 defaults/pref/bug259708.js
 defaults/pref/bug307259.js
@@ -78,6 +98,10 @@ defaults/pref/reporter.js
 defaults/pref/security-prefs.js
 defaults/pref/winpref.js
 defaults/pref/xpinstall.js
+defaults/preferences/services-aitc.js
+defaults/preferences/services-notifications.js
+defaults/preferences/services-sync.js
+defaults/preferences/healthreport-prefs.js
 defaults/profile/US/
 defaults/profile/extensions/
 defaults/profile/extensions/Extensions.rdf
@@ -85,6 +109,16 @@ defaults/profile/extensions/installed-extensions.txt
 defaults/profile/extensions/{972ce4c6-7e08-4474-a285-3208198ce6fd}/
 defaults/profile/extensions/{972ce4c6-7e08-4474-a285-3208198ce6fd}/install.rdf
 defaults/profile/search.rdf
+#ifndef SHIP_FEEDBACK
+# In the average case, this directory is only used by Test Pilot, and will get
+# removed by the updater. In some cases (eg, partner builds), distribution/
+# will have other files and/or directories in it. In these cases, the updater
+# will print a non-fatal error and continue on, because we're not appending
+# '*' to force a recursive removal.
+distribution/
+distribution/extensions/
+distribution/extensions/testpilot@labs.mozilla.com.xpi
+#endif
 extensions/talkback@mozilla.org/
 extensions/talkback@mozilla.org/chrome.manifest
 extensions/talkback@mozilla.org/components/@DLL_PREFIX@qfaservices@DLL_SUFFIX@
@@ -92,13 +126,134 @@ extensions/talkback@mozilla.org/components/qfaservices.xpt
 extensions/talkback@mozilla.org/install.rdf
 extensions/{641d8d09-7dda-4850-8228-ac0ab65e2ac9}/
 extensions/{641d8d09-7dda-4850-8228-ac0ab65e2ac9}/install.rdf
+extensions/{972ce4c6-7e08-4474-a285-3208198ce6fd}/preview.png
+extensions/testpilot@labs.mozilla.com/chrome.manifest
+extensions/testpilot@labs.mozilla.com/components/TestPilot.js
+extensions/testpilot@labs.mozilla.com/content/all-studies-window.js
+extensions/testpilot@labs.mozilla.com/content/all-studies-window.xul
+extensions/testpilot@labs.mozilla.com/content/browser.css
+extensions/testpilot@labs.mozilla.com/content/browser.js
+extensions/testpilot@labs.mozilla.com/content/debug.html
+extensions/testpilot@labs.mozilla.com/content/experiment-page.js
+extensions/testpilot@labs.mozilla.com/content/feedback-browser.xul
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.colorhelpers.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.colorhelpers.min.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.flot.crosshair.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.flot.crosshair.min.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.flot.image.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.flot.image.min.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.flot.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.flot.min.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.flot.navigate.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.flot.navigate.min.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.flot.selection.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.flot.selection.min.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.flot.stack.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.flot.stack.min.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.flot.threshold.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.flot.threshold.min.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.js
+extensions/testpilot@labs.mozilla.com/content/flot/jquery.min.js
+extensions/testpilot@labs.mozilla.com/content/raw-data-dialog.js
+extensions/testpilot@labs.mozilla.com/content/raw-data-dialog.xul
+extensions/testpilot@labs.mozilla.com/content/screen.css
+extensions/testpilot@labs.mozilla.com/content/status-quit.html
+extensions/testpilot@labs.mozilla.com/content/status.html
+extensions/testpilot@labs.mozilla.com/content/survey-generator.js
+extensions/testpilot@labs.mozilla.com/content/take-survey.html
+extensions/testpilot@labs.mozilla.com/content/tp-browser.xul
+extensions/testpilot@labs.mozilla.com/content/welcome-page.js
+extensions/testpilot@labs.mozilla.com/content/welcome.html
+extensions/testpilot@labs.mozilla.com/content/window-utils.js
+extensions/testpilot@labs.mozilla.com/defaults/preferences/preferences.js
+extensions/testpilot@labs.mozilla.com/install.rdf
+extensions/testpilot@labs.mozilla.com/instrument/chrome.manifest
+extensions/testpilot@labs.mozilla.com/instrument/install.rdf
+extensions/testpilot@labs.mozilla.com/instrument/instrument.jsm
+extensions/testpilot@labs.mozilla.com/instrument/instrument.xul
+extensions/testpilot@labs.mozilla.com/modules/dbutils.js
+extensions/testpilot@labs.mozilla.com/modules/experiment_data_store.js
+extensions/testpilot@labs.mozilla.com/modules/extension-update.js
+extensions/testpilot@labs.mozilla.com/modules/feedback.js
+extensions/testpilot@labs.mozilla.com/modules/jar-code-store.js
+extensions/testpilot@labs.mozilla.com/modules/lib/cuddlefish.js
+extensions/testpilot@labs.mozilla.com/modules/lib/memory.js
+extensions/testpilot@labs.mozilla.com/modules/lib/observer-service.js
+extensions/testpilot@labs.mozilla.com/modules/lib/plain-text-console.js
+extensions/testpilot@labs.mozilla.com/modules/lib/preferences-service.js
+extensions/testpilot@labs.mozilla.com/modules/lib/securable-module.js
+extensions/testpilot@labs.mozilla.com/modules/lib/timer.js
+extensions/testpilot@labs.mozilla.com/modules/lib/traceback.js
+extensions/testpilot@labs.mozilla.com/modules/lib/unit-test.js
+extensions/testpilot@labs.mozilla.com/modules/lib/unload.js
+extensions/testpilot@labs.mozilla.com/modules/lib/url.js
+extensions/testpilot@labs.mozilla.com/modules/log4moz.js
+extensions/testpilot@labs.mozilla.com/modules/metadata.js
+extensions/testpilot@labs.mozilla.com/modules/Observers.js
+extensions/testpilot@labs.mozilla.com/modules/remote-experiment-loader.js
+extensions/testpilot@labs.mozilla.com/modules/setup.js
+extensions/testpilot@labs.mozilla.com/modules/string_sanitizer.js
+extensions/testpilot@labs.mozilla.com/modules/tasks.js
+extensions/testpilot@labs.mozilla.com/skin/all/badge-default.png
+extensions/testpilot@labs.mozilla.com/skin/all/bg.jpg
+extensions/testpilot@labs.mozilla.com/skin/all/css/screen-standalone.css
+extensions/testpilot@labs.mozilla.com/skin/all/dino_32x32.png
+extensions/testpilot@labs.mozilla.com/skin/all/images/bg-status.jpg
+extensions/testpilot@labs.mozilla.com/skin/all/images/callout.png
+extensions/testpilot@labs.mozilla.com/skin/all/images/callout_continue.png
+extensions/testpilot@labs.mozilla.com/skin/all/images/data1.jpg
+extensions/testpilot@labs.mozilla.com/skin/all/images/data2.jpg
+extensions/testpilot@labs.mozilla.com/skin/all/images/home_comments.png
+extensions/testpilot@labs.mozilla.com/skin/all/images/home_computer.png
+extensions/testpilot@labs.mozilla.com/skin/all/images/home_continue.png
+extensions/testpilot@labs.mozilla.com/skin/all/images/home_quit.png
+extensions/testpilot@labs.mozilla.com/skin/all/images/home_results.png
+extensions/testpilot@labs.mozilla.com/skin/all/images/home_twitter.png
+extensions/testpilot@labs.mozilla.com/skin/all/images/home_upcoming.png
+extensions/testpilot@labs.mozilla.com/skin/all/logo.png
+extensions/testpilot@labs.mozilla.com/skin/all/mozilla-logo.png
+extensions/testpilot@labs.mozilla.com/skin/all/status-completed.png
+extensions/testpilot@labs.mozilla.com/skin/all/status-ejected.png
+extensions/testpilot@labs.mozilla.com/skin/all/status-missed.png
+extensions/testpilot@labs.mozilla.com/skin/all/testpilot_16x16.png
+extensions/testpilot@labs.mozilla.com/skin/all/testPilot_200x200.png
+extensions/testpilot@labs.mozilla.com/skin/all/testpilot_32x32.png
+extensions/testpilot@labs.mozilla.com/skin/all/tp-completedstudies-32x32.png
+extensions/testpilot@labs.mozilla.com/skin/all/tp-currentstudies-32x32.png
+extensions/testpilot@labs.mozilla.com/skin/all/tp-generic-32x32.png
+extensions/testpilot@labs.mozilla.com/skin/all/tp-learned-32x32.png
+extensions/testpilot@labs.mozilla.com/skin/all/tp-results-48x48.png
+extensions/testpilot@labs.mozilla.com/skin/all/tp-settings-32x32.png
+extensions/testpilot@labs.mozilla.com/skin/all/tp-study-48x48.png
+extensions/testpilot@labs.mozilla.com/skin/all/tp-submit-48x48.png
+extensions/testpilot@labs.mozilla.com/skin/linux/close_button.png
+extensions/testpilot@labs.mozilla.com/skin/linux/feedback-frown-16x16.png
+extensions/testpilot@labs.mozilla.com/skin/linux/feedback-smile-16x16.png
+extensions/testpilot@labs.mozilla.com/skin/linux/feedback.css
+extensions/testpilot@labs.mozilla.com/skin/mac/close_button.png
+extensions/testpilot@labs.mozilla.com/skin/mac/feedback-frown-16x16.png
+extensions/testpilot@labs.mozilla.com/skin/mac/feedback-smile-16x16.png
+extensions/testpilot@labs.mozilla.com/skin/mac/feedback.css
+extensions/testpilot@labs.mozilla.com/skin/mac/notification-tail-down.png
+extensions/testpilot@labs.mozilla.com/skin/mac/notification-tail-up.png
+extensions/testpilot@labs.mozilla.com/skin/win/close_button.png
+extensions/testpilot@labs.mozilla.com/skin/win/feedback-frown-16x16.png
+extensions/testpilot@labs.mozilla.com/skin/win/feedback-smile-16x16.png
+extensions/testpilot@labs.mozilla.com/skin/win/feedback.css
+extensions/testpilot@labs.mozilla.com/skin/win/notification-tail-down.png
+extensions/testpilot@labs.mozilla.com/skin/win/notification-tail-up.png
+extensions/testpilot@labs.mozilla.com/tests/test_data_store.js
+extensions/uriloader@pdf.js.xpi
 greprefs/all.js
 greprefs/security-prefs.js
 greprefs/xpinstall.js
 install.rdf
 modules/JSON.jsm
+modules/SpatialNavigation.js
+modules/utils.js
 mozilla-runtime@BIN_SUFFIX@
 old-homepage-default.properties
+README.txt
 res/arrow.gif
 res/arrowd.gif
 res/broken-image.gif
@@ -117,6 +272,7 @@ res/fonts/mathfontMath4.properties
 res/fonts/mathfontPUA.properties
 res/fonts/pangoFontEncoding.properties
 res/forms.css
+res/full-screen-override.css
 res/hiddenWindow.html
 res/html.css
 res/html/gopher-audio.gif
@@ -139,7 +295,9 @@ res/ua.css
 res/unixcharset.properties
 res/viewsource.css
 res/wincharset.properties
-searchplugins/
+#ifdef XP_MACOSX
+run-mozilla.sh
+#endif
 searchplugins/DRAE.gif
 searchplugins/DRAE.png
 searchplugins/DRAE.src
@@ -180,6 +338,7 @@ searchplugins/atlas-sk.src
 searchplugins/baidu.gif
 searchplugins/baidu.png
 searchplugins/baidu.src
+searchplugins/bluu.xml
 searchplugins/bok-NO.gif
 searchplugins/bok-NO.png
 searchplugins/bok-NO.src
@@ -414,6 +573,7 @@ searchplugins/taobao.xml
 searchplugins/telefonkatalogen-NO.gif
 searchplugins/telefonkatalogen-NO.png
 searchplugins/telefonkatalogen-NO.src
+searchplugins/termiadur.xml
 searchplugins/universal-pt.gif
 searchplugins/universal-pt.png
 searchplugins/universal-pt.src
@@ -548,9 +708,174 @@ uninstall/UninstallDeerPark.exe
 uninstall/UninstallFirefox.exe
 uninstall/uninst.exe
 uninstall/uninstall.exe
+#ifndef MOZ_UPDATER
+  #ifdef XP_MACOSX
+    updater.app/
+  #else
+    updater@BIN_SUFFIX@
+  #endif
+  updater.ini
+#endif
 xpicleanup@BIN_SUFFIX@
 #ifdef MOZ_OMNIJAR
-  chrome/@AB_CD@.jar
+  update.locale
+  omni.jar
+  chrome/af.jar
+  chrome/af.manifest
+  chrome/ar.jar
+  chrome/ar.manifest
+  chrome/as.jar
+  chrome/as.manifest
+  chrome/ast.jar
+  chrome/ast.manifest
+  chrome/be.jar
+  chrome/be.manifest
+  chrome/bg.jar
+  chrome/bg.manifest
+  chrome/bn-BD.jar
+  chrome/bn-BD.manifest
+  chrome/bn-IN.jar
+  chrome/bn-IN.manifest
+  chrome/ca.jar
+  chrome/ca.manifest
+  chrome/cs.jar
+  chrome/cs.manifest
+  chrome/cy.jar
+  chrome/cy.manifest
+  chrome/da.jar
+  chrome/da.manifest
+  chrome/de.jar
+  chrome/de.manifest
+  chrome/el.jar
+  chrome/el.manifest
+  chrome/en-GB.jar
+  chrome/en-GB.manifest
+  chrome/en-US.jar
+  chrome/en-US.manifest
+  chrome/eo.jar
+  chrome/eo.manifest
+  chrome/es-AR.jar
+  chrome/es-AR.manifest
+  chrome/es-CL.jar
+  chrome/es-CL.manifest
+  chrome/es-ES.jar
+  chrome/es-ES.manifest
+  chrome/es-MX.jar
+  chrome/es-MX.manifest
+  chrome/et.jar
+  chrome/et.manifest
+  chrome/eu.jar
+  chrome/eu.manifest
+  chrome/fa.jar
+  chrome/fa.manifest
+  chrome/fi.jar
+  chrome/fi.manifest
+  chrome/fr.jar
+  chrome/fr.manifest
+  chrome/fy-NL.jar
+  chrome/fy-NL.manifest
+  chrome/ga-IE.jar
+  chrome/ga-IE.manifest
+  chrome/gd.jar
+  chrome/gd.manifest
+  chrome/gl.jar
+  chrome/gl.manifest
+  chrome/gu-IN.jar
+  chrome/gu-IN.manifest
+  chrome/he.jar
+  chrome/he.manifest
+  chrome/hi-IN.jar
+  chrome/hi-IN.manifest
+  chrome/hr.jar
+  chrome/hr.manifest
+  chrome/hu.jar
+  chrome/hu.manifest
+  chrome/id.jar
+  chrome/id.manifest
+  chrome/is.jar
+  chrome/is.manifest
+  chrome/it.jar
+  chrome/it.manifest
+  chrome/ja-JP-mac.jar
+  chrome/ja-JP-mac.manifest
+  chrome/ja.jar
+  chrome/ja.manifest
+  chrome/ka.jar
+  chrome/ka.manifest
+  chrome/kk.jar
+  chrome/kk.manifest
+  chrome/kn.jar
+  chrome/kn.manifest
+  chrome/ko.jar
+  chrome/ko.manifest
+  chrome/ku.jar
+  chrome/ku.manifest
+  chrome/lt.jar
+  chrome/lt.manifest
+  chrome/lv.jar
+  chrome/lv.manifest
+  chrome/mk.jar
+  chrome/mk.manifest
+  chrome/ml.jar
+  chrome/ml.manifest
+  chrome/mn.jar
+  chrome/mn.manifest
+  chrome/mr.jar
+  chrome/mr.manifest
+  chrome/nb-NO.jar
+  chrome/nb-NO.manifest
+  chrome/nl.jar
+  chrome/nl.manifest
+  chrome/nn-NO.jar
+  chrome/nn-NO.manifest
+  chrome/oc.jar
+  chrome/oc.manifest
+  chrome/or.jar
+  chrome/or.manifest
+  chrome/pa-IN.jar
+  chrome/pa-IN.manifest
+  chrome/pl.jar
+  chrome/pl.manifest
+  chrome/pt-BR.jar
+  chrome/pt-BR.manifest
+  chrome/pt-PT.jar
+  chrome/pt-PT.manifest
+  chrome/rm.jar
+  chrome/rm.manifest
+  chrome/ro.jar
+  chrome/ro.manifest
+  chrome/ru.jar
+  chrome/ru.manifest
+  chrome/si.jar
+  chrome/si.manifest
+  chrome/sk.jar
+  chrome/sk.manifest
+  chrome/sl.jar
+  chrome/sl.manifest
+  chrome/sq.jar
+  chrome/sq.manifest
+  chrome/sr.jar
+  chrome/sr.manifest
+  chrome/sv-SE.jar
+  chrome/sv-SE.manifest
+  chrome/ta-LK.jar
+  chrome/ta-LK.manifest
+  chrome/ta.jar
+  chrome/ta.manifest
+  chrome/te.jar
+  chrome/te.manifest
+  chrome/th.jar
+  chrome/th.manifest
+  chrome/tr.jar
+  chrome/tr.manifest
+  chrome/uk.jar
+  chrome/uk.manifest
+  chrome/vi.jar
+  chrome/vi.manifest
+  chrome/zh-CN.jar
+  chrome/zh-CN.manifest
+  chrome/zh-TW.jar
+  chrome/zh-TW.manifest
   chrome/browser.jar
   chrome/localized.manifest
   chrome/nonlocalized.manifest
@@ -560,6 +885,9 @@ xpicleanup@BIN_SUFFIX@
   components/amContentHandler.js
   components/amWebInstallListener.js
   components/browser.xpt
+  components/BrowserElementParent.js
+  components/BrowserElementParent.manifest
+  components/BrowserElementPromptService.jsm
   components/components.manifest
   components/contentAreaDropListener.js
   components/contentSecurityPolicy.js
@@ -594,12 +922,12 @@ xpicleanup@BIN_SUFFIX@
   components/nsLoginInfo.js
   components/nsLoginManager.js
   components/nsLoginManagerPrompter.js
-  components/nsMicrosummaryService.js
   components/nsPlacesAutoComplete.js
   components/nsPlacesDBFlush.js
   components/nsPlacesExpiration.js
   components/nsPrivateBrowsingService.js
   components/nsPrompter.js
+  components/nsProxyAutoConfig.manifest
   components/nsProxyAutoConfig.js
   components/nsSafebrowsingApplication.js
   components/nsSearchService.js
@@ -620,13 +948,23 @@ xpicleanup@BIN_SUFFIX@
   components/PlacesProtocolHandler.js
   components/storage-Legacy.js
   components/storage-mozStorage.js
+#ifdef MOZ_B2G_RIL
+  components/nsTelephonyWorker.manifest
+  components/nsTelephonyWorker.js
+  components/Telephony.manifest
+  components/Telephony.js
+  components/WifiWorker.js
+  components/WifiWorker.manifest
+  components/DOMWifiManager.js
+  components/DOMWifiManager.manifest
+#endif
   components/txEXSLTRegExFunctions.js
-  components/WeaveCrypto.js
   components/Weave.js
+  components/Webapps.js
+  components/Webapps.manifest
   components/WebContentConverter.js
   defaults/autoconfig/platform.js
   defaults/autoconfig/prefcalls.js
-  defaults/pref/channel-prefs.js
   defaults/pref/firefox-branding.js
   defaults/pref/firefox.js
   defaults/pref/firefox-l10n.js
@@ -638,6 +976,42 @@ xpicleanup@BIN_SUFFIX@
   defaults/profile/mimeTypes.rdf
   defaults/profile/prefs.js
   greprefs.js
+  hyphenation/
+  hyphenation/hyph_af.dic
+  hyphenation/hyph_bg.dic
+  hyphenation/hyph_ca.dic
+  hyphenation/hyph_cy.dic
+  hyphenation/hyph_da.dic
+  hyphenation/hyph_de-1901.dic
+  hyphenation/hyph_de-1996.dic
+  hyphenation/hyph_de-CH.dic
+  hyphenation/hyph_en_US.dic
+  hyphenation/hyph_eo.dic
+  hyphenation/hyph_es.dic
+  hyphenation/hyph_et.dic
+  hyphenation/hyph_fi.dic
+  hyphenation/hyph_fr.dic
+  hyphenation/hyph_gl.dic
+  hyphenation/hyph_hr.dic
+  hyphenation/hyph_hsb.dic
+  hyphenation/hyph_hu.dic
+  hyphenation/hyph_ia.dic
+  hyphenation/hyph_is.dic
+  hyphenation/hyph_it.dic
+  hyphenation/hyph_kmr.dic
+  hyphenation/hyph_la.dic
+  hyphenation/hyph_lt.dic
+  hyphenation/hyph_mn.dic
+  hyphenation/hyph_nb.dic
+  hyphenation/hyph_nl.dic
+  hyphenation/hyph_nn.dic
+  hyphenation/hyph_pt.dic
+  hyphenation/hyph_ru.dic
+  hyphenation/hyph_sh.dic
+  hyphenation/hyph_sl.dic
+  hyphenation/hyph_sv.dic
+  hyphenation/hyph_tr.dic
+  hyphenation/hyph_uk.dic
   modules/AddonLogging.jsm
   modules/AddonManager.jsm
   modules/AddonRepository.jsm
@@ -673,7 +1047,15 @@ xpicleanup@BIN_SUFFIX@
   modules/PluralForm.jsm
   modules/PopupNotifications.jsm
   modules/PropertyPanel.jsm
+  modules/reflect.jsm
   modules/Services.jsm
+  modules/services-common/async.js
+  modules/services-common/log4moz.js
+  modules/services-common/observers.js
+  modules/services-common/preferences.js
+  modules/services-common/rest.js
+  modules/services-common/stringbundle.js
+  modules/services-common/utils.js
   modules/services-sync/auth.js
   modules/services-sync/base_records/collection.js
   modules/services-sync/base_records/crypto.js
@@ -708,12 +1090,11 @@ xpicleanup@BIN_SUFFIX@
   modules/services-sync/type_records/prefs.js
   modules/services-sync/type_records/tabs.js
   modules/services-sync/util.js
-  modules/SpatialNavigation.js
   modules/stylePanel.jsm
   modules/tabview/AllTabs.jsm
   modules/tabview/groups.jsm
   modules/tabview/utils.jsm
-  modules/utils.js
+  modules/Webapps.jsm
   modules/WindowDraggingUtils.jsm
   #ifdef XP_WIN
     modules/WindowsJumpLists.jsm
@@ -767,6 +1148,7 @@ xpicleanup@BIN_SUFFIX@
 #else
   components/binary.manifest
   omni.jar
+  omni.ja
 #endif
 #ifdef XP_MACOSX
   ../Plug-Ins/PrintPDE.plugin/Contents/Info.plist
@@ -803,12 +1185,19 @@ xpicleanup@BIN_SUFFIX@
   components/directory.xpt
   components/docshell.xpt
   components/dom.xpt
+  components/dom_apps.xpt
   components/dom_base.xpt
+#ifdef MOZ_B2G_RIL
+  components/dom_telephony.xpt
+  components/dom_wifi.xpt
+  components/dom_system_b2g.xpt
+#endif
   components/dom_canvas.xpt
   components/dom_core.xpt
   components/dom_css.xpt
   components/dom_events.xpt
   components/dom_geolocation.xpt
+  components/dom_devicestorage.xpt
   components/dom_html.xpt
   components/dom_json.xpt
   components/dom_loadsave.xpt
@@ -838,6 +1227,7 @@ xpicleanup@BIN_SUFFIX@
   components/fuel.xpt
   components/gfx.xpt
   components/gksvgrenderer.xpt
+  components/html5.xpt
   components/htmlparser.xpt
   components/imgicon.xpt
   components/imglib2.xpt
@@ -940,16 +1330,45 @@ xpicleanup@BIN_SUFFIX@
   plugins/Default Plugin.plugin/Contents/PkgInfo
   plugins/Default Plugin.plugin/Contents/Resources/Default Plugin.rsrc
   plugins/Default Plugin.plugin/Contents/Resources/English.lproj/InfoPlist.strings
-  plugins/DefaultPlugin.plugin/
   plugins/DefaultPlugin.plugin/Contents/Info.plist
-  plugins/DefaultPlugin.plugin/Contents/MacOS/
   plugins/DefaultPlugin.plugin/Contents/MacOS/DefaultPlugin
-  plugins/DefaultPlugin.plugin/Contents/Resources/
-  plugins/DefaultPlugin.plugin/Contents/Resources/English.lproj/
   plugins/DefaultPlugin.plugin/Contents/Resources/English.lproj/InfoPlist.strings
   plugins/DefaultPlugin.plugin/Contents/Resources/plugin.png
+  plugins/JavaEmbeddingPlugin.bundle/Contents/Info.plist
+  plugins/JavaEmbeddingPlugin.bundle/Contents/MacOS/JavaEmbeddingPlugin
+  plugins/JavaEmbeddingPlugin.bundle/Contents/MacOS/JavaEmbeddingPlugin.policy
+  plugins/JavaEmbeddingPlugin.bundle/Contents/PkgInfo
+  plugins/JavaEmbeddingPlugin.bundle/Contents/Resources/English.lproj/InfoPlist.strings
+  plugins/JavaEmbeddingPlugin.bundle/Contents/Resources/Java/JavaEmbeddingPlugin.jar
+  plugins/MRJPlugin.plugin/Contents/Info.plist
+  plugins/MRJPlugin.plugin/Contents/MacOS/MRJPlugin
+  plugins/MRJPlugin.plugin/Contents/MacOS/MRJPlugin.jar
+  plugins/MRJPlugin.plugin/Contents/MacOS/MRJPlugin.policy
+  plugins/MRJPlugin.plugin/Contents/MacOS/MRJPlugin.properties
+  plugins/MRJPlugin.plugin/Contents/PkgInfo
+  plugins/MRJPlugin.plugin/Contents/Resources/English.lproj/InfoPlist.strings
+  plugins/MRJPlugin.plugin/Contents/Resources/MRJPlugin.rsrc
   redo-prebinding.sh
   res/bloatcycle.html
+  res/cursors/arrowN.tiff
+  res/cursors/arrowS.tiff
+  res/cursors/colResize.tiff
+  res/cursors/help.tiff
+  res/cursors/rowResize.tiff
+  res/cursors/sizeNE.tiff
+  res/cursors/sizeNESW.tiff
+  res/cursors/sizeNS.tiff
+  res/cursors/sizeNW.tiff
+  res/cursors/sizeNWSE.tiff
+  res/cursors/sizeSE.tiff
+  res/cursors/sizeSW.tiff
+  res/cursors/spin1.tiff
+  res/cursors/spin2.tiff
+  res/cursors/spin3.tiff
+  res/cursors/spin4.tiff
+  res/cursors/vtIBeam.tiff
+  res/cursors/zoomIn.tiff
+  res/cursors/zoomOut.tiff
   res/cursors/CVS/Entries
   res/cursors/CVS/Repository
   res/cursors/CVS/Root
@@ -963,9 +1382,9 @@ xpicleanup@BIN_SUFFIX@
     components/libimgicon.so
     dictionaries/PL.aff
     dictionaries/PL.dic
+    icons/document.png
     icons/mozicon16.xpm
     icons/mozicon50.xpm
-    libjemalloc.so
     plugins/libnullplugin.so
     readme.txt
   #endif
@@ -978,31 +1397,40 @@ xpicleanup@BIN_SUFFIX@
   components/jsd3250.dll
   components/nsPostUpdateWin.js
   js3250.dll
-  plugins/npnul32.dll
-  #ifdef MOZ_MEMORY
+  mozcpp19.dll
+  mozcrt19.dll
+  #if MOZ_MSVC_REDIST != 1400
     Microsoft.VC80.CRT.manifest
     msvcm80.dll
     msvcp80.dll
     msvcr80.dll
-  #else
-    mozcrt19.dll
   #endif
+  #if MOZ_MSVC_REDIST != 1500
+    Microsoft.VC90.CRT.manifest
+    msvcm90.dll
+    msvcp90.dll
+    msvcr90.dll
+  #endif
+  #if MOZ_MSVC_REDIST != 1600
+    msvcp100.dll
+    msvcr100.dll
+  #endif
+  #if MOZ_MSVC_REDIST != 1700
+    msvcp110.dll
+    msvcr110.dll
+    #ifdef MOZ_METRO
+      vccorlib110.dll
+    #endif
+  #endif
+  plugins/npnul32.dll
 #endif
-#ifdef MOZ_ENABLE_LIBXUL
-  @DLL_PREFIX@xpcom_core@DLL_SUFFIX@
-  components/@DLL_PREFIX@jar50@DLL_SUFFIX@
-  #ifdef XP_WIN
-    components/xpinstal.dll
-  #else
-    components/@DLL_PREFIX@jsd@DLL_SUFFIX@
-    components/@DLL_PREFIX@xpinstall@DLL_SUFFIX@
-  #endif
+@DLL_PREFIX@xpcom_core@DLL_SUFFIX@
+components/@DLL_PREFIX@jar50@DLL_SUFFIX@
+#ifdef XP_WIN
+  components/xpinstal.dll
 #else
-  #ifdef XP_MACOSX
-    XUL
-  #else
-    @DLL_PREFIX@xul@DLL_SUFFIX@
-  #endif
+  components/@DLL_PREFIX@jsd@DLL_SUFFIX@
+  components/@DLL_PREFIX@xpinstall@DLL_SUFFIX@
 #endif
 #ifndef MOZ_UPDATER
   components/nsUpdateService.js
@@ -1090,3 +1518,9 @@ extensions/inspector@mozilla.org/components/@DLL_PREFIX@inspector@DLL_SUFFIX@
 extensions/inspector@mozilla.org/chrome/icons/default/winInspectorMain.ico
 components/nsPlacesTransactionsService.js
 components/browserplaces.xpt
+components/nsPlacesDBFlush.js
+#ifndef MOZ_MAINTENANCE_SERVICE
+maintenanceservice.exe
+maintenanceservice_installer.exe
+#endif
+jssubloader/

@@ -12,7 +12,7 @@
  *
  * You should have received a copy of the LGPL along with this library
  * in the file COPYING-LGPL-2.1; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA 02110-1335, USA
  * You should have received a copy of the MPL along with this library
  * in the file COPYING-MPL-1.1
  *
@@ -189,16 +189,19 @@ _cairo_spline_decompose_into (cairo_spline_knots_t *s1, double tolerance_squared
     cairo_spline_knots_t s2;
     cairo_status_t status;
 
-    if (_cairo_spline_error_squared (s1) < tolerance_squared)
+    if (_cairo_spline_error_squared (s1) < tolerance_squared) {
 	return _cairo_spline_add_point (result, &s1->a);
+    }
 
     _de_casteljau (s1, &s2);
 
     status = _cairo_spline_decompose_into (s1, tolerance_squared, result);
-    if (unlikely (status))
+    if (unlikely (status)) {
 	return status;
+    }
 
-    return _cairo_spline_decompose_into (&s2, tolerance_squared, result);
+    status = _cairo_spline_decompose_into (&s2, tolerance_squared, result);
+    return status;
 }
 
 cairo_status_t

@@ -45,7 +45,6 @@
 #include "nsIURI.h"
 #include "nsIWebProgress.h"
 #include "nsCWebBrowser.h"
-#include "nsIProfileChangeStatus.h"
 
 // Glue APIs (not frozen, but safe to use because they are statically linked)
 #include "nsComponentManagerUtils.h"
@@ -55,8 +54,8 @@
 
 WebBrowserChrome::WebBrowserChrome()
 {
-    mNativeWindow = nsnull;
-    mSizeSet = PR_FALSE;
+    mNativeWindow = nullptr;
+    mSizeSet = false;
 }
 
 WebBrowserChrome::~WebBrowserChrome()
@@ -64,12 +63,12 @@ WebBrowserChrome::~WebBrowserChrome()
     WebBrowserChromeUI::Destroyed(this);
 }
 
-nsresult WebBrowserChrome::CreateBrowser(PRInt32 aX, PRInt32 aY,
-                                         PRInt32 aCX, PRInt32 aCY,
+nsresult WebBrowserChrome::CreateBrowser(int32_t aX, int32_t aY,
+                                         int32_t aCX, int32_t aCY,
                                          nsIWebBrowser **aBrowser)
 {
     NS_ENSURE_ARG_POINTER(aBrowser);
-    *aBrowser = nsnull;
+    *aBrowser = nullptr;
 
     mWebBrowser = do_CreateInstance(NS_WEBBROWSER_CONTRACTID);
     
@@ -86,7 +85,7 @@ nsresult WebBrowserChrome::CreateBrowser(PRInt32 aX, PRInt32 aY,
         return NS_ERROR_FAILURE;
 
     browserBaseWindow->InitWindow( mNativeWindow,
-                             nsnull, 
+                             nullptr, 
                              aX, aY, aCX, aCY);
     browserBaseWindow->Create();
 
@@ -151,7 +150,7 @@ NS_IMETHODIMP WebBrowserChrome::GetInterface(const nsIID &aIID, void** aInstance
 // WebBrowserChrome::nsIWebBrowserChrome
 //*****************************************************************************   
 
-NS_IMETHODIMP WebBrowserChrome::SetStatus(PRUint32 aType, const PRUnichar* aStatus)
+NS_IMETHODIMP WebBrowserChrome::SetStatus(uint32_t aType, const PRUnichar* aStatus)
 {
     WebBrowserChromeUI::UpdateStatusBarText(this, aStatus);
     return NS_OK;
@@ -171,13 +170,13 @@ NS_IMETHODIMP WebBrowserChrome::SetWebBrowser(nsIWebBrowser* aWebBrowser)
     return NS_OK;
 }
 
-NS_IMETHODIMP WebBrowserChrome::GetChromeFlags(PRUint32* aChromeMask)
+NS_IMETHODIMP WebBrowserChrome::GetChromeFlags(uint32_t* aChromeMask)
 {
     *aChromeMask = mChromeFlags;
     return NS_OK;
 }
 
-NS_IMETHODIMP WebBrowserChrome::SetChromeFlags(PRUint32 aChromeMask)
+NS_IMETHODIMP WebBrowserChrome::SetChromeFlags(uint32_t aChromeMask)
 {
     mChromeFlags = aChromeMask;
     return NS_OK;
@@ -191,13 +190,13 @@ NS_IMETHODIMP WebBrowserChrome::DestroyBrowserWindow(void)
 
 
 // IN: The desired browser client area dimensions.
-NS_IMETHODIMP WebBrowserChrome::SizeBrowserTo(PRInt32 aWidth, PRInt32 aHeight)
+NS_IMETHODIMP WebBrowserChrome::SizeBrowserTo(int32_t aWidth, int32_t aHeight)
 {
   /* This isn't exactly correct: we're setting the whole window to
      the size requested for the browser. At time of writing, though,
      it's fine and useful for winEmbed's purposes. */
   WebBrowserChromeUI::SizeTo(this, aWidth, aHeight);
-  mSizeSet = PR_TRUE;
+  mSizeSet = true;
   return NS_OK;
 }
 
@@ -205,26 +204,26 @@ NS_IMETHODIMP WebBrowserChrome::SizeBrowserTo(PRInt32 aWidth, PRInt32 aHeight)
 NS_IMETHODIMP WebBrowserChrome::ShowAsModal(void)
 {
   if (mDependentParent)
-    AppCallbacks::EnableChromeWindow(mDependentParent, PR_FALSE);
+    AppCallbacks::EnableChromeWindow(mDependentParent, false);
 
-  mContinueModalLoop = PR_TRUE;
+  mContinueModalLoop = true;
   AppCallbacks::RunEventLoop(mContinueModalLoop);
 
   if (mDependentParent)
-    AppCallbacks::EnableChromeWindow(mDependentParent, PR_TRUE);
+    AppCallbacks::EnableChromeWindow(mDependentParent, true);
 
   return NS_OK;
 }
 
-NS_IMETHODIMP WebBrowserChrome::IsWindowModal(PRBool *_retval)
+NS_IMETHODIMP WebBrowserChrome::IsWindowModal(bool *_retval)
 {
-    *_retval = PR_FALSE;
+    *_retval = false;
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 NS_IMETHODIMP WebBrowserChrome::ExitModalEventLoop(nsresult aStatus)
 {
-  mContinueModalLoop = PR_FALSE;
+  mContinueModalLoop = false;
   return NS_OK;
 }
 
@@ -247,26 +246,26 @@ NS_IMETHODIMP WebBrowserChrome::FocusPrevElement()
 //*****************************************************************************   
 
 NS_IMETHODIMP WebBrowserChrome::OnProgressChange(nsIWebProgress *progress, nsIRequest *request,
-                                                  PRInt32 curSelfProgress, PRInt32 maxSelfProgress,
-                                                  PRInt32 curTotalProgress, PRInt32 maxTotalProgress)
+                                                  int32_t curSelfProgress, int32_t maxSelfProgress,
+                                                  int32_t curTotalProgress, int32_t maxTotalProgress)
 {
     WebBrowserChromeUI::UpdateProgress(this, curTotalProgress, maxTotalProgress);
     return NS_OK;
 }
 
 NS_IMETHODIMP WebBrowserChrome::OnStateChange(nsIWebProgress *progress, nsIRequest *request,
-                                               PRUint32 progressStateFlags, nsresult status)
+                                               uint32_t progressStateFlags, nsresult status)
 {
     if ((progressStateFlags & STATE_START) && (progressStateFlags & STATE_IS_DOCUMENT))
     {
-        WebBrowserChromeUI::UpdateBusyState(this, PR_TRUE);
+        WebBrowserChromeUI::UpdateBusyState(this, true);
     }
 
     if ((progressStateFlags & STATE_STOP) && (progressStateFlags & STATE_IS_DOCUMENT))
     {
-        WebBrowserChromeUI::UpdateBusyState(this, PR_FALSE);
+        WebBrowserChromeUI::UpdateBusyState(this, false);
         WebBrowserChromeUI::UpdateProgress(this, 0, 100);
-        WebBrowserChromeUI::UpdateStatusBarText(this, nsnull);
+        WebBrowserChromeUI::UpdateStatusBarText(this, nullptr);
         ContentFinishedLoading();
     }
 
@@ -276,9 +275,10 @@ NS_IMETHODIMP WebBrowserChrome::OnStateChange(nsIWebProgress *progress, nsIReque
 
 NS_IMETHODIMP WebBrowserChrome::OnLocationChange(nsIWebProgress* aWebProgress,
                                                  nsIRequest* aRequest,
-                                                 nsIURI *location)
+                                                 nsIURI *location,
+                                                 uint32_t aFlags)
 {
-  PRBool isSubFrameLoad = PR_FALSE; // Is this a subframe load
+  bool isSubFrameLoad = false; // Is this a subframe load
   if (aWebProgress) {
     nsCOMPtr<nsIDOMWindow>  domWindow;
     nsCOMPtr<nsIDOMWindow>  topDomWindow;
@@ -287,7 +287,7 @@ NS_IMETHODIMP WebBrowserChrome::OnLocationChange(nsIWebProgress* aWebProgress,
       domWindow->GetTop(getter_AddRefs(topDomWindow));
     }
     if (domWindow != topDomWindow)
-      isSubFrameLoad = PR_TRUE;
+      isSubFrameLoad = true;
   }
   if (!isSubFrameLoad)
     WebBrowserChromeUI::UpdateCurrentURI(this);
@@ -309,7 +309,7 @@ WebBrowserChrome::OnStatusChange(nsIWebProgress* aWebProgress,
 NS_IMETHODIMP 
 WebBrowserChrome::OnSecurityChange(nsIWebProgress *aWebProgress, 
                                     nsIRequest *aRequest, 
-                                    PRUint32 state)
+                                    uint32_t state)
 {
     return NS_OK;
 }
@@ -325,49 +325,49 @@ WebBrowserChrome::OnHistoryNewEntry(nsIURI * aNewURI)
 }
 
 NS_IMETHODIMP
-WebBrowserChrome::OnHistoryGoBack(nsIURI * aBackURI, PRBool * aContinue)
+WebBrowserChrome::OnHistoryGoBack(nsIURI * aBackURI, bool * aContinue)
 {
     // For now, let the operation continue
-    *aContinue = PR_TRUE;
+    *aContinue = true;
     return SendHistoryStatusMessage(aBackURI, "back");
 }
 
 
 NS_IMETHODIMP
-WebBrowserChrome::OnHistoryGoForward(nsIURI * aForwardURI, PRBool * aContinue)
+WebBrowserChrome::OnHistoryGoForward(nsIURI * aForwardURI, bool * aContinue)
 {
     // For now, let the operation continue
-    *aContinue = PR_TRUE;
+    *aContinue = true;
     return SendHistoryStatusMessage(aForwardURI, "forward");
 }
 
 
 NS_IMETHODIMP
-WebBrowserChrome::OnHistoryGotoIndex(PRInt32 aIndex, nsIURI * aGotoURI, PRBool * aContinue)
+WebBrowserChrome::OnHistoryGotoIndex(int32_t aIndex, nsIURI * aGotoURI, bool * aContinue)
 {
     // For now, let the operation continue
-    *aContinue = PR_TRUE;
+    *aContinue = true;
     return SendHistoryStatusMessage(aGotoURI, "goto", aIndex);
 }
 
 NS_IMETHODIMP
-WebBrowserChrome::OnHistoryReload(nsIURI * aURI, PRUint32 aReloadFlags, PRBool * aContinue)
+WebBrowserChrome::OnHistoryReload(nsIURI * aURI, uint32_t aReloadFlags, bool * aContinue)
 {
     // For now, let the operation continue
-    *aContinue = PR_TRUE;
+    *aContinue = true;
     return SendHistoryStatusMessage(aURI, "reload", 0 /* no info to pass here */, aReloadFlags);
 }
 
 NS_IMETHODIMP
-WebBrowserChrome::OnHistoryPurge(PRInt32 aNumEntries, PRBool *aContinue)
+WebBrowserChrome::OnHistoryPurge(int32_t aNumEntries, bool *aContinue)
 {
     // For now let the operation continue
-    *aContinue = PR_FALSE;
-    return SendHistoryStatusMessage(nsnull, "purge", aNumEntries);
+    *aContinue = false;
+    return SendHistoryStatusMessage(nullptr, "purge", aNumEntries);
 }
 
 static void
-AppendIntToCString(PRInt32 info1, nsCString& aResult)
+AppendIntToCString(int32_t info1, nsCString& aResult)
 {
   char intstr[10];
   _snprintf(intstr, sizeof(intstr) - 1, "%i", info1);
@@ -376,7 +376,7 @@ AppendIntToCString(PRInt32 info1, nsCString& aResult)
 }
 
 nsresult
-WebBrowserChrome::SendHistoryStatusMessage(nsIURI * aURI, char * operation, PRInt32 info1, PRUint32 aReloadFlags)
+WebBrowserChrome::SendHistoryStatusMessage(nsIURI * aURI, char * operation, int32_t info1, uint32_t aReloadFlags)
 {
     nsCString uriSpec;
     if (aURI)
@@ -456,7 +456,7 @@ void WebBrowserChrome::ContentFinishedLoading()
     mWebBrowser->GetContentDOMWindow(getter_AddRefs(contentWin));
     if (contentWin)
         contentWin->SizeToContent();
-    WebBrowserChromeUI::ShowWindow(this, PR_TRUE);
+    WebBrowserChromeUI::ShowWindow(this, true);
   }
 }
 
@@ -465,12 +465,12 @@ void WebBrowserChrome::ContentFinishedLoading()
 // WebBrowserChrome::nsIEmbeddingSiteWindow
 //*****************************************************************************   
 
-NS_IMETHODIMP WebBrowserChrome::SetDimensions(PRUint32 aFlags, PRInt32 x, PRInt32 y, PRInt32 cx, PRInt32 cy)
+NS_IMETHODIMP WebBrowserChrome::SetDimensions(uint32_t aFlags, int32_t x, int32_t y, int32_t cx, int32_t cy)
 {
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
-NS_IMETHODIMP WebBrowserChrome::GetDimensions(PRUint32 aFlags, PRInt32 *x, PRInt32 *y, PRInt32 *cx, PRInt32 *cy)
+NS_IMETHODIMP WebBrowserChrome::GetDimensions(uint32_t aFlags, int32_t *x, int32_t *y, int32_t *cx, int32_t *cy)
 {
     if (aFlags & nsIEmbeddingSiteWindow::DIM_FLAGS_POSITION)
     {
@@ -493,12 +493,18 @@ NS_IMETHODIMP WebBrowserChrome::SetFocus()
     return NS_OK;
 }
 
+/* void blur (); */
+NS_IMETHODIMP WebBrowserChrome::Blur()
+{
+    return NS_ERROR_NOT_IMPLEMENTED;
+}
+
 /* attribute wstring title; */
 NS_IMETHODIMP WebBrowserChrome::GetTitle(PRUnichar * *aTitle)
 {
    NS_ENSURE_ARG_POINTER(aTitle);
 
-   *aTitle = nsnull;
+   *aTitle = nullptr;
    
    return NS_ERROR_NOT_IMPLEMENTED;
 }
@@ -508,13 +514,13 @@ NS_IMETHODIMP WebBrowserChrome::SetTitle(const PRUnichar * aTitle)
 }
 
 /* attribute boolean visibility; */
-NS_IMETHODIMP WebBrowserChrome::GetVisibility(PRBool * aVisibility)
+NS_IMETHODIMP WebBrowserChrome::GetVisibility(bool * aVisibility)
 {
     NS_ENSURE_ARG_POINTER(aVisibility);
-    *aVisibility = PR_TRUE;
+    *aVisibility = true;
     return NS_OK;
 }
-NS_IMETHODIMP WebBrowserChrome::SetVisibility(PRBool aVisibility)
+NS_IMETHODIMP WebBrowserChrome::SetVisibility(bool aVisibility)
 {
     return NS_OK;
 }
@@ -549,7 +555,7 @@ NS_IMETHODIMP WebBrowserChrome::Observe(nsISupports *aSubject, const char *aTopi
 //*****************************************************************************   
 
 /* void OnShowContextMenu (in unsigned long aContextFlags, in nsIDOMEvent aEvent, in nsIDOMNode aNode); */
-NS_IMETHODIMP WebBrowserChrome::OnShowContextMenu(PRUint32 aContextFlags, nsIDOMEvent *aEvent, nsIDOMNode *aNode)
+NS_IMETHODIMP WebBrowserChrome::OnShowContextMenu(uint32_t aContextFlags, nsIDOMEvent *aEvent, nsIDOMNode *aNode)
 {
     WebBrowserChromeUI::ShowContextMenu(this, aContextFlags, aEvent, aNode);
     return NS_OK;
@@ -560,7 +566,7 @@ NS_IMETHODIMP WebBrowserChrome::OnShowContextMenu(PRUint32 aContextFlags, nsIDOM
 //*****************************************************************************   
 
 /* void OnShowTooltip (in long aXCoords, in long aYCoords, in wstring aTipText); */
-NS_IMETHODIMP WebBrowserChrome::OnShowTooltip(PRInt32 aXCoords, PRInt32 aYCoords, const PRUnichar *aTipText)
+NS_IMETHODIMP WebBrowserChrome::OnShowTooltip(int32_t aXCoords, int32_t aYCoords, const PRUnichar *aTipText)
 {
     WebBrowserChromeUI::ShowTooltip(this, aXCoords, aYCoords, aTipText);
     return NS_OK;

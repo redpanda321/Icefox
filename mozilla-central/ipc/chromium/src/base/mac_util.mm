@@ -4,8 +4,13 @@
 
 #include "base/mac_util.h"
 
+#ifdef XP_MACOSX
 #include <Carbon/Carbon.h>
 #import <Cocoa/Cocoa.h>
+#else
+#import <Foundation/NSString.h>
+#import <Foundation/NSBundle.h>
+#endif
 
 #include "base/file_path.h"
 #include "base/logging.h"
@@ -14,6 +19,7 @@
 
 namespace mac_util {
 
+#ifdef XP_MACOSX
 std::string PathFromFSRef(const FSRef& ref) {
   scoped_cftyperef<CFURLRef> url(
       CFURLCreateFromFSRef(kCFAllocatorDefault, &ref));
@@ -43,6 +49,11 @@ bool AmIBundled() {
 
   return info.nodeFlags & kFSNodeIsDirectoryMask;
 }
+#else
+bool AmIBundled() {
+  return true;
+}
+#endif
 
 // No threading worries since NSBundle isn't thread safe.
 static NSBundle* g_override_app_bundle = nil;

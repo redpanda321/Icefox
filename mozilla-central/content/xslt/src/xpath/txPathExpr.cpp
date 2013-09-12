@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is TransforMiiX XSLT processor code.
- *
- * The Initial Developer of the Original Code is
- * The MITRE Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Keith Visco <kvisco@ziplink.net> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "txExpr.h"
 #include "txNodeSet.h"
@@ -80,7 +47,7 @@ PathExpr::addExpr(Expr* aExpr, PathOperator aPathOp)
 nsresult
 PathExpr::evaluate(txIEvalContext* aContext, txAExprResult** aResult)
 {
-    *aResult = nsnull;
+    *aResult = nullptr;
 
     // We need to evaluate the first step with the current context since it
     // can depend on the context size and position. For example:
@@ -100,10 +67,10 @@ PathExpr::evaluate(txIEvalContext* aContext, txAExprResult** aResult)
 
         return NS_OK;
     }
-    res = nsnull; // To allow recycling
+    res = nullptr; // To allow recycling
 
     // Evaluate remaining steps
-    PRUint32 i, len = mItems.Length();
+    uint32_t i, len = mItems.Length();
     for (i = 1; i < len; ++i) {
         PathExprItem& pxi = mItems[i];
         nsRefPtr<txNodeSet> tmpNodes;
@@ -193,7 +160,7 @@ PathExpr::evalDescendants(Expr* aStep, const txXPathNode& aNode,
 
     resNodes->addAndTransfer(newSet);
 
-    MBool filterWS = aContext->isStripSpaceAllowed(aNode);
+    bool filterWS = aContext->isStripSpaceAllowed(aNode);
 
     txXPathTreeWalker walker(aNode);
     if (!walker.moveToFirstChild()) {
@@ -221,12 +188,12 @@ PathExpr::getType()
 TX_IMPL_EXPR_STUBS_BASE(PathExpr, NODESET_RESULT)
 
 Expr*
-PathExpr::getSubExprAt(PRUint32 aPos)
+PathExpr::getSubExprAt(uint32_t aPos)
 {
-    return aPos < mItems.Length() ? mItems[aPos].expr.get() : nsnull;
+    return aPos < mItems.Length() ? mItems[aPos].expr.get() : nullptr;
 }
 void
-PathExpr::setSubExprAt(PRUint32 aPos, Expr* aExpr)
+PathExpr::setSubExprAt(uint32_t aPos, Expr* aExpr)
 {
     NS_ASSERTION(aPos < mItems.Length(), "setting bad subexpression index");
     mItems[aPos].expr.forget();
@@ -234,30 +201,30 @@ PathExpr::setSubExprAt(PRUint32 aPos, Expr* aExpr)
 }
 
 
-PRBool
+bool
 PathExpr::isSensitiveTo(ContextSensitivity aContext)
 {
     if (mItems[0].expr->isSensitiveTo(aContext)) {
-        return PR_TRUE;
+        return true;
     }
 
     // We're creating a new node/nodeset so we can ignore those bits.
     Expr::ContextSensitivity context =
         aContext & ~(Expr::NODE_CONTEXT | Expr::NODESET_CONTEXT);
     if (context == NO_CONTEXT) {
-        return PR_FALSE;
+        return false;
     }
 
-    PRUint32 i, len = mItems.Length();
+    uint32_t i, len = mItems.Length();
     for (i = 0; i < len; ++i) {
         NS_ASSERTION(!mItems[i].expr->isSensitiveTo(Expr::NODESET_CONTEXT),
                      "Step cannot depend on nodeset-context");
         if (mItems[i].expr->isSensitiveTo(context)) {
-            return PR_TRUE;
+            return true;
         }
     }
 
-    return PR_FALSE;
+    return false;
 }
 
 #ifdef TX_TO_STRING
@@ -270,7 +237,7 @@ PathExpr::toString(nsAString& dest)
         mItems[0].expr->toString(dest);
     }
     
-    PRUint32 i, len = mItems.Length();
+    uint32_t i, len = mItems.Length();
     for (i = 1; i < len; ++i) {
         switch (mItems[i].pathOp) {
             case DESCENDANT_OP:

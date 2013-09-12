@@ -1,47 +1,16 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Boris Zbarsky <bzbarsky@mit.edu>.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsWebNavigationInfo.h"
 #include "nsIWebNavigation.h"
 #include "nsString.h"
 #include "nsServiceManagerUtils.h"
-#include "nsIContentUtils.h"
 #include "nsIDocumentLoaderFactory.h"
 #include "nsIPluginHost.h"
+#include "nsContentUtils.h"
+#include "imgLoader.h"
 
 NS_IMPL_ISUPPORTS1(nsWebNavigationInfo, nsIWebNavigationInfo)
 
@@ -56,15 +25,13 @@ nsWebNavigationInfo::Init()
   mCategoryManager = do_GetService(NS_CATEGORYMANAGER_CONTRACTID, &rv);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  mImgLoader = do_GetService("@mozilla.org/image/loader;1", &rv);
-
-  return rv;
+  return NS_OK;
 }
 
 NS_IMETHODIMP
 nsWebNavigationInfo::IsTypeSupported(const nsACString& aType,
                                      nsIWebNavigation* aWebNav,
-                                     PRUint32* aIsTypeSupported)
+                                     uint32_t* aIsTypeSupported)
 {
   NS_PRECONDITION(aIsTypeSupported, "null out param?");
 
@@ -88,9 +55,9 @@ nsWebNavigationInfo::IsTypeSupported(const nsACString& aType,
   nsCOMPtr<nsIPluginHost> pluginHost =
     do_GetService(MOZ_PLUGIN_HOST_CONTRACTID);
   if (pluginHost) {
-    // PR_FALSE will ensure that currently running plugins will not
+    // false will ensure that currently running plugins will not
     // be shut down
-    rv = pluginHost->ReloadPlugins(PR_FALSE);
+    rv = pluginHost->ReloadPlugins(false);
     if (NS_SUCCEEDED(rv)) {
       // OK, we reloaded plugins and there were new ones
       // (otherwise NS_ERROR_PLUGINS_PLUGINSNOTCHANGED would have
@@ -105,37 +72,34 @@ nsWebNavigationInfo::IsTypeSupported(const nsACString& aType,
 
 nsresult
 nsWebNavigationInfo::IsTypeSupportedInternal(const nsCString& aType,
-                                             PRUint32* aIsSupported)
+                                             uint32_t* aIsSupported)
 {
   NS_PRECONDITION(aIsSupported, "Null out param?");
 
 
-  nsCOMPtr<nsIContentUtils> cutils = do_GetService("@mozilla.org/content/contentutils;1");
-  if (!cutils)
-      return NS_ERROR_FAILURE;
-
-  nsIContentUtils::ContentViewerType vtype = nsIContentUtils::TYPE_UNSUPPORTED;
+  nsContentUtils::ContentViewerType vtype = nsContentUtils::TYPE_UNSUPPORTED;
 
   nsCOMPtr<nsIDocumentLoaderFactory> docLoaderFactory =
-    cutils->FindInternalContentViewer(aType.get(), &vtype);
-  
+    nsContentUtils::FindInternalContentViewer(aType.get(), &vtype);
+
   switch (vtype) {
-  case nsIContentUtils::TYPE_UNSUPPORTED:
+  case nsContentUtils::TYPE_UNSUPPORTED:
     *aIsSupported = nsIWebNavigationInfo::UNSUPPORTED;
     break;
 
-  case nsIContentUtils::TYPE_PLUGIN:
+  case nsContentUtils::TYPE_PLUGIN:
     *aIsSupported = nsIWebNavigationInfo::PLUGIN;
     break;
 
-  case nsIContentUtils::TYPE_UNKNOWN:
+  case nsContentUtils::TYPE_UNKNOWN:
     *aIsSupported = nsIWebNavigationInfo::OTHER;
     break;
 
-  case nsIContentUtils::TYPE_CONTENT:
-    PRBool isImage = PR_FALSE;
-    mImgLoader->SupportImageWithMimeType(aType.get(), &isImage);
-    if (isImage) {
+  case nsContentUtils::TYPE_CONTENT:
+    // XXXbz we only need this because images register for the same
+    // contractid as documents, so we can't tell them apart based on
+    // contractid.
+    if (imgLoader::SupportImageWithMimeType(aType.get())) {
       *aIsSupported = nsIWebNavigationInfo::IMAGE;
     }
     else {
@@ -143,6 +107,6 @@ nsWebNavigationInfo::IsTypeSupportedInternal(const nsCString& aType,
     }
     break;
   }
-  
+
   return NS_OK;
 }

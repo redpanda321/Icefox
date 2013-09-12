@@ -5,11 +5,10 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=518122
 -->
 <head>
   <title>Test for Bug 518122</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
 </head>
-<body onload="runTests()">
+<body>
 <a target="_blank" href="https://bugzilla.mozilla.org/show_bug.cgi?id=518122">Mozilla Bug 518122</a>
 <p id="display"></p>
 <div id="content" style="display: none">
@@ -21,6 +20,7 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=518122
 /** Test for Bug 518122 **/
 
 SimpleTest.waitForExplicitFinish();
+addLoadEvent(runTests);
 
 var simple_tests = [ ["foo", "foo"],
                      ["", ""],

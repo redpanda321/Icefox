@@ -8,6 +8,7 @@
 #define BASE_STRING_UTIL_H_
 
 #include <stdarg.h>   // va_list
+#include <ctype.h>
 
 #include <string>
 #include <vector>
@@ -107,9 +108,7 @@ bool IsWprintfFormatPortable(const wchar_t* format);
 #error Define string operations appropriately for your platform
 #endif
 
-#ifdef CHROMIUM_MOZILLA_BUILD
 namespace base {
-#endif
 // Returns a reference to a globally unique empty string that functions can
 // return.  Use this to avoid static construction of strings, not to replace
 // any and all uses of "std::string()" as nicer-looking sugar.
@@ -117,9 +116,7 @@ namespace base {
 const std::string& EmptyString();
 const std::wstring& EmptyWString();
 const string16& EmptyString16();
-#ifdef CHROMIUM_MOZILLA_BUILD
 }
-#endif
 
 extern const wchar_t kWhitespaceWide[];
 extern const char kWhitespaceASCII[];
@@ -149,7 +146,7 @@ enum TrimPositions {
   TRIM_NONE     = 0,
   TRIM_LEADING  = 1 << 0,
   TRIM_TRAILING = 1 << 1,
-  TRIM_ALL      = TRIM_LEADING | TRIM_TRAILING,
+  TRIM_ALL      = TRIM_LEADING | TRIM_TRAILING
 };
 TrimPositions TrimWhitespace(const std::wstring& input,
                              TrimPositions positions,
@@ -227,7 +224,7 @@ class OnStringUtilConversionError {
 
     // The offending characters are skipped and the conversion will proceed as
     // if they did not exist.
-    SKIP,
+    SKIP
   };
 
  private:
@@ -356,27 +353,27 @@ enum DataUnits {
   DATA_UNITS_BYTE = 0,
   DATA_UNITS_KILOBYTE,
   DATA_UNITS_MEGABYTE,
-  DATA_UNITS_GIGABYTE,
+  DATA_UNITS_GIGABYTE
 };
 
 // Return the unit type that is appropriate for displaying the amount of bytes
 // passed in.
-DataUnits GetByteDisplayUnits(int64 bytes);
+DataUnits GetByteDisplayUnits(int64_t bytes);
 
 // Return a byte string in human-readable format, displayed in units appropriate
 // specified by 'units', with an optional unit suffix.
 // Ex: FormatBytes(512, DATA_UNITS_KILOBYTE, true) => "0.5 KB"
 // Ex: FormatBytes(10*1024, DATA_UNITS_MEGABYTE, false) => "0.1"
-std::wstring FormatBytes(int64 bytes, DataUnits units, bool show_units);
+std::wstring FormatBytes(int64_t bytes, DataUnits units, bool show_units);
 
 // As above, but with "/s" units.
 // Ex: FormatSpeed(512, DATA_UNITS_KILOBYTE, true) => "0.5 KB/s"
 // Ex: FormatSpeed(10*1024, DATA_UNITS_MEGABYTE, false) => "0.1"
-std::wstring FormatSpeed(int64 bytes, DataUnits units, bool show_units);
+std::wstring FormatSpeed(int64_t bytes, DataUnits units, bool show_units);
 
 // Return a number formated with separators in the user's locale way.
 // Ex: FormatNumber(1234567) => 1,234,567
-std::wstring FormatNumber(int64 number);
+std::wstring FormatNumber(int64_t number);
 
 // Starting at |start_offset| (usually 0), replace the first instance of
 // |find_this| with |replace_with|.
@@ -409,10 +406,10 @@ std::string IntToString(int value);
 std::wstring IntToWString(int value);
 std::string UintToString(unsigned int value);
 std::wstring UintToWString(unsigned int value);
-std::string Int64ToString(int64 value);
-std::wstring Int64ToWString(int64 value);
-std::string Uint64ToString(uint64 value);
-std::wstring Uint64ToWString(uint64 value);
+std::string Int64ToString(int64_t value);
+std::wstring Int64ToWString(int64_t value);
+std::string Uint64ToString(uint64_t value);
+std::wstring Uint64ToWString(uint64_t value);
 // The DoubleToString methods convert the double to a string format that
 // ignores the locale.  If you want to use locale specific formatting, use ICU.
 std::string DoubleToString(double value);
@@ -430,8 +427,8 @@ std::wstring DoubleToWString(double value);
 //  - Empty string.  |*output| will be set to 0.
 bool StringToInt(const std::string& input, int* output);
 bool StringToInt(const string16& input, int* output);
-bool StringToInt64(const std::string& input, int64* output);
-bool StringToInt64(const string16& input, int64* output);
+bool StringToInt64(const std::string& input, int64_t* output);
+bool StringToInt64(const string16& input, int64_t* output);
 bool HexStringToInt(const std::string& input, int* output);
 bool HexStringToInt(const string16& input, int* output);
 
@@ -439,8 +436,8 @@ bool HexStringToInt(const string16& input, int* output);
 // |*output| will contain as many bytes as were successfully parsed prior to the
 // error.  There is no overflow, but input.size() must be evenly divisible by 2.
 // Leading 0x or +/- are not allowed.
-bool HexStringToBytes(const std::string& input, std::vector<uint8>* output);
-bool HexStringToBytes(const string16& input, std::vector<uint8>* output);
+bool HexStringToBytes(const std::string& input, std::vector<uint8_t>* output);
+bool HexStringToBytes(const string16& input, std::vector<uint8_t>* output);
 
 // For floating-point conversions, only conversions of input strings in decimal
 // form are defined to work.  Behavior with strings representing floating-point
@@ -456,8 +453,8 @@ bool StringToDouble(const string16& input, double* output);
 // above conversions: a best-effort conversion when possible, otherwise, 0.
 int StringToInt(const std::string& value);
 int StringToInt(const string16& value);
-int64 StringToInt64(const std::string& value);
-int64 StringToInt64(const string16& value);
+int64_t StringToInt64(const std::string& value);
+int64_t StringToInt64(const string16& value);
 int HexStringToInt(const std::string& value);
 int HexStringToInt(const string16& value);
 double StringToDouble(const std::string& value);
@@ -508,11 +505,7 @@ inline typename string_type::value_type* WriteInto(string_type* str,
 
 // Function objects to aid in comparing/searching strings.
 
-#if defined(CHROMIUM_MOZILLA_BUILD)
 template<typename Char> struct chromium_CaseInsensitiveCompare {
-#else
-template<typename Char> struct CaseInsensitiveCompare {
-#endif
  public:
   bool operator()(Char x, Char y) const {
     return tolower(x) == tolower(y);

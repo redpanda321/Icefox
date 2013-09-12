@@ -1,63 +1,34 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  * vim: sw=2 ts=2 et :
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Shawn Wilsher <me@shawnwilsher.com> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "Link.h"
 
-#include "nsIEventStateManager.h"
+#include "mozilla/dom/Element.h"
+#include "nsEventStates.h"
 #include "nsIURL.h"
+#include "nsISizeOf.h"
 
-#include "nsContentUtils.h"
 #include "nsEscape.h"
 #include "nsGkAtoms.h"
 #include "nsString.h"
 #include "mozAutoDocUpdate.h"
 
-#include "mozilla/IHistory.h"
+#include "mozilla/Services.h"
 
 namespace mozilla {
 namespace dom {
 
-Link::Link()
-  : mLinkState(defaultState)
+Link::Link(Element *aElement)
+  : mElement(aElement)
+  , mHistory(services::GetHistoryService())
+  , mLinkState(eLinkState_NotLink)
+  , mNeedsRegistration(false)
   , mRegistered(false)
-  , mContent(NULL)
 {
+  NS_ABORT_IF_FALSE(mElement, "Must have an element");
 }
 
 Link::~Link()
@@ -65,14 +36,19 @@ Link::~Link()
   UnregisterFromHistory();
 }
 
+bool
+Link::ElementHasHref() const
+{
+  return ((!mElement->IsSVG() && mElement->HasAttr(kNameSpaceID_None, nsGkAtoms::href))
+        || (!mElement->IsHTML() && mElement->HasAttr(kNameSpaceID_XLink, nsGkAtoms::href)));
+}
+
 nsLinkState
 Link::GetLinkState() const
 {
   NS_ASSERTION(mRegistered,
                "Getting the link state of an unregistered Link!");
-  NS_ASSERTION(mLinkState != eLinkState_Unknown,
-               "Getting the link state with an unknown value!");
-  return mLinkState;
+  return nsLinkState(mLinkState);
 }
 
 void
@@ -83,63 +59,49 @@ Link::SetLinkState(nsLinkState aState)
   NS_ASSERTION(mLinkState != aState,
                "Setting state to the currently set state!");
 
-  // Remember our old link state for when we notify.
-  PRInt32 oldLinkState = LinkState();
-
   // Set our current state as appropriate.
   mLinkState = aState;
 
   // Per IHistory interface documentation, we are no longer registered.
   mRegistered = false;
 
-  // Notify the document that our visited state has changed.
-  nsIContent *content = Content();
-  nsIDocument *doc = content->GetCurrentDoc();
-  NS_ASSERTION(doc, "Registered but we have no document?!");
-  PRInt32 newLinkState = LinkState();
-  NS_ASSERTION(newLinkState == NS_EVENT_STATE_VISITED ||
-               newLinkState == NS_EVENT_STATE_UNVISITED,
-               "Unexpected state obtained from LinkState()!");
-  mozAutoDocUpdate update(doc, UPDATE_CONTENT_STATE, PR_TRUE);
-  doc->ContentStatesChanged(content, nsnull, oldLinkState ^ newLinkState);
+  NS_ABORT_IF_FALSE(LinkState() == NS_EVENT_STATE_VISITED ||
+                    LinkState() == NS_EVENT_STATE_UNVISITED,
+                    "Unexpected state obtained from LinkState()!");
+
+  // Tell the element to update its visited state
+  mElement->UpdateState(true);
 }
 
-PRInt32
+nsEventStates
 Link::LinkState() const
 {
   // We are a constant method, but we are just lazily doing things and have to
   // track that state.  Cast away that constness!
   Link *self = const_cast<Link *>(this);
 
-  // If we are not in the document, default to not visited.
-  nsIContent *content = self->Content();
-  if (!content->IsInDoc()) {
-    self->mLinkState = eLinkState_Unvisited;
-  }
+  Element *element = self->mElement;
 
-  // If we have not yet registered for notifications and are in an unknown
-  // state, register now!
-  if (!mRegistered && mLinkState == eLinkState_Unknown) {
-    // First, make sure the href attribute has a valid link (bug 23209).
+  // If we have not yet registered for notifications and need to,
+  // due to our href changing, register now!
+  if (!mRegistered && mNeedsRegistration && element->IsInDoc()) {
+    // Only try and register once.
+    self->mNeedsRegistration = false;
+
     nsCOMPtr<nsIURI> hrefURI(GetURI());
-    if (!hrefURI) {
-      self->mLinkState = eLinkState_NotLink;
-      return 0;
-    }
 
-    // We have a good href, so register with History.
-    IHistory *history = nsContentUtils::GetHistory();
-    nsresult rv = history->RegisterVisitedCallback(hrefURI, self);
-    if (NS_SUCCEEDED(rv)) {
-      self->mRegistered = true;
+    // Assume that we are not visited until we are told otherwise.
+    self->mLinkState = eLinkState_Unvisited;
 
-      // Assume that we are not visited until we are told otherwise.
-      self->mLinkState = eLinkState_Unvisited;
+    // Make sure the href attribute has a valid link (bug 23209).
+    // If we have a good href, register with History if available.
+    if (mHistory && hrefURI) {
+      nsresult rv = mHistory->RegisterVisitedCallback(hrefURI, self);
+      if (NS_SUCCEEDED(rv)) {
+        self->mRegistered = true;
 
-      // And make sure we are in the document's link map.
-      nsIDocument *doc = content->GetCurrentDoc();
-      if (doc) {
-        doc->AddStyleRelevantLink(self);
+        // And make sure we are in the document's link map.
+        element->GetCurrentDoc()->AddStyleRelevantLink(self);
       }
     }
   }
@@ -153,7 +115,7 @@ Link::LinkState() const
     return NS_EVENT_STATE_UNVISITED;
   }
 
-  return 0;
+  return nsEventStates();
 }
 
 already_AddRefed<nsIURI>
@@ -168,11 +130,11 @@ Link::GetURI() const
 
   // Otherwise obtain it.
   Link *self = const_cast<Link *>(this);
-  nsIContent *content = self->Content();
-  uri = content->GetHrefURI();
+  Element *element = self->mElement;
+  uri = element->GetHrefURI();
 
-  // We want to cache the URI if the node is in the document.
-  if (uri && content->IsInDoc()) {
+  // We want to cache the URI if we have it
+  if (uri) {
     mCachedURI = uri;
   }
 
@@ -227,7 +189,7 @@ Link::SetHost(const nsAString &aHost)
     if (iter != end) {
       nsAutoString portStr(Substring(iter, end));
       nsresult rv;
-      PRInt32 port = portStr.ToInteger((PRInt32 *)&rv);
+      int32_t port = portStr.ToInteger(&rv);
       if (NS_SUCCEEDED(rv)) {
         (void)uri->SetPort(port);
       }
@@ -293,7 +255,7 @@ Link::SetPort(const nsAString &aPort)
 
   nsresult rv;
   nsAutoString portStr(aPort);
-  PRInt32 port = portStr.ToInteger((PRInt32 *)&rv);
+  int32_t port = portStr.ToInteger(&rv);
   if (NS_FAILED(rv)) {
     return NS_OK;
   }
@@ -307,13 +269,12 @@ nsresult
 Link::SetHash(const nsAString &aHash)
 {
   nsCOMPtr<nsIURI> uri(GetURIToMutate());
-  nsCOMPtr<nsIURL> url(do_QueryInterface(uri));
-  if (!url) {
+  if (!uri) {
     // Ignore failures to be compatible with NS4.
     return NS_OK;
   }
 
-  (void)url->SetRef(NS_ConvertUTF16toUTF8(aHash));
+  (void)uri->SetRef(NS_ConvertUTF16toUTF8(aHash));
   SetHrefAttribute(uri);
   return NS_OK;
 }
@@ -326,7 +287,7 @@ Link::GetProtocol(nsAString &_protocol)
     _protocol.AssignLiteral("http");
   }
   else {
-    nsCAutoString scheme;
+    nsAutoCString scheme;
     (void)uri->GetScheme(scheme);
     CopyASCIItoUTF16(scheme, _protocol);
   }
@@ -345,7 +306,7 @@ Link::GetHost(nsAString &_host)
     return NS_OK;
   }
 
-  nsCAutoString hostport;
+  nsAutoCString hostport;
   nsresult rv = uri->GetHostPort(hostport);
   if (NS_SUCCEEDED(rv)) {
     CopyUTF8toUTF16(hostport, _host);
@@ -364,7 +325,7 @@ Link::GetHostname(nsAString &_hostname)
     return NS_OK;
   }
 
-  nsCAutoString host;
+  nsAutoCString host;
   nsresult rv = uri->GetHost(host);
   // Note that failure to get the host from the URI is not necessarily a bad
   // thing.  Some URIs do not have a host.
@@ -387,7 +348,7 @@ Link::GetPathname(nsAString &_pathname)
     return NS_OK;
   }
 
-  nsCAutoString file;
+  nsAutoCString file;
   nsresult rv = url->GetFilePath(file);
   NS_ENSURE_SUCCESS(rv, rv);
   CopyUTF8toUTF16(file, _pathname);
@@ -407,7 +368,7 @@ Link::GetSearch(nsAString &_search)
     return NS_OK;
   }
 
-  nsCAutoString search;
+  nsAutoCString search;
   nsresult rv = url->GetQuery(search);
   if (NS_SUCCEEDED(rv) && !search.IsEmpty()) {
     CopyUTF8toUTF16(NS_LITERAL_CSTRING("?") + search, _search);
@@ -426,7 +387,7 @@ Link::GetPort(nsAString &_port)
     return NS_OK;
   }
 
-  PRInt32 port;
+  int32_t port;
   nsresult rv = uri->GetPort(&port);
   // Note that failure to get the port from the URI is not necessarily a bad
   // thing.  Some URIs do not have a port.
@@ -444,15 +405,14 @@ Link::GetHash(nsAString &_hash)
   _hash.Truncate();
 
   nsCOMPtr<nsIURI> uri(GetURI());
-  nsCOMPtr<nsIURL> url(do_QueryInterface(uri));
-  if (!url) {
-    // Do not throw!  Not having a valid URI or URL should result in an empty
+  if (!uri) {
+    // Do not throw!  Not having a valid URI should result in an empty
     // string.
     return NS_OK;
   }
 
-  nsCAutoString ref;
-  nsresult rv = url->GetRef(ref);
+  nsAutoCString ref;
+  nsresult rv = uri->GetRef(ref);
   if (NS_SUCCEEDED(rv) && !ref.IsEmpty()) {
     NS_UnescapeURL(ref); // XXX may result in random non-ASCII bytes!
     _hash.Assign(PRUnichar('#'));
@@ -462,38 +422,56 @@ Link::GetHash(nsAString &_hash)
 }
 
 void
-Link::ResetLinkState(bool aNotify)
+Link::ResetLinkState(bool aNotify, bool aHasHref)
 {
-  // If we are in our default state, bail early.
-  if (mLinkState == defaultState) {
-    return;
+  nsLinkState defaultState;
+
+  // The default state for links with an href is unvisited.
+  if (aHasHref) {
+    defaultState = eLinkState_Unvisited;
+  } else {
+    defaultState = eLinkState_NotLink;
   }
 
-  nsIContent *content = Content();
+  // If !mNeedsRegstration, then either we've never registered, or we're
+  // currently registered; in either case, we should remove ourself
+  // from the doc and the history.
+  if (!mNeedsRegistration && mLinkState != eLinkState_NotLink) {
+    nsIDocument *doc = mElement->GetCurrentDoc();
+    if (doc && (mRegistered || mLinkState == eLinkState_Visited)) {
+      // Tell the document to forget about this link if we've registered
+      // with it before.
+      doc->ForgetLink(this);
+    }
 
-  // Tell the document to forget about this link if we were a link before.
-  nsIDocument *doc = content->GetCurrentDoc();
-  if (doc && mLinkState != eLinkState_NotLink) {
-    doc->ForgetLink(this);
+    UnregisterFromHistory();
   }
 
-  UnregisterFromHistory();
+  // If we have an href, we should register with the history.
+  mNeedsRegistration = aHasHref;
+
+  // If we've cached the URI, reset always invalidates it.
+  mCachedURI = nullptr;
 
   // Update our state back to the default.
   mLinkState = defaultState;
 
-  // Get rid of our cached URI.
-  mCachedURI = nsnull;
-
-  // If aNotify is true, notify both of the visited-related states.  We have
-  // to do that, because we might be racing with a response from history and
-  // hence need to make sure that we get restyled whether we were visited or
-  // not before.  In particular, we need to make sure that our LinkState() is
-  // called so that we'll start a new history query as needed.
-  if (aNotify && doc) {
-    PRUint32 changedState = NS_EVENT_STATE_VISITED ^ NS_EVENT_STATE_UNVISITED;
-    MOZ_AUTO_DOC_UPDATE(doc, UPDATE_STYLE, aNotify);
-    doc->ContentStatesChanged(content, nsnull, changedState);
+  // We have to be very careful here: if aNotify is false we do NOT
+  // want to call UpdateState, because that will call into LinkState()
+  // and try to start off loads, etc.  But ResetLinkState is called
+  // with aNotify false when things are in inconsistent states, so
+  // we'll get confused in that situation.  Instead, just silently
+  // update the link state on mElement. Since we might have set the
+  // link state to unvisited, make sure to update with that state if
+  // required.
+  if (aNotify) {
+    mElement->UpdateState(aNotify);
+  } else {
+    if (mLinkState == eLinkState_Unvisited) {
+      mElement->UpdateLinkState(NS_EVENT_STATE_UNVISITED);
+    } else {
+      mElement->UpdateLinkState(nsEventStates());
+    }
   }
 }
 
@@ -508,11 +486,12 @@ Link::UnregisterFromHistory()
   NS_ASSERTION(mCachedURI, "mRegistered is true, but we have no cached URI?!");
 
   // And tell History to stop tracking us.
-  IHistory *history = nsContentUtils::GetHistory();
-  nsresult rv = history->UnregisterVisitedCallback(mCachedURI, this);
-  NS_ASSERTION(NS_SUCCEEDED(rv), "This should only fail if we misuse the API!");
-  if (NS_SUCCEEDED(rv)) {
-    mRegistered = false;
+  if (mHistory) {
+    nsresult rv = mHistory->UnregisterVisitedCallback(mCachedURI, this);
+    NS_ASSERTION(NS_SUCCEEDED(rv), "This should only fail if we misuse the API!");
+    if (NS_SUCCEEDED(rv)) {
+      mRegistered = false;
+    }
   }
 }
 
@@ -521,7 +500,7 @@ Link::GetURIToMutate()
 {
   nsCOMPtr<nsIURI> uri(GetURI());
   if (!uri) {
-    return nsnull;
+    return nullptr;
   }
   nsCOMPtr<nsIURI> clone;
   (void)uri->Clone(getter_AddRefs(clone));
@@ -533,22 +512,29 @@ Link::SetHrefAttribute(nsIURI *aURI)
 {
   NS_ASSERTION(aURI, "Null URI is illegal!");
 
-  nsCAutoString href;
+  nsAutoCString href;
   (void)aURI->GetSpec(href);
-  (void)Content()->SetAttr(kNameSpaceID_None, nsGkAtoms::href,
-                           NS_ConvertUTF8toUTF16(href), PR_TRUE);
+  (void)mElement->SetAttr(kNameSpaceID_None, nsGkAtoms::href,
+                          NS_ConvertUTF8toUTF16(href), true);
 }
 
-nsIContent *
-Link::Content()
+size_t
+Link::SizeOfExcludingThis(nsMallocSizeOfFun aMallocSizeOf) const
 {
-  if (NS_LIKELY(mContent)) {
-    return mContent;
+  size_t n = 0;
+
+  if (mCachedURI) {
+    nsCOMPtr<nsISizeOf> iface = do_QueryInterface(mCachedURI);
+    if (iface) {
+      n += iface->SizeOfIncludingThis(aMallocSizeOf);
+    }
   }
 
-  nsCOMPtr<nsIContent> content(do_QueryInterface(this));
-  NS_ABORT_IF_FALSE(content, "This must be able to QI to nsIContent!");
-  return mContent = content;
+  // The following members don't need to be measured:
+  // - mElement, because it is a pointer-to-self used to avoid QIs
+  // - mHistory, because it is non-owning
+
+  return n;
 }
 
 } // namespace dom

@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsRDFResource.h"
 #include "nsIServiceManager.h"
@@ -47,13 +14,13 @@
 
 static NS_DEFINE_CID(kRDFServiceCID, NS_RDFSERVICE_CID);
 
-nsIRDFService* nsRDFResource::gRDFService = nsnull;
+nsIRDFService* nsRDFResource::gRDFService = nullptr;
 nsrefcnt nsRDFResource::gRDFServiceRefCnt = 0;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 nsRDFResource::nsRDFResource(void)
-    : mDelegates(nsnull)
+    : mDelegates(nullptr)
 {
 }
 
@@ -81,9 +48,9 @@ NS_IMPL_THREADSAFE_ISUPPORTS2(nsRDFResource, nsIRDFResource, nsIRDFNode)
 // nsIRDFNode methods:
 
 NS_IMETHODIMP
-nsRDFResource::EqualsNode(nsIRDFNode* aNode, PRBool* aResult)
+nsRDFResource::EqualsNode(nsIRDFNode* aNode, bool* aResult)
 {
-    NS_PRECONDITION(aNode != nsnull, "null ptr");
+    NS_PRECONDITION(aNode != nullptr, "null ptr");
     if (! aNode)
         return NS_ERROR_NULL_POINTER;
 
@@ -96,7 +63,7 @@ nsRDFResource::EqualsNode(nsIRDFNode* aNode, PRBool* aResult)
         return NS_OK;
     }
     else if (rv == NS_NOINTERFACE) {
-        *aResult = PR_FALSE;
+        *aResult = false;
         return NS_OK;
     }
     else {
@@ -110,7 +77,7 @@ nsRDFResource::EqualsNode(nsIRDFNode* aNode, PRBool* aResult)
 NS_IMETHODIMP
 nsRDFResource::Init(const char* aURI)
 {
-    NS_PRECONDITION(aURI != nsnull, "null ptr");
+    NS_PRECONDITION(aURI != nullptr, "null ptr");
     if (! aURI)
         return NS_ERROR_NULL_POINTER;
 
@@ -122,7 +89,7 @@ nsRDFResource::Init(const char* aURI)
     }
 
     // don't replace an existing resource with the same URI automatically
-    return gRDFService->RegisterResource(this, PR_TRUE);
+    return gRDFService->RegisterResource(this, true);
 }
 
 NS_IMETHODIMP
@@ -153,9 +120,9 @@ nsRDFResource::GetValueConst(const char** aURI)
 }
 
 NS_IMETHODIMP
-nsRDFResource::EqualsString(const char* aURI, PRBool* aResult)
+nsRDFResource::EqualsString(const char* aURI, bool* aResult)
 {
-    NS_PRECONDITION(aURI != nsnull, "null ptr");
+    NS_PRECONDITION(aURI != nullptr, "null ptr");
     if (! aURI)
         return NS_ERROR_NULL_POINTER;
 
@@ -168,12 +135,12 @@ nsRDFResource::EqualsString(const char* aURI, PRBool* aResult)
 NS_IMETHODIMP
 nsRDFResource::GetDelegate(const char* aKey, REFNSIID aIID, void** aResult)
 {
-    NS_PRECONDITION(aKey != nsnull, "null ptr");
+    NS_PRECONDITION(aKey != nullptr, "null ptr");
     if (! aKey)
         return NS_ERROR_NULL_POINTER;
 
     nsresult rv;
-    *aResult = nsnull;
+    *aResult = nullptr;
 
     DelegateEntry* entry = mDelegates;
     while (entry) {
@@ -186,11 +153,11 @@ nsRDFResource::GetDelegate(const char* aKey, REFNSIID aIID, void** aResult)
     }
 
     // Construct a ContractID of the form "@mozilla.org/rdf/delegate/[key]/[scheme];1
-    nsCAutoString contractID(NS_RDF_DELEGATEFACTORY_CONTRACTID_PREFIX);
+    nsAutoCString contractID(NS_RDF_DELEGATEFACTORY_CONTRACTID_PREFIX);
     contractID.Append(aKey);
     contractID.Append("&scheme=");
 
-    PRInt32 i = mURI.FindChar(':');
+    int32_t i = mURI.FindChar(':');
     contractID += StringHead(mURI, i);
 
     nsCOMPtr<nsIRDFDelegateFactory> delegateFactory =
@@ -227,7 +194,7 @@ nsRDFResource::GetDelegate(const char* aKey, REFNSIID aIID, void** aResult)
 NS_IMETHODIMP
 nsRDFResource::ReleaseDelegate(const char* aKey)
 {
-    NS_PRECONDITION(aKey != nsnull, "null ptr");
+    NS_PRECONDITION(aKey != nullptr, "null ptr");
     if (! aKey)
         return NS_ERROR_NULL_POINTER;
 

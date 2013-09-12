@@ -8,7 +8,7 @@
 #include <io.h>
 #endif
 #include <stdio.h>
-#if defined(ANDROID)
+#if defined(ANDROID) || defined(OS_POSIX)
 #include <unistd.h>
 #endif
 
@@ -144,10 +144,10 @@ bool ContentsEqual(const FilePath& filename1, const FilePath& filename2) {
   // We open the file in binary format even if they are text files because
   // we are just comparing that bytes are exactly same in both files and not
   // doing anything smart with text formatting.
-  std::ifstream file1(filename1.value().c_str(),
-                      std::ios::in | std::ios::binary);
-  std::ifstream file2(filename2.value().c_str(),
-                      std::ios::in | std::ios::binary);
+  std::ifstream file1, file2;
+
+  filename1.OpenInputStream(file1);
+  filename2.OpenInputStream(file2);
 
   // Even if both files aren't openable (and thus, in some sense, "equal"),
   // any unusable file yields a result of "false".
@@ -194,12 +194,12 @@ bool ReadFileToString(const FilePath& path, std::string* contents) {
 FILE* CreateAndOpenTemporaryFile(FilePath* path) {
   FilePath directory;
   if (!GetTempDir(&directory))
-    return false;
+    return NULL;
 
   return CreateAndOpenTemporaryFileInDir(directory, path);
 }
 
-bool GetFileSize(const FilePath& file_path, int64* file_size) {
+bool GetFileSize(const FilePath& file_path, int64_t* file_size) {
   FileInfo info;
   if (!GetFileInfo(file_path, &info))
     return false;
@@ -379,7 +379,7 @@ std::wstring GetFilenameFromPath(const std::wstring& path) {
 
   return FilePath::FromWStringHack(path).BaseName().ToWStringHack();
 }
-bool GetFileSize(const std::wstring& file_path, int64* file_size) {
+bool GetFileSize(const std::wstring& file_path, int64_t* file_size) {
   return GetFileSize(FilePath::FromWStringHack(file_path), file_size);
 }
 bool GetTempDir(std::wstring* path_str) {

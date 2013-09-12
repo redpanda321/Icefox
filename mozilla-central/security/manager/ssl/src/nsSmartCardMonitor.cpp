@@ -1,44 +1,15 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Contributed by Red Hat Inc.
- *
- * The Initial Developer of the Original Code is
- * Red Hat, Inc.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "nspr.h"
 
 #include "pk11func.h"
 #include "nsNSSComponent.h"
 #include "nsSmartCardMonitor.h"
 #include "nsSmartCardEvent.h"
+#include "mozilla/unused.h"
+
+using namespace mozilla;
 
 //
 // The SmartCard monitoring thread should start up for each module we load
@@ -57,8 +28,6 @@
 
 
 static NS_DEFINE_CID(kNSSComponentCID, NS_NSSCOMPONENT_CID);
-
-#include <assert.h>
 
 // self linking and removing double linked entry
 // adopts the thread it is passed.
@@ -105,8 +74,7 @@ SmartCardThreadList::~SmartCardThreadList()
 void
 SmartCardThreadList::Remove(SECMODModule *aModule)
 {
-  SmartCardThreadEntry *current;
-  for (current = head; current; current=current->next) {
+  for (SmartCardThreadEntry *current = head; current; current = current->next) {
     if (current->thread->GetModule() == aModule) {
       // NOTE: automatically stops the thread and dequeues it from the list
       delete current;
@@ -115,32 +83,31 @@ SmartCardThreadList::Remove(SECMODModule *aModule)
   }
 }
 
-// adopts the thread passwd to it. Starts the thread as well
+// adopts the thread passed to it. Starts the thread as well
 nsresult
 SmartCardThreadList::Add(SmartCardMonitoringThread *thread)
 {
-  SmartCardThreadEntry *current = new SmartCardThreadEntry(thread, head, nsnull,
+  SmartCardThreadEntry *current = new SmartCardThreadEntry(thread, head, nullptr,
                                                            &head);
-  if (current) {  
-     // OK to forget current here, it's on the list
-    return thread->Start();
-  }
-  return NS_ERROR_OUT_OF_MEMORY;
+  // OK to forget current here, it's on the list.
+  unused << current;
+
+  return thread->Start();
 }
 
 
 // We really should have a Unity PL Hash function...
-static PR_CALLBACK PLHashNumber
+static PLHashNumber
 unity(const void *key) { return PLHashNumber(NS_PTR_TO_INT32(key)); }
 
 SmartCardMonitoringThread::SmartCardMonitoringThread(SECMODModule *module_)
-  : mThread(nsnull)
+  : mThread(nullptr)
 {
   mModule = SECMOD_ReferenceModule(module_);
   // simple hash functions, most modules have less than 3 slots, so 10 buckets
   // should be plenty
   mHash = PL_NewHashTable(10, unity, PL_CompareValues, 
-                           PL_CompareStrings, nsnull, 0);
+                           PL_CompareStrings, nullptr, 0);
 }
 
 //
@@ -206,18 +173,18 @@ void SmartCardMonitoringThread::Stop()
 //
 void
 SmartCardMonitoringThread::SetTokenName(CK_SLOT_ID slotid, 
-                                       const char *tokenName, PRUint32 series)
+                                       const char *tokenName, uint32_t series)
 {
   if (mHash) {
     if (tokenName) {
       int len = strlen(tokenName) + 1;
       /* this must match the allocator used in
        * PLHashAllocOps.freeEntry DefaultFreeEntry */
-      char *entry = (char *)PR_Malloc(len+sizeof(PRUint32));
+      char *entry = (char *)PR_Malloc(len+sizeof(uint32_t));
      
       if (entry) {  
-        memcpy(entry,&series,sizeof(PRUint32));
-        memcpy(&entry[sizeof(PRUint32)],tokenName,len);
+        memcpy(entry,&series,sizeof(uint32_t));
+        memcpy(&entry[sizeof(uint32_t)],tokenName,len);
 
         PL_HashTableAdd(mHash,(void *)slotid, entry); /* adopt */
         return;
@@ -234,29 +201,29 @@ SmartCardMonitoringThread::SetTokenName(CK_SLOT_ID slotid,
 const char *
 SmartCardMonitoringThread::GetTokenName(CK_SLOT_ID slotid)
 {
-  const char *tokenName = nsnull;
+  const char *tokenName = nullptr;
   const char *entry;
 
   if (mHash) {
     entry = (const char *)PL_HashTableLookupConst(mHash,(void *)slotid);
     if (entry) {
-      tokenName = &entry[sizeof(PRUint32)];
+      tokenName = &entry[sizeof(uint32_t)];
     }
   }
   return tokenName;
 }
 
 // retrieve the series saved in SetTokenName above
-PRUint32
+uint32_t
 SmartCardMonitoringThread::GetTokenSeries(CK_SLOT_ID slotid)
 {
-  PRUint32 series = 0;
+  uint32_t series = 0;
   const char *entry;
 
   if (mHash) {
     entry = (const char *)PL_HashTableLookupConst(mHash,(void *)slotid);
     if (entry) {
-      memcpy(&series,entry,sizeof(PRUint32));
+      memcpy(&series,entry,sizeof(uint32_t));
     }
   }
   return series;
@@ -286,18 +253,18 @@ SmartCardMonitoringThread::SendEvent(const nsAString &eventType,
 void SmartCardMonitoringThread::Execute()
 {
   PK11SlotInfo *slot;
-  const char *tokenName = nsnull;
+  const char *tokenName = nullptr;
 
   //
   // populate token names for already inserted tokens.
   //
   PK11SlotList *sl =
-            PK11_FindSlotsByNames(mModule->dllName, nsnull, nsnull, PR_TRUE);
+            PK11_FindSlotsByNames(mModule->dllName, nullptr, nullptr, true);
   PK11SlotListElement *sle;
  
   if (sl) {
     for (sle=PK11_GetFirstSafe(sl); sle; 
-                                      sle=PK11_GetNextSafe(sl,sle,PR_FALSE)) {
+                                      sle=PK11_GetNextSafe(sl,sle,false)) {
       SetTokenName(PK11_GetSlotID(sle->slot), 
                   PK11_GetTokenName(sle->slot), PK11_GetSlotSeries(sle->slot));
     }
@@ -307,7 +274,7 @@ void SmartCardMonitoringThread::Execute()
   // loop starts..
   do {
     slot = SECMOD_WaitForAnyTokenEvent(mModule, 0, PR_SecondsToInterval(1)  );
-    if (slot == nsnull) {
+    if (!slot) {
       break;
     }
 
@@ -316,7 +283,7 @@ void SmartCardMonitoringThread::Execute()
     if (PK11_IsPresent(slot)) {
       // insertion
       CK_SLOT_ID slotID = PK11_GetSlotID(slot);
-      PRUint32 series = PK11_GetSlotSeries(slot);
+      uint32_t series = PK11_GetSlotSeries(slot);
 
       // skip spurious insertion events...
       if (series != GetTokenSeries(slotID)) {
@@ -340,7 +307,7 @@ void SmartCardMonitoringThread::Execute()
       if (tokenName) {
         SendEvent(NS_LITERAL_STRING(SMARTCARDEVENT_REMOVE), tokenName);
         // clear the token name (after we send it)
-        SetTokenName(slotID, nsnull, 0);
+        SetTokenName(slotID, nullptr, 0);
       }
     }
     PK11_FreeSlot(slot);
@@ -357,6 +324,8 @@ const SECMODModule * SmartCardMonitoringThread::GetModule()
 // C-like calling sequence to glue into PR_CreateThread.
 void SmartCardMonitoringThread::LaunchExecute(void *arg)
 {
+  PR_SetCurrentThreadName("SmartCard");
+
   ((SmartCardMonitoringThread*)arg)->Execute();
 }
 

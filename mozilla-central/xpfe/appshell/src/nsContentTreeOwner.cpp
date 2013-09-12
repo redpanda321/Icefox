@@ -1,42 +1,9 @@
 /* -*- Mode: C++; tab-width: 3; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  * vim: set ts=2 sw=2 et tw=79:
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla browser.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications, Inc.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Travis Bogard <travis@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // Local Includes
 #include "nsContentTreeOwner.h"
@@ -50,12 +17,11 @@
 #include "nsIDOMNode.h"
 #include "nsIDOMElement.h"
 #include "nsIDOMNodeList.h"
-#include "nsIDOMWindowInternal.h"
+#include "nsIDOMWindow.h"
 #include "nsIDOMChromeWindow.h"
 #include "nsIBrowserDOMWindow.h"
 #include "nsIDOMXULElement.h"
 #include "nsIEmbeddingSiteWindow.h"
-#include "nsIEmbeddingSiteWindow2.h"
 #include "nsIPrompt.h"
 #include "nsIAuthPrompt.h"
 #include "nsIWindowMediator.h"
@@ -63,14 +29,20 @@
 #include "nsIPrincipal.h"
 #include "nsIURIFixup.h"
 #include "nsCDefaultURIFixup.h"
-#include "nsIPrefService.h"
-#include "nsIPrefBranch.h"
 #include "nsIWebNavigation.h"
 #include "nsIJSContextStack.h"
+#include "mozilla/BrowserElementParent.h"
 
 #include "nsIDOMDocument.h"
 #include "nsIScriptObjectPrincipal.h"
 #include "nsIURI.h"
+#if defined(XP_MACOSX)
+#include "nsThreadUtils.h"
+#endif
+
+#include "mozilla/Preferences.h"
+
+using namespace mozilla;
 
 // CIDs
 static NS_DEFINE_CID(kWindowMediatorCID, NS_WINDOWMEDIATOR_CID);
@@ -78,18 +50,17 @@ static NS_DEFINE_CID(kWindowMediatorCID, NS_WINDOWMEDIATOR_CID);
 static const char *sJSStackContractID="@mozilla.org/js/xpc/ContextStack;1";
 
 //*****************************************************************************
-//*** nsSiteWindow2 declaration
+//*** nsSiteWindow declaration
 //*****************************************************************************
 
-class nsSiteWindow2 : public nsIEmbeddingSiteWindow2
+class nsSiteWindow : public nsIEmbeddingSiteWindow
 {
 public:
-  nsSiteWindow2(nsContentTreeOwner *aAggregator);
-  virtual ~nsSiteWindow2();
+  nsSiteWindow(nsContentTreeOwner *aAggregator);
+  virtual ~nsSiteWindow();
 
   NS_DECL_ISUPPORTS
   NS_DECL_NSIEMBEDDINGSITEWINDOW
-  NS_DECL_NSIEMBEDDINGSITEWINDOW2
 
 private:
   nsContentTreeOwner *mAggregator;
@@ -99,16 +70,16 @@ private:
 //***    nsContentTreeOwner: Object Management
 //*****************************************************************************
 
-nsContentTreeOwner::nsContentTreeOwner(PRBool fPrimary) : mXULWindow(nsnull), 
-   mPrimary(fPrimary), mContentTitleSetting(PR_FALSE)
+nsContentTreeOwner::nsContentTreeOwner(bool fPrimary) : mXULWindow(nullptr), 
+   mPrimary(fPrimary), mContentTitleSetting(false)
 {
   // note if this fails, QI on nsIEmbeddingSiteWindow(2) will simply fail
-  mSiteWindow2 = new nsSiteWindow2(this);
+  mSiteWindow = new nsSiteWindow(this);
 }
 
 nsContentTreeOwner::~nsContentTreeOwner()
 {
-  delete mSiteWindow2;
+  delete mSiteWindow;
 }
 
 //*****************************************************************************
@@ -124,6 +95,7 @@ NS_INTERFACE_MAP_BEGIN(nsContentTreeOwner)
    NS_INTERFACE_MAP_ENTRY(nsIBaseWindow)
    NS_INTERFACE_MAP_ENTRY(nsIWebBrowserChrome)
    NS_INTERFACE_MAP_ENTRY(nsIWebBrowserChrome2)
+   NS_INTERFACE_MAP_ENTRY(nsIWebBrowserChrome3)
    NS_INTERFACE_MAP_ENTRY(nsIInterfaceRequestor)
    NS_INTERFACE_MAP_ENTRY(nsIWindowProvider)
    // NOTE: This is using aggregation because there are some properties and
@@ -134,8 +106,7 @@ NS_INTERFACE_MAP_BEGIN(nsContentTreeOwner)
    // (SetFocus() is a good example here).  If it were not for that, we could
    // ditch the aggregation and just deal with not being able to use NS_DECL_*
    // macros for this stuff....
-   NS_INTERFACE_MAP_ENTRY_AGGREGATED(nsIEmbeddingSiteWindow, mSiteWindow2)
-   NS_INTERFACE_MAP_ENTRY_AGGREGATED(nsIEmbeddingSiteWindow2, mSiteWindow2)
+   NS_INTERFACE_MAP_ENTRY_AGGREGATED(nsIEmbeddingSiteWindow, mSiteWindow)
 NS_INTERFACE_MAP_END
 
 //*****************************************************************************
@@ -194,9 +165,9 @@ NS_IMETHODIMP nsContentTreeOwner::FindItemWithName(const PRUnichar* aName,
 {
    NS_ENSURE_ARG_POINTER(aFoundItem);
 
-   *aFoundItem = nsnull;
+   *aFoundItem = nullptr;
 
-   PRBool fIs_Content = PR_FALSE;
+   bool fIs_Content = false;
 
    /* Special Cases */
    if (!aName || !*aName)
@@ -225,8 +196,8 @@ NS_IMETHODIMP nsContentTreeOwner::FindItemWithName(const PRUnichar* aName,
                     "Bogus aRequestor");
 #endif
 
-       PRInt32 count = mXULWindow->mTargetableShells.Count();
-       for (PRInt32 i = 0; i < count; ++i) {
+       int32_t count = mXULWindow->mTargetableShells.Count();
+       for (int32_t i = 0; i < count; ++i) {
          nsCOMPtr<nsIDocShellTreeItem> item =
            do_QueryReferent(mXULWindow->mTargetableShells[i]);
          if (SameCOMIdentity(item, aRequestor)) {
@@ -239,21 +210,21 @@ NS_IMETHODIMP nsContentTreeOwner::FindItemWithName(const PRUnichar* aName,
      if(*aFoundItem)
        return NS_OK;
      // Fall through and keep looking...
-     fIs_Content = PR_TRUE;
+     fIs_Content = true;
    }
 
    nsCOMPtr<nsIWindowMediator> windowMediator(do_GetService(kWindowMediatorCID));
    NS_ENSURE_TRUE(windowMediator, NS_ERROR_FAILURE);
 
    nsCOMPtr<nsISimpleEnumerator> windowEnumerator;
-   NS_ENSURE_SUCCESS(windowMediator->GetXULWindowEnumerator(nsnull, 
+   NS_ENSURE_SUCCESS(windowMediator->GetXULWindowEnumerator(nullptr, 
       getter_AddRefs(windowEnumerator)), NS_ERROR_FAILURE);
    
-   PRBool more;
+   bool more;
    
    windowEnumerator->HasMoreElements(&more);
    while(more) {
-     nsCOMPtr<nsISupports> nextWindow = nsnull;
+     nsCOMPtr<nsISupports> nextWindow = nullptr;
      windowEnumerator->GetNext(getter_AddRefs(nextWindow));
      nsCOMPtr<nsIXULWindow> xulWindow(do_QueryInterface(nextWindow));
      NS_ENSURE_TRUE(xulWindow, NS_ERROR_FAILURE);
@@ -265,8 +236,8 @@ NS_IMETHODIMP nsContentTreeOwner::FindItemWithName(const PRUnichar* aName,
        nsRefPtr<nsXULWindow> win;
        xulWindow->QueryInterface(NS_GET_IID(nsXULWindow), getter_AddRefs(win));
        if (win) {
-         PRInt32 count = win->mTargetableShells.Count();
-         PRInt32 i;
+         int32_t count = win->mTargetableShells.Count();
+         int32_t i;
          for (i = 0; i < count && !*aFoundItem; ++i) {
            nsCOMPtr<nsIDocShellTreeItem> shellAsTreeItem =
              do_QueryReferent(win->mTargetableShells[i]);
@@ -307,7 +278,7 @@ NS_IMETHODIMP nsContentTreeOwner::FindItemWithName(const PRUnichar* aName,
 
 NS_IMETHODIMP
 nsContentTreeOwner::ContentShellAdded(nsIDocShellTreeItem* aContentShell,
-                                      PRBool aPrimary, PRBool aTargetable,
+                                      bool aPrimary, bool aTargetable,
                                       const nsAString& aID)
 {
   NS_ENSURE_STATE(mXULWindow);
@@ -329,73 +300,72 @@ NS_IMETHODIMP nsContentTreeOwner::GetPrimaryContentShell(nsIDocShellTreeItem** a
 }
 
 NS_IMETHODIMP nsContentTreeOwner::SizeShellTo(nsIDocShellTreeItem* aShellItem,
-   PRInt32 aCX, PRInt32 aCY)
+   int32_t aCX, int32_t aCY)
 {
    NS_ENSURE_STATE(mXULWindow);
    return mXULWindow->SizeShellTo(aShellItem, aCX, aCY);
 }
 
 NS_IMETHODIMP
-nsContentTreeOwner::SetPersistence(PRBool aPersistPosition,
-                                   PRBool aPersistSize,
-                                   PRBool aPersistSizeMode)
+nsContentTreeOwner::SetPersistence(bool aPersistPosition,
+                                   bool aPersistSize,
+                                   bool aPersistSizeMode)
 {
   NS_ENSURE_STATE(mXULWindow);
-  nsCOMPtr<nsIDOMElement> docShellElement;
-  mXULWindow->GetWindowDOMElement(getter_AddRefs(docShellElement));
-  if(!docShellElement)
+  nsCOMPtr<nsIDOMElement> docShellElement = mXULWindow->GetWindowDOMElement();
+  if (!docShellElement)
     return NS_ERROR_FAILURE;
 
   nsAutoString persistString;
   docShellElement->GetAttribute(NS_LITERAL_STRING("persist"), persistString);
 
-  PRBool saveString = PR_FALSE;
-  PRInt32 index;
+  bool saveString = false;
+  int32_t index;
 
   // Set X
   index = persistString.Find("screenX");
   if (!aPersistPosition && index >= 0) {
     persistString.Cut(index, 7);
-    saveString = PR_TRUE;
+    saveString = true;
   } else if (aPersistPosition && index < 0) {
     persistString.AppendLiteral(" screenX");
-    saveString = PR_TRUE;
+    saveString = true;
   }
   // Set Y
   index = persistString.Find("screenY");
   if (!aPersistPosition && index >= 0) {
     persistString.Cut(index, 7);
-    saveString = PR_TRUE;
+    saveString = true;
   } else if (aPersistPosition && index < 0) {
     persistString.AppendLiteral(" screenY");
-    saveString = PR_TRUE;
+    saveString = true;
   }
   // Set CX
   index = persistString.Find("width");
   if (!aPersistSize && index >= 0) {
     persistString.Cut(index, 5);
-    saveString = PR_TRUE;
+    saveString = true;
   } else if (aPersistSize && index < 0) {
     persistString.AppendLiteral(" width");
-    saveString = PR_TRUE;
+    saveString = true;
   }
   // Set CY
   index = persistString.Find("height");
   if (!aPersistSize && index >= 0) {
     persistString.Cut(index, 6);
-    saveString = PR_TRUE;
+    saveString = true;
   } else if (aPersistSize && index < 0) {
     persistString.AppendLiteral(" height");
-    saveString = PR_TRUE;
+    saveString = true;
   }
   // Set SizeMode
   index = persistString.Find("sizemode");
   if (!aPersistSizeMode && (index >= 0)) {
     persistString.Cut(index, 8);
-    saveString = PR_TRUE;
+    saveString = true;
   } else if (aPersistSizeMode && (index < 0)) {
     persistString.AppendLiteral(" sizemode");
-    saveString = PR_TRUE;
+    saveString = true;
   }
 
   if(saveString) 
@@ -405,14 +375,13 @@ nsContentTreeOwner::SetPersistence(PRBool aPersistPosition,
 }
 
 NS_IMETHODIMP
-nsContentTreeOwner::GetPersistence(PRBool* aPersistPosition,
-                                   PRBool* aPersistSize,
-                                   PRBool* aPersistSizeMode)
+nsContentTreeOwner::GetPersistence(bool* aPersistPosition,
+                                   bool* aPersistSize,
+                                   bool* aPersistSizeMode)
 {
   NS_ENSURE_STATE(mXULWindow);
-  nsCOMPtr<nsIDOMElement> docShellElement;
-  mXULWindow->GetWindowDOMElement(getter_AddRefs(docShellElement));
-  if(!docShellElement) 
+  nsCOMPtr<nsIDOMElement> docShellElement = mXULWindow->GetWindowDOMElement();
+  if (!docShellElement)
     return NS_ERROR_FAILURE;
 
   nsAutoString persistString;
@@ -421,12 +390,43 @@ nsContentTreeOwner::GetPersistence(PRBool* aPersistPosition,
   // data structure doesn't quite match the question, but it's close enough
   // for what we want (since this method is never actually called...)
   if (aPersistPosition)
-    *aPersistPosition = persistString.Find("screenX") >= 0 || persistString.Find("screenY") >= 0 ? PR_TRUE : PR_FALSE;
+    *aPersistPosition = persistString.Find("screenX") >= 0 || persistString.Find("screenY") >= 0 ? true : false;
   if (aPersistSize)
-    *aPersistSize = persistString.Find("width") >= 0 || persistString.Find("height") >= 0 ? PR_TRUE : PR_FALSE;
+    *aPersistSize = persistString.Find("width") >= 0 || persistString.Find("height") >= 0 ? true : false;
   if (aPersistSizeMode)
-    *aPersistSizeMode = persistString.Find("sizemode") >= 0 ? PR_TRUE : PR_FALSE;
+    *aPersistSizeMode = persistString.Find("sizemode") >= 0 ? true : false;
 
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsContentTreeOwner::GetTargetableShellCount(uint32_t* aResult)
+{
+  NS_ENSURE_STATE(mXULWindow);
+  *aResult = mXULWindow->mTargetableShells.Count();
+  return NS_OK;
+}
+
+//*****************************************************************************
+// nsContentTreeOwner::nsIWebBrowserChrome3
+//*****************************************************************************   
+
+NS_IMETHODIMP nsContentTreeOwner::OnBeforeLinkTraversal(const nsAString &originalTarget,
+                                                        nsIURI *linkURI,
+                                                        nsIDOMNode *linkNode,
+                                                        bool isAppTab,
+                                                        nsAString &_retval)
+{
+  NS_ENSURE_STATE(mXULWindow);
+
+  nsCOMPtr<nsIXULBrowserWindow> xulBrowserWindow;
+  mXULWindow->GetXULBrowserWindow(getter_AddRefs(xulBrowserWindow));
+
+  if (xulBrowserWindow)
+    return xulBrowserWindow->OnBeforeLinkTraversal(originalTarget, linkURI,
+                                                   linkNode, isAppTab, _retval);
+  
+  _retval = originalTarget;
   return NS_OK;
 }
 
@@ -434,7 +434,7 @@ nsContentTreeOwner::GetPersistence(PRBool* aPersistPosition,
 // nsContentTreeOwner::nsIWebBrowserChrome2
 //*****************************************************************************   
 
-NS_IMETHODIMP nsContentTreeOwner::SetStatusWithContext(PRUint32 aStatusType,
+NS_IMETHODIMP nsContentTreeOwner::SetStatusWithContext(uint32_t aStatusType,
                                                        const nsAString &aStatusText,
                                                        nsISupports *aStatusContext)
 {
@@ -473,13 +473,13 @@ NS_IMETHODIMP nsContentTreeOwner::SetStatusWithContext(PRUint32 aStatusType,
 // nsContentTreeOwner::nsIWebBrowserChrome
 //*****************************************************************************   
 
-NS_IMETHODIMP nsContentTreeOwner::SetStatus(PRUint32 aStatusType,
+NS_IMETHODIMP nsContentTreeOwner::SetStatus(uint32_t aStatusType,
                                             const PRUnichar* aStatus)
 {
   return SetStatusWithContext(aStatusType,
       aStatus ? static_cast<const nsString &>(nsDependentString(aStatus))
               : EmptyString(),
-      nsnull);
+      nullptr);
 }
 
 NS_IMETHODIMP nsContentTreeOwner::SetWebBrowser(nsIWebBrowser* aWebBrowser)
@@ -497,13 +497,13 @@ NS_IMETHODIMP nsContentTreeOwner::GetWebBrowser(nsIWebBrowser** aWebBrowser)
   return NS_ERROR_FAILURE;
 }
 
-NS_IMETHODIMP nsContentTreeOwner::SetChromeFlags(PRUint32 aChromeFlags)
+NS_IMETHODIMP nsContentTreeOwner::SetChromeFlags(uint32_t aChromeFlags)
 {
    NS_ENSURE_STATE(mXULWindow);
    return mXULWindow->SetChromeFlags(aChromeFlags);
 }
 
-NS_IMETHODIMP nsContentTreeOwner::GetChromeFlags(PRUint32* aChromeFlags)
+NS_IMETHODIMP nsContentTreeOwner::GetChromeFlags(uint32_t* aChromeFlags)
 {
   NS_ENSURE_STATE(mXULWindow);
   return mXULWindow->GetChromeFlags(aChromeFlags);
@@ -515,7 +515,7 @@ NS_IMETHODIMP nsContentTreeOwner::DestroyBrowserWindow()
    return NS_ERROR_FAILURE;
 }
 
-NS_IMETHODIMP nsContentTreeOwner::SizeBrowserTo(PRInt32 aCX, PRInt32 aCY)
+NS_IMETHODIMP nsContentTreeOwner::SizeBrowserTo(int32_t aCX, int32_t aCY)
 {
    NS_ERROR("Haven't Implemented this yet");
    return NS_ERROR_FAILURE;
@@ -527,7 +527,7 @@ NS_IMETHODIMP nsContentTreeOwner::ShowAsModal()
    return mXULWindow->ShowModal();
 }
 
-NS_IMETHODIMP nsContentTreeOwner::IsWindowModal(PRBool *_retval)
+NS_IMETHODIMP nsContentTreeOwner::IsWindowModal(bool *_retval)
 {
   NS_ENSURE_STATE(mXULWindow);
   *_retval = mXULWindow->mContinueModalLoop;
@@ -545,17 +545,17 @@ NS_IMETHODIMP nsContentTreeOwner::ExitModalEventLoop(nsresult aStatus)
 //*****************************************************************************   
 
 NS_IMETHODIMP nsContentTreeOwner::InitWindow(nativeWindow aParentNativeWindow,
-   nsIWidget* parentWidget, PRInt32 x, PRInt32 y, PRInt32 cx, PRInt32 cy)   
+   nsIWidget* parentWidget, int32_t x, int32_t y, int32_t cx, int32_t cy)   
 {
    // Ignore wigdet parents for now.  Don't think those are a vaild thing to call.
-   NS_ENSURE_SUCCESS(SetPositionAndSize(x, y, cx, cy, PR_FALSE), NS_ERROR_FAILURE);
+   NS_ENSURE_SUCCESS(SetPositionAndSize(x, y, cx, cy, false), NS_ERROR_FAILURE);
 
    return NS_OK;
 }
 
 NS_IMETHODIMP nsContentTreeOwner::Create()
 {
-   NS_ASSERTION(PR_FALSE, "You can't call this");
+   NS_ASSERTION(false, "You can't call this");
    return NS_ERROR_UNEXPECTED;
 }
 
@@ -565,45 +565,51 @@ NS_IMETHODIMP nsContentTreeOwner::Destroy()
    return mXULWindow->Destroy();
 }
 
-NS_IMETHODIMP nsContentTreeOwner::SetPosition(PRInt32 aX, PRInt32 aY)
+NS_IMETHODIMP nsContentTreeOwner::GetUnscaledDevicePixelsPerCSSPixel(double* aScale)
+{
+   NS_ENSURE_STATE(mXULWindow);
+   return mXULWindow->GetUnscaledDevicePixelsPerCSSPixel(aScale);
+}
+
+NS_IMETHODIMP nsContentTreeOwner::SetPosition(int32_t aX, int32_t aY)
 {
    NS_ENSURE_STATE(mXULWindow);
    return mXULWindow->SetPosition(aX, aY);
 }
 
-NS_IMETHODIMP nsContentTreeOwner::GetPosition(PRInt32* aX, PRInt32* aY)
+NS_IMETHODIMP nsContentTreeOwner::GetPosition(int32_t* aX, int32_t* aY)
 {
    NS_ENSURE_STATE(mXULWindow);
    return mXULWindow->GetPosition(aX, aY);
 }
 
-NS_IMETHODIMP nsContentTreeOwner::SetSize(PRInt32 aCX, PRInt32 aCY, PRBool aRepaint)
+NS_IMETHODIMP nsContentTreeOwner::SetSize(int32_t aCX, int32_t aCY, bool aRepaint)
 {
    NS_ENSURE_STATE(mXULWindow);
    return mXULWindow->SetSize(aCX, aCY, aRepaint);
 }
 
-NS_IMETHODIMP nsContentTreeOwner::GetSize(PRInt32* aCX, PRInt32* aCY)
+NS_IMETHODIMP nsContentTreeOwner::GetSize(int32_t* aCX, int32_t* aCY)
 {
    NS_ENSURE_STATE(mXULWindow);
    return mXULWindow->GetSize(aCX, aCY);
 }
 
-NS_IMETHODIMP nsContentTreeOwner::SetPositionAndSize(PRInt32 aX, PRInt32 aY,
-   PRInt32 aCX, PRInt32 aCY, PRBool aRepaint)
+NS_IMETHODIMP nsContentTreeOwner::SetPositionAndSize(int32_t aX, int32_t aY,
+   int32_t aCX, int32_t aCY, bool aRepaint)
 {
    NS_ENSURE_STATE(mXULWindow);
    return mXULWindow->SetPositionAndSize(aX, aY, aCX, aCY, aRepaint);
 }
 
-NS_IMETHODIMP nsContentTreeOwner::GetPositionAndSize(PRInt32* aX, PRInt32* aY,
-   PRInt32* aCX, PRInt32* aCY)
+NS_IMETHODIMP nsContentTreeOwner::GetPositionAndSize(int32_t* aX, int32_t* aY,
+   int32_t* aCX, int32_t* aCY)
 {
    NS_ENSURE_STATE(mXULWindow);
    return mXULWindow->GetPositionAndSize(aX, aY, aCX, aCY); 
 }
 
-NS_IMETHODIMP nsContentTreeOwner::Repaint(PRBool aForce)
+NS_IMETHODIMP nsContentTreeOwner::Repaint(bool aForce)
 {
    NS_ENSURE_STATE(mXULWindow);
    return mXULWindow->Repaint(aForce);
@@ -617,7 +623,7 @@ NS_IMETHODIMP nsContentTreeOwner::GetParentWidget(nsIWidget** aParentWidget)
 
 NS_IMETHODIMP nsContentTreeOwner::SetParentWidget(nsIWidget* aParentWidget)
 {
-   NS_ASSERTION(PR_FALSE, "You can't call this");
+   NS_ASSERTION(false, "You can't call this");
    return NS_ERROR_NOT_IMPLEMENTED;
 }
 
@@ -629,44 +635,38 @@ NS_IMETHODIMP nsContentTreeOwner::GetParentNativeWindow(nativeWindow* aParentNat
 
 NS_IMETHODIMP nsContentTreeOwner::SetParentNativeWindow(nativeWindow aParentNativeWindow)
 {
-   NS_ASSERTION(PR_FALSE, "You can't call this");
+   NS_ASSERTION(false, "You can't call this");
    return NS_ERROR_NOT_IMPLEMENTED;
 }
 
-NS_IMETHODIMP nsContentTreeOwner::GetVisibility(PRBool* aVisibility)
+NS_IMETHODIMP nsContentTreeOwner::GetNativeHandle(nsAString& aNativeHandle)
+{
+   NS_ENSURE_STATE(mXULWindow);
+   return mXULWindow->GetNativeHandle(aNativeHandle);
+}
+
+NS_IMETHODIMP nsContentTreeOwner::GetVisibility(bool* aVisibility)
 {
    NS_ENSURE_STATE(mXULWindow);
    return mXULWindow->GetVisibility(aVisibility);
 }
 
-NS_IMETHODIMP nsContentTreeOwner::SetVisibility(PRBool aVisibility)
+NS_IMETHODIMP nsContentTreeOwner::SetVisibility(bool aVisibility)
 {
    NS_ENSURE_STATE(mXULWindow);
    return mXULWindow->SetVisibility(aVisibility);
 }
 
-NS_IMETHODIMP nsContentTreeOwner::GetEnabled(PRBool *aEnabled)
+NS_IMETHODIMP nsContentTreeOwner::GetEnabled(bool *aEnabled)
 {
    NS_ENSURE_STATE(mXULWindow);
    return mXULWindow->GetEnabled(aEnabled);
 }
 
-NS_IMETHODIMP nsContentTreeOwner::SetEnabled(PRBool aEnable)
+NS_IMETHODIMP nsContentTreeOwner::SetEnabled(bool aEnable)
 {
    NS_ENSURE_STATE(mXULWindow);
    return mXULWindow->SetEnabled(aEnable);
-}
-
-NS_IMETHODIMP nsContentTreeOwner::GetBlurSuppression(PRBool *aBlurSuppression)
-{
-  NS_ENSURE_STATE(mXULWindow);
-  return mXULWindow->GetBlurSuppression(aBlurSuppression);
-}
-
-NS_IMETHODIMP nsContentTreeOwner::SetBlurSuppression(PRBool aBlurSuppression)
-{
-  NS_ENSURE_STATE(mXULWindow);
-  return mXULWindow->SetBlurSuppression(aBlurSuppression);
 }
 
 NS_IMETHODIMP nsContentTreeOwner::GetMainWidget(nsIWidget** aMainWidget)
@@ -729,8 +729,7 @@ NS_IMETHODIMP nsContentTreeOwner::SetTitle(const PRUnichar* aTitle)
   // if there is no location bar we modify the title to display at least
   // the scheme and host (if any) as an anti-spoofing measure.
   //
-  nsCOMPtr<nsIDOMElement> docShellElement;
-  mXULWindow->GetWindowDOMElement(getter_AddRefs(docShellElement));
+  nsCOMPtr<nsIDOMElement> docShellElement = mXULWindow->GetWindowDOMElement();
 
   if (docShellElement) {
     nsAutoString chromeString;
@@ -761,8 +760,8 @@ NS_IMETHODIMP nsContentTreeOwner::SetTitle(const PRUnichar* aTitle)
               nsresult rv = fixup->CreateExposableURI(uri,getter_AddRefs(tmpuri));
               if (NS_SUCCEEDED(rv) && tmpuri) {
                 // (don't bother if there's no host)
-                nsCAutoString host;
-                nsCAutoString prepath;
+                nsAutoCString host;
+                nsAutoCString prepath;
                 tmpuri->GetHost(host);
                 tmpuri->GetPrePath(prepath);
                 if (!host.IsEmpty()) {
@@ -778,6 +777,11 @@ NS_IMETHODIMP nsContentTreeOwner::SetTitle(const PRUnichar* aTitle)
         }
       }
     }
+    nsCOMPtr<nsIDOMDocument> document;
+    docShellElement->GetOwnerDocument(getter_AddRefs(document));
+    if (document) {
+      return document->SetTitle(title);
+    }
   }
 
   return mXULWindow->SetTitle(title.get());
@@ -791,7 +795,7 @@ public:
 #ifdef DEBUG
       nsresult rv =
 #endif
-        mService->Push(nsnull);
+        mService->Push(nullptr);
       NS_ASSERTION(NS_SUCCEEDED(rv), "Mismatched push/pop");
     }
   }
@@ -816,19 +820,19 @@ private:
 //*****************************************************************************   
 NS_IMETHODIMP
 nsContentTreeOwner::ProvideWindow(nsIDOMWindow* aParent,
-                                  PRUint32 aChromeFlags,
-                                  PRBool aCalledFromJS,
-                                  PRBool aPositionSpecified,
-                                  PRBool aSizeSpecified,
+                                  uint32_t aChromeFlags,
+                                  bool aCalledFromJS,
+                                  bool aPositionSpecified,
+                                  bool aSizeSpecified,
                                   nsIURI* aURI,
                                   const nsAString& aName,
                                   const nsACString& aFeatures,
-                                  PRBool* aWindowIsNew,
+                                  bool* aWindowIsNew,
                                   nsIDOMWindow** aReturn)
 {
   NS_ENSURE_ARG_POINTER(aParent);
   
-  *aReturn = nsnull;
+  *aReturn = nullptr;
 
   if (!mXULWindow) {
     // Nothing to do here
@@ -843,21 +847,28 @@ nsContentTreeOwner::ProvideWindow(nsIDOMWindow* aParent,
                "Parent from wrong docshell tree?");
 #endif
 
-  // First check what our prefs say
-  nsCOMPtr<nsIPrefService> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
-  if (!prefs) {
-    return NS_OK;
-  }
+  // If aParent is inside an <iframe mozbrowser> and this isn't a request to
+  // open a modal-type window, we're going to create a new <iframe mozbrowser>
+  // and return its window here.
+  nsCOMPtr<nsIDocShell> docshell = do_GetInterface(aParent);
+  if (docshell && docshell->GetIsInBrowserOrApp() &&
+      !(aChromeFlags & (nsIWebBrowserChrome::CHROME_MODAL |
+                        nsIWebBrowserChrome::CHROME_OPENAS_DIALOG |
+                        nsIWebBrowserChrome::CHROME_OPENAS_CHROME))) {
+    *aWindowIsNew =
+      BrowserElementParent::OpenWindowInProcess(aParent, aURI, aName,
+                                                aFeatures, aReturn);
 
-  nsCOMPtr<nsIPrefBranch> branch;
-  prefs->GetBranch("browser.link.", getter_AddRefs(branch));
-  if (!branch) {
-    return NS_OK;
+    // If OpenWindowInProcess failed (perhaps because the embedder blocked the
+    // popup), tell our caller not to proceed trying to create a new window
+    // through other means.
+    return *aWindowIsNew ? NS_OK : NS_ERROR_ABORT;
   }
 
   // Where should we open this?
-  PRInt32 containerPref;
-  if (NS_FAILED(branch->GetIntPref("open_newwindow", &containerPref))) {
+  int32_t containerPref;
+  if (NS_FAILED(Preferences::GetInt("browser.link.open_newwindow",
+                                    &containerPref))) {
     return NS_OK;
   }
 
@@ -874,11 +885,9 @@ nsContentTreeOwner::ProvideWindow(nsIDOMWindow* aParent,
        1: don't divert window.open at all
        2: don't divert window.open with features
     */
-    PRInt32 restrictionPref;
-    if (NS_FAILED(branch->GetIntPref("open_newwindow.restriction",
-                                     &restrictionPref)) ||
-        restrictionPref < 0 ||
-        restrictionPref > 2) {
+    int32_t restrictionPref =
+      Preferences::GetInt("browser.link.open_newwindow.restriction", 2);
+    if (restrictionPref < 0 || restrictionPref > 2) {
       restrictionPref = 2; // Sane default behavior
     }
 
@@ -895,7 +904,7 @@ nsContentTreeOwner::ProvideWindow(nsIDOMWindow* aParent,
     }
   }
 
-  nsCOMPtr<nsIDOMWindowInternal> domWin;
+  nsCOMPtr<nsIDOMWindow> domWin;
   mXULWindow->GetWindowDOMWindow(getter_AddRefs(domWin));
   nsCOMPtr<nsIDOMChromeWindow> chromeWin = do_QueryInterface(domWin);
   if (!chromeWin) {
@@ -917,23 +926,42 @@ nsContentTreeOwner::ProvideWindow(nsIDOMWindow* aParent,
 
     // Get a new rendering area from the browserDOMWin.  We don't want
     // to be starting any loads here, so get it with a null URI.
-    return browserDOMWin->OpenURI(nsnull, aParent, containerPref,
+    return browserDOMWin->OpenURI(nullptr, aParent, containerPref,
                                   nsIBrowserDOMWindow::OPEN_NEW, aReturn);
   }
 }
 
 //*****************************************************************************
 // nsContentTreeOwner: Accessors
-//*****************************************************************************   
+//*****************************************************************************
+
+#if defined(XP_MACOSX)
+class nsContentTitleSettingEvent : public nsRunnable
+{
+public:
+  nsContentTitleSettingEvent(nsIDOMElement *dse, const nsAString& wtm)
+    : mElement(dse),
+      mTitleDefault(wtm) {}
+
+  NS_IMETHOD Run()
+  {
+    mElement->SetAttribute(NS_LITERAL_STRING("titledefault"), mTitleDefault);
+    mElement->RemoveAttribute(NS_LITERAL_STRING("titlemodifier"));
+    return NS_OK;
+  }
+
+private:
+  nsCOMPtr<nsIDOMElement> mElement;
+  nsString mTitleDefault;
+};
+#endif
 
 void nsContentTreeOwner::XULWindow(nsXULWindow* aXULWindow)
 {
    mXULWindow = aXULWindow;
-   if(mXULWindow && mPrimary)
-      {
+   if (mXULWindow && mPrimary) {
       // Get the window title modifiers
-      nsCOMPtr<nsIDOMElement> docShellElement;
-      mXULWindow->GetWindowDOMElement(getter_AddRefs(docShellElement));
+      nsCOMPtr<nsIDOMElement> docShellElement = mXULWindow->GetWindowDOMElement();
 
       nsAutoString   contentTitleSetting;
 
@@ -942,7 +970,7 @@ void nsContentTreeOwner::XULWindow(nsXULWindow* aXULWindow)
          docShellElement->GetAttribute(NS_LITERAL_STRING("contenttitlesetting"), contentTitleSetting);
          if(contentTitleSetting.EqualsLiteral("true"))
             {
-            mContentTitleSetting = PR_TRUE;
+            mContentTitleSetting = true;
             docShellElement->GetAttribute(NS_LITERAL_STRING("titledefault"), mTitleDefault);
             docShellElement->GetAttribute(NS_LITERAL_STRING("titlemodifier"), mWindowTitleModifier);
             docShellElement->GetAttribute(NS_LITERAL_STRING("titlepreface"), mTitlePreface);
@@ -951,9 +979,9 @@ void nsContentTreeOwner::XULWindow(nsXULWindow* aXULWindow)
             // On OS X, treat the titlemodifier like it's the titledefault, and don't ever append
             // the separator + appname.
             if (mTitleDefault.IsEmpty()) {
-                docShellElement->SetAttribute(NS_LITERAL_STRING("titledefault"),
-                                              mWindowTitleModifier);
-                docShellElement->RemoveAttribute(NS_LITERAL_STRING("titlemodifier"));
+                NS_DispatchToCurrentThread(
+                    new nsContentTitleSettingEvent(docShellElement,
+                                                   mWindowTitleModifier));
                 mTitleDefault = mWindowTitleModifier;
                 mWindowTitleModifier.Truncate();
             }
@@ -975,45 +1003,44 @@ nsXULWindow* nsContentTreeOwner::XULWindow()
 }
 
 //*****************************************************************************
-//*** nsSiteWindow2 implementation
+//*** nsSiteWindow implementation
 //*****************************************************************************
 
-nsSiteWindow2::nsSiteWindow2(nsContentTreeOwner *aAggregator)
+nsSiteWindow::nsSiteWindow(nsContentTreeOwner *aAggregator)
 {
   mAggregator = aAggregator;
 }
 
-nsSiteWindow2::~nsSiteWindow2()
+nsSiteWindow::~nsSiteWindow()
 {
 }
 
-NS_IMPL_ADDREF_USING_AGGREGATOR(nsSiteWindow2, mAggregator)
-NS_IMPL_RELEASE_USING_AGGREGATOR(nsSiteWindow2, mAggregator)
+NS_IMPL_ADDREF_USING_AGGREGATOR(nsSiteWindow, mAggregator)
+NS_IMPL_RELEASE_USING_AGGREGATOR(nsSiteWindow, mAggregator)
 
-NS_INTERFACE_MAP_BEGIN(nsSiteWindow2)
+NS_INTERFACE_MAP_BEGIN(nsSiteWindow)
   NS_INTERFACE_MAP_ENTRY(nsISupports)
   NS_INTERFACE_MAP_ENTRY(nsIEmbeddingSiteWindow)
-  NS_INTERFACE_MAP_ENTRY(nsIEmbeddingSiteWindow2)
 NS_INTERFACE_MAP_END_AGGREGATED(mAggregator)
 
 NS_IMETHODIMP
-nsSiteWindow2::SetDimensions(PRUint32 aFlags,
-                    PRInt32 aX, PRInt32 aY, PRInt32 aCX, PRInt32 aCY)
+nsSiteWindow::SetDimensions(uint32_t aFlags,
+                    int32_t aX, int32_t aY, int32_t aCX, int32_t aCY)
 {
   // XXX we're ignoring aFlags
-  return mAggregator->SetPositionAndSize(aX, aY, aCX, aCY, PR_TRUE);
+  return mAggregator->SetPositionAndSize(aX, aY, aCX, aCY, true);
 }
 
 NS_IMETHODIMP
-nsSiteWindow2::GetDimensions(PRUint32 aFlags,
-                    PRInt32 *aX, PRInt32 *aY, PRInt32 *aCX, PRInt32 *aCY)
+nsSiteWindow::GetDimensions(uint32_t aFlags,
+                    int32_t *aX, int32_t *aY, int32_t *aCX, int32_t *aCY)
 {
   // XXX we're ignoring aFlags
   return mAggregator->GetPositionAndSize(aX, aY, aCX, aCY);
 }
 
 NS_IMETHODIMP
-nsSiteWindow2::SetFocus(void)
+nsSiteWindow::SetFocus(void)
 {
 #if 0
   /* This implementation focuses the main document and could make sense.
@@ -1026,7 +1053,7 @@ nsSiteWindow2::SetFocus(void)
   if (window) {
     nsCOMPtr<nsIDocShell> docshell;
     window->GetDocShell(getter_AddRefs(docshell));
-    nsCOMPtr<nsIDOMWindowInternal> domWindow(do_GetInterface(docshell));
+    nsCOMPtr<nsIDOMWindow> domWindow(do_GetInterface(docshell));
     if (domWindow)
       domWindow->Focus();
   }
@@ -1037,17 +1064,17 @@ nsSiteWindow2::SetFocus(void)
 /* this implementation focuses another window. if there isn't another
    window to focus, we do nothing. */
 NS_IMETHODIMP
-nsSiteWindow2::Blur(void)
+nsSiteWindow::Blur(void)
 {
   nsCOMPtr<nsISimpleEnumerator> windowEnumerator;
   nsCOMPtr<nsIXULWindow>        xulWindow;
-  PRBool                        more, foundUs;
+  bool                          more, foundUs;
   nsXULWindow                  *ourWindow = mAggregator->XULWindow();
 
   {
     nsCOMPtr<nsIWindowMediator> windowMediator(do_GetService(kWindowMediatorCID));
     if (windowMediator)
-      windowMediator->GetZOrderXULWindowEnumerator(0, PR_TRUE,
+      windowMediator->GetZOrderXULWindowEnumerator(0, true,
                         getter_AddRefs(windowEnumerator));
   }
 
@@ -1055,7 +1082,7 @@ nsSiteWindow2::Blur(void)
     return NS_ERROR_FAILURE;
 
   // step through the top-level windows
-  foundUs = PR_FALSE;
+  foundUs = false;
   windowEnumerator->HasMoreElements(&more);
   while (more) {
 
@@ -1077,7 +1104,7 @@ nsSiteWindow2::Blur(void)
 
     // look for us
     if (nextXULWindow == ourWindow)
-      foundUs = PR_TRUE;
+      foundUs = true;
 
     windowEnumerator->HasMoreElements(&more);
   }
@@ -1086,7 +1113,7 @@ nsSiteWindow2::Blur(void)
   if (xulWindow) {
     nsCOMPtr<nsIDocShell> docshell;
     xulWindow->GetDocShell(getter_AddRefs(docshell));
-    nsCOMPtr<nsIDOMWindowInternal> domWindow(do_GetInterface(docshell));
+    nsCOMPtr<nsIDOMWindow> domWindow(do_GetInterface(docshell));
     if (domWindow)
       domWindow->Focus();
   }
@@ -1094,31 +1121,31 @@ nsSiteWindow2::Blur(void)
 }
 
 NS_IMETHODIMP
-nsSiteWindow2::GetVisibility(PRBool *aVisibility)
+nsSiteWindow::GetVisibility(bool *aVisibility)
 {
   return mAggregator->GetVisibility(aVisibility);
 }
 
 NS_IMETHODIMP
-nsSiteWindow2::SetVisibility(PRBool aVisibility)
+nsSiteWindow::SetVisibility(bool aVisibility)
 {
   return mAggregator->SetVisibility(aVisibility);
 }
 
 NS_IMETHODIMP
-nsSiteWindow2::GetTitle(PRUnichar * *aTitle)
+nsSiteWindow::GetTitle(PRUnichar * *aTitle)
 {
   return mAggregator->GetTitle(aTitle);
 }
 
 NS_IMETHODIMP
-nsSiteWindow2::SetTitle(const PRUnichar * aTitle)
+nsSiteWindow::SetTitle(const PRUnichar * aTitle)
 {
   return mAggregator->SetTitle(aTitle);
 }
 
 NS_IMETHODIMP
-nsSiteWindow2::GetSiteWindow(void **aSiteWindow)
+nsSiteWindow::GetSiteWindow(void **aSiteWindow)
 {
   return mAggregator->GetParentNativeWindow(aSiteWindow);
 }

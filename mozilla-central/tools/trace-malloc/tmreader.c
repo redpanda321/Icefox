@@ -1,42 +1,8 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is tmreader.h/tmreader.c code, released
- * July 7, 2000.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Brendan Eich, 7-July-2000
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,7 +24,7 @@
 
 #undef  DEBUG_tmreader
 
-static int accum_byte(FILE *fp, uint32 *uip)
+static int accum_byte(FILE *fp, uint32_t *uip)
 {
     int c = getc(fp);
     if (c == EOF)
@@ -67,10 +33,10 @@ static int accum_byte(FILE *fp, uint32 *uip)
     return 1;
 }
 
-static int get_uint32(FILE *fp, uint32 *uip)
+static int get_uint32(FILE *fp, uint32_t *uip)
 {
     int c;
-    uint32 ui;
+    uint32_t ui;
 
     c = getc(fp);
     if (c == EOF)
@@ -86,22 +52,22 @@ static int get_uint32(FILE *fp, uint32 *uip)
                     if (!accum_byte(fp, &ui))
                         return 0;
                 } else {
-                    ui = (uint32) c;
+                    ui = (uint32_t) c;
                 }
                 if (!accum_byte(fp, &ui))
                     return 0;
             } else {
-                ui = (uint32) c;
+                ui = (uint32_t) c;
             }
             if (!accum_byte(fp, &ui))
                 return 0;
         } else {
-            ui = (uint32) c;
+            ui = (uint32_t) c;
         }
         if (!accum_byte(fp, &ui))
             return 0;
     } else {
-        ui = (uint32) c;
+        ui = (uint32_t) c;
     }
     *uip = ui;
     return 1;
@@ -327,7 +293,7 @@ static int get_tmevent(FILE *fp, tmevent *event)
     return 1;
 }
 
-static void *arena_alloc(void* pool, PRSize size)
+static void *arena_alloc(void* pool, size_t size)
 {
     PLArenaPool* arena = (PLArenaPool*)pool;
     void* result;
@@ -336,7 +302,7 @@ static void *arena_alloc(void* pool, PRSize size)
     return result;
 }
 
-static void *generic_alloctable(void *pool, PRSize size)
+static void *generic_alloctable(void *pool, size_t size)
 {
     return arena_alloc(pool, size);
 }
@@ -403,7 +369,7 @@ static PLHashEntry *method_allocentry(void *pool, const void *key)
     return &node->graphnode.entry;
 }
 
-static void graphnode_freeentry(void *pool, PLHashEntry *he, PRUintn flag)
+static void graphnode_freeentry(void *pool, PLHashEntry *he, unsigned flag)
 {
     /* Always free the value, which points to a strdup'd string. */
     free(he->value);
@@ -414,7 +380,7 @@ static void graphnode_freeentry(void *pool, PLHashEntry *he, PRUintn flag)
 #endif
 }
 
-static void component_freeentry(void *pool, PLHashEntry *he, PRUintn flag)
+static void component_freeentry(void *pool, PLHashEntry *he, unsigned flag)
 {
     if (flag == HT_FREE_ENTRY) {
         tmgraphnode *comp = (tmgraphnode*) he;
@@ -734,7 +700,7 @@ int tmreader_eventloop(tmreader *tmr, const char *filename,
           case TM_EVENT_CALLOC:
           case TM_EVENT_REALLOC: {
             tmcallsite *site;
-            uint32 size, oldsize;
+            uint32_t size, oldsize;
             double delta, sqdelta, sqszdelta = 0;
             tmgraphnode *comp, *lib;
             tmmethodnode *meth;
@@ -790,7 +756,7 @@ int tmreader_eventloop(tmreader *tmr, const char *filename,
 
           case TM_EVENT_FREE: {
             tmcallsite *site;
-            uint32 size;
+            uint32_t size;
             tmgraphnode *comp, *lib;
             tmmethodnode *meth;
 
@@ -831,7 +797,7 @@ int tmreader_eventloop(tmreader *tmr, const char *filename,
     return 1;
 }
 
-tmgraphnode *tmreader_library(tmreader *tmr, uint32 serial)
+tmgraphnode *tmreader_library(tmreader *tmr, uint32_t serial)
 {
     const void *key;
     PLHashNumber hash;
@@ -841,7 +807,7 @@ tmgraphnode *tmreader_library(tmreader *tmr, uint32 serial)
     return (tmgraphnode*) *PL_HashTableRawLookup(tmr->libraries, hash, key);
 }
 
-tmgraphnode *tmreader_filename(tmreader *tmr, uint32 serial)
+tmgraphnode *tmreader_filename(tmreader *tmr, uint32_t serial)
 {
     const void *key;
     PLHashNumber hash;
@@ -859,7 +825,7 @@ tmgraphnode *tmreader_component(tmreader *tmr, const char *name)
     return (tmgraphnode*) *PL_HashTableRawLookup(tmr->components, hash, name);
 }
 
-tmmethodnode *tmreader_method(tmreader *tmr, uint32 serial)
+tmmethodnode *tmreader_method(tmreader *tmr, uint32_t serial)
 {
     const void *key;
     PLHashNumber hash;
@@ -869,7 +835,7 @@ tmmethodnode *tmreader_method(tmreader *tmr, uint32 serial)
     return (tmmethodnode*) *PL_HashTableRawLookup(tmr->methods, hash, key);
 }
 
-tmcallsite *tmreader_callsite(tmreader *tmr, uint32 serial)
+tmcallsite *tmreader_callsite(tmreader *tmr, uint32_t serial)
 {
     const void *key;
     PLHashNumber hash;

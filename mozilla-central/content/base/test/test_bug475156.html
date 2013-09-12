@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=475156
 -->
 <head>
   <title>Test for Bug 475156</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -18,8 +17,7 @@ var path = "http://mochi.test:8888/tests/content/base/test/";
 
 function fromCache(xhr)
 {
-  netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-  var ch = xhr.channel.QueryInterface(Components.interfaces.nsICachingChannel);
+  var ch = SpecialPowers.wrap(xhr).channel.QueryInterface(SpecialPowers.Ci.nsICachingChannel);
   return ch.isFromCache();  
 }
 

@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsSupportsArrayEnumerator.h"
 #include "nsISupportsArray.h"
@@ -56,10 +24,10 @@ NS_IMETHODIMP
 nsSupportsArrayEnumerator::First()
 {
   mCursor = 0;
-  PRUint32 cnt;
+  uint32_t cnt;
   nsresult rv = mArray->Count(&cnt);
   if (NS_FAILED(rv)) return rv;
-  PRInt32 end = (PRInt32)cnt;
+  int32_t end = (int32_t)cnt;
   if (mCursor < end)
     return NS_OK;
   else
@@ -69,10 +37,10 @@ nsSupportsArrayEnumerator::First()
 NS_IMETHODIMP
 nsSupportsArrayEnumerator::Next()
 {
-  PRUint32 cnt;
+  uint32_t cnt;
   nsresult rv = mArray->Count(&cnt);
   if (NS_FAILED(rv)) return rv;
-  PRInt32 end = (PRInt32)cnt;
+  int32_t end = (int32_t)cnt;
   if (mCursor < end)   // don't count upward forever
     mCursor++;
   if (mCursor < end)
@@ -85,12 +53,11 @@ NS_IMETHODIMP
 nsSupportsArrayEnumerator::CurrentItem(nsISupports **aItem)
 {
   NS_ASSERTION(aItem, "null out parameter");
-  PRUint32 cnt;
+  uint32_t cnt;
   nsresult rv = mArray->Count(&cnt);
   if (NS_FAILED(rv)) return rv;
-  if (mCursor >= 0 && mCursor < (PRInt32)cnt) {
-    *aItem = mArray->ElementAt(mCursor);
-    return NS_OK;
+  if (mCursor >= 0 && mCursor < (int32_t)cnt) {
+    return mArray->GetElementAt(mCursor, aItem);
   }
   return NS_ERROR_FAILURE;
 }
@@ -98,11 +65,13 @@ nsSupportsArrayEnumerator::CurrentItem(nsISupports **aItem)
 NS_IMETHODIMP
 nsSupportsArrayEnumerator::IsDone()
 {
-  PRUint32 cnt;
+  uint32_t cnt;
   nsresult rv = mArray->Count(&cnt);
   if (NS_FAILED(rv)) return rv;
-  return (mCursor >= 0 && mCursor < (PRInt32)cnt)
-    ? NS_ENUMERATOR_FALSE : NS_OK;
+  // XXX This is completely incompatible with the meaning of nsresult.
+  // NS_ENUMERATOR_FALSE is defined to be 1.  (bug 778111)
+  return (mCursor >= 0 && mCursor < (int32_t)cnt)
+    ? (nsresult)NS_ENUMERATOR_FALSE : NS_OK;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -110,7 +79,7 @@ nsSupportsArrayEnumerator::IsDone()
 NS_IMETHODIMP
 nsSupportsArrayEnumerator::Last()
 {
-  PRUint32 cnt;
+  uint32_t cnt;
   nsresult rv = mArray->Count(&cnt);
   if (NS_FAILED(rv)) return rv;
   mCursor = cnt - 1;
@@ -127,22 +96,4 @@ nsSupportsArrayEnumerator::Prev()
   else
     return NS_ERROR_FAILURE;
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-NS_COM nsresult
-NS_NewISupportsArrayEnumerator(nsISupportsArray* array,
-                               nsIBidirectionalEnumerator* *aInstancePtrResult)
-{
-  if (aInstancePtrResult == 0)
-    return NS_ERROR_NULL_POINTER;
-  nsSupportsArrayEnumerator* e = new nsSupportsArrayEnumerator(array);
-  if (e == 0)
-    return NS_ERROR_OUT_OF_MEMORY;
-  NS_ADDREF(e);
-  *aInstancePtrResult = e;
-  return NS_OK;
-}
-
-////////////////////////////////////////////////////////////////////////////////
 

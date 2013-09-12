@@ -1,40 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Storage Test Code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Shawn Wilsher <me@shawnwilsher.com> (Original Author)
- *   Andrew Sutherland <asutherland@asutherland.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * This file tests the functionality of mozIStorageBaseStatement::executeAsync
@@ -237,11 +203,11 @@ function test_add_data()
     "INSERT INTO test (id, string, number, nuller, blober) " +
     "VALUES (?, ?, ?, ?, ?)"
   );
-  stmt.bindBlobParameter(4, BLOB, BLOB.length);
-  stmt.bindNullParameter(3);
-  stmt.bindDoubleParameter(2, REAL);
-  stmt.bindStringParameter(1, TEXT);
-  stmt.bindInt32Parameter(0, INTEGER);
+  stmt.bindBlobByIndex(4, BLOB, BLOB.length);
+  stmt.bindByIndex(3, null);
+  stmt.bindByIndex(2, REAL);
+  stmt.bindByIndex(1, TEXT);
+  stmt.bindByIndex(0, INTEGER);
 
   execAsync(stmt);
   stmt.finalize();
@@ -258,7 +224,7 @@ function test_get_data()
   var stmt = makeTestStatement(
     "SELECT string, number, nuller, blober, id FROM test WHERE id = ?"
   );
-  stmt.bindInt32Parameter(0, INTEGER);
+  stmt.bindByIndex(0, INTEGER);
   execAsync(stmt, {}, [
     function(tuple)
     {
@@ -360,7 +326,7 @@ function test_no_listener_works_on_success()
   var stmt = makeTestStatement(
     "DELETE FROM test WHERE id = ?"
   );
-  stmt.bindInt32Parameter(0, 0);
+  stmt.bindByIndex(0, 0);
   stmt.executeAsync();
   stmt.finalize();
 
@@ -373,7 +339,7 @@ function test_no_listener_works_on_results()
   var stmt = makeTestStatement(
     "SELECT ?"
   );
-  stmt.bindInt32Parameter(0, 1);
+  stmt.bindByIndex(0, 1);
   stmt.executeAsync();
   stmt.finalize();
 
@@ -399,7 +365,7 @@ function test_partial_listener_works()
   var stmt = makeTestStatement(
     "DELETE FROM test WHERE id = ?"
   );
-  stmt.bindInt32Parameter(0, 0);
+  stmt.bindByIndex(0, 0);
   stmt.executeAsync({
     handleResult: function(aResultSet)
     {
@@ -432,7 +398,7 @@ function test_immediate_cancellation()
   var stmt = makeTestStatement(
     "DELETE FROM test WHERE id = ?"
   );
-  stmt.bindInt32Parameter(0, 0);
+  stmt.bindByIndex(0, 0);
   execAsync(stmt, {cancel: true});
   stmt.finalize();
   run_next_test();
@@ -446,7 +412,7 @@ function test_double_cancellation()
   var stmt = makeTestStatement(
     "DELETE FROM test WHERE id = ?"
   );
-  stmt.bindInt32Parameter(0, 0);
+  stmt.bindByIndex(0, 0);
   let pendingStatement = execAsync(stmt, {cancel: true});
   // And cancel again - expect an exception
   expectError(Cr.NS_ERROR_UNEXPECTED,
@@ -465,7 +431,7 @@ function test_cancellation_after_execution()
   var stmt = makeTestStatement(
     "DELETE FROM test WHERE id = ?"
   );
-  stmt.bindInt32Parameter(0, 0);
+  stmt.bindByIndex(0, 0);
   let pendingStatement = execAsync(stmt, {returnPending: true});
   // (the statement has fully executed at this point)
   // canceling after the statement has run to completion should not throw!

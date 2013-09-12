@@ -1,39 +1,7 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Basic APIs for streaming typelib structures to/from disk.
@@ -44,7 +12,9 @@
 
 #include "xpt_struct.h"
 
-PR_BEGIN_EXTERN_C
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct XPTState         XPTState;
 typedef struct XPTDatapool      XPTDatapool;
@@ -66,19 +36,19 @@ extern XPT_PUBLIC_API(PRBool)
 XPT_DoIID(XPTCursor *cursor, nsID *iidp);
 
 extern XPT_PUBLIC_API(PRBool)
-XPT_Do64(XPTCursor *cursor, PRInt64 *u64p);
+XPT_Do64(XPTCursor *cursor, int64_t *u64p);
 
 extern XPT_PUBLIC_API(PRBool)
-XPT_Do32(XPTCursor *cursor, PRUint32 *u32p);
+XPT_Do32(XPTCursor *cursor, uint32_t *u32p);
 
 extern XPT_PUBLIC_API(PRBool)
-XPT_Do16(XPTCursor *cursor, PRUint16 *u16p);
+XPT_Do16(XPTCursor *cursor, uint16_t *u16p);
 
 extern XPT_PUBLIC_API(PRBool)
-XPT_Do8(XPTCursor *cursor, PRUint8 *u8p);
+XPT_Do8(XPTCursor *cursor, uint8_t *u8p);
 
 extern XPT_PUBLIC_API(PRBool)
-XPT_DoHeaderPrologue(XPTArena *arena, XPTCursor *cursor, XPTHeader **headerp, PRUint32 * ide_offset);
+XPT_DoHeaderPrologue(XPTArena *arena, XPTCursor *cursor, XPTHeader **headerp, uint32_t * ide_offset);
 extern XPT_PUBLIC_API(PRBool)
 XPT_DoHeader(XPTArena *arena, XPTCursor *cursor, XPTHeader **headerp);
 
@@ -94,8 +64,8 @@ typedef enum {
 
 struct XPTState {
     XPTMode          mode;
-    PRUint32         data_offset;
-    PRUint32         next_cursor[2];
+    uint32_t         data_offset;
+    uint32_t         next_cursor[2];
     XPTDatapool      *pool;
     XPTArena         *arena;
 };
@@ -103,25 +73,25 @@ struct XPTState {
 struct XPTDatapool {
     XPTHashTable     *offset_map;
     char             *data;
-    PRUint32         count;
-    PRUint32         allocated;
+    uint32_t         count;
+    uint32_t         allocated;
 };
 
 struct XPTCursor {
     XPTState    *state;
     XPTPool     pool;
-    PRUint32    offset;
-    PRUint8     bits;
+    uint32_t    offset;
+    uint8_t     bits;
 };
 
 extern XPT_PUBLIC_API(XPTState *)
-XPT_NewXDRState(XPTMode mode, char *data, PRUint32 len);
+XPT_NewXDRState(XPTMode mode, char *data, uint32_t len);
 
 extern XPT_PUBLIC_API(PRBool)
-XPT_MakeCursor(XPTState *state, XPTPool pool, PRUint32 len, XPTCursor *cursor);
+XPT_MakeCursor(XPTState *state, XPTPool pool, uint32_t len, XPTCursor *cursor);
 
 extern XPT_PUBLIC_API(PRBool)
-XPT_SeekTo(XPTCursor *cursor, PRUint32 offset);
+XPT_SeekTo(XPTCursor *cursor, uint32_t offset);
 
 extern XPT_PUBLIC_API(void)
 XPT_DestroyXDRState(XPTState *state);
@@ -132,29 +102,29 @@ XPT_UpdateFileLength(XPTState *state);
 
 /* returns the length of the specified data block */
 extern XPT_PUBLIC_API(void)
-XPT_GetXDRDataLength(XPTState *state, XPTPool pool, PRUint32 *len);
+XPT_GetXDRDataLength(XPTState *state, XPTPool pool, uint32_t *len);
 
 extern XPT_PUBLIC_API(void)
-XPT_GetXDRData(XPTState *state, XPTPool pool, char **data, PRUint32 *len);
+XPT_GetXDRData(XPTState *state, XPTPool pool, char **data, uint32_t *len);
 
 /* set or get the data offset for the state, depending on mode */
 extern XPT_PUBLIC_API(void)
-XPT_DataOffset(XPTState *state, PRUint32 *data_offsetp);
+XPT_DataOffset(XPTState *state, uint32_t *data_offsetp);
 
 extern XPT_PUBLIC_API(void)
-XPT_SetDataOffset(XPTState *state, PRUint32 data_offset);
+XPT_SetDataOffset(XPTState *state, uint32_t data_offset);
 
-extern XPT_PUBLIC_API(PRUint32)
+extern XPT_PUBLIC_API(uint32_t)
 XPT_GetOffsetForAddr(XPTCursor *cursor, void *addr);
 
 extern XPT_PUBLIC_API(PRBool)
-XPT_SetOffsetForAddr(XPTCursor *cursor, void *addr, PRUint32 offset);
+XPT_SetOffsetForAddr(XPTCursor *cursor, void *addr, uint32_t offset);
 
 extern XPT_PUBLIC_API(PRBool)
-XPT_SetAddrForOffset(XPTCursor *cursor, PRUint32 offset, void *addr);
+XPT_SetAddrForOffset(XPTCursor *cursor, uint32_t offset, void *addr);
 
 extern XPT_PUBLIC_API(void *)
-XPT_GetAddrForOffset(XPTCursor *cursor, PRUint32 offset);
+XPT_GetAddrForOffset(XPTCursor *cursor, uint32_t offset);
 
 /* all data structures are big-endian */
 
@@ -206,6 +176,8 @@ XPT_GetAddrForOffset(XPTCursor *cursor, PRUint32 offset);
     return PR_FALSE;
 
 
-PR_END_EXTERN_C
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __xpt_xdr_h__ */

@@ -5,8 +5,6 @@
 <window title="Key Tests"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
 
-  <script type="application/javascript" 
-          src="chrome://mochikit/content/MochiKit/packed.js"/>
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"/>
   <script type="application/javascript"
@@ -25,6 +23,7 @@ var keysToTest = [
   ["k-v-scy", "V", { ctrlKey: true } ],
   ["", "V", { altKey: true } ],
   ["", "V", { metaKey: true } ],
+  ["", "V", { osKey: true } ],
   ["k-v-scy", "V", { shiftKey: true, ctrlKey: true } ],
   ["", "V", { shiftKey: true, ctrlKey: true, altKey: true } ],
   ["k-e-y", "E", { } ],
@@ -32,8 +31,16 @@ var keysToTest = [
   ["", "E", { ctrlKey: true } ],
   ["", "E", { altKey: true } ],
   ["", "E", { metaKey: true } ],
+  ["", "E", { osKey: true } ],
   ["k-d-a", "D", { altKey: true } ],
   ["k-8-m", "8", { metaKey: true } ],
+  ["", "8", { metaKey: true, osKey: true } ],
+  ["k-a-o", "A", { osKey: true } ],
+  ["", "A", { osKey: true, metaKey: true } ],
+  ["k-b-myo", "B", { osKey: true } ],
+  ["k-b-myo", "B", { osKey: true, metaKey: true } ],
+  ["k-f-oym", "F", { metaKey: true } ],
+  ["k-f-oym", "F", { metaKey: true, osKey: true } ],
   ["k-c-scaym", "C", { metaKey: true } ],
   ["k-c-scaym", "C", { shiftKey: true, ctrlKey: true, altKey: true, metaKey: true } ],
   ["", "V", { shiftKey: true, ctrlKey: true, altKey: true } ],
@@ -61,6 +68,50 @@ function runTest()
 
   document.documentElement.appendChild(keyset);
   iterateKeys(true, "appended");
+
+  var accelText = function(menuitem) menuitem.getAttribute("acceltext").toLowerCase();
+
+  $("menubutton").open = true;
+
+  // now check if a menu updates its accelerator text when a key attribute is changed
+  var menuitem1 = $("menuitem1");
+  ok(accelText(menuitem1).indexOf("d") >= 0, "menuitem1 accelText before");
+  if (navigator.platform.indexOf("Win") != -1) {
+    ok(accelText(menuitem1).indexOf("alt") >= 0, "menuitem1 accelText modifier before");
+  }
+
+  menuitem1.setAttribute("key", "k-s-c");
+  ok(accelText(menuitem1).indexOf("s") >= 0, "menuitem1 accelText after");
+  if (navigator.platform.indexOf("Win") != -1) {
+    ok(accelText(menuitem1).indexOf("ctrl") >= 0, "menuitem1 accelText modifier after");
+  }
+
+  menuitem1.setAttribute("acceltext", "custom");
+  is(accelText(menuitem1), "custom", "menuitem1 accelText set custom");
+  menuitem1.removeAttribute("acceltext");
+  ok(accelText(menuitem1).indexOf("s") >= 0, "menuitem1 accelText remove");
+  if (navigator.platform.indexOf("Win") != -1) {
+    ok(accelText(menuitem1).indexOf("ctrl") >= 0, "menuitem1 accelText modifier remove");
+  }
+
+  var menuitem2 = $("menuitem2");
+  is(accelText(menuitem2), "", "menuitem2 accelText before");
+  menuitem2.setAttribute("key", "k-s-c");
+  ok(accelText(menuitem2).indexOf("s") >= 0, "menuitem2 accelText before");
+  if (navigator.platform.indexOf("Win") != -1) {
+    ok(accelText(menuitem2).indexOf("ctrl") >= 0, "menuitem2 accelText modifier before");
+  }
+
+  menuitem2.setAttribute("key", "k-h-l");
+  ok(accelText(menuitem2).indexOf("h") >= 0, "menuitem2 accelText after");
+  if (navigator.platform.indexOf("Win") != -1) {
+    ok(accelText(menuitem2).indexOf("ctrl") >= 0, "menuitem2 accelText modifier after");
+  }
+
+  menuitem2.removeAttribute("key");
+  is(accelText(menuitem2), "", "menuitem2 accelText after remove");
+
+  $("menubutton").open = false;
 
   window.close();
   window.opener.wrappedJSObject.SimpleTest.finish();
@@ -106,6 +157,9 @@ SimpleTest.waitForFocus(runTest);
   <key id="k-v-scy" key="v" modifiers="shift any control" oncommand="checkKey(event)"/>
   <key id="k-e-y" key="e" modifiers="any" oncommand="checkKey(event)"/>
   <key id="k-8-m" key="8" modifiers="meta" oncommand="checkKey(event)"/>
+  <key id="k-a-o" key="a" modifiers="os" oncommand="checkKey(event)"/>
+  <key id="k-b-myo" key="b" modifiers="meta any os" oncommand="checkKey(event)"/>
+  <key id="k-f-oym" key="f" modifiers="os any meta" oncommand="checkKey(event)"/>
   <key id="k-c-scaym" key="c" modifiers="shift control alt any meta" oncommand="checkKey(event)"/>
   <key id="k-h-l" key="h" modifiers="accel" oncommand="checkKey(event)"/>
   <key id="k-j-s" key="j" modifiers="access" oncommand="checkKey(event)"/>
@@ -116,7 +170,15 @@ SimpleTest.waitForFocus(runTest);
 
 <keyset id="keyset2">
   <key id="k-d-a" key="d" modifiers="alt" oncommand="checkKey(event)"/>
+  <key id="k-s-c" key="s" modifiers="control" oncommand="checkKey(event)"/>
 </keyset>
+
+<button id="menubutton" label="Menu" type="menu">
+  <menupopup>
+    <menuitem id="menuitem1" label="Item 1" key="k-d-a"/>
+    <menuitem id="menuitem2" label="Item 2"/>
+  </menupopup>
+</button>
 
 <body xmlns="http://www.w3.org/1999/xhtml">
 <p id="display">

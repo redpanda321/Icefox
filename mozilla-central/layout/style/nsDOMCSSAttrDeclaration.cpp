@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Ms2ger <ms2ger@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* DOM object for element.style */
 
@@ -42,26 +9,24 @@
 
 #include "mozilla/css/Declaration.h"
 #include "mozilla/css/Loader.h"
+#include "mozilla/css/StyleRule.h"
 #include "mozilla/dom/Element.h"
-#include "nsICSSStyleRule.h"
 #include "nsIDocument.h"
 #include "nsIDOMMutationEvent.h"
 #include "nsIPrincipal.h"
 #include "nsIURI.h"
 #include "nsNodeUtils.h"
+#include "nsContentUtils.h"
+#include "xpcpublic.h"
+#include "nsWrapperCacheInlines.h"
 
 namespace css = mozilla::css;
 namespace dom = mozilla::dom;
 
-nsDOMCSSAttributeDeclaration::nsDOMCSSAttributeDeclaration(dom::Element* aElement
-#ifdef MOZ_SMIL
-                                                           , PRBool aIsSMILOverride
-#endif // MOZ_SMIL
-                                                           )
+nsDOMCSSAttributeDeclaration::nsDOMCSSAttributeDeclaration(dom::Element* aElement,
+                                                           bool aIsSMILOverride)
   : mElement(aElement)
-#ifdef MOZ_SMIL
   , mIsSMILOverride(aIsSMILOverride)
-#endif // MOZ_SMIL
 {
   MOZ_COUNT_CTOR(nsDOMCSSAttributeDeclaration);
 
@@ -73,11 +38,36 @@ nsDOMCSSAttributeDeclaration::~nsDOMCSSAttributeDeclaration()
   MOZ_COUNT_DTOR(nsDOMCSSAttributeDeclaration);
 }
 
-NS_IMPL_CYCLE_COLLECTION_1(nsDOMCSSAttributeDeclaration, mElement)
+NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE_1(nsDOMCSSAttributeDeclaration, mElement)
 
-NS_INTERFACE_MAP_BEGIN(nsDOMCSSAttributeDeclaration)
+// mElement holds a strong ref to us, so if it's going to be
+// skipped, the attribute declaration can't be part of a garbage
+// cycle.
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_BEGIN(nsDOMCSSAttributeDeclaration)
+  if (tmp->mElement && Element::CanSkip(tmp->mElement, true)) {
+    if (tmp->PreservingWrapper()) {
+      // Not relying on GetWrapper to unmark us gray because the
+      // side-effect thing is pretty weird.
+      JSObject* o = tmp->GetWrapperPreserveColor();
+      xpc_UnmarkGrayObject(o);
+    }
+    return true;
+  }
+  return tmp->IsBlack();
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_END
+
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_IN_CC_BEGIN(nsDOMCSSAttributeDeclaration)
+  return tmp->IsBlack() ||
+    (tmp->mElement && Element::CanSkipInCC(tmp->mElement));
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_IN_CC_END
+
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_THIS_BEGIN(nsDOMCSSAttributeDeclaration)
+  return tmp->IsBlack() ||
+    (tmp->mElement && Element::CanSkipThis(tmp->mElement));
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_THIS_END
+
+NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(nsDOMCSSAttributeDeclaration)
   NS_WRAPPERCACHE_INTERFACE_MAP_ENTRY
-  NS_INTERFACE_MAP_ENTRIES_CYCLE_COLLECTION(nsDOMCSSAttributeDeclaration)
 NS_IMPL_QUERY_TAIL_INHERITING(nsDOMCSSDeclaration)
 
 NS_IMPL_CYCLE_COLLECTING_ADDREF(nsDOMCSSAttributeDeclaration)
@@ -87,24 +77,20 @@ nsresult
 nsDOMCSSAttributeDeclaration::SetCSSDeclaration(css::Declaration* aDecl)
 {
   NS_ASSERTION(mElement, "Must have Element to set the declaration!");
-  nsICSSStyleRule* oldRule =
-#ifdef MOZ_SMIL
+  css::StyleRule* oldRule =
     mIsSMILOverride ? mElement->GetSMILOverrideStyleRule() :
-#endif // MOZ_SMIL
     mElement->GetInlineStyleRule();
   NS_ASSERTION(oldRule, "Element must have rule");
 
-  nsCOMPtr<nsICSSStyleRule> newRule =
-    oldRule->DeclarationChanged(aDecl, PR_FALSE);
+  nsRefPtr<css::StyleRule> newRule =
+    oldRule->DeclarationChanged(aDecl, false);
   if (!newRule) {
     return NS_ERROR_OUT_OF_MEMORY;
   }
 
   return
-#ifdef MOZ_SMIL
-    mIsSMILOverride ? mElement->SetSMILOverrideStyleRule(newRule, PR_TRUE) :
-#endif // MOZ_SMIL
-    mElement->SetInlineStyleRule(newRule, PR_TRUE);
+    mIsSMILOverride ? mElement->SetSMILOverrideStyleRule(newRule, true) :
+    mElement->SetInlineStyleRule(newRule, nullptr, true);
 }
 
 nsIDocument*
@@ -114,96 +100,65 @@ nsDOMCSSAttributeDeclaration::DocToUpdate()
   // BeginUpdate(), but this is a good chokepoint where we know we
   // plan to modify the CSSDeclaration, so need to notify
   // AttributeWillChange if this is inline style.
-#ifdef MOZ_SMIL
-  if (!mIsSMILOverride)
-#endif
-  {
+  if (!mIsSMILOverride) {
     nsNodeUtils::AttributeWillChange(mElement, kNameSpaceID_None,
                                      nsGkAtoms::style,
                                      nsIDOMMutationEvent::MODIFICATION);
   }
  
-  // We need GetOwnerDoc() rather than GetCurrentDoc() because it might
+  // We need OwnerDoc() rather than GetCurrentDoc() because it might
   // be the BeginUpdate call that inserts mElement into the document.
-  return mElement->GetOwnerDoc();
+  return mElement->OwnerDoc();
 }
 
 css::Declaration*
-nsDOMCSSAttributeDeclaration::GetCSSDeclaration(PRBool aAllocate)
+nsDOMCSSAttributeDeclaration::GetCSSDeclaration(bool aAllocate)
 {
   if (!mElement)
-    return nsnull;
+    return nullptr;
 
-  nsICSSStyleRule* cssRule;
-#ifdef MOZ_SMIL
+  css::StyleRule* cssRule;
   if (mIsSMILOverride)
     cssRule = mElement->GetSMILOverrideStyleRule();
   else
-#endif // MOZ_SMIL
     cssRule = mElement->GetInlineStyleRule();
 
   if (cssRule) {
     return cssRule->GetDeclaration();
   }
   if (!aAllocate) {
-    return nsnull;
+    return nullptr;
   }
 
   // cannot fail
   css::Declaration *decl = new css::Declaration();
   decl->InitializeEmpty();
-  nsCOMPtr<nsICSSStyleRule> newRule = NS_NewCSSStyleRule(nsnull, decl);
+  nsRefPtr<css::StyleRule> newRule = new css::StyleRule(nullptr, decl);
 
   // this *can* fail (inside SetAttrAndNotify, at least).
   nsresult rv;
-#ifdef MOZ_SMIL
   if (mIsSMILOverride)
-    rv = mElement->SetSMILOverrideStyleRule(newRule, PR_FALSE);
+    rv = mElement->SetSMILOverrideStyleRule(newRule, false);
   else
-#endif // MOZ_SMIL
-    rv = mElement->SetInlineStyleRule(newRule, PR_FALSE);
+    rv = mElement->SetInlineStyleRule(newRule, nullptr, false);
 
   if (NS_FAILED(rv)) {
-    return nsnull; // the decl will be destroyed along with the style rule
+    return nullptr; // the decl will be destroyed along with the style rule
   }
 
   return decl;
 }
 
-/*
- * This is a utility function.  It will only fail if it can't get a
- * parser.  This means it can return NS_OK without aURI or aCSSLoader
- * being initialized.
- */
-nsresult
-nsDOMCSSAttributeDeclaration::GetCSSParsingEnvironment(nsIURI** aSheetURI,
-                                                       nsIURI** aBaseURI,
-                                                       nsIPrincipal** aSheetPrincipal,
-                                                       mozilla::css::Loader** aCSSLoader)
+void
+nsDOMCSSAttributeDeclaration::GetCSSParsingEnvironment(CSSParsingEnvironment& aCSSParseEnv)
 {
   NS_ASSERTION(mElement, "Something is severely broken -- there should be an Element here!");
-  // null out the out params since some of them may not get initialized below
-  *aSheetURI = nsnull;
-  *aBaseURI = nsnull;
-  *aSheetPrincipal = nsnull;
-  *aCSSLoader = nsnull;
 
-  nsIDocument* doc = mElement->GetOwnerDoc();
-  if (!doc) {
-    // document has been destroyed
-    return NS_ERROR_NOT_AVAILABLE;
-  }
-
-  nsCOMPtr<nsIURI> baseURI = mElement->GetBaseURI();
-  nsCOMPtr<nsIURI> sheetURI = doc->GetDocumentURI();
-
-  NS_ADDREF(*aCSSLoader = doc->CSSLoader());
-
-  baseURI.swap(*aBaseURI);
-  sheetURI.swap(*aSheetURI);
-  NS_ADDREF(*aSheetPrincipal = mElement->NodePrincipal());
-
-  return NS_OK;
+  nsIDocument* doc = mElement->OwnerDoc();
+  aCSSParseEnv.mSheetURI = doc->GetDocumentURI();
+  aCSSParseEnv.mBaseURI = mElement->GetBaseURI();
+  aCSSParseEnv.mPrincipal = mElement->NodePrincipal();
+  aCSSParseEnv.mCSSLoader = doc->CSSLoader();
 }
 
 NS_IMETHODIMP
@@ -211,7 +166,7 @@ nsDOMCSSAttributeDeclaration::GetParentRule(nsIDOMCSSRule **aParent)
 {
   NS_ENSURE_ARG_POINTER(aParent);
 
-  *aParent = nsnull;
+  *aParent = nullptr;
   return NS_OK;
 }
 

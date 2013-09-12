@@ -1,13 +1,12 @@
 <?xml version="1.0"?>
 <?xml-stylesheet href="chrome://global/skin" type="text/css"?>
-<?xml-stylesheet href="/tests/SimpleTest/test.css" type="text/css"?>
+<?xml-stylesheet href="chrome://mochikit/content/tests/SimpleTest/test.css" type="text/css"?>
 <!--
   Tests for mozInnerScreenX/Y properties
   -->
 <window title="Test mozInnerScreenX/Y Properties"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
-  <script type="text/javascript" src="/MochiKit/packed.js"/>
-  <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"/>
+  <script type="text/javascript" src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"/>
 
   <!-- test resuls are displayed in the html:body -->
   <body xmlns="http://www.w3.org/1999/xhtml"
@@ -36,10 +35,12 @@ function doTests()
   catch(ex) { }
   ok(!readable, "window pixels per css pixel shouldn't be readable to content");
 
-  netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
   var domWindowUtils = window.QueryInterface(Components.interfaces.nsIInterfaceRequestor)
                            .getInterface(Components.interfaces.nsIDOMWindowUtils);
   var devPxPerCSSPx = domWindowUtils.screenPixelsPerCSSPixel;
+
+  is(window.devicePixelRatio, devPxPerCSSPx, "window.devicePixelRatio");
+
   var windowBO = document.documentElement.boxObject;
   isRounded(window.mozInnerScreenX*devPxPerCSSPx, windowBO.screenX,
             "window screen X");
@@ -65,6 +66,8 @@ function doTests()
                               .getInterface(Components.interfaces.nsIDOMWindowUtils);
   is(frameDomWindowUtils.screenPixelsPerCSSPixel, 2*devPxPerCSSPx,
      "frame screen pixels per CSS pixel");
+
+  is(f.contentWindow.devicePixelRatio, 2*devPxPerCSSPx, "frame devicePixelRatio");
 
   isRounded(f.contentWindow.mozInnerScreenX*2,
             window.mozInnerScreenX + fBounds.left,

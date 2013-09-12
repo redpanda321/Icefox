@@ -1,41 +1,7 @@
 #!/bin/env python
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# The Initial Developer of the Original Code is
-# The Mozilla Foundation
-# Portions created by the Initial Developer are Copyright (C) 2007
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-# Ted Mielczarek <ted.mielczarek@gmail.com>
-# Ben Turner <mozilla@songbirdnest.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
 # Usage: symbolstore.py <params> <dump_syms path> <symbol store path>
 #                                <debug info files or dirs>
@@ -55,11 +21,16 @@
 #                    generate relative filenames.
 
 import sys
+import platform
 import os
 import re
 import shutil
-from subprocess import call, Popen, PIPE, STDOUT
+import textwrap
+import fnmatch
+import subprocess
+import urlparse
 from optparse import OptionParser
+from xml.dom.minidom import parse
 
 # Utility classes
 
@@ -133,65 +104,6 @@ class VCSFileInfo:
             file or 'None' on failure. """
         raise NotImplementedError
 
-class CVSFileInfo(VCSFileInfo):
-    """ A class to maintiain version information for files in a CVS repository.
-        Derived from VCSFileInfo. """
-
-    def __init__(self, file, srcdir):
-        VCSFileInfo.__init__(self, file)
-        self.srcdir = srcdir
-
-    def GetRoot(self):
-        (path, filename) = os.path.split(self.file)
-        root = os.path.join(path, "CVS", "Root")
-        if not os.path.isfile(root):
-            return None
-        f = open(root, "r")
-        root_name = f.readline().strip()
-        f.close()
-        if root_name:
-            return root_name
-        print >> sys.stderr, "Failed to get CVS Root for %s" % filename
-        return None
-
-    def GetCleanRoot(self):
-        parts = self.root.split('@')
-        if len(parts) > 1:
-            # we don't want the extra colon
-            return parts[1].replace(":","")
-        return self.root.replace(":","")
-
-    def GetRevision(self):
-        (path, filename) = os.path.split(self.file)
-        entries = os.path.join(path, "CVS", "Entries")
-        if not os.path.isfile(entries):
-            return None
-        f = open(entries, "r")
-        for line in f:
-            parts = line.split("/")
-            if len(parts) > 1 and parts[1] == filename:
-                return parts[2]
-        print >> sys.stderr, "Failed to get CVS Revision for %s" % filename
-        return None
-
-    def GetFilename(self):
-        file = self.file
-        if self.revision and self.clean_root:
-            if self.srcdir:
-                # strip the base path off
-                # but we actually want the last dir in srcdir
-                file = os.path.normpath(file)
-                # the lower() is to handle win32+vc8, where
-                # the source filenames come out all lowercase,
-                # but the srcdir can be mixed case
-                if file.lower().startswith(self.srcdir.lower()):
-                    file = file[len(self.srcdir):]
-                (head, tail) = os.path.split(self.srcdir)
-                if tail == "":
-                    tail = os.path.basename(head)
-                file = tail + file
-            return "cvs:%s:%s:%s" % (self.clean_root, file, self.revision)
-        return file
 
 # This regex separates protocol and optional username/password from a url.
 # For instance, all the following urls will be transformed into
@@ -201,102 +113,50 @@ class CVSFileInfo(VCSFileInfo):
 #   svn+ssh://user@foo.com/bar
 #   svn+ssh://user:pass@foo.com/bar
 #
-# This is used by both SVN and HG
 rootRegex = re.compile(r'^\S+?:/+(?:[^\s/]*@)?(\S+)$')
 
-class SVNFileInfo(VCSFileInfo):
-    url = None
-    repo = None
-    svndata = {}
-
-    def __init__(self, file):
-        """ We only want to run subversion's info tool once so pull all the data
-            here. """
-
-        VCSFileInfo.__init__(self, file)
-
-        if os.path.isfile(file):
-            command = os.popen("svn info %s" % file, "r")
-            for line in command:
-                # The last line of the output is usually '\n'
-                if line.strip() == '':
-                    continue
-                # Split into a key/value pair on the first colon
-                key, value = line.split(':', 1)
-                if key in ["Repository Root", "Revision", "URL"]:
-                    self.svndata[key] = value.strip()
-
-            exitStatus = command.close()
-            if exitStatus:
-              print >> sys.stderr, "Failed to get SVN info for %s" % file
-
-    def GetRoot(self):
-        key = "Repository Root"
-        if key in self.svndata:
-            match = rootRegex.match(self.svndata[key])
-            if match:
-                return match.group(1)
-        print >> sys.stderr, "Failed to get SVN Root for %s" % self.file
-        return None
-
-    # File bug to get this teased out from the current GetRoot, this is temporary
-    def GetCleanRoot(self):
-        return self.root
-
-    def GetRevision(self):
-        key = "Revision"
-        if key in self.svndata:
-            return self.svndata[key]
-        print >> sys.stderr, "Failed to get SVN Revision for %s" % self.file
-        return None
-
-    def GetFilename(self):
-        if self.root and self.revision:
-            if "URL" in self.svndata and "Repository Root" in self.svndata:
-                url, repo = self.svndata["URL"], self.svndata["Repository Root"]
-                file = url[len(repo) + 1:]
-            return "svn:%s:%s:%s" % (self.root, file, self.revision)
-        print >> sys.stderr, "Failed to get SVN Filename for %s" % self.file
-        return self.file
-
 def read_output(*args):
-    (stdout, _) = Popen(args=args, stdout=PIPE).communicate()
+    (stdout, _) = subprocess.Popen(args=args, stdout=subprocess.PIPE).communicate()
     return stdout.rstrip()
 
 class HGRepoInfo:
-    # HG info is per-repo, so cache it in a static
-    # member var
-    repos = {}
-    def __init__(self, path, rev, cleanroot):
+    def __init__(self, path):
         self.path = path
+        rev = read_output('hg', '-R', path,
+                          'parent', '--template={node|short}')
+        # Look for the default hg path.  If SRVSRV_ROOT is set, we
+        # don't bother asking hg.
+        hg_root = os.environ.get("SRCSRV_ROOT")
+        if hg_root:
+            root = hg_root
+        else:
+            root = read_output('hg', '-R', path,
+                               'showconfig', 'paths.default')
+            if not root:
+                print >> sys.stderr, "Failed to get HG Repo for %s" % path
+        cleanroot = None
+        if root:
+            match = rootRegex.match(root)
+            if match:
+                cleanroot = match.group(1)
+                if cleanroot.endswith('/'):
+                    cleanroot = cleanroot[:-1]
+        if cleanroot is None:
+            print >> sys.stderr, textwrap.dedent("""\
+                Could not determine repo info for %s.  This is either not a clone of the web-based
+                repository, or you have not specified SRCSRV_ROOT, or the clone is corrupt.""") % path
+            sys.exit(1)
         self.rev = rev
         self.cleanroot = cleanroot
 
+    def GetFileInfo(self, file):
+        return HGFileInfo(file, self)
+
 class HGFileInfo(VCSFileInfo):
-    def __init__(self, file, srcdir):
+    def __init__(self, file, repo):
         VCSFileInfo.__init__(self, file)
-        # we should only have to collect this info once per-repo
-        if not srcdir in HGRepoInfo.repos:
-            rev = read_output('hg', '-R', srcdir,
-                              'parent', '--template={node|short}')
-            path = read_output('hg', '-R', srcdir,
-                               'showconfig', 'paths.default')
-            if path == '':
-                hg_root = os.environ.get("SRCSRV_ROOT")
-                if hg_root:
-                    path = hg_root
-                else:
-                    print >> sys.stderr, "Failed to get HG Repo for %s" % srcdir
-            if path != '': # not there?
-                match = rootRegex.match(path)
-                if match:
-                    cleanroot = match.group(1)
-                    if cleanroot.endswith('/'):
-                        cleanroot = cleanroot[:-1]
-            HGRepoInfo.repos[srcdir] = HGRepoInfo(path, rev, cleanroot)
-        self.repo = HGRepoInfo.repos[srcdir]
-        self.file = file
-        self.srcdir = srcdir
+        self.repo = repo
+        self.file = os.path.relpath(file, repo.path)
 
     def GetRoot(self):
         return self.repo.path
@@ -308,19 +168,60 @@ class HGFileInfo(VCSFileInfo):
         return self.repo.rev
 
     def GetFilename(self):
-        file = self.file
         if self.revision and self.clean_root:
-            if self.srcdir:
-                # strip the base path off
-                file = os.path.normpath(file)
-                if IsInDir(file, self.srcdir):
-                    file = file[len(self.srcdir):]
-                if file.startswith('/') or file.startswith('\\'):
-                    file = file[1:]
-            return "hg:%s:%s:%s" % (self.clean_root, file, self.revision)
-        return file
+            return "hg:%s:%s:%s" % (self.clean_root, self.file, self.revision)
+        return self.file
+
+class GitRepoInfo:
+    """
+    Info about a local git repository. Does not currently
+    support discovering info about a git clone, the info must be
+    provided out-of-band.
+    """
+    def __init__(self, path, rev, root):
+        self.path = path
+        cleanroot = None
+        if root:
+            match = rootRegex.match(root)
+            if match:
+                cleanroot = match.group(1)
+                if cleanroot.endswith('/'):
+                    cleanroot = cleanroot[:-1]
+        if cleanroot is None:
+            print >> sys.stderr, textwrap.dedent("""\
+                Could not determine repo info for %s (%s).  This is either not a clone of a web-based
+                repository, or you have not specified SRCSRV_ROOT, or the clone is corrupt.""") % (path, root)
+            sys.exit(1)
+        self.rev = rev
+        self.cleanroot = cleanroot
+
+    def GetFileInfo(self, file):
+        return GitFileInfo(file, self)
+
+class GitFileInfo(VCSFileInfo):
+    def __init__(self, file, repo):
+        VCSFileInfo.__init__(self, file)
+        self.repo = repo
+        self.file = os.path.relpath(file, repo.path)
+
+    def GetRoot(self):
+        return self.repo.path
+
+    def GetCleanRoot(self):
+        return self.repo.cleanroot
+
+    def GetRevision(self):
+        return self.repo.rev
+
+    def GetFilename(self):
+        if self.revision and self.clean_root:
+            return "git:%s:%s:%s" % (self.clean_root, self.file, self.revision)
+        return self.file
 
 # Utility functions
+
+# A cache of repo info for each srcdir.
+srcdirRepoInfo = {}
 
 # A cache of files for which VCS info has already been determined. Used to
 # prevent extra filesystem activity or process launching.
@@ -331,6 +232,16 @@ def IsInDir(file, dir):
     # the source filenames come out all lowercase,
     # but the srcdir can be mixed case
     return os.path.abspath(file).lower().startswith(os.path.abspath(dir).lower())
+
+def GetVCSFilenameFromSrcdir(file, srcdir):
+    if srcdir not in srcdirRepoInfo:
+        # Not in cache, so find it adnd cache it
+        if os.path.isdir(os.path.join(srcdir, '.hg')):
+            srcdirRepoInfo[srcdir] = HGRepoInfo(srcdir)
+        else:
+            # Unknown VCS or file is not in a repo.
+            return None
+    return srcdirRepoInfo[srcdir].GetFileInfo(file)
 
 def GetVCSFilename(file, srcdirs):
     """Given a full path to a file, and the top source directory,
@@ -353,18 +264,10 @@ def GetVCSFilename(file, srcdirs):
         fileInfo = vcsFileInfoCache[file]
     else:
         for srcdir in srcdirs:
-            if os.path.isdir(os.path.join(path, "CVS")):
-                fileInfo = CVSFileInfo(file, srcdir)
-                if fileInfo:
-                    root = fileInfo.root
-            elif os.path.isdir(os.path.join(path, ".svn")) or \
-                 os.path.isdir(os.path.join(path, "_svn")):
-                 fileInfo = SVNFileInfo(file);
-            elif os.path.isdir(os.path.join(srcdir, '.hg')) and \
-                 IsInDir(file, srcdir):
-                 fileInfo = HGFileInfo(file, srcdir)
-
-            if fileInfo: 
+            if not IsInDir(file, srcdir):
+                continue
+            fileInfo = GetVCSFilenameFromSrcdir(file, srcdir)
+            if fileInfo:
                 vcsFileInfoCache[file] = fileInfo
                 break
 
@@ -378,11 +281,13 @@ def GetVCSFilename(file, srcdirs):
 def GetPlatformSpecificDumper(**kwargs):
     """This function simply returns a instance of a subclass of Dumper
     that is appropriate for the current platform."""
-    return {'win32': Dumper_Win32,
-            'cygwin': Dumper_Win32,
-            'linux2': Dumper_Linux,
-            'sunos5': Dumper_Solaris,
-            'darwin': Dumper_Mac}[sys.platform](**kwargs)
+    # Python 2.5 has a bug where platform.system() returns 'Microsoft'.
+    # Remove this when we no longer support Python 2.5.
+    return {'Windows': Dumper_Win32,
+            'Microsoft': Dumper_Win32,
+            'Linux': Dumper_Linux,
+            'Sunos5': Dumper_Solaris,
+            'Darwin': Dumper_Mac}[platform.system()](**kwargs)
 
 def SourceIndex(fileStream, outputPath, vcs_root):
     """Takes a list of files, writes info to a data block in a .stream file"""
@@ -414,7 +319,13 @@ class Dumper:
     ProcessDir.  Instead, call GetPlatformSpecificDumper to
     get an instance of a subclass."""
     def __init__(self, dump_syms, symbol_path,
-                 archs=None, srcdirs=None, copy_debug=False, vcsinfo=False, srcsrv=False):
+                 archs=None,
+                 srcdirs=[],
+                 copy_debug=False,
+                 vcsinfo=False,
+                 srcsrv=False,
+                 exclude=[],
+                 repo_manifest=None):
         # popen likes absolute paths, at least on windows
         self.dump_syms = os.path.abspath(dump_syms)
         self.symbol_path = symbol_path
@@ -423,17 +334,63 @@ class Dumper:
             self.archs = ['']
         else:
             self.archs = ['-a %s' % a for a in archs.split()]
-        if srcdirs is not None:
-            self.srcdirs = [os.path.normpath(a) for a in srcdirs]
-        else:
-            self.srcdirs = None
+        self.srcdirs = [os.path.normpath(a) for a in srcdirs]
         self.copy_debug = copy_debug
         self.vcsinfo = vcsinfo
         self.srcsrv = srcsrv
+        self.exclude = exclude[:]
+        if repo_manifest:
+            self.parse_repo_manifest(repo_manifest)
+
+    def parse_repo_manifest(self, repo_manifest):
+        """
+        Parse an XML manifest of repository info as produced
+        by the `repo manifest -r` command.
+        """
+        doc = parse(repo_manifest)
+        if doc.firstChild.tagName != "manifest":
+            return
+        # First, get remotes.
+        remotes = dict([(r.getAttribute("name"), r.getAttribute("fetch")) for r in doc.getElementsByTagName("remote")])
+        # And default remote.
+        default_remote = None
+        if doc.getElementsByTagName("default"):
+            default_remote = doc.getElementsByTagName("default")[0].getAttribute("remote")
+        # Now get projects. Assume they're relative to repo_manifest.
+        base_dir = os.path.abspath(os.path.dirname(repo_manifest))
+        for proj in doc.getElementsByTagName("project"):
+            # name is the repository URL relative to the remote path.
+            name = proj.getAttribute("name")
+            # path is the path on-disk, relative to the manifest file.
+            path = proj.getAttribute("path")
+            # revision is the changeset ID.
+            rev = proj.getAttribute("revision")
+            # remote is the base URL to use.
+            remote = proj.getAttribute("remote")
+            # remote defaults to the <default remote>.
+            if not remote:
+                remote = default_remote
+            # path defaults to name.
+            if not path:
+                path = name
+            if not (name and path and rev and remote):
+                print "Skipping project %s" % proj.toxml()
+                continue
+            remote = remotes[remote]
+            # Turn git URLs into http URLs so that urljoin works.
+            if remote.startswith("git:"):
+                remote = "http" + remote[3:]
+            # Add this project to srcdirs.
+            srcdir = os.path.join(base_dir, path)
+            self.srcdirs.append(srcdir)
+            # And cache its VCS file info. Currently all repos mentioned
+            # in a repo manifest are assumed to be git.
+            root = urlparse.urljoin(remote, name)
+            srcdirRepoInfo[srcdir] = GitRepoInfo(srcdir, rev, root)
 
     # subclasses override this
     def ShouldProcess(self, file):
-        return False
+        return not any(fnmatch.fnmatch(os.path.basename(file), exclude) for exclude in self.exclude)
 
     # and can override this
     def ShouldSkipDir(self, dir):
@@ -488,15 +445,17 @@ class Dumper:
         """Dump symbols from this file into a symbol file, stored
         in the proper directory structure in  |symbol_path|."""
         print >> sys.stderr, "Processing file: %s" % file
+        sys.stderr.flush()
         result = False
         sourceFileStream = ''
         # tries to get the vcs root from the .mozconfig first - if it's not set
         # the tinderbox vcs path will be assigned further down
         vcs_root = os.environ.get("SRCSRV_ROOT")
-        for arch in self.archs:
+        for arch_num, arch in enumerate(self.archs):
             try:
-                cmd = os.popen("%s %s %s" % (self.dump_syms, arch, file), "r")
-                module_line = cmd.next()
+                proc = subprocess.Popen([self.dump_syms] + arch.split() + [file],
+                                        stdout=subprocess.PIPE)
+                module_line = proc.stdout.next()
                 if module_line.startswith("MODULE"):
                     # MODULE os cpu guid debug_file
                     (guid, debug_file) = (module_line.split())[3:5]
@@ -515,17 +474,17 @@ class Dumper:
                     f = open(full_path, "w")
                     f.write(module_line)
                     # now process the rest of the output
-                    for line in cmd:
+                    for line in proc.stdout:
                         if line.startswith("FILE"):
                             # FILE index filename
-                            (x, index, filename) = line.split(None, 2)
+                            (x, index, filename) = line.rstrip().split(None, 2)
                             if sys.platform == "sunos5":
                                 for srcdir in self.srcdirs:
                                     start = filename.find(self.srcdir)
                                     if start != -1:
                                         filename = filename[start:]
                                         break
-                            filename = self.FixFilenameCase(filename.rstrip())
+                            filename = self.FixFilenameCase(filename)
                             sourcepath = filename
                             if self.vcsinfo:
                                 (filename, rootname) = GetVCSFilename(filename, self.srcdirs)
@@ -544,14 +503,15 @@ class Dumper:
                             # we want to return true only if at least one line is not a MODULE or FILE line
                             result = True
                     f.close()
-                    cmd.close()
+                    proc.wait()
                     # we output relative paths so callers can get a list of what
                     # was generated
                     print rel_path
                     if self.srcsrv and vcs_root:
                         # add source server indexing to the pdb file
                         self.SourceServerIndexing(file, guid, sourceFileStream, vcs_root)
-                    if self.copy_debug:
+                    # only copy debug the first time if we have multiple architectures
+                    if self.copy_debug and arch_num == 0:
                         self.CopyDebug(file, debug_file, guid)
             except StopIteration:
                 pass
@@ -569,6 +529,8 @@ class Dumper_Win32(Dumper):
     def ShouldProcess(self, file):
         """This function will allow processing of pdb files that have dll
         or exe files with the same base name next to them."""
+        if not Dumper.ShouldProcess(self, file):
+            return False
         if file.endswith(".pdb"):
             (path,ext) = os.path.splitext(file)
             if os.path.isfile(path + ".exe") or os.path.isfile(path + ".dll"):
@@ -608,8 +570,10 @@ class Dumper_Win32(Dumper):
         # try compressing it
         compressed_file = os.path.splitext(full_path)[0] + ".pd_"
         # ignore makecab's output
-        success = call(["makecab.exe", "/D", "CompressionType=LZX", "/D", "CompressionMemory=21",
-                       full_path, compressed_file], stdout=open("NUL:","w"), stderr=STDOUT)
+        success = subprocess.call(["makecab.exe", "/D", "CompressionType=LZX", "/D",
+                                   "CompressionMemory=21",
+                                   full_path, compressed_file],
+                                  stdout=open("NUL:","w"), stderr=subprocess.STDOUT)
         if success == 0 and os.path.exists(compressed_file):
             os.unlink(full_path)
             print os.path.splitext(rel_path)[0] + ".pd_"
@@ -626,19 +590,22 @@ class Dumper_Win32(Dumper):
         if self.copy_debug:
             pdbstr_path = os.environ.get("PDBSTR_PATH")
             pdbstr = os.path.normpath(pdbstr_path)
-            call([pdbstr, "-w", "-p:" + os.path.basename(debug_file),
-                  "-i:" + os.path.basename(streamFilename), "-s:srcsrv"],
-                 cwd=os.path.dirname(stream_output_path))
+            subprocess.call([pdbstr, "-w", "-p:" + os.path.basename(debug_file),
+                             "-i:" + os.path.basename(streamFilename), "-s:srcsrv"],
+                            cwd=os.path.dirname(stream_output_path))
             # clean up all the .stream files when done
             os.remove(stream_output_path)
         return result
 
 class Dumper_Linux(Dumper):
+    objcopy = os.environ['OBJCOPY'] if 'OBJCOPY' in os.environ else 'objcopy'
     def ShouldProcess(self, file):
         """This function will allow processing of files that are
         executable, or end with the .so extension, and additionally
         file(1) reports as being ELF files.  It expects to find the file
         command in PATH."""
+        if not Dumper.ShouldProcess(self, file):
+            return False
         if file.endswith(".so") or os.access(file, os.X_OK):
             return self.RunFileCommand(file).startswith("ELF")
         return False
@@ -648,8 +615,8 @@ class Dumper_Linux(Dumper):
         # .gnu_debuglink section to the object, so the debugger can
         # actually load our debug info later.
         file_dbg = file + ".dbg"
-        if call(['objcopy', '--only-keep-debug', file, file_dbg]) == 0 and \
-           call(['objcopy', '--add-gnu-debuglink=%s' % file_dbg, file]) == 0:
+        if subprocess.call([self.objcopy, '--only-keep-debug', file, file_dbg]) == 0 and \
+           subprocess.call([self.objcopy, '--add-gnu-debuglink=%s' % file_dbg, file]) == 0:
             rel_path = os.path.join(debug_file,
                                     guid,
                                     debug_file + ".dbg")
@@ -677,6 +644,8 @@ class Dumper_Solaris(Dumper):
         executable, or end with the .so extension, and additionally
         file(1) reports as being ELF files.  It expects to find the file
         command in PATH."""
+        if not Dumper.ShouldProcess(self, file):
+            return False
         if file.endswith(".so") or os.access(file, os.X_OK):
             return self.RunFileCommand(file).startswith("ELF")
         return False
@@ -687,6 +656,8 @@ class Dumper_Mac(Dumper):
         executable, or end with the .dylib extension, and additionally
         file(1) reports as being Mach-O files.  It expects to find the file
         command in PATH."""
+        if not Dumper.ShouldProcess(self, file):
+            return False
         if file.endswith(".dylib") or os.access(file, os.X_OK):
             return self.RunFileCommand(file).startswith("Mach-O")
         return False
@@ -708,8 +679,9 @@ class Dumper_Mac(Dumper):
         if os.path.exists(dsymbundle):
             shutil.rmtree(dsymbundle)
         # dsymutil takes --arch=foo instead of -a foo like everything else
-        os.system("dsymutil %s %s >/dev/null" % (' '.join([a.replace('-a ', '--arch=') for a in self.archs]),
-                                      file))
+        subprocess.call(["dsymutil"] + [a.replace('-a ', '--arch=') for a in self.archs if a]
+                        + [file],
+                        stdout=open("/dev/null","w"))
         if not os.path.exists(dsymbundle):
             # dsymutil won't produce a .dSYM for files without symbols
             return False
@@ -735,9 +707,9 @@ class Dumper_Mac(Dumper):
                                 os.path.basename(file) + ".tar.bz2")
         full_path = os.path.abspath(os.path.join(self.symbol_path,
                                                   rel_path))
-        success = call(["tar", "cjf", full_path, os.path.basename(file)],
-                       cwd=os.path.dirname(file),
-                       stdout=open("/dev/null","w"), stderr=STDOUT)
+        success = subprocess.call(["tar", "cjf", full_path, os.path.basename(file)],
+                                  cwd=os.path.dirname(file),
+                                  stdout=open("/dev/null","w"), stderr=subprocess.STDOUT)
         if success == 0 and os.path.exists(full_path):
             print rel_path
 
@@ -759,15 +731,23 @@ def main():
     parser.add_option("-i", "--source-index",
                       action="store_true", dest="srcsrv", default=False,
                       help="Add source index information to debug files, making them suitable for use in a source server.")
+    parser.add_option("-x", "--exclude",
+                      action="append", dest="exclude", default=[], metavar="PATTERN",
+                      help="Skip processing files matching PATTERN.")
+    parser.add_option("--repo-manifest",
+                      action="store", dest="repo_manifest",
+                      help="""Get source information from this XML manifest
+produced by the `repo manifest -r` command.
+""")
     (options, args) = parser.parse_args()
-    
+
     #check to see if the pdbstr.exe exists
     if options.srcsrv:
         pdbstr = os.environ.get("PDBSTR_PATH")
         if not os.path.exists(pdbstr):
             print >> sys.stderr, "Invalid path to pdbstr.exe - please set/check PDBSTR_PATH.\n"
             sys.exit(1)
-            
+
     if len(args) < 3:
         parser.error("not enough arguments")
         exit(1)
@@ -778,7 +758,9 @@ def main():
                                        archs=options.archs,
                                        srcdirs=options.srcdir,
                                        vcsinfo=options.vcsinfo,
-                                       srcsrv=options.srcsrv)
+                                       srcsrv=options.srcsrv,
+                                       exclude=options.exclude,
+                                       repo_manifest=options.repo_manifest)
     for arg in args[2:]:
         dumper.Process(arg)
 

@@ -1,40 +1,10 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set ts=2 sw=2 et tw=80: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "mozilla/DebugOnly.h"
 
 #include "nsXBLDocumentInfo.h"
 #include "nsHashtable.h"
@@ -51,11 +21,22 @@
 #include "nsIScriptError.h"
 #include "nsIChromeRegistry.h"
 #include "nsIPrincipal.h"
+#include "nsJSPrincipals.h"
 #include "nsIScriptSecurityManager.h"
 #include "nsContentUtils.h"
 #include "nsDOMJSUtils.h"
 #include "mozilla/Services.h"
- 
+#include "xpcpublic.h"
+#include "mozilla/scache/StartupCache.h"
+#include "mozilla/scache/StartupCacheUtils.h"
+#include "nsCCUncollectableMarker.h"
+#include "mozilla/dom/BindingUtils.h"
+
+using namespace mozilla::scache;
+using namespace mozilla;
+
+static const char kXBLCachePrefix[] = "xblcache";
+
 static NS_DEFINE_CID(kDOMScriptObjectFactoryCID, NS_DOM_SCRIPT_OBJECT_FACTORY_CID);
 
 // An XBLDocumentInfo object has a special context associated with it which we can use to pre-compile 
@@ -64,47 +45,50 @@ class nsXBLDocGlobalObject : public nsIScriptGlobalObject,
                              public nsIScriptObjectPrincipal
 {
 public:
-  nsXBLDocGlobalObject(nsIScriptGlobalObjectOwner *aGlobalObjectOwner);
+  nsXBLDocGlobalObject(nsXBLDocumentInfo *aGlobalObjectOwner);
 
   // nsISupports interface
   NS_DECL_CYCLE_COLLECTING_ISUPPORTS
   
   // nsIScriptGlobalObject methods
-  virtual nsresult EnsureScriptEnvironment(PRUint32 aLangID);
-  virtual nsresult SetScriptContext(PRUint32 lang_id, nsIScriptContext *aContext);
+  virtual nsresult EnsureScriptEnvironment();
+  void ClearScriptContext()
+  {
+    mScriptContext = NULL;
+  }
 
   virtual nsIScriptContext *GetContext();
   virtual JSObject *GetGlobalJSObject();
-  virtual void OnFinalize(PRUint32 aLangID, void *aScriptGlobal);
-  virtual void SetScriptsEnabled(PRBool aEnabled, PRBool aFireTimeouts);
+  virtual void OnFinalize(JSObject* aObject);
+  virtual void SetScriptsEnabled(bool aEnabled, bool aFireTimeouts);
 
   // nsIScriptObjectPrincipal methods
   virtual nsIPrincipal* GetPrincipal();
 
   static JSBool doCheckAccess(JSContext *cx, JSObject *obj, jsid id,
-                              PRUint32 accessType);
+                              uint32_t accessType);
 
   NS_DECL_CYCLE_COLLECTION_CLASS_AMBIGUOUS(nsXBLDocGlobalObject,
                                            nsIScriptGlobalObject)
 
   void ClearGlobalObjectOwner();
 
+  void UnmarkScriptContext();
+
 protected:
   virtual ~nsXBLDocGlobalObject();
 
-  void SetContext(nsIScriptContext *aContext);
-  nsIScriptContext *GetScriptContext(PRUint32 language);
-  void *GetScriptGlobal(PRUint32 language);
+  nsIScriptContext *GetScriptContext();
 
   nsCOMPtr<nsIScriptContext> mScriptContext;
-  JSObject *mJSObject;    // XXX JS language rabies bigotry badness
+  JSObject *mJSObject;
 
-  nsIScriptGlobalObjectOwner* mGlobalObjectOwner; // weak reference
+  nsXBLDocumentInfo* mGlobalObjectOwner; // weak reference
   static JSClass gSharedGlobalClass;
 };
 
 JSBool
-nsXBLDocGlobalObject::doCheckAccess(JSContext *cx, JSObject *obj, jsid id, PRUint32 accessType)
+nsXBLDocGlobalObject::doCheckAccess(JSContext *cx, JSObject *obj, jsid id, uint32_t accessType)
 {
   nsIScriptSecurityManager *ssm = nsContentUtils::GetSecurityManager();
   if (!ssm) {
@@ -114,40 +98,42 @@ nsXBLDocGlobalObject::doCheckAccess(JSContext *cx, JSObject *obj, jsid id, PRUin
 
   // Make sure to actually operate on our object, and not some object further
   // down on the proto chain.
-  while (JS_GET_CLASS(cx, obj) != &nsXBLDocGlobalObject::gSharedGlobalClass) {
-    obj = ::JS_GetPrototype(cx, obj);
+  while (JS_GetClass(obj) != &nsXBLDocGlobalObject::gSharedGlobalClass) {
+    if (!::JS_GetPrototype(cx, obj, &obj)) {
+      return JS_FALSE;
+    }
     if (!obj) {
       ::JS_ReportError(cx, "Invalid access to a global object property.");
       return JS_FALSE;
     }
   }
 
-  nsresult rv = ssm->CheckPropertyAccess(cx, obj, JS_GET_CLASS(cx, obj)->name,
+  nsresult rv = ssm->CheckPropertyAccess(cx, obj, JS_GetClass(obj)->name,
                                          id, accessType);
   return NS_SUCCEEDED(rv);
 }
 
 static JSBool
-nsXBLDocGlobalObject_getProperty(JSContext *cx, JSObject *obj,
-                                 jsid id, jsval *vp)
+nsXBLDocGlobalObject_getProperty(JSContext *cx, JSHandleObject obj,
+                                 JSHandleId id, JSMutableHandleValue vp)
 {
   return nsXBLDocGlobalObject::
     doCheckAccess(cx, obj, id, nsIXPCSecurityManager::ACCESS_GET_PROPERTY);
 }
 
 static JSBool
-nsXBLDocGlobalObject_setProperty(JSContext *cx, JSObject *obj,
-                                 jsid id, jsval *vp)
+nsXBLDocGlobalObject_setProperty(JSContext *cx, JSHandleObject obj,
+                                 JSHandleId id, JSBool strict, JSMutableHandleValue vp)
 {
   return nsXBLDocGlobalObject::
     doCheckAccess(cx, obj, id, nsIXPCSecurityManager::ACCESS_SET_PROPERTY);
 }
 
 static JSBool
-nsXBLDocGlobalObject_checkAccess(JSContext *cx, JSObject *obj, jsid id,
-                                 JSAccessMode mode, jsval *vp)
+nsXBLDocGlobalObject_checkAccess(JSContext *cx, JSHandleObject obj, JSHandleId id,
+                                 JSAccessMode mode, JSMutableHandleValue vp)
 {
-  PRUint32 translated;
+  uint32_t translated;
   if (mode & JSACC_WRITE) {
     translated = nsIXPCSecurityManager::ACCESS_SET_PROPERTY;
   } else {
@@ -159,21 +145,21 @@ nsXBLDocGlobalObject_checkAccess(JSContext *cx, JSObject *obj, jsid id,
 }
 
 static void
-nsXBLDocGlobalObject_finalize(JSContext *cx, JSObject *obj)
+nsXBLDocGlobalObject_finalize(JSFreeOp *fop, JSObject *obj)
 {
-  nsISupports *nativeThis = (nsISupports*)JS_GetPrivate(cx, obj);
+  nsISupports *nativeThis = (nsISupports*)JS_GetPrivate(obj);
 
   nsCOMPtr<nsIScriptGlobalObject> sgo(do_QueryInterface(nativeThis));
 
   if (sgo)
-    sgo->OnFinalize(nsIProgrammingLanguage::JAVASCRIPT, obj);
+    sgo->OnFinalize(obj);
 
   // The addref was part of JSObject construction
   NS_RELEASE(nativeThis);
 }
 
 static JSBool
-nsXBLDocGlobalObject_resolve(JSContext *cx, JSObject *obj, jsid id)
+nsXBLDocGlobalObject_resolve(JSContext *cx, JSHandleObject obj, JSHandleId id)
 {
   JSBool did_resolve = JS_FALSE;
   return JS_ResolveStandardClass(cx, obj, id, &did_resolve);
@@ -182,12 +168,14 @@ nsXBLDocGlobalObject_resolve(JSContext *cx, JSObject *obj, jsid id)
 
 JSClass nsXBLDocGlobalObject::gSharedGlobalClass = {
     "nsXBLPrototypeScript compilation scope",
-    JSCLASS_HAS_PRIVATE | JSCLASS_PRIVATE_IS_NSISUPPORTS | JSCLASS_GLOBAL_FLAGS,
+    JSCLASS_HAS_PRIVATE | JSCLASS_PRIVATE_IS_NSISUPPORTS |
+    JSCLASS_IMPLEMENTS_BARRIERS | JSCLASS_GLOBAL_FLAGS_WITH_SLOTS(0),
     JS_PropertyStub,  JS_PropertyStub,
     nsXBLDocGlobalObject_getProperty, nsXBLDocGlobalObject_setProperty,
     JS_EnumerateStub, nsXBLDocGlobalObject_resolve,
     JS_ConvertStub, nsXBLDocGlobalObject_finalize,
-    NULL, nsXBLDocGlobalObject_checkAccess
+    nsXBLDocGlobalObject_checkAccess, NULL, NULL, NULL,
+    NULL
 };
 
 //----------------------------------------------------------------------
@@ -195,8 +183,8 @@ JSClass nsXBLDocGlobalObject::gSharedGlobalClass = {
 // nsXBLDocGlobalObject
 //
 
-nsXBLDocGlobalObject::nsXBLDocGlobalObject(nsIScriptGlobalObjectOwner *aGlobalObjectOwner)
-    : mJSObject(nsnull),
+nsXBLDocGlobalObject::nsXBLDocGlobalObject(nsXBLDocumentInfo *aGlobalObjectOwner)
+    : mJSObject(nullptr),
       mGlobalObjectOwner(aGlobalObjectOwner) // weak reference
 {
 }
@@ -214,8 +202,8 @@ NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(nsXBLDocGlobalObject)
   NS_INTERFACE_MAP_ENTRY_AMBIGUOUS(nsISupports, nsIScriptGlobalObject)
 NS_INTERFACE_MAP_END
 
-NS_IMPL_CYCLE_COLLECTING_ADDREF_AMBIGUOUS(nsXBLDocGlobalObject, nsIScriptGlobalObject)
-NS_IMPL_CYCLE_COLLECTING_RELEASE_AMBIGUOUS(nsXBLDocGlobalObject, nsIScriptGlobalObject)
+NS_IMPL_CYCLE_COLLECTING_ADDREF(nsXBLDocGlobalObject)
+NS_IMPL_CYCLE_COLLECTING_RELEASE(nsXBLDocGlobalObject)
 
 void
 XBL_ProtoErrorReporter(JSContext *cx,
@@ -230,12 +218,17 @@ XBL_ProtoErrorReporter(JSContext *cx,
     consoleService(do_GetService("@mozilla.org/consoleservice;1"));
 
   if (errorObject && consoleService) {
-    PRUint32 column = report->uctokenptr - report->uclinebuf;
+    uint32_t column = report->uctokenptr - report->uclinebuf;
+
+    const PRUnichar* ucmessage =
+      static_cast<const PRUnichar*>(report->ucmessage);
+    const PRUnichar* uclinebuf =
+      static_cast<const PRUnichar*>(report->uclinebuf);
 
     errorObject->Init
-         (reinterpret_cast<const PRUnichar*>(report->ucmessage),
-          NS_ConvertUTF8toUTF16(report->filename).get(),
-          reinterpret_cast<const PRUnichar*>(report->uclinebuf),
+         (ucmessage ? nsDependentString(ucmessage) : EmptyString(),
+          NS_ConvertUTF8toUTF16(report->filename),
+          uclinebuf ? nsDependentString(uclinebuf) : EmptyString(),
           report->lineno, column, report->flags,
           "xbl javascript"
           );
@@ -248,91 +241,60 @@ XBL_ProtoErrorReporter(JSContext *cx,
 // nsIScriptGlobalObject methods
 //
 
-void
-nsXBLDocGlobalObject::SetContext(nsIScriptContext *aScriptContext)
-{
-  if (!aScriptContext) {
-    mScriptContext = nsnull;
-    return;
-  }
-  NS_ASSERTION(aScriptContext->GetScriptTypeID() ==
-                                        nsIProgrammingLanguage::JAVASCRIPT,
-               "xbl is not multi-language");
-  aScriptContext->WillInitializeContext();
-  // NOTE: We init this context with a NULL global, so we automatically
-  // hook up to the existing nsIScriptGlobalObject global setup by
-  // nsGlobalWindow.
-  nsresult rv;
-  rv = aScriptContext->InitContext();
-  NS_WARN_IF_FALSE(NS_SUCCEEDED(rv), "Script Language's InitContext failed");
-  aScriptContext->SetGCOnDestruction(PR_FALSE);
-  aScriptContext->DidInitializeContext();
-  // and we set up our global manually
-  mScriptContext = aScriptContext;
-}
-
-nsresult
-nsXBLDocGlobalObject::SetScriptContext(PRUint32 lang_id, nsIScriptContext *aContext)
-{
-  NS_ASSERTION(lang_id == nsIProgrammingLanguage::JAVASCRIPT, "Only JS allowed!");
-  SetContext(aContext);
-  return NS_OK;
-}
-
 nsIScriptContext *
-nsXBLDocGlobalObject::GetScriptContext(PRUint32 language)
+nsXBLDocGlobalObject::GetScriptContext()
 {
-  // This impl still assumes JS
-  NS_ENSURE_TRUE(language==nsIProgrammingLanguage::JAVASCRIPT, nsnull);
   return GetContext();
 }
 
-void *
-nsXBLDocGlobalObject::GetScriptGlobal(PRUint32 language)
-{
-  // This impl still assumes JS
-  NS_ENSURE_TRUE(language==nsIProgrammingLanguage::JAVASCRIPT, nsnull);
-  return GetGlobalJSObject();
-}
-
 nsresult
-nsXBLDocGlobalObject::EnsureScriptEnvironment(PRUint32 aLangID)
+nsXBLDocGlobalObject::EnsureScriptEnvironment()
 {
-  if (aLangID != nsIProgrammingLanguage::JAVASCRIPT) {
-    NS_WARNING("XBL still JS only");
-    return NS_ERROR_INVALID_ARG;
+  if (mScriptContext) {
+    // Already initialized.
+    return NS_OK;
   }
-  if (mScriptContext)
-    return NS_OK; // already initialized for this lang
-  nsCOMPtr<nsIDOMScriptObjectFactory> factory = do_GetService(kDOMScriptObjectFactoryCID);
-  NS_ENSURE_TRUE(factory, nsnull);
-
-  nsresult rv;
 
   nsCOMPtr<nsIScriptRuntime> scriptRuntime;
-  rv = NS_GetScriptRuntimeByID(aLangID, getter_AddRefs(scriptRuntime));
-  NS_ENSURE_SUCCESS(rv, rv);
-  nsCOMPtr<nsIScriptContext> newCtx;
-  rv = scriptRuntime->CreateContext(getter_AddRefs(newCtx));
-  NS_ENSURE_SUCCESS(rv, rv);
-  rv = SetScriptContext(aLangID, newCtx);
+  NS_GetJSRuntime(getter_AddRefs(scriptRuntime));
+  NS_ENSURE_TRUE(scriptRuntime, NS_OK);
 
-  JSContext *cx = (JSContext *)mScriptContext->GetNativeContext();
+  nsCOMPtr<nsIScriptContext> newCtx = scriptRuntime->CreateContext(false, nullptr);
+  MOZ_ASSERT(newCtx);
+
+  newCtx->WillInitializeContext();
+  // NOTE: We init this context with a NULL global, so we automatically
+  // hook up to the existing nsIScriptGlobalObject global setup by
+  // nsGlobalWindow.
+  DebugOnly<nsresult> rv = newCtx->InitContext();
+  NS_WARN_IF_FALSE(NS_SUCCEEDED(rv), "Script Language's InitContext failed");
+  newCtx->DidInitializeContext();
+
+  mScriptContext = newCtx;
+
+  JSContext *cx = mScriptContext->GetNativeContext();
   JSAutoRequest ar(cx);
 
   // nsJSEnvironment set the error reporter to NS_ScriptErrorReporter so
   // we must apparently override that with our own (although it isn't clear 
   // why - see bug 339647)
   JS_SetErrorReporter(cx, XBL_ProtoErrorReporter);
-  mJSObject = ::JS_NewGlobalObject(cx, &gSharedGlobalClass);
+
+  mJSObject = JS_NewGlobalObject(cx, &gSharedGlobalClass,
+                                 nsJSPrincipals::get(GetPrincipal()));
   if (!mJSObject)
-    return nsnull;
+      return NS_OK;
+
+  // Set the location information for the new global, so that tools like
+  // about:memory may use that information
+  nsIURI *ownerURI = mGlobalObjectOwner->DocumentURI();
+  xpc::SetLocationForGlobal(mJSObject, ownerURI);
 
   ::JS_SetGlobalObject(cx, mJSObject);
 
   // Add an owning reference from JS back to us. This'll be
   // released when the JSObject is finalized.
-  ::JS_SetPrivate(cx, mJSObject, this);
+  ::JS_SetPrivate(mJSObject, this);
   NS_ADDREF(this);
   return NS_OK;
 }
@@ -343,10 +305,10 @@ nsXBLDocGlobalObject::GetContext()
   // This whole fragile mess is predicated on the fact that
   // GetContext() will be called before GetScriptObject() is.
   if (! mScriptContext) {
-    nsresult rv = EnsureScriptEnvironment(nsIProgrammingLanguage::JAVASCRIPT);
+    nsresult rv = EnsureScriptEnvironment();
     // JS is builtin so we make noise if it fails to initialize.
     NS_WARN_IF_FALSE(NS_SUCCEEDED(rv), "Failed to setup JS!?");
-    NS_ENSURE_SUCCESS(rv, nsnull);
+    NS_ENSURE_SUCCESS(rv, nullptr);
     NS_ASSERTION(mScriptContext, "Failed to find a script context!?");
   }
   return mScriptContext;
@@ -355,7 +317,15 @@ nsXBLDocGlobalObject::GetContext()
 void
 nsXBLDocGlobalObject::ClearGlobalObjectOwner()
 {
-  mGlobalObjectOwner = nsnull;
+  mGlobalObjectOwner = nullptr;
+}
+
+void
+nsXBLDocGlobalObject::UnmarkScriptContext()
+{
+  if (mScriptContext) {
+    xpc_UnmarkGrayObject(mScriptContext->GetNativeGlobal());
+  }
 }
 
 JSObject *
@@ -365,12 +335,11 @@ nsXBLDocGlobalObject::GetGlobalJSObject()
   // that can be used to compile scripts and event handlers.
 
   if (!mScriptContext)
-    return nsnull;
+    return nullptr;
 
-  JSContext* cx = static_cast<JSContext*>
-                             (mScriptContext->GetNativeContext());
+  JSContext* cx = mScriptContext->GetNativeContext();
   if (!cx)
-    return nsnull;
+    return nullptr;
 
   JSObject *ret = ::JS_GetGlobalObject(cx);
   NS_ASSERTION(mJSObject == ret, "How did this magic switch happen?");
@@ -378,17 +347,14 @@ nsXBLDocGlobalObject::GetGlobalJSObject()
 }
 
 void
-nsXBLDocGlobalObject::OnFinalize(PRUint32 aLangID, void *aObject)
+nsXBLDocGlobalObject::OnFinalize(JSObject* aObject)
 {
-  NS_ASSERTION(aLangID == nsIProgrammingLanguage::JAVASCRIPT,
-               "Only JS supported");
   NS_ASSERTION(aObject == mJSObject, "Wrong object finalized!");
-
-  mJSObject = nsnull;
+  mJSObject = NULL;
 }
 
 void
-nsXBLDocGlobalObject::SetScriptsEnabled(PRBool aEnabled, PRBool aFireTimeouts)
+nsXBLDocGlobalObject::SetScriptsEnabled(bool aEnabled, bool aFireTimeouts)
 {
     // We don't care...
 }
@@ -404,7 +370,7 @@ nsXBLDocGlobalObject::GetPrincipal()
   if (!mGlobalObjectOwner) {
     // XXXbz this should really save the principal when
     // ClearGlobalObjectOwner() happens.
-    return nsnull;
+    return nullptr;
   }
 
   nsRefPtr<nsXBLDocumentInfo> docInfo =
@@ -417,17 +383,17 @@ nsXBLDocGlobalObject::GetPrincipal()
   return document->NodePrincipal();
 }
 
-static PRBool IsChromeURI(nsIURI* aURI)
+static bool IsChromeURI(nsIURI* aURI)
 {
-  PRBool isChrome = PR_FALSE;
+  bool isChrome = false;
   if (NS_SUCCEEDED(aURI->SchemeIs("chrome", &isChrome)))
       return isChrome;
-  return PR_FALSE;
+  return false;
 }
 
 /* Implementation file */
 
-static PRIntn
+static bool
 TraverseProtos(nsHashKey *aKey, void *aData, void* aClosure)
 {
   nsCycleCollectionTraversalCallback *cb = 
@@ -437,7 +403,7 @@ TraverseProtos(nsHashKey *aKey, void *aData, void* aClosure)
   return kHashEnumerateNext;
 }
 
-static PRIntn
+static bool
 UnlinkProtoJSObjects(nsHashKey *aKey, void *aData, void* aClosure)
 {
   nsXBLPrototypeBinding *proto = static_cast<nsXBLPrototypeBinding*>(aData);
@@ -451,7 +417,7 @@ struct ProtoTracer
   void *mClosure;
 };
 
-static PRIntn
+static bool
 TraceProtos(nsHashKey *aKey, void *aData, void* aClosure)
 {
   ProtoTracer* closure = static_cast<ProtoTracer*>(aClosure);
@@ -461,20 +427,24 @@ TraceProtos(nsHashKey *aKey, void *aData, void* aClosure)
 }
 
 NS_IMPL_CYCLE_COLLECTION_CLASS(nsXBLDocumentInfo)
-NS_IMPL_CYCLE_COLLECTION_ROOT_BEGIN(nsXBLDocumentInfo)
-  if (tmp->mBindingTable) {
-    tmp->mBindingTable->Enumerate(UnlinkProtoJSObjects, nsnull);
-  }
-NS_IMPL_CYCLE_COLLECTION_ROOT_END
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(nsXBLDocumentInfo)
-  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mDocument)
-  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mGlobalObject)
+  if (tmp->mBindingTable) {
+    tmp->mBindingTable->Enumerate(UnlinkProtoJSObjects, nullptr);
+  }
+  NS_IMPL_CYCLE_COLLECTION_UNLINK(mDocument)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK(mGlobalObject)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN(nsXBLDocumentInfo)
-  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mDocument)
+  if (tmp->mDocument &&
+      nsCCUncollectableMarker::InGeneration(cb, tmp->mDocument->GetMarkedCCGeneration())) {
+    NS_IMPL_CYCLE_COLLECTION_TRAVERSE_SCRIPT_OBJECTS
+    return NS_SUCCESS_INTERRUPTED_TRAVERSE;
+  }
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mDocument)
   if (tmp->mBindingTable) {
     tmp->mBindingTable->Enumerate(TraverseProtos, &cb);
   }
+  NS_CYCLE_COLLECTION_NOTE_EDGE_NAME(cb, "mGlobalObject");
   cb.NoteXPCOMChild(static_cast<nsIScriptGlobalObject*>(tmp->mGlobalObject));
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_SCRIPT_OBJECTS
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
@@ -485,22 +455,50 @@ NS_IMPL_CYCLE_COLLECTION_TRACE_BEGIN(nsXBLDocumentInfo)
   }
 NS_IMPL_CYCLE_COLLECTION_TRACE_END
 
+static void
+UnmarkXBLJSObject(void* aP, const char* aName, void* aClosure)
+{
+  xpc_UnmarkGrayObject(static_cast<JSObject*>(aP));
+}
+
+static bool
+UnmarkProtos(nsHashKey* aKey, void* aData, void* aClosure)
+{
+  nsXBLPrototypeBinding* proto = static_cast<nsXBLPrototypeBinding*>(aData);
+  proto->Trace(UnmarkXBLJSObject, nullptr);
+  return kHashEnumerateNext;
+}
+
+void
+nsXBLDocumentInfo::MarkInCCGeneration(uint32_t aGeneration)
+{
+  if (mDocument) {
+    mDocument->MarkUncollectableForCCGeneration(aGeneration);
+  }
+  // Unmark any JS we hold
+  if (mBindingTable) {
+    mBindingTable->Enumerate(UnmarkProtos, nullptr);
+  }
+  if (mGlobalObject) {
+    mGlobalObject->UnmarkScriptContext();
+  }
+}
+
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(nsXBLDocumentInfo)
   NS_INTERFACE_MAP_ENTRY(nsIScriptGlobalObjectOwner)
   NS_INTERFACE_MAP_ENTRY(nsISupportsWeakReference)
   NS_INTERFACE_MAP_ENTRY_AMBIGUOUS(nsISupports, nsIScriptGlobalObjectOwner)
 NS_INTERFACE_MAP_END
 
-NS_IMPL_CYCLE_COLLECTING_ADDREF_AMBIGUOUS(nsXBLDocumentInfo, nsIScriptGlobalObjectOwner)
-NS_IMPL_CYCLE_COLLECTING_RELEASE_AMBIGUOUS(nsXBLDocumentInfo,
-                                           nsIScriptGlobalObjectOwner)
+NS_IMPL_CYCLE_COLLECTING_ADDREF(nsXBLDocumentInfo)
+NS_IMPL_CYCLE_COLLECTING_RELEASE(nsXBLDocumentInfo)
 
 nsXBLDocumentInfo::nsXBLDocumentInfo(nsIDocument* aDocument)
   : mDocument(aDocument),
-    mScriptAccess(PR_TRUE),
-    mIsChrome(PR_FALSE),
-    mBindingTable(nsnull),
-    mFirstBinding(nsnull)
+    mScriptAccess(true),
+    mIsChrome(false),
+    mBindingTable(nullptr),
+    mFirstBinding(nullptr)
 {
   nsIURI* uri = aDocument->GetDocumentURI();
   if (IsChromeURI(uri)) {
@@ -508,11 +506,11 @@ nsXBLDocumentInfo::nsXBLDocumentInfo(nsIDocument* aDocument)
     nsCOMPtr<nsIXULChromeRegistry> reg =
       mozilla::services::GetXULChromeRegistryService();
     if (reg) {
-      PRBool allow = PR_TRUE;
+      bool allow = true;
       reg->AllowScriptsForPackage(uri, &allow);
       mScriptAccess = allow;
     }
-    mIsChrome = PR_TRUE;
+    mIsChrome = true;
   }
 }
 
@@ -521,12 +519,13 @@ nsXBLDocumentInfo::~nsXBLDocumentInfo()
   /* destructor code */
   if (mGlobalObject) {
     // remove circular reference
-    mGlobalObject->SetScriptContext(nsIProgrammingLanguage::JAVASCRIPT, nsnull);
+    mGlobalObject->ClearScriptContext();
     mGlobalObject->ClearGlobalObjectOwner(); // just in case
   }
   if (mBindingTable) {
-    NS_DROP_JS_OBJECTS(this, nsXBLDocumentInfo);
     delete mBindingTable;
+    mBindingTable = nullptr;
+    NS_DROP_JS_OBJECTS(this, nsXBLDocumentInfo);
   }
 }
 
@@ -546,19 +545,19 @@ nsXBLDocumentInfo::GetPrototypeBinding(const nsACString& aRef)
   return static_cast<nsXBLPrototypeBinding*>(mBindingTable->Get(&key));
 }
 
-static PRBool
+static bool
 DeletePrototypeBinding(nsHashKey* aKey, void* aData, void* aClosure)
 {
   nsXBLPrototypeBinding* binding = static_cast<nsXBLPrototypeBinding*>(aData);
   delete binding;
-  return PR_TRUE;
+  return true;
 }
 
 nsresult
 nsXBLDocumentInfo::SetPrototypeBinding(const nsACString& aRef, nsXBLPrototypeBinding* aBinding)
 {
   if (!mBindingTable) {
-    mBindingTable = new nsObjectHashtable(nsnull, nsnull, DeletePrototypeBinding, nsnull);
+    mBindingTable = new nsObjectHashtable(nullptr, nullptr, DeletePrototypeBinding, nullptr);
 
     NS_HOLD_JS_OBJECTS(this, nsXBLDocumentInfo);
   }
@@ -572,16 +571,149 @@ nsXBLDocumentInfo::SetPrototypeBinding(const nsACString& aRef, nsXBLPrototypeBin
 }
 
 void
+nsXBLDocumentInfo::RemovePrototypeBinding(const nsACString& aRef)
+{
+  if (mBindingTable) {
+    // Use a flat string to avoid making a copy.
+    const nsPromiseFlatCString& flat = PromiseFlatCString(aRef);
+    nsCStringKey key(flat);
+    mBindingTable->Remove(&key);
+  }
+}
+
+// Callback to enumerate over the bindings from this document and write them
+// out to the cache.
+bool
+WriteBinding(nsHashKey *aKey, void *aData, void* aClosure)
+{
+  nsXBLPrototypeBinding* binding = static_cast<nsXBLPrototypeBinding *>(aData);
+  binding->Write((nsIObjectOutputStream*)aClosure);
+
+  return kHashEnumerateNext;
+}
+
+// static
+nsresult
+nsXBLDocumentInfo::ReadPrototypeBindings(nsIURI* aURI, nsXBLDocumentInfo** aDocInfo)
+{
+  *aDocInfo = nullptr;
+
+  nsAutoCString spec(kXBLCachePrefix);
+  nsresult rv = PathifyURI(aURI, spec);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  StartupCache* startupCache = StartupCache::GetSingleton();
+  NS_ENSURE_TRUE(startupCache, NS_ERROR_FAILURE);
+
+  nsAutoArrayPtr<char> buf;
+  uint32_t len;
+  rv = startupCache->GetBuffer(spec.get(), getter_Transfers(buf), &len);
+  // GetBuffer will fail if the binding is not in the cache.
+  if (NS_FAILED(rv))
+    return rv;
+
+  nsCOMPtr<nsIObjectInputStream> stream;
+  rv = NewObjectInputStreamFromBuffer(buf, len, getter_AddRefs(stream));
+  NS_ENSURE_SUCCESS(rv, rv);
+  buf.forget();
+
+  // The file compatibility.ini stores the build id. This is checked in
+  // nsAppRunner.cpp and will delete the cache if a different build is
+  // present. However, we check that the version matches here to be safe. 
+  uint32_t version;
+  rv = stream->Read32(&version);
+  NS_ENSURE_SUCCESS(rv, rv);
+  if (version != XBLBinding_Serialize_Version) {
+    // The version that exists is different than expected, likely created with a
+    // different build, so invalidate the cache.
+    startupCache->InvalidateCache();
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+
+  nsCOMPtr<nsIPrincipal> principal;
+  nsContentUtils::GetSecurityManager()->
+    GetSystemPrincipal(getter_AddRefs(principal));
+
+  nsCOMPtr<nsIDOMDocument> domdoc;
+  rv = NS_NewXBLDocument(getter_AddRefs(domdoc), aURI, nullptr, principal);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  nsCOMPtr<nsIDocument> doc = do_QueryInterface(domdoc);
+  NS_ASSERTION(doc, "Must have a document!");
+  nsRefPtr<nsXBLDocumentInfo> docInfo = new nsXBLDocumentInfo(doc);
+
+  while (1) {
+    uint8_t flags;
+    nsresult rv = stream->Read8(&flags);
+    NS_ENSURE_SUCCESS(rv, rv);
+    if (flags == XBLBinding_Serialize_NoMoreBindings)
+      break;
+
+    nsXBLPrototypeBinding* binding = new nsXBLPrototypeBinding();
+    rv = binding->Read(stream, docInfo, doc, flags);
+    if (NS_FAILED(rv)) {
+      delete binding;
+      return rv;
+    }
+  }
+
+  docInfo.swap(*aDocInfo);
+  return NS_OK;
+}
+
+nsresult
+nsXBLDocumentInfo::WritePrototypeBindings()
+{
+  // Only write out bindings with the system principal
+  if (!nsContentUtils::IsSystemPrincipal(mDocument->NodePrincipal()))
+    return NS_OK;
+
+  nsAutoCString spec(kXBLCachePrefix);
+  nsresult rv = PathifyURI(DocumentURI(), spec);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  StartupCache* startupCache = StartupCache::GetSingleton();
+  NS_ENSURE_TRUE(startupCache, rv);
+
+  nsCOMPtr<nsIObjectOutputStream> stream;
+  nsCOMPtr<nsIStorageStream> storageStream;
+  rv = NewObjectOutputWrappedStorageStream(getter_AddRefs(stream),
+                                           getter_AddRefs(storageStream),
+                                           true);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  rv = stream->Write32(XBLBinding_Serialize_Version);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  if (mBindingTable)
+    mBindingTable->Enumerate(WriteBinding, stream);
+
+  // write a end marker at the end
+  rv = stream->Write8(XBLBinding_Serialize_NoMoreBindings);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  stream->Close();
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  uint32_t len;
+  nsAutoArrayPtr<char> buf;
+  rv = NewBufferFromStorageStream(storageStream, getter_Transfers(buf), &len);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  return startupCache->PutBuffer(spec.get(), buf, len);
+}
+
+void
 nsXBLDocumentInfo::SetFirstPrototypeBinding(nsXBLPrototypeBinding* aBinding)
 {
   mFirstBinding = aBinding;
 }
 
-PRBool FlushScopedSkinSheets(nsHashKey* aKey, void* aData, void* aClosure)
+bool FlushScopedSkinSheets(nsHashKey* aKey, void* aData, void* aClosure)
 {
   nsXBLPrototypeBinding* proto = (nsXBLPrototypeBinding*)aData;
   proto->FlushSkinSheets();
-  return PR_TRUE;
+  return true;
 }
 
 void
@@ -602,21 +734,10 @@ nsXBLDocumentInfo::GetScriptGlobalObject()
   if (!mGlobalObject) {
     nsXBLDocGlobalObject *global = new nsXBLDocGlobalObject(this);
     if (!global)
-      return nsnull;
+      return nullptr;
 
     mGlobalObject = global;
   }
 
   return mGlobalObject;
-}
-
-nsXBLDocumentInfo* NS_NewXBLDocumentInfo(nsIDocument* aDocument)
-{
-  NS_PRECONDITION(aDocument, "Must have a document!");
-
-  nsXBLDocumentInfo* result;
-
-  result = new nsXBLDocumentInfo(aDocument);
-  NS_ADDREF(result);
-  return result;
 }

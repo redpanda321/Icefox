@@ -1,40 +1,7 @@
 /* vim:set ts=4 sw=4 sts=4 et cindent: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the SSPI NegotiateAuth Module
- *
- * The Initial Developer of the Original Code is IBM Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2004
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@meer.net>
- *   Jim Mathies <jmathies@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 //
 // Negotiate Authentication Support Module
@@ -52,6 +19,7 @@
 #include "nsIDNSRecord.h"
 #include "nsNetCID.h"
 #include "nsCOMPtr.h"
+#include "nsICryptoHash.h"
 
 #include <windows.h>
 
@@ -105,33 +73,14 @@ static const char *MapErrorCode(int rc)
 
 //-----------------------------------------------------------------------------
 
-static HINSTANCE                 sspi_lib; 
 static PSecurityFunctionTableW   sspi;
 
 static nsresult
 InitSSPI()
 {
-    PSecurityFunctionTableW (*initFun)(void);
-
     LOG(("  InitSSPI\n"));
 
-    sspi_lib = LoadLibraryW(L"secur32.dll");
-    if (!sspi_lib) {
-        sspi_lib = LoadLibraryW(L"security.dll");
-        if (!sspi_lib) {
-            LOG(("SSPI library not found"));
-            return NS_ERROR_UNEXPECTED;
-        }
-    }
-
-    initFun = (PSecurityFunctionTableW (*)(void))
-            GetProcAddress(sspi_lib, "InitSecurityInterfaceW");
-    if (!initFun) {
-        LOG(("InitSecurityInterfaceW not found"));
-        return NS_ERROR_UNEXPECTED;
-    }
-
-    sspi = initFun();
+    sspi = InitSecurityInterfaceW();
     if (!sspi) {
         LOG(("InitSecurityInterfaceW failed"));
         return NS_ERROR_UNEXPECTED;
@@ -142,54 +91,12 @@ InitSSPI()
 
 //-----------------------------------------------------------------------------
 
-static nsresult
-MakeSN(const char *principal, nsCString &result)
-{
-    nsresult rv;
-
-    nsCAutoString buf(principal);
-
-    // The service name looks like "protocol@hostname", we need to map
-    // this to a value that SSPI expects.  To be consistent with IE, we
-    // need to map '@' to '/' and canonicalize the hostname.
-    PRInt32 index = buf.FindChar('@');
-    if (index == kNotFound)
-        return NS_ERROR_UNEXPECTED;
-    
-    nsCOMPtr<nsIDNSService> dns = do_GetService(NS_DNSSERVICE_CONTRACTID, &rv);
-    if (NS_FAILED(rv))
-        return rv;
-
-    // This could be expensive if our DNS cache cannot satisfy the request.
-    // However, we should have at least hit the OS resolver once prior to
-    // reaching this code, so provided the OS resolver has this information
-    // cached, we should not have to worry about blocking on this function call
-    // for very long.  NOTE: because we ask for the canonical hostname, we
-    // might end up requiring extra network activity in cases where the OS
-    // resolver might not have enough information to satisfy the request from
-    // its cache.  This is not an issue in versions of Windows up to WinXP.
-    nsCOMPtr<nsIDNSRecord> record;
-    rv = dns->Resolve(Substring(buf, index + 1),
-                      nsIDNSService::RESOLVE_CANONICAL_NAME,
-                      getter_AddRefs(record));
-    if (NS_FAILED(rv))
-        return rv;
-
-    nsCAutoString cname;
-    rv = record->GetCanonicalName(cname);
-    if (NS_SUCCEEDED(rv)) {
-        result = StringHead(buf, index) + NS_LITERAL_CSTRING("/") + cname;
-        LOG(("Using SPN of [%s]\n", result.get()));
-    }
-    return rv;
-}
-
-//-----------------------------------------------------------------------------
-
 nsAuthSSPI::nsAuthSSPI(pType package)
     : mServiceFlags(REQ_DEFAULT)
     , mMaxTokenLen(0)
     , mPackage(package)
+    , mCertDERData(nullptr)
+    , mCertDERLength(0)
 {
     memset(&mCred, 0, sizeof(mCred));
     memset(&mCtxt, 0, sizeof(mCtxt));
@@ -212,6 +119,14 @@ nsAuthSSPI::~nsAuthSSPI()
 void
 nsAuthSSPI::Reset()
 {
+    mIsFirst = true;
+
+    if (mCertDERData){
+        nsMemory::Free(mCertDERData);
+        mCertDERData = nullptr;
+        mCertDERLength = 0;   
+    }
+
     if (mCtxt.dwLower || mCtxt.dwUpper) {
         (sspi->DeleteSecurityContext)(&mCtxt);
         memset(&mCtxt, 0, sizeof(mCtxt));
@@ -222,12 +137,16 @@ NS_IMPL_ISUPPORTS1(nsAuthSSPI, nsIAuthModule)
 
 NS_IMETHODIMP
 nsAuthSSPI::Init(const char *serviceName,
-                 PRUint32    serviceFlags,
+                 uint32_t    serviceFlags,
                  const PRUnichar *domain,
                  const PRUnichar *username,
                  const PRUnichar *password)
 {
     LOG(("  nsAuthSSPI::Init\n"));
+
+    mIsFirst = true;
+    mCertDERLength = 0;
+    mCertDERData = nullptr;
 
     // The caller must supply a service name to be used. (For why we now require
     // a service name for NTLM, see bug 487872.)
@@ -245,23 +164,13 @@ nsAuthSSPI::Init(const char *serviceName,
 
     package = (SEC_WCHAR *) pTypeName[(int)mPackage];
 
-    if (mPackage == PACKAGE_TYPE_NTLM) {
-        // (bug 535193) For NTLM, just use the uri host, do not do canonical host lookups.
-        // The incoming serviceName is in the format: "protocol@hostname", SSPI expects
-        // "<service class>/<hostname>", so swap the '@' for a '/'.
-        mServiceName.Assign(serviceName);
-        PRInt32 index = mServiceName.FindChar('@');
-        if (index == kNotFound)
-            return NS_ERROR_UNEXPECTED;
-        mServiceName.Replace(index, 1, '/');
-    }
-    else {
-        // Kerberos requires the canonical host, MakeSN takes care of this through a
-        // DNS lookup.
-        rv = MakeSN(serviceName, mServiceName);
-        if (NS_FAILED(rv))
-            return rv;
-    }
+    // The incoming serviceName is in the format: "protocol@hostname", SSPI expects
+    // "<service class>/<hostname>", so swap the '@' for a '/'.
+    mServiceName.Assign(serviceName);
+    int32_t index = mServiceName.FindChar('@');
+    if (index == kNotFound)
+        return NS_ERROR_UNEXPECTED;
+    mServiceName.Replace(index, 1, '/');
 
     mServiceFlags = serviceFlags;
 
@@ -279,7 +188,7 @@ nsAuthSSPI::Init(const char *serviceName,
     TimeStamp useBefore;
 
     SEC_WINNT_AUTH_IDENTITY_W ai;
-    SEC_WINNT_AUTH_IDENTITY_W *pai = nsnull;
+    SEC_WINNT_AUTH_IDENTITY_W *pai = nullptr;
     
     // domain, username, and password will be null if nsHttpNTLMAuth's ChallengeReceived
     // returns false for identityInvalid. Use default credentials in this case by passing
@@ -314,19 +223,32 @@ nsAuthSSPI::Init(const char *serviceName,
     return NS_OK;
 }
 
+// The arguments inToken and inTokenLen are used to pass in the server
+// certificate (when available) in the first call of the function. The
+// second time these arguments hold an input token. 
 NS_IMETHODIMP
 nsAuthSSPI::GetNextToken(const void *inToken,
-                         PRUint32    inTokenLen,
+                         uint32_t    inTokenLen,
                          void      **outToken,
-                         PRUint32   *outTokenLen)
+                         uint32_t   *outTokenLen)
 {
+    // String for end-point bindings.
+    const char end_point[] = "tls-server-end-point:"; 
+    const int end_point_length = sizeof(end_point) - 1;
+    const int hash_size = 32;  // Size of a SHA256 hash.
+    const int cbt_size = hash_size + end_point_length;
+	
     SECURITY_STATUS rc;
     TimeStamp ignored;
 
     DWORD ctxAttr, ctxReq = 0;
     CtxtHandle *ctxIn;
     SecBufferDesc ibd, obd;
-    SecBuffer ib, ob;
+    // Optional second input buffer for the CBT (Channel Binding Token)
+    SecBuffer ib[2], ob;
+    // Pointer to the block of memory that stores the CBT
+    char* sspi_cbt = nullptr;
+    SEC_CHANNEL_BINDINGS pendpoint_binding;
 
     LOG(("entering nsAuthSSPI::GetNextToken()\n"));
 
@@ -341,26 +263,123 @@ nsAuthSSPI::GetNextToken(const void *inToken,
         ctxReq |= ISC_REQ_MUTUAL_AUTH;
 
     if (inToken) {
-        ib.BufferType = SECBUFFER_TOKEN;
-        ib.cbBuffer = inTokenLen;
-        ib.pvBuffer = (void *) inToken;
-        ibd.ulVersion = SECBUFFER_VERSION;
-        ibd.cBuffers = 1;
-        ibd.pBuffers = &ib;
-        ctxIn = &mCtxt;
-    }
-    else {
-        // If there is no input token, then we are starting a new
-        // authentication sequence.  If we have already initialized our
-        // security context, then we're in trouble because it means that the
-        // first sequence failed.  We need to bail or else we might end up in
-        // an infinite loop.
-        if (mCtxt.dwLower || mCtxt.dwUpper) {
+        if (mIsFirst) {
+            // First time if it comes with a token,
+            // the token represents the server certificate.
+            mIsFirst = false;
+            mCertDERLength = inTokenLen;
+            mCertDERData = nsMemory::Alloc(inTokenLen);
+            if (!mCertDERData)
+                return NS_ERROR_OUT_OF_MEMORY;
+            memcpy(mCertDERData, inToken, inTokenLen);
+
+            // We are starting a new authentication sequence.  
+            // If we have already initialized our
+            // security context, then we're in trouble because it means that the
+            // first sequence failed.  We need to bail or else we might end up in
+            // an infinite loop.
+            if (mCtxt.dwLower || mCtxt.dwUpper) {
+                LOG(("Cannot restart authentication sequence!"));
+                return NS_ERROR_UNEXPECTED;
+            }
+            ctxIn = nullptr;
+            // The certificate needs to be erased before being passed 
+            // to InitializeSecurityContextW().
+            inToken = nullptr;
+            inTokenLen = 0;
+        } else {
+            ibd.ulVersion = SECBUFFER_VERSION;
+            ibd.cBuffers = 0;
+            ibd.pBuffers = ib;
+            
+            // If we have stored a certificate, the Channel Binding Token
+            // needs to be generated and sent in the first input buffer.
+            if (mCertDERLength > 0) {
+                // First we create a proper Endpoint Binding structure. 
+                pendpoint_binding.dwInitiatorAddrType = 0;
+                pendpoint_binding.cbInitiatorLength = 0;
+                pendpoint_binding.dwInitiatorOffset = 0;
+                pendpoint_binding.dwAcceptorAddrType = 0;
+                pendpoint_binding.cbAcceptorLength = 0;
+                pendpoint_binding.dwAcceptorOffset = 0;
+                pendpoint_binding.cbApplicationDataLength = cbt_size;
+                pendpoint_binding.dwApplicationDataOffset = 
+                                            sizeof(SEC_CHANNEL_BINDINGS);
+
+                // Then add it to the array of sec buffers accordingly.
+                ib[ibd.cBuffers].BufferType = SECBUFFER_CHANNEL_BINDINGS;
+                ib[ibd.cBuffers].cbBuffer =
+                        pendpoint_binding.cbApplicationDataLength
+                        + pendpoint_binding.dwApplicationDataOffset;
+          
+                sspi_cbt = (char *) nsMemory::Alloc(ib[ibd.cBuffers].cbBuffer);
+                if (!sspi_cbt){
+                    return NS_ERROR_OUT_OF_MEMORY;
+                }
+
+                // Helper to write in the memory block that stores the CBT
+                char* sspi_cbt_ptr = sspi_cbt;
+          
+                ib[ibd.cBuffers].pvBuffer = sspi_cbt;
+                ibd.cBuffers++;
+
+                memcpy(sspi_cbt_ptr, &pendpoint_binding,
+                       pendpoint_binding.dwApplicationDataOffset);
+                sspi_cbt_ptr += pendpoint_binding.dwApplicationDataOffset;
+
+                memcpy(sspi_cbt_ptr, end_point, end_point_length);
+                sspi_cbt_ptr += end_point_length;
+          
+                // Start hashing. We are always doing SHA256, but depending
+                // on the certificate, a different alogirthm might be needed.
+                nsAutoCString hashString;
+
+                nsresult rv;
+                nsCOMPtr<nsICryptoHash> crypto;
+                crypto = do_CreateInstance(NS_CRYPTO_HASH_CONTRACTID, &rv);
+                if (NS_SUCCEEDED(rv))
+                    rv = crypto->Init(nsICryptoHash::SHA256);
+                if (NS_SUCCEEDED(rv))
+                    rv = crypto->Update((unsigned char*)mCertDERData, mCertDERLength);
+                if (NS_SUCCEEDED(rv))
+                    rv = crypto->Finish(false, hashString);
+                if (NS_FAILED(rv)) {
+                    nsMemory::Free(mCertDERData);
+                    mCertDERData = nullptr;
+                    mCertDERLength = 0;
+                    nsMemory::Free(sspi_cbt);
+                    return rv;
+                }
+          
+                // Once the hash has been computed, we store it in memory right
+                // after the Endpoint structure and the "tls-server-end-point:"
+                // char array.
+                memcpy(sspi_cbt_ptr, hashString.get(), hash_size);
+          
+                // Free memory used to store the server certificate
+                nsMemory::Free(mCertDERData);
+                mCertDERData = nullptr;
+                mCertDERLength = 0;
+            } // End of CBT computation.
+
+            // We always need this SECBUFFER.
+            ib[ibd.cBuffers].BufferType = SECBUFFER_TOKEN;
+            ib[ibd.cBuffers].cbBuffer = inTokenLen;
+            ib[ibd.cBuffers].pvBuffer = (void *) inToken;
+            ibd.cBuffers++;
+            ctxIn = &mCtxt;
+        }
+    } else { // First time and without a token (no server certificate)
+        // We are starting a new authentication sequence.  If we have already 
+        // initialized our security context, then we're in trouble because it 
+        // means that the first sequence failed.  We need to bail or else we 
+        // might end up in an infinite loop.
+        if (mCtxt.dwLower || mCtxt.dwUpper || mCertDERData || mCertDERLength) {
             LOG(("Cannot restart authentication sequence!"));
             return NS_ERROR_UNEXPECTED;
         }
-
         ctxIn = NULL;
+        mIsFirst = false;
     }
 
     obd.ulVersion = SECBUFFER_VERSION;
@@ -369,8 +388,11 @@ nsAuthSSPI::GetNextToken(const void *inToken,
     ob.BufferType = SECBUFFER_TOKEN;
     ob.cbBuffer = mMaxTokenLen;
     ob.pvBuffer = nsMemory::Alloc(ob.cbBuffer);
-    if (!ob.pvBuffer)
+    if (!ob.pvBuffer){
+        if (sspi_cbt)
+            nsMemory::Free(sspi_cbt);
         return NS_ERROR_OUT_OF_MEMORY;
+    }
     memset(ob.pvBuffer, 0, ob.cbBuffer);
 
     NS_ConvertUTF8toUTF16 wSN(mServiceName);
@@ -396,7 +418,9 @@ nsAuthSSPI::GetNextToken(const void *inToken,
         else
             LOG(("InitializeSecurityContext: continue.\n"));
 #endif
-
+        if (sspi_cbt)
+            nsMemory::Free(sspi_cbt);
+            
         if (!ob.cbBuffer) {
             nsMemory::Free(ob.pvBuffer);
             ob.pvBuffer = NULL;
@@ -418,9 +442,9 @@ nsAuthSSPI::GetNextToken(const void *inToken,
 
 NS_IMETHODIMP
 nsAuthSSPI::Unwrap(const void *inToken,
-                   PRUint32    inTokenLen,
+                   uint32_t    inTokenLen,
                    void      **outToken,
-                   PRUint32   *outTokenLen)
+                   uint32_t   *outTokenLen)
 {
     SECURITY_STATUS rc;
     SecBufferDesc ibd;
@@ -499,10 +523,10 @@ public:
 
 NS_IMETHODIMP
 nsAuthSSPI::Wrap(const void *inToken,
-                 PRUint32    inTokenLen,
-                 PRBool      confidential,
+                 uint32_t    inTokenLen,
+                 bool        confidential,
                  void      **outToken,
-                 PRUint32   *outTokenLen)
+                 uint32_t   *outTokenLen)
 {
     SECURITY_STATUS rc;
 
@@ -574,4 +598,17 @@ nsAuthSSPI::Wrap(const void *inToken,
     }
 
     return NS_ERROR_FAILURE;
+}
+
+NS_IMETHODIMP
+nsAuthSSPI::GetModuleProperties(uint32_t *flags)
+{
+    *flags = 0;
+
+    // (bug 535193) For NTLM, just use the uri host, do not do canonical host
+    // lookups. But Kerberos requires the canonical host.
+    if (mPackage != PACKAGE_TYPE_NTLM)
+        *flags |= CANONICAL_NAME_REQUIRED;
+
+    return NS_OK;
 }

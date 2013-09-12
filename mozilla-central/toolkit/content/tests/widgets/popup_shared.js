@@ -36,6 +36,7 @@ var gAutoHide = false;
 var gExpectedEventDetails = null;
 var gExpectedTriggerNode = null;
 var gWindowUtils;
+var gPopupWidth = -1, gPopupHeight = -1;
 
 function startPopupTests(tests)
 {
@@ -51,8 +52,7 @@ function startPopupTests(tests)
   document.addEventListener("DOMMenuBarInactive", eventOccurred, false);
 
   gPopupTests = tests;
-  gWindowUtils = window.QueryInterface(Components.interfaces.nsIInterfaceRequestor)
-                       .getInterface(Components.interfaces.nsIDOMWindowUtils);
+  gWindowUtils = SpecialPowers.getDOMWindowUtils(window);
 
   goNext();
 }
@@ -83,15 +83,11 @@ function is(left, right, message) {
 }
 
 function disableNonTestMouse(aDisable) {
-  netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
-
   gWindowUtils.disableNonTestMouseEvents(aDisable);
 }
 
 function eventOccurred(event)
 {
-   netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
-
   if (gPopupTests.length <= gTestIndex) {
     ok(false, "Extra " + event.type + " event fired");
     return;
@@ -111,7 +107,8 @@ function eventOccurred(event)
     events = events();
   if (events) {
     if (events.length <= gTestEventIndex) {
-      ok(false, "Extra " + event.type + " event fired " + gPopupTests[gTestIndex].testname);
+      ok(false, "Extra " + event.type + " event fired for " + event.target.id +
+                  " " +gPopupTests[gTestIndex].testname);
       return;
     }
 
@@ -130,6 +127,16 @@ function eventOccurred(event)
       is(event.target.id, eventitem[1],
          test.testname + " event target ID " + event.target.id);
       matches = eventitem[0] == event.type && eventitem[1] == event.target.id;
+    }
+
+    var modifiersMask = eventitem[2];
+    if (modifiersMask) {
+      var m = "";
+      m += event.altKey ? '1' : '0';
+      m += event.ctrlKey ? '1' : '0';
+      m += event.shiftKey ? '1' : '0';
+      m += event.metaKey ? '1' : '0';
+      is(m, modifiersMask, test.testname + " modifiers mask matches");
     }
 
     var expectedState;
@@ -244,7 +251,7 @@ function openMenu(menu)
   }
   else {
     var bo = menu.boxObject;
-    if (bo instanceof Components.interfaces.nsIMenuBoxObject)
+    if (bo instanceof SpecialPowers.Ci.nsIMenuBoxObject)
       bo.openMenu(true);
     else
       synthesizeMouse(menu, 4, 4, { });
@@ -258,7 +265,7 @@ function closeMenu(menu, popup)
   }
   else {
     var bo = menu.boxObject;
-    if (bo instanceof Components.interfaces.nsIMenuBoxObject)
+    if (bo instanceof SpecialPowers.Ci.nsIMenuBoxObject)
       bo.openMenu(false);
     else
       popup.hidePopup();
@@ -285,7 +292,7 @@ function checkOpen(menuid, testname)
   var menu = document.getElementById(menuid);
   if ("open" in menu)
     ok(menu.open, testname + " " + menuid + " menu is open");
-  else if (menu.boxObject instanceof Components.interfaces.nsIMenuBoxObject)
+  else if (menu.boxObject instanceof SpecialPowers.Ci.nsIMenuBoxObject)
     ok(menu.getAttribute("open") == "true", testname + " " + menuid + " menu is open");
 }
 
@@ -294,7 +301,7 @@ function checkClosed(menuid, testname)
   var menu = document.getElementById(menuid);
   if ("open" in menu)
     ok(!menu.open, testname + " " + menuid + " menu is open");
-  else if (menu.boxObject instanceof Components.interfaces.nsIMenuBoxObject)
+  else if (menu.boxObject instanceof SpecialPowers.Ci.nsIMenuBoxObject)
     ok(!menu.hasAttribute("open"), testname + " " + menuid + " menu is closed");
 }
 
@@ -312,6 +319,18 @@ function convertPosition(anchor, align)
   return "";
 }
 
+/*
+ * When checking position of the bottom or right edge of the popup's rect,
+ * use this instead of strict equality check of rounded values,
+ * because we snap the top/left edges to pixel boundaries,
+ * which can shift the bottom/right up to 0.5px from its "ideal" location,
+ * and could cause it to round differently. (See bug 622507.)
+ */
+function isWithinHalfPixel(a, b)
+{
+  return Math.abs(a - b) <= 0.5;
+}
+
 function compareEdge(anchor, popup, edge, offsetX, offsetY, testname)
 {
   testname += " " + edge;
@@ -322,9 +341,42 @@ function compareEdge(anchor, popup, edge, offsetX, offsetY, testname)
   var popuprect = popup.getBoundingClientRect();
   var check1 = false, check2 = false;
 
-  ok((Math.round(popuprect.right) - Math.round(popuprect.left)) &&
-     (Math.round(popuprect.bottom) - Math.round(popuprect.top)),
-     testname + " size");
+  if (gPopupWidth == -1) {
+    ok((Math.round(popuprect.right) - Math.round(popuprect.left)) &&
+       (Math.round(popuprect.bottom) - Math.round(popuprect.top)),
+       testname + " size");
+  }
+  else {
+    is(Math.round(popuprect.width), gPopupWidth, testname + " width");
+    is(Math.round(popuprect.height), gPopupHeight, testname + " height");
+  }
+
+  var spaceIdx = edge.indexOf(" ");
+  if (spaceIdx > 0) {
+    let cornerX, cornerY;
+    let [anchor, align] = edge.split(" ");
+    switch (anchor) {
+      case "topleft": cornerX = anchorrect.left; cornerY = anchorrect.top; break;
+      case "topcenter": cornerX = anchorrect.left + anchorrect.width / 2; cornerY = anchorrect.top; break;
+      case "topright": cornerX = anchorrect.right; cornerY = anchorrect.top; break;
+      case "leftcenter": cornerX = anchorrect.left; cornerY = anchorrect.top + anchorrect.height / 2; break;
+      case "rightcenter": cornerX = anchorrect.right; cornerY = anchorrect.top + anchorrect.height / 2; break;
+      case "bottomleft": cornerX = anchorrect.left; cornerY = anchorrect.bottom; break;
+      case "bottomcenter": cornerX = anchorrect.left + anchorrect.width / 2; cornerY = anchorrect.bottom; break;
+      case "bottomright": cornerX = anchorrect.right; cornerY = anchorrect.bottom; break;
+    }
+
+    switch (align) {
+      case "topleft": cornerX += offsetX; cornerY += offsetY; break;
+      case "topright": cornerX += -popuprect.width + offsetX; cornerY += offsetY; break;
+      case "bottomleft": cornerX += offsetX; cornerY += -popuprect.height + offsetY; break;
+      case "bottomright": cornerX += -popuprect.width + offsetX; cornerY += -popuprect.height + offsetY; break;
+    }
+
+    is(Math.round(popuprect.left), Math.round(cornerX), testname + " x position");
+    is(Math.round(popuprect.top), Math.round(cornerY), testname + " y position");
+    return;
+  }
 
   if (edge == "after_pointer") {
     is(Math.round(popuprect.left), Math.round(anchorrect.left) + offsetX, testname + " x position");
@@ -340,22 +392,22 @@ function compareEdge(anchor, popup, edge, offsetX, offsetY, testname)
   }
 
   if (edge.indexOf("before") == 0)
-    check1 = (Math.round(anchorrect.top) + offsetY == Math.round(popuprect.bottom));
+    check1 = isWithinHalfPixel(anchorrect.top + offsetY, popuprect.bottom);
   else if (edge.indexOf("after") == 0)
     check1 = (Math.round(anchorrect.bottom) + offsetY == Math.round(popuprect.top));
   else if (edge.indexOf("start") == 0)
-    check1 = (Math.round(anchorrect.left) + offsetX == Math.round(popuprect.right));
+    check1 = isWithinHalfPixel(anchorrect.left + offsetX, popuprect.right);
   else if (edge.indexOf("end") == 0)
     check1 = (Math.round(anchorrect.right) + offsetX == Math.round(popuprect.left));
 
   if (0 < edge.indexOf("before"))
     check2 = (Math.round(anchorrect.top) + offsetY == Math.round(popuprect.top));
   else if (0 < edge.indexOf("after"))
-    check2 = (Math.round(anchorrect.bottom) + offsetY == Math.round(popuprect.bottom));
+    check2 = isWithinHalfPixel(anchorrect.bottom + offsetY, popuprect.bottom);
   else if (0 < edge.indexOf("start"))
     check2 = (Math.round(anchorrect.left) + offsetX == Math.round(popuprect.left));
   else if (0 < edge.indexOf("end"))
-    check2 = (Math.round(anchorrect.right) + offsetX == Math.round(popuprect.right));
+    check2 = isWithinHalfPixel(anchorrect.right + offsetX, popuprect.right);
 
   ok(check1 && check2, testname + " position");
 }

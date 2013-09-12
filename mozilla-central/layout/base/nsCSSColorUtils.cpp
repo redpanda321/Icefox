@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* functions that manipulate colors */
 
@@ -74,26 +42,26 @@ void NS_GetSpecial3DColors(nscolor aResult[2],
                            nscolor aBorderColor)
 {
 
-  PRUint8 f0, f1;
-  PRUint8 r, g, b;
+  uint8_t f0, f1;
+  uint8_t r, g, b;
 
-  PRUint8 rb = NS_GET_R(aBorderColor);
-  PRUint8 gb = NS_GET_G(aBorderColor);
-  PRUint8 bb = NS_GET_B(aBorderColor);
+  uint8_t rb = NS_GET_R(aBorderColor);
+  uint8_t gb = NS_GET_G(aBorderColor);
+  uint8_t bb = NS_GET_B(aBorderColor);
 
-  PRUint8 a = NS_GET_A(aBorderColor);
+  uint8_t a = NS_GET_A(aBorderColor);
 
   // This needs to be optimized.
   // Calculating background brightness again and again is 
   // a waste of time!!!. Just calculate it only once.
   // .....somehow!!!
 
-  PRUint8 red = NS_GET_R(aBackgroundColor);
-  PRUint8 green = NS_GET_G(aBackgroundColor);
-  PRUint8 blue = NS_GET_B(aBackgroundColor);
+  uint8_t red = NS_GET_R(aBackgroundColor);
+  uint8_t green = NS_GET_G(aBackgroundColor);
+  uint8_t blue = NS_GET_B(aBackgroundColor);
   
-  PRUint8 elementBrightness = NS_GetBrightness(rb,gb,bb);
-  PRUint8 backgroundBrightness = NS_GetBrightness(red, green, blue);
+  uint8_t elementBrightness = NS_GetBrightness(rb,gb,bb);
+  uint8_t backgroundBrightness = NS_GetBrightness(red, green, blue);
 
 
   if (backgroundBrightness < COLOR_DARK_THRESHOLD) {
@@ -135,18 +103,18 @@ void NS_GetSpecial3DColors(nscolor aResult[2],
   aResult[1] = NS_RGBA(r, g, b, a);
 }
 
-int NS_GetBrightness(PRUint8 aRed, PRUint8 aGreen, PRUint8 aBlue)
+int NS_GetBrightness(uint8_t aRed, uint8_t aGreen, uint8_t aBlue)
 {
 
-  PRUint8 intensity = (aRed + aGreen + aBlue) / 3;
+  uint8_t intensity = (aRed + aGreen + aBlue) / 3;
 
-  PRUint8 luminosity = NS_GetLuminosity(NS_RGB(aRed, aGreen, aBlue)) / 1000;
+  uint8_t luminosity = NS_GetLuminosity(NS_RGB(aRed, aGreen, aBlue)) / 1000;
  
   return ((intensity * INTENSITY_FACTOR) +
           (luminosity * LUMINOSITY_FACTOR)) / 100;
 }
 
-PRInt32 NS_GetLuminosity(nscolor aColor)
+int32_t NS_GetLuminosity(nscolor aColor)
 {
   // When aColor is not opaque, the perceived luminosity will depend
   // on what color(s) aColor is ultimately drawn on top of, which we
@@ -163,11 +131,11 @@ PRInt32 NS_GetLuminosity(nscolor aColor)
 // Hue is the primary color defined from 0 to 359 degrees
 // Saturation is defined from 0 to 255.  The higher the number.. the deeper
 // the color Value is the brightness of the color. 0 is black, 255 is white.
-void NS_RGB2HSV(nscolor aColor, PRUint16 &aHue, PRUint16 &aSat,
-                PRUint16 &aValue, PRUint8 &aAlpha)
+void NS_RGB2HSV(nscolor aColor, uint16_t &aHue, uint16_t &aSat,
+                uint16_t &aValue, uint8_t &aAlpha)
 {
-  PRUint8 r, g, b;
-  PRInt16 delta, min, max, r1, b1, g1;
+  uint8_t r, g, b;
+  int16_t delta, min, max, r1, b1, g1;
   float   hue;
 
   r = NS_GET_R(aColor);
@@ -218,7 +186,7 @@ void NS_RGB2HSV(nscolor aColor, PRUint16 &aHue, PRUint16 &aSat,
     hue=0;
   }
 
-  aHue = (PRUint16)hue;
+  aHue = (uint16_t)hue;
 
   aAlpha = NS_GET_A(aColor);
 }
@@ -227,11 +195,11 @@ void NS_RGB2HSV(nscolor aColor, PRUint16 &aHue, PRUint16 &aSat,
 // Hue is the primary color defined from 0 to 359 degrees
 // Saturation is defined from 0 to 255.  The higher the number.. the deeper
 // the color Value is the brightness of the color. 0 is black, 255 is white.
-void NS_HSV2RGB(nscolor &aColor, PRUint16 aHue, PRUint16 aSat, PRUint16 aValue,
-                PRUint8 aAlpha)
+void NS_HSV2RGB(nscolor &aColor, uint16_t aHue, uint16_t aSat, uint16_t aValue,
+                uint8_t aAlpha)
 {
-  PRUint16  r = 0, g = 0, b = 0;
-  PRUint16  i, p, q, t;
+  uint16_t  r = 0, g = 0, b = 0;
+  uint16_t  i, p, q, t;
   double    h, f, percent;
 
   if ( aSat == 0 ){
@@ -250,13 +218,13 @@ void NS_HSV2RGB(nscolor &aColor, PRUint16 aHue, PRUint16 aSat, PRUint16 aValue,
     // areas define how the saturation and value define the color.
     // reds behave differently than the blues
     h = (double)aHue / 60.0;
-    i = (PRUint16) floor(h);
+    i = (uint16_t) floor(h);
     f = h-(double)i;
     percent = ((double)aValue/255.0);   // this needs to be a value from 0 to 1, so a percentage
                                         // can be calculated of the saturation.
-    p = (PRUint16)(percent*(255-aSat));
-    q = (PRUint16)(percent*(255-(aSat*f)));
-    t = (PRUint16)(percent*(255-(aSat*(1.0-f))));
+    p = (uint16_t)(percent*(255-aSat));
+    q = (uint16_t)(percent*(255-(aSat*f)));
+    t = (uint16_t)(percent*(255-(aSat*(1.0-f))));
 
     // i is guaranteed to never be larger than 5.
     switch(i){

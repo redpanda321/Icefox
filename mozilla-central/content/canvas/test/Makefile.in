@@ -1,52 +1,19 @@
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# The Initial Developer of the Original Code is
-# Mozilla Corporation.
-# Portions created by the Initial Developer are Copyright (C) 2007
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Philip Taylor <philip.taylor@cl.cam.ac.uk>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either of the GNU General Public License Version 2 or later (the "GPL"),
-# or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH		= ../../..
+DEPTH		= @DEPTH@
 topsrcdir	= @top_srcdir@
 srcdir		= @srcdir@
 VPATH		= @srcdir@
-relativesrcdir  = content/canvas/test
-DIRS		+= webgl
+relativesrcdir  = @relativesrcdir@
+DIRS		+= webgl crossorigin chrome
 
 include $(DEPTH)/config/autoconf.mk
-include $(topsrcdir)/config/rules.mk
-_TEST_FILES_0 = \
+MOCHITEST_FILES = \
 	test_canvas.html \
+	test_isPointInStroke.html \
 	image_transparent50.png \
 	image_redtransparent.png \
 	image_yellow.png \
@@ -68,11 +35,84 @@ _TEST_FILES_0 = \
 	image_green-redirect^headers^ \
 	test_drawImageIncomplete.html \
 	test_canvas_font_setter.html \
-	test_2d.composite.uncovered.image.source-in.html \
+	test_2d.clearRect.image.offscreen.html \
+	test_2d.composite.canvas.destination-atop.html \
+	test_2d.composite.canvas.destination-in.html \
+	test_2d.composite.canvas.source-in.html \
+	test_2d.composite.canvas.source-out.html \
+	test_2d.composite.canvas.multiply.html \
+	test_2d.composite.canvas.screen.html \
+	test_2d.composite.canvas.overlay.html \
+	test_2d.composite.canvas.darken.html \
+	test_2d.composite.canvas.lighten.html \
+	test_2d.composite.canvas.color-dodge.html \
+	test_2d.composite.canvas.color-burn.html \
+	test_2d.composite.canvas.hard-light.html \
+	test_2d.composite.canvas.soft-light.html \
+	test_2d.composite.canvas.difference.html \
+	test_2d.composite.canvas.exclusion.html \
+	test_2d.composite.canvas.hue.html \
+	test_2d.composite.canvas.saturation.html \
+	test_2d.composite.canvas.color.html \
+	test_2d.composite.canvas.luminosity.html \
+	test_2d.composite.image.destination-atop.html \
+	test_2d.composite.image.destination-in.html \
+	test_2d.composite.image.source-in.html \
+	test_2d.composite.image.source-out.html \
+	test_2d.composite.solid.multiply.html \
+	test_2d.composite.solid.screen.html \
+	test_2d.composite.solid.overlay.html \
+	test_2d.composite.solid.darken.html \
+	test_2d.composite.solid.lighten.html \
+	test_2d.composite.solid.color-dodge.html \
+	test_2d.composite.solid.color-burn.html \
+	test_2d.composite.solid.hard-light.html \
+	test_2d.composite.solid.soft-light.html \
+	test_2d.composite.solid.difference.html \
+	test_2d.composite.solid.exclusion.html \
+	test_2d.composite.solid.hue.html \
+	test_2d.composite.solid.saturation.html \
+	test_2d.composite.solid.color.html \
+	test_2d.composite.solid.luminosity.html \
 	test_2d.composite.uncovered.image.destination-in.html \
+	test_2d.composite.uncovered.image.source-in.html \
 	test_2d.composite.uncovered.image.source-out.html \
-	test_2d.composite.uncovered.image.destination-atop.html \
+	test_2d.composite.uncovered.fill.multiply.html \
+	test_2d.composite.uncovered.fill.screen.html \
+	test_2d.composite.uncovered.fill.overlay.html \
+	test_2d.composite.uncovered.fill.darken.html \
+	test_2d.composite.uncovered.fill.lighten.html \
+	test_2d.composite.uncovered.fill.color-dodge.html \
+	test_2d.composite.uncovered.fill.color-burn.html \
+	test_2d.composite.uncovered.fill.hard-light.html \
+	test_2d.composite.uncovered.fill.soft-light.html \
+	test_2d.composite.uncovered.fill.difference.html \
+	test_2d.composite.uncovered.fill.exclusion.html \
+	test_2d.composite.uncovered.fill.hue.html \
+	test_2d.composite.uncovered.fill.saturation.html \
+	test_2d.composite.uncovered.fill.color.html \
+	test_2d.composite.uncovered.fill.luminosity.html \
+	test_2d.drawImage.zerocanvas.html \
+	test_2d.strokeRect.zero.5.html \
+	test_toBlob.html \
+	test_toDataURL_alpha.html \
+	test_toDataURL_lowercase_ascii.html \
+	test_toDataURL_parameters.html \
+	test_mozGetAsFile.html \
+	test_canvas_strokeStyle_getter.html \
+	test_bug613794.html \
+	test_bug753758.html \
+	test_bug764125.html \
+	test_drawImage_edge_cases.html \
+	test_drawImage_document_domain.html \
+  test_mozDashOffset.html \
+	file_drawImage_document_domain.html \
 	$(NULL)
+
+ifneq (1_Linux,$(MOZ_SUITE)_$(OS_ARCH))
+# This test fails in Suite on Linux for some reason, disable it there
+MOCHITEST_FILES += test_2d.composite.uncovered.image.destination-atop.html
+endif
 
 # xor and lighter aren't well handled by cairo; they mostly work, but we don't want
 # to test that
@@ -88,29 +128,16 @@ _TEST_FILES_0 = \
 #	test_2d.composite.clip.lighter.html \
 #
 
-# Temporarily disabled tests; unbounded operators changed behaviour, need to reevaluate tests
-#
-#	test_2d.composite.canvas.destination-atop.html \
-#	test_2d.composite.canvas.destination-in.html \
-#	test_2d.composite.canvas.source-in.html \
-#	test_2d.composite.canvas.source-out.html \
-#	test_2d.composite.image.destination-atop.html \
-#	test_2d.composite.image.destination-in.html \
-#	test_2d.composite.image.source-in.html \
-#	test_2d.composite.image.source-out.html \
-#
-
 # Tests that fail on Mac (possibly because spec is underdefined?).  Bug 407105
 ifneq ($(MOZ_WIDGET_TOOLKIT),cocoa)
 # XXX vlad don't test these anywhere, cairo behaviour changed
-_TEST_FILES_0 += \
+MOCHITEST_FILES += \
 	test_2d.line.join.parallel.html \
-	test_2d.strokeRect.zero.5.html \
 	$(NULL)
 
 # This is an issue with Quartz's handling of radial gradients and some numeric
 # imprecision that results in errors here.
-_TEST_FILES_0 += \
+MOCHITEST_FILES += \
 	test_2d.gradient.radial.inside2.html \
 	test_2d.gradient.radial.inside3.html \
 	test_2d.gradient.radial.outside1.html \
@@ -122,7 +149,7 @@ _TEST_FILES_0 += \
 # destination bounds seem to have problems with the BEVEL/SQUARE join/cap combo.
 # The joins are rendered as if with MITER; the correct behaviour is also seen
 # if BUTT is used instead of SQUARE.
-_TEST_FILES_0 += test_2d.line.cap.closed.html
+MOCHITEST_FILES += test_2d.line.cap.closed.html
 
 endif
 
@@ -130,7 +157,7 @@ endif
 ifeq ($(MOZ_WIDGET_TOOLKIT),cocoa)
 
 # still need bug numbers
-_TEST_FILES_0 += \
+MOCHITEST_FILES += \
 	test_2d.composite.uncovered.fill.source-in.html \
 	test_2d.composite.uncovered.fill.destination-in.html \
 	test_2d.composite.uncovered.fill.source-out.html \
@@ -142,15 +169,15 @@ _TEST_FILES_0 += \
 	$(NULL)
 
 # still need bug numbers
-_TEST_FILES_0 += \
+MOCHITEST_FILES += \
 	test_2d.gradient.radial.outside2.html \
 	test_2d.gradient.radial.outside3.html \
 	$(NULL)
 
 # still need bug numbers
-_TEST_FILES_0 += test_2d.path.arc.shape.3.html
+MOCHITEST_FILES += test_2d.path.arc.shape.3.html
 
-_TEST_FILES_0 += test_2d.path.rect.selfintersect.html
+MOCHITEST_FILES += test_2d.path.rect.selfintersect.html
 endif
 
 # These tests only pass on Mac OS X >= 10.5; see bug 450114
@@ -170,5 +197,4 @@ endif
 # test_2d.path.rect.zero.6.html
 
 # split up into groups to work around command-line length limits
-libs:: $(_TEST_FILES_0)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
+include $(topsrcdir)/config/rules.mk

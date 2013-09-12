@@ -30,13 +30,10 @@
 
 #define nsHtml5Tokenizer_cpp__
 
-#include "prtypes.h"
 #include "nsIAtom.h"
 #include "nsHtml5AtomTable.h"
 #include "nsString.h"
-#include "nsINameSpaceManager.h"
 #include "nsIContent.h"
-#include "nsIDocument.h"
 #include "nsTraceRefcnt.h"
 #include "jArray.h"
 #include "nsHtml5DocumentMode.h"
@@ -44,10 +41,10 @@
 #include "nsHtml5NamedCharacters.h"
 #include "nsHtml5NamedCharactersAccel.h"
 #include "nsHtml5Atoms.h"
-#include "nsHtml5ByteReadable.h"
-#include "nsIUnicodeDecoder.h"
 #include "nsAHtml5TreeBuilderState.h"
 #include "nsHtml5Macros.h"
+#include "nsHtml5Highlighter.h"
+#include "nsHtml5TokenizerLoopPolicies.h"
 
 #include "nsHtml5TreeBuilder.h"
 #include "nsHtml5MetaScanner.h"
@@ -61,28 +58,48 @@
 
 #include "nsHtml5Tokenizer.h"
 
+PRUnichar nsHtml5Tokenizer::LT_GT[] = { '<', '>' };
+PRUnichar nsHtml5Tokenizer::LT_SOLIDUS[] = { '<', '/' };
+PRUnichar nsHtml5Tokenizer::RSQB_RSQB[] = { ']', ']' };
+PRUnichar nsHtml5Tokenizer::REPLACEMENT_CHARACTER[] = { 0xfffd };
+PRUnichar nsHtml5Tokenizer::LF[] = { '\n' };
+PRUnichar nsHtml5Tokenizer::CDATA_LSQB[] = { 'C', 'D', 'A', 'T', 'A', '[' };
+PRUnichar nsHtml5Tokenizer::OCTYPE[] = { 'o', 'c', 't', 'y', 'p', 'e' };
+PRUnichar nsHtml5Tokenizer::UBLIC[] = { 'u', 'b', 'l', 'i', 'c' };
+PRUnichar nsHtml5Tokenizer::YSTEM[] = { 'y', 's', 't', 'e', 'm' };
 static PRUnichar const TITLE_ARR_DATA[] = { 't', 'i', 't', 'l', 'e' };
+staticJArray<PRUnichar,int32_t> nsHtml5Tokenizer::TITLE_ARR = { TITLE_ARR_DATA, NS_ARRAY_LENGTH(TITLE_ARR_DATA) };
 static PRUnichar const SCRIPT_ARR_DATA[] = { 's', 'c', 'r', 'i', 'p', 't' };
+staticJArray<PRUnichar,int32_t> nsHtml5Tokenizer::SCRIPT_ARR = { SCRIPT_ARR_DATA, NS_ARRAY_LENGTH(SCRIPT_ARR_DATA) };
 static PRUnichar const STYLE_ARR_DATA[] = { 's', 't', 'y', 'l', 'e' };
+staticJArray<PRUnichar,int32_t> nsHtml5Tokenizer::STYLE_ARR = { STYLE_ARR_DATA, NS_ARRAY_LENGTH(STYLE_ARR_DATA) };
 static PRUnichar const PLAINTEXT_ARR_DATA[] = { 'p', 'l', 'a', 'i', 'n', 't', 'e', 'x', 't' };
+staticJArray<PRUnichar,int32_t> nsHtml5Tokenizer::PLAINTEXT_ARR = { PLAINTEXT_ARR_DATA, NS_ARRAY_LENGTH(PLAINTEXT_ARR_DATA) };
 static PRUnichar const XMP_ARR_DATA[] = { 'x', 'm', 'p' };
+staticJArray<PRUnichar,int32_t> nsHtml5Tokenizer::XMP_ARR = { XMP_ARR_DATA, NS_ARRAY_LENGTH(XMP_ARR_DATA) };
 static PRUnichar const TEXTAREA_ARR_DATA[] = { 't', 'e', 'x', 't', 'a', 'r', 'e', 'a' };
+staticJArray<PRUnichar,int32_t> nsHtml5Tokenizer::TEXTAREA_ARR = { TEXTAREA_ARR_DATA, NS_ARRAY_LENGTH(TEXTAREA_ARR_DATA) };
 static PRUnichar const IFRAME_ARR_DATA[] = { 'i', 'f', 'r', 'a', 'm', 'e' };
+staticJArray<PRUnichar,int32_t> nsHtml5Tokenizer::IFRAME_ARR = { IFRAME_ARR_DATA, NS_ARRAY_LENGTH(IFRAME_ARR_DATA) };
 static PRUnichar const NOEMBED_ARR_DATA[] = { 'n', 'o', 'e', 'm', 'b', 'e', 'd' };
+staticJArray<PRUnichar,int32_t> nsHtml5Tokenizer::NOEMBED_ARR = { NOEMBED_ARR_DATA, NS_ARRAY_LENGTH(NOEMBED_ARR_DATA) };
 static PRUnichar const NOSCRIPT_ARR_DATA[] = { 'n', 'o', 's', 'c', 'r', 'i', 'p', 't' };
+staticJArray<PRUnichar,int32_t> nsHtml5Tokenizer::NOSCRIPT_ARR = { NOSCRIPT_ARR_DATA, NS_ARRAY_LENGTH(NOSCRIPT_ARR_DATA) };
 static PRUnichar const NOFRAMES_ARR_DATA[] = { 'n', 'o', 'f', 'r', 'a', 'm', 'e', 's' };
+staticJArray<PRUnichar,int32_t> nsHtml5Tokenizer::NOFRAMES_ARR = { NOFRAMES_ARR_DATA, NS_ARRAY_LENGTH(NOFRAMES_ARR_DATA) };
 
-nsHtml5Tokenizer::nsHtml5Tokenizer(nsHtml5TreeBuilder* tokenHandler)
+nsHtml5Tokenizer::nsHtml5Tokenizer(nsHtml5TreeBuilder* tokenHandler, bool viewingXmlSource)
   : tokenHandler(tokenHandler),
-    encodingDeclarationHandler(nsnull),
-    bmpChar(jArray<PRUnichar,PRInt32>(1)),
-    astralChar(jArray<PRUnichar,PRInt32>(2)),
-    tagName(nsnull),
-    attributeName(nsnull),
-    doctypeName(nsnull),
-    publicIdentifier(nsnull),
-    systemIdentifier(nsnull),
-    attributes(nsnull)
+    encodingDeclarationHandler(nullptr),
+    bmpChar(jArray<PRUnichar,int32_t>::newJArray(1)),
+    astralChar(jArray<PRUnichar,int32_t>::newJArray(2)),
+    tagName(nullptr),
+    attributeName(nullptr),
+    doctypeName(nullptr),
+    publicIdentifier(nullptr),
+    systemIdentifier(nullptr),
+    attributes(nullptr),
+    viewingXmlSource(viewingXmlSource)
 {
   MOZ_COUNT_CTOR(nsHtml5Tokenizer);
 }
@@ -100,29 +117,26 @@ nsHtml5Tokenizer::initLocation(nsString* newPublicId, nsString* newSystemId)
   this->publicId = newPublicId;
 }
 
-
-nsHtml5Tokenizer::~nsHtml5Tokenizer()
+bool 
+nsHtml5Tokenizer::isViewingXmlSource()
 {
-  MOZ_COUNT_DTOR(nsHtml5Tokenizer);
-  bmpChar.release();
-  astralChar.release();
+  return viewingXmlSource;
 }
 
 void 
-nsHtml5Tokenizer::setStateAndEndTagExpectation(PRInt32 specialTokenizerState, nsIAtom* endTagExpectation)
+nsHtml5Tokenizer::setStateAndEndTagExpectation(int32_t specialTokenizerState, nsIAtom* endTagExpectation)
 {
   this->stateSave = specialTokenizerState;
   if (specialTokenizerState == NS_HTML5TOKENIZER_DATA) {
     return;
   }
-  jArray<PRUnichar,PRInt32> asArray = nsHtml5Portability::newCharArrayFromLocal(endTagExpectation);
+  autoJArray<PRUnichar,int32_t> asArray = nsHtml5Portability::newCharArrayFromLocal(endTagExpectation);
   this->endTagExpectation = nsHtml5ElementName::elementNameByBuffer(asArray, 0, asArray.length, interner);
-  asArray.release();
   endTagExpectationToArray();
 }
 
 void 
-nsHtml5Tokenizer::setStateAndEndTagExpectation(PRInt32 specialTokenizerState, nsHtml5ElementName* endTagExpectation)
+nsHtml5Tokenizer::setStateAndEndTagExpectation(int32_t specialTokenizerState, nsHtml5ElementName* endTagExpectation)
 {
   this->stateSave = specialTokenizerState;
   this->endTagExpectation = endTagExpectation;
@@ -132,7 +146,7 @@ nsHtml5Tokenizer::setStateAndEndTagExpectation(PRInt32 specialTokenizerState, ns
 void 
 nsHtml5Tokenizer::endTagExpectationToArray()
 {
-  switch(endTagExpectation->group) {
+  switch(endTagExpectation->getGroup()) {
     case NS_HTML5TREE_BUILDER_TITLE: {
       endTagExpectationAsArray = TITLE_ARR;
       return;
@@ -174,14 +188,14 @@ nsHtml5Tokenizer::endTagExpectationToArray()
       return;
     }
     default: {
-
+      MOZ_ASSERT(false, "Bad end tag expectation.");
       return;
     }
   }
 }
 
 void 
-nsHtml5Tokenizer::setLineNumber(PRInt32 line)
+nsHtml5Tokenizer::setLineNumber(int32_t line)
 {
   this->line = line;
 }
@@ -196,9 +210,8 @@ void
 nsHtml5Tokenizer::appendStrBuf(PRUnichar c)
 {
   if (strBufLen == strBuf.length) {
-    jArray<PRUnichar,PRInt32> newBuf = jArray<PRUnichar,PRInt32>(strBuf.length + NS_HTML5TOKENIZER_BUFFER_GROW_BY);
+    jArray<PRUnichar,int32_t> newBuf = jArray<PRUnichar,int32_t>::newJArray(strBuf.length + NS_HTML5TOKENIZER_BUFFER_GROW_BY);
     nsHtml5ArrayCopy::arraycopy(strBuf, newBuf, strBuf.length);
-    strBuf.release();
     strBuf = newBuf;
   }
   strBuf[strBufLen++] = c;
@@ -228,22 +241,20 @@ void
 nsHtml5Tokenizer::appendLongStrBuf(PRUnichar c)
 {
   if (longStrBufLen == longStrBuf.length) {
-    jArray<PRUnichar,PRInt32> newBuf = jArray<PRUnichar,PRInt32>(longStrBufLen + (longStrBufLen >> 1));
+    jArray<PRUnichar,int32_t> newBuf = jArray<PRUnichar,int32_t>::newJArray(longStrBufLen + (longStrBufLen >> 1));
     nsHtml5ArrayCopy::arraycopy(longStrBuf, newBuf, longStrBuf.length);
-    longStrBuf.release();
     longStrBuf = newBuf;
   }
   longStrBuf[longStrBufLen++] = c;
 }
 
 void 
-nsHtml5Tokenizer::appendLongStrBuf(jArray<PRUnichar,PRInt32> buffer, PRInt32 offset, PRInt32 length)
+nsHtml5Tokenizer::appendLongStrBuf(PRUnichar* buffer, int32_t offset, int32_t length)
 {
-  PRInt32 reqLen = longStrBufLen + length;
+  int32_t reqLen = longStrBufLen + length;
   if (longStrBuf.length < reqLen) {
-    jArray<PRUnichar,PRInt32> newBuf = jArray<PRUnichar,PRInt32>(reqLen + (reqLen >> 1));
+    jArray<PRUnichar,int32_t> newBuf = jArray<PRUnichar,int32_t>::newJArray(reqLen + (reqLen >> 1));
     nsHtml5ArrayCopy::arraycopy(longStrBuf, newBuf, longStrBuf.length);
-    longStrBuf.release();
     longStrBuf = newBuf;
   }
   nsHtml5ArrayCopy::arraycopy(buffer, offset, longStrBuf, longStrBufLen, length);
@@ -257,25 +268,25 @@ nsHtml5Tokenizer::longStrBufToString()
 }
 
 void 
-nsHtml5Tokenizer::emitComment(PRInt32 provisionalHyphens, PRInt32 pos)
+nsHtml5Tokenizer::emitComment(int32_t provisionalHyphens, int32_t pos)
 {
   tokenHandler->comment(longStrBuf, 0, longStrBufLen - provisionalHyphens);
   cstart = pos + 1;
 }
 
 void 
-nsHtml5Tokenizer::flushChars(PRUnichar* buf, PRInt32 pos)
+nsHtml5Tokenizer::flushChars(PRUnichar* buf, int32_t pos)
 {
   if (pos > cstart) {
     tokenHandler->characters(buf, cstart, pos - cstart);
   }
-  cstart = PR_INT32_MAX;
+  cstart = INT32_MAX;
 }
 
 void 
 nsHtml5Tokenizer::resetAttributes()
 {
-  attributes = nsnull;
+  attributes = nullptr;
 }
 
 void 
@@ -284,22 +295,28 @@ nsHtml5Tokenizer::strBufToElementNameString()
   tagName = nsHtml5ElementName::elementNameByBuffer(strBuf, 0, strBufLen, interner);
 }
 
-PRInt32 
-nsHtml5Tokenizer::emitCurrentTagToken(PRBool selfClosing, PRInt32 pos)
+int32_t 
+nsHtml5Tokenizer::emitCurrentTagToken(bool selfClosing, int32_t pos)
 {
   cstart = pos + 1;
-
+  maybeErrSlashInEndTag(selfClosing);
   stateSave = NS_HTML5TOKENIZER_DATA;
   nsHtml5HtmlAttributes* attrs = (!attributes ? nsHtml5HtmlAttributes::EMPTY_ATTRIBUTES : attributes);
   if (endTag) {
-
-    tokenHandler->endTag(tagName);
+    maybeErrAttributesOnEndTag(attrs);
+    if (!viewingXmlSource) {
+      tokenHandler->endTag(tagName);
+    }
     delete attributes;
   } else {
-    tokenHandler->startTag(tagName, attrs, selfClosing);
+    if (viewingXmlSource) {
+      delete attributes;
+    } else {
+      tokenHandler->startTag(tagName, attrs, selfClosing);
+    }
   }
   tagName->release();
-  tagName = nsnull;
+  tagName = nullptr;
   resetAttributes();
   return stateSave;
 }
@@ -312,9 +329,9 @@ nsHtml5Tokenizer::attributeNameComplete()
     attributes = new nsHtml5HtmlAttributes(0);
   }
   if (attributes->contains(attributeName)) {
-
+    errDuplicateAttribute();
     attributeName->release();
-    attributeName = nsnull;
+    attributeName = nullptr;
   }
 }
 
@@ -324,7 +341,7 @@ nsHtml5Tokenizer::addAttributeWithoutValue()
 
   if (attributeName) {
     attributes->addAttribute(attributeName, nsHtml5Portability::newEmptyString());
-    attributeName = nsnull;
+    attributeName = nullptr;
   }
 }
 
@@ -333,8 +350,11 @@ nsHtml5Tokenizer::addAttributeWithValue()
 {
   if (attributeName) {
     nsString* val = longStrBufToString();
+    if (mViewSource) {
+      mViewSource->MaybeLinkifyAttributeValue(attributeName, val);
+    }
     attributes->addAttribute(attributeName, val);
-    attributeName = nsnull;
+    attributeName = nullptr;
   }
 }
 
@@ -345,16 +365,16 @@ nsHtml5Tokenizer::start()
   tokenHandler->startTokenization(this);
 }
 
-PRBool 
+bool 
 nsHtml5Tokenizer::tokenizeBuffer(nsHtml5UTF16Buffer* buffer)
 {
-  PRInt32 state = stateSave;
-  PRInt32 returnState = returnStateSave;
+  int32_t state = stateSave;
+  int32_t returnState = returnStateSave;
   PRUnichar c = '\0';
-  shouldSuspend = PR_FALSE;
-  lastCR = PR_FALSE;
-  PRInt32 start = buffer->getStart();
-  PRInt32 pos = start - 1;
+  shouldSuspend = false;
+  lastCR = false;
+  int32_t start = buffer->getStart();
+  int32_t pos = start - 1;
   switch(state) {
     case NS_HTML5TOKENIZER_DATA:
     case NS_HTML5TOKENIZER_RCDATA:
@@ -377,11 +397,17 @@ nsHtml5Tokenizer::tokenizeBuffer(nsHtml5UTF16Buffer* buffer)
       break;
     }
     default: {
-      cstart = PR_INT32_MAX;
+      cstart = INT32_MAX;
       break;
     }
   }
-  pos = stateLoop(state, c, pos, buffer->getBuffer(), PR_FALSE, returnState, buffer->getEnd());
+  if (mViewSource) {
+    mViewSource->SetBuffer(buffer);
+    pos = stateLoop<nsHtml5ViewSourcePolicy>(state, c, pos, buffer->getBuffer(), false, returnState, buffer->getEnd());
+    mViewSource->DropBuffer((pos == buffer->getEnd()) ? pos : pos + 1);
+  } else {
+    pos = stateLoop<nsHtml5SilentPolicy>(state, c, pos, buffer->getBuffer(), false, returnState, buffer->getEnd());
+  }
   if (pos == buffer->getEnd()) {
     buffer->setStart(pos);
   } else {
@@ -390,15 +416,16 @@ nsHtml5Tokenizer::tokenizeBuffer(nsHtml5UTF16Buffer* buffer)
   return lastCR;
 }
 
-PRInt32 
-nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* buf, PRBool reconsume, PRInt32 returnState, PRInt32 endPos)
+template<class P>
+int32_t 
+nsHtml5Tokenizer::stateLoop(int32_t state, PRUnichar c, int32_t pos, PRUnichar* buf, bool reconsume, int32_t returnState, int32_t endPos)
 {
   stateloop: for (; ; ) {
     switch(state) {
       case NS_HTML5TOKENIZER_DATA: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -411,12 +438,12 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
               clearStrBufAndAppend(c);
               setAdditionalAndRememberAmpersandLocation('\0');
               returnState = state;
-              state = NS_HTML5TOKENIZER_CONSUME_CHARACTER_REFERENCE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_CONSUME_CHARACTER_REFERENCE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '<': {
               flushChars(buf, pos);
-              state = NS_HTML5TOKENIZER_TAG_OPEN;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_TAG_OPEN, reconsume, pos);
               NS_HTML5_BREAK(dataloop);
             }
             case '\0': {
@@ -444,44 +471,54 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           }
           c = checkChar(buf, pos);
           if (c >= 'A' && c <= 'Z') {
-            endTag = PR_FALSE;
+            endTag = false;
             clearStrBufAndAppend((PRUnichar) (c + 0x20));
-            state = NS_HTML5TOKENIZER_TAG_NAME;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_TAG_NAME, reconsume, pos);
             NS_HTML5_BREAK(tagopenloop);
           } else if (c >= 'a' && c <= 'z') {
-            endTag = PR_FALSE;
+            endTag = false;
             clearStrBufAndAppend(c);
-            state = NS_HTML5TOKENIZER_TAG_NAME;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_TAG_NAME, reconsume, pos);
             NS_HTML5_BREAK(tagopenloop);
           }
           switch(c) {
             case '!': {
-              state = NS_HTML5TOKENIZER_MARKUP_DECLARATION_OPEN;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_MARKUP_DECLARATION_OPEN, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '/': {
-              state = NS_HTML5TOKENIZER_CLOSE_TAG_OPEN;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_CLOSE_TAG_OPEN, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\?': {
-
+              if (viewingXmlSource) {
+                state = P::transition(mViewSource, NS_HTML5TOKENIZER_PROCESSING_INSTRUCTION, reconsume, pos);
+                NS_HTML5_CONTINUE(stateloop);
+              }
+              if (P::reportErrors) {
+                errProcessingInstruction();
+              }
               clearLongStrBufAndAppend(c);
-              state = NS_HTML5TOKENIZER_BOGUS_COMMENT;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_COMMENT, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '>': {
-
+              if (P::reportErrors) {
+                errLtGt();
+              }
               tokenHandler->characters(nsHtml5Tokenizer::LT_GT, 0, 2);
               cstart = pos + 1;
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             default: {
-
+              if (P::reportErrors) {
+                errBadCharAfterLt(c);
+              }
               tokenHandler->characters(nsHtml5Tokenizer::LT_GT, 0, 1);
               cstart = pos;
-              state = NS_HTML5TOKENIZER_DATA;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -498,7 +535,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '\r': {
               silentCarriageReturn();
               strBufToElementNameString();
-              state = NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
@@ -508,17 +545,17 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '\t':
             case '\f': {
               strBufToElementNameString();
-              state = NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME, reconsume, pos);
               NS_HTML5_BREAK(tagnameloop);
             }
             case '/': {
               strBufToElementNameString();
-              state = NS_HTML5TOKENIZER_SELF_CLOSING_START_TAG;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SELF_CLOSING_START_TAG, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '>': {
               strBufToElementNameString();
-              state = emitCurrentTagToken(PR_FALSE, pos);
+              state = P::transition(mViewSource, emitCurrentTagToken(false, pos), reconsume, pos);
               if (shouldSuspend) {
                 NS_HTML5_BREAK(stateloop);
               }
@@ -541,7 +578,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -562,11 +599,11 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
               continue;
             }
             case '/': {
-              state = NS_HTML5TOKENIZER_SELF_CLOSING_START_TAG;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SELF_CLOSING_START_TAG, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '>': {
-              state = emitCurrentTagToken(PR_FALSE, pos);
+              state = P::transition(mViewSource, emitCurrentTagToken(false, pos), reconsume, pos);
               if (shouldSuspend) {
                 NS_HTML5_BREAK(stateloop);
               }
@@ -578,13 +615,17 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '\"':
             case '\'':
             case '<':
-            case '=':
+            case '=': {
+              if (P::reportErrors) {
+                errBadCharBeforeAttributeNameOrNull(c);
+              }
+            }
             default: {
               if (c >= 'A' && c <= 'Z') {
                 c += 0x20;
               }
               clearStrBufAndAppend(c);
-              state = NS_HTML5TOKENIZER_ATTRIBUTE_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_ATTRIBUTE_NAME, reconsume, pos);
               NS_HTML5_BREAK(beforeattributenameloop);
             }
           }
@@ -601,7 +642,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '\r': {
               silentCarriageReturn();
               attributeNameComplete();
-              state = NS_HTML5TOKENIZER_AFTER_ATTRIBUTE_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_AFTER_ATTRIBUTE_NAME, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
@@ -611,24 +652,24 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '\t':
             case '\f': {
               attributeNameComplete();
-              state = NS_HTML5TOKENIZER_AFTER_ATTRIBUTE_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_AFTER_ATTRIBUTE_NAME, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '/': {
               attributeNameComplete();
               addAttributeWithoutValue();
-              state = NS_HTML5TOKENIZER_SELF_CLOSING_START_TAG;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SELF_CLOSING_START_TAG, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '=': {
               attributeNameComplete();
-              state = NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_VALUE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_VALUE, reconsume, pos);
               NS_HTML5_BREAK(attributenameloop);
             }
             case '>': {
               attributeNameComplete();
               addAttributeWithoutValue();
-              state = emitCurrentTagToken(PR_FALSE, pos);
+              state = P::transition(mViewSource, emitCurrentTagToken(false, pos), reconsume, pos);
               if (shouldSuspend) {
                 NS_HTML5_BREAK(stateloop);
               }
@@ -639,7 +680,11 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             case '\"':
             case '\'':
-            case '<':
+            case '<': {
+              if (P::reportErrors) {
+                errQuoteOrLtInAttributeNameOrNull(c);
+              }
+            }
             default: {
               if (c >= 'A' && c <= 'Z') {
                 c += 0x20;
@@ -672,25 +717,27 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             case '\"': {
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_ATTRIBUTE_VALUE_DOUBLE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_ATTRIBUTE_VALUE_DOUBLE_QUOTED, reconsume, pos);
               NS_HTML5_BREAK(beforeattributevalueloop);
             }
             case '&': {
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_ATTRIBUTE_VALUE_UNQUOTED;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_ATTRIBUTE_VALUE_UNQUOTED, reconsume, pos);
 
-              reconsume = PR_TRUE;
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\'': {
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_ATTRIBUTE_VALUE_SINGLE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_ATTRIBUTE_VALUE_SINGLE_QUOTED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '>': {
-
+              if (P::reportErrors) {
+                errAttributeValueMissing();
+              }
               addAttributeWithoutValue();
-              state = emitCurrentTagToken(PR_FALSE, pos);
+              state = P::transition(mViewSource, emitCurrentTagToken(false, pos), reconsume, pos);
               if (shouldSuspend) {
                 NS_HTML5_BREAK(stateloop);
               }
@@ -701,10 +748,14 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             case '<':
             case '=':
-            case '`':
+            case '`': {
+              if (P::reportErrors) {
+                errLtOrEqualsOrGraveInUnquotedAttributeOrNull(c);
+              }
+            }
             default: {
               clearLongStrBufAndAppend(c);
-              state = NS_HTML5TOKENIZER_ATTRIBUTE_VALUE_UNQUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_ATTRIBUTE_VALUE_UNQUOTED, reconsume, pos);
 
               NS_HTML5_CONTINUE(stateloop);
             }
@@ -715,7 +766,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_ATTRIBUTE_VALUE_DOUBLE_QUOTED: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -725,14 +776,14 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '\"': {
               addAttributeWithValue();
-              state = NS_HTML5TOKENIZER_AFTER_ATTRIBUTE_VALUE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_AFTER_ATTRIBUTE_VALUE_QUOTED, reconsume, pos);
               NS_HTML5_BREAK(attributevaluedoublequotedloop);
             }
             case '&': {
               clearStrBufAndAppend(c);
               setAdditionalAndRememberAmpersandLocation('\"');
               returnState = state;
-              state = NS_HTML5TOKENIZER_CONSUME_CHARACTER_REFERENCE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_CONSUME_CHARACTER_REFERENCE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\r': {
@@ -763,7 +814,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '\r': {
               silentCarriageReturn();
-              state = NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
@@ -772,24 +823,26 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case ' ':
             case '\t':
             case '\f': {
-              state = NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '/': {
-              state = NS_HTML5TOKENIZER_SELF_CLOSING_START_TAG;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SELF_CLOSING_START_TAG, reconsume, pos);
               NS_HTML5_BREAK(afterattributevaluequotedloop);
             }
             case '>': {
-              state = emitCurrentTagToken(PR_FALSE, pos);
+              state = P::transition(mViewSource, emitCurrentTagToken(false, pos), reconsume, pos);
               if (shouldSuspend) {
                 NS_HTML5_BREAK(stateloop);
               }
               NS_HTML5_CONTINUE(stateloop);
             }
             default: {
-
-              state = NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME;
-              reconsume = PR_TRUE;
+              if (P::reportErrors) {
+                errNoSpaceBetweenAttributes();
+              }
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -803,16 +856,18 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
         c = checkChar(buf, pos);
         switch(c) {
           case '>': {
-            state = emitCurrentTagToken(PR_TRUE, pos);
+            state = P::transition(mViewSource, emitCurrentTagToken(true, pos), reconsume, pos);
             if (shouldSuspend) {
               NS_HTML5_BREAK(stateloop);
             }
             NS_HTML5_CONTINUE(stateloop);
           }
           default: {
-
-            state = NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME;
-            reconsume = PR_TRUE;
+            if (P::reportErrors) {
+              errSlashNotFollowedByGt();
+            }
+            reconsume = true;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME, reconsume, pos);
             NS_HTML5_CONTINUE(stateloop);
           }
         }
@@ -820,7 +875,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_ATTRIBUTE_VALUE_UNQUOTED: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -831,7 +886,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '\r': {
               silentCarriageReturn();
               addAttributeWithValue();
-              state = NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
@@ -841,19 +896,19 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '\t':
             case '\f': {
               addAttributeWithValue();
-              state = NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '&': {
               clearStrBufAndAppend(c);
               setAdditionalAndRememberAmpersandLocation('>');
               returnState = state;
-              state = NS_HTML5TOKENIZER_CONSUME_CHARACTER_REFERENCE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_CONSUME_CHARACTER_REFERENCE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '>': {
               addAttributeWithValue();
-              state = emitCurrentTagToken(PR_FALSE, pos);
+              state = P::transition(mViewSource, emitCurrentTagToken(false, pos), reconsume, pos);
               if (shouldSuspend) {
                 NS_HTML5_BREAK(stateloop);
               }
@@ -866,7 +921,11 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '\"':
             case '\'':
             case '=':
-            case '`':
+            case '`': {
+              if (P::reportErrors) {
+                errUnquotedAttributeValOrNull(c);
+              }
+            }
             default: {
 
               appendLongStrBuf(c);
@@ -896,16 +955,16 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             case '/': {
               addAttributeWithoutValue();
-              state = NS_HTML5TOKENIZER_SELF_CLOSING_START_TAG;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SELF_CLOSING_START_TAG, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '=': {
-              state = NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_VALUE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_VALUE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '>': {
               addAttributeWithoutValue();
-              state = emitCurrentTagToken(PR_FALSE, pos);
+              state = P::transition(mViewSource, emitCurrentTagToken(false, pos), reconsume, pos);
               if (shouldSuspend) {
                 NS_HTML5_BREAK(stateloop);
               }
@@ -916,14 +975,18 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             case '\"':
             case '\'':
-            case '<':
+            case '<': {
+              if (P::reportErrors) {
+                errQuoteOrLtInAttributeNameOrNull(c);
+              }
+            }
             default: {
               addAttributeWithoutValue();
               if (c >= 'A' && c <= 'Z') {
                 c += 0x20;
               }
               clearStrBufAndAppend(c);
-              state = NS_HTML5TOKENIZER_ATTRIBUTE_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_ATTRIBUTE_NAME, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -938,30 +1001,31 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '-': {
               clearLongStrBufAndAppend(c);
-              state = NS_HTML5TOKENIZER_MARKUP_DECLARATION_HYPHEN;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_MARKUP_DECLARATION_HYPHEN, reconsume, pos);
               NS_HTML5_BREAK(markupdeclarationopenloop);
             }
             case 'd':
             case 'D': {
               clearLongStrBufAndAppend(c);
               index = 0;
-              state = NS_HTML5TOKENIZER_MARKUP_DECLARATION_OCTYPE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_MARKUP_DECLARATION_OCTYPE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '[': {
-              if (tokenHandler->isInForeign()) {
+              if (tokenHandler->cdataSectionAllowed()) {
                 clearLongStrBufAndAppend(c);
                 index = 0;
-                state = NS_HTML5TOKENIZER_CDATA_START;
+                state = P::transition(mViewSource, NS_HTML5TOKENIZER_CDATA_START, reconsume, pos);
                 NS_HTML5_CONTINUE(stateloop);
-              } else {
               }
             }
             default: {
-
+              if (P::reportErrors) {
+                errBogusComment();
+              }
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_BOGUS_COMMENT;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_COMMENT, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -980,13 +1044,15 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             case '-': {
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_COMMENT_START;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT_START, reconsume, pos);
               NS_HTML5_BREAK(markupdeclarationhyphenloop);
             }
             default: {
-
-              state = NS_HTML5TOKENIZER_BOGUS_COMMENT;
-              reconsume = PR_TRUE;
+              if (P::reportErrors) {
+                errBogusComment();
+              }
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_COMMENT, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -1002,23 +1068,25 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '-': {
               appendLongStrBuf(c);
-              state = NS_HTML5TOKENIZER_COMMENT_START_DASH;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT_START_DASH, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '>': {
-
+              if (P::reportErrors) {
+                errPrematureEndOfComment();
+              }
               emitComment(0, pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\r': {
               appendLongStrBufCarriageReturn();
-              state = NS_HTML5TOKENIZER_COMMENT;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
               appendLongStrBufLineFeed();
-              state = NS_HTML5TOKENIZER_COMMENT;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT, reconsume, pos);
               NS_HTML5_BREAK(commentstartloop);
             }
             case '\0': {
@@ -1026,7 +1094,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             default: {
               appendLongStrBuf(c);
-              state = NS_HTML5TOKENIZER_COMMENT;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT, reconsume, pos);
               NS_HTML5_BREAK(commentstartloop);
             }
           }
@@ -1042,7 +1110,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '-': {
               appendLongStrBuf(c);
-              state = NS_HTML5TOKENIZER_COMMENT_END_DASH;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT_END_DASH, reconsume, pos);
               NS_HTML5_BREAK(commentloop);
             }
             case '\r': {
@@ -1073,17 +1141,17 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '-': {
               appendLongStrBuf(c);
-              state = NS_HTML5TOKENIZER_COMMENT_END;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT_END, reconsume, pos);
               NS_HTML5_BREAK(commentenddashloop);
             }
             case '\r': {
               appendLongStrBufCarriageReturn();
-              state = NS_HTML5TOKENIZER_COMMENT;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
               appendLongStrBufLineFeed();
-              state = NS_HTML5TOKENIZER_COMMENT;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\0': {
@@ -1091,7 +1159,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             default: {
               appendLongStrBuf(c);
-              state = NS_HTML5TOKENIZER_COMMENT;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -1107,7 +1175,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '>': {
               emitComment(2, pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '-': {
@@ -1116,18 +1184,20 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             case '\r': {
               adjustDoubleHyphenAndAppendToLongStrBufCarriageReturn();
-              state = NS_HTML5TOKENIZER_COMMENT;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
               adjustDoubleHyphenAndAppendToLongStrBufLineFeed();
-              state = NS_HTML5TOKENIZER_COMMENT;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '!': {
-
+              if (P::reportErrors) {
+                errHyphenHyphenBang();
+              }
               appendLongStrBuf(c);
-              state = NS_HTML5TOKENIZER_COMMENT_END_BANG;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT_END_BANG, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\0': {
@@ -1135,54 +1205,12 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             default: {
               adjustDoubleHyphenAndAppendToLongStrBufAndErr(c);
-              state = NS_HTML5TOKENIZER_COMMENT;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
         }
 
-      }
-      case NS_HTML5TOKENIZER_COMMENT_END_SPACE: {
-        for (; ; ) {
-          if (++pos == endPos) {
-            NS_HTML5_BREAK(stateloop);
-          }
-          c = checkChar(buf, pos);
-          switch(c) {
-            case '>': {
-              emitComment(0, pos);
-              state = NS_HTML5TOKENIZER_DATA;
-              NS_HTML5_CONTINUE(stateloop);
-            }
-            case '-': {
-              appendLongStrBuf(c);
-              state = NS_HTML5TOKENIZER_COMMENT_END_DASH;
-              NS_HTML5_CONTINUE(stateloop);
-            }
-            case ' ':
-            case '\t':
-            case '\f': {
-              appendLongStrBuf(c);
-              continue;
-            }
-            case '\r': {
-              appendLongStrBufCarriageReturn();
-              NS_HTML5_BREAK(stateloop);
-            }
-            case '\n': {
-              appendLongStrBufLineFeed();
-              continue;
-            }
-            case '\0': {
-              c = 0xfffd;
-            }
-            default: {
-              appendLongStrBuf(c);
-              state = NS_HTML5TOKENIZER_COMMENT;
-              NS_HTML5_CONTINUE(stateloop);
-            }
-          }
-        }
       }
       case NS_HTML5TOKENIZER_COMMENT_END_BANG: {
         for (; ; ) {
@@ -1193,12 +1221,12 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '>': {
               emitComment(3, pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '-': {
               appendLongStrBuf(c);
-              state = NS_HTML5TOKENIZER_COMMENT_END_DASH;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT_END_DASH, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\r': {
@@ -1214,7 +1242,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             default: {
               appendLongStrBuf(c);
-              state = NS_HTML5TOKENIZER_COMMENT;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -1228,23 +1256,25 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
         switch(c) {
           case '-': {
             appendLongStrBuf(c);
-            state = NS_HTML5TOKENIZER_COMMENT_END;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT_END, reconsume, pos);
             NS_HTML5_CONTINUE(stateloop);
           }
           case '>': {
-
+            if (P::reportErrors) {
+              errPrematureEndOfComment();
+            }
             emitComment(1, pos);
-            state = NS_HTML5TOKENIZER_DATA;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
             NS_HTML5_CONTINUE(stateloop);
           }
           case '\r': {
             appendLongStrBufCarriageReturn();
-            state = NS_HTML5TOKENIZER_COMMENT;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT, reconsume, pos);
             NS_HTML5_BREAK(stateloop);
           }
           case '\n': {
             appendLongStrBufLineFeed();
-            state = NS_HTML5TOKENIZER_COMMENT;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT, reconsume, pos);
             NS_HTML5_CONTINUE(stateloop);
           }
           case '\0': {
@@ -1252,7 +1282,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           }
           default: {
             appendLongStrBuf(c);
-            state = NS_HTML5TOKENIZER_COMMENT;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_COMMENT, reconsume, pos);
             NS_HTML5_CONTINUE(stateloop);
           }
         }
@@ -1267,17 +1297,19 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             if (c == nsHtml5Tokenizer::CDATA_LSQB[index]) {
               appendLongStrBuf(c);
             } else {
-
-              state = NS_HTML5TOKENIZER_BOGUS_COMMENT;
-              reconsume = PR_TRUE;
+              if (P::reportErrors) {
+                errBogusComment();
+              }
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_COMMENT, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             index++;
             continue;
           } else {
             cstart = pos;
-            state = NS_HTML5TOKENIZER_CDATA_SECTION;
-            reconsume = PR_TRUE;
+            reconsume = true;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_CDATA_SECTION, reconsume, pos);
             break;
           }
         }
@@ -1285,7 +1317,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_CDATA_SECTION: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -1295,7 +1327,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case ']': {
               flushChars(buf, pos);
-              state = NS_HTML5TOKENIZER_CDATA_RSQB;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_CDATA_RSQB, reconsume, pos);
               NS_HTML5_BREAK(cdatasectionloop);
             }
             case '\0': {
@@ -1324,14 +1356,14 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           c = checkChar(buf, pos);
           switch(c) {
             case ']': {
-              state = NS_HTML5TOKENIZER_CDATA_RSQB_RSQB;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_CDATA_RSQB_RSQB, reconsume, pos);
               NS_HTML5_BREAK(cdatarsqb);
             }
             default: {
               tokenHandler->characters(nsHtml5Tokenizer::RSQB_RSQB, 0, 1);
               cstart = pos;
-              state = NS_HTML5TOKENIZER_CDATA_SECTION;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_CDATA_SECTION, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -1339,29 +1371,36 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
         cdatarsqb_end: ;
       }
       case NS_HTML5TOKENIZER_CDATA_RSQB_RSQB: {
-        if (++pos == endPos) {
-          NS_HTML5_BREAK(stateloop);
-        }
-        c = checkChar(buf, pos);
-        switch(c) {
-          case '>': {
-            cstart = pos + 1;
-            state = NS_HTML5TOKENIZER_DATA;
-            NS_HTML5_CONTINUE(stateloop);
+        for (; ; ) {
+          if (++pos == endPos) {
+            NS_HTML5_BREAK(stateloop);
           }
-          default: {
-            tokenHandler->characters(nsHtml5Tokenizer::RSQB_RSQB, 0, 2);
-            cstart = pos;
-            state = NS_HTML5TOKENIZER_CDATA_SECTION;
-            reconsume = PR_TRUE;
-            NS_HTML5_CONTINUE(stateloop);
+          c = checkChar(buf, pos);
+          switch(c) {
+            case ']': {
+              tokenHandler->characters(nsHtml5Tokenizer::RSQB_RSQB, 0, 1);
+              continue;
+            }
+            case '>': {
+              cstart = pos + 1;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
+              NS_HTML5_CONTINUE(stateloop);
+            }
+            default: {
+              tokenHandler->characters(nsHtml5Tokenizer::RSQB_RSQB, 0, 2);
+              cstart = pos;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_CDATA_SECTION, reconsume, pos);
+              NS_HTML5_CONTINUE(stateloop);
+            }
           }
         }
+
       }
       case NS_HTML5TOKENIZER_ATTRIBUTE_VALUE_SINGLE_QUOTED: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -1371,14 +1410,14 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '\'': {
               addAttributeWithValue();
-              state = NS_HTML5TOKENIZER_AFTER_ATTRIBUTE_VALUE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_AFTER_ATTRIBUTE_VALUE_QUOTED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '&': {
               clearStrBufAndAppend(c);
               setAdditionalAndRememberAmpersandLocation('\'');
               returnState = state;
-              state = NS_HTML5TOKENIZER_CONSUME_CHARACTER_REFERENCE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_CONSUME_CHARACTER_REFERENCE, reconsume, pos);
               NS_HTML5_BREAK(attributevaluesinglequotedloop);
             }
             case '\r': {
@@ -1420,20 +1459,20 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             if (!(returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
               cstart = pos;
             }
-            state = returnState;
-            reconsume = PR_TRUE;
+            reconsume = true;
+            state = P::transition(mViewSource, returnState, reconsume, pos);
             NS_HTML5_CONTINUE(stateloop);
           }
           case '#': {
             appendStrBuf('#');
-            state = NS_HTML5TOKENIZER_CONSUME_NCR;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_CONSUME_NCR, reconsume, pos);
             NS_HTML5_CONTINUE(stateloop);
           }
           default: {
             if (c == additional) {
               emitOrAppendStrBuf(returnState);
-              state = returnState;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, returnState, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             if (c >= 'a' && c <= 'z') {
@@ -1441,17 +1480,19 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             } else if (c >= 'A' && c <= 'Z') {
               firstCharKey = c - 'A';
             } else {
-
+              if (P::reportErrors) {
+                errNoNamedCharacterMatch();
+              }
               emitOrAppendStrBuf(returnState);
               if (!(returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
                 cstart = pos;
               }
-              state = returnState;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, returnState, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             appendStrBuf(c);
-            state = NS_HTML5TOKENIZER_CHARACTER_REFERENCE_HILO_LOOKUP;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_CHARACTER_REFERENCE_HILO_LOOKUP, reconsume, pos);
           }
         }
       }
@@ -1464,21 +1505,23 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           if (c == '\0') {
             NS_HTML5_BREAK(stateloop);
           }
-          PRInt32 hilo = 0;
+          int32_t hilo = 0;
           if (c <= 'z') {
-            const PRInt32* row = nsHtml5NamedCharactersAccel::HILO_ACCEL[c];
+            const int32_t* row = nsHtml5NamedCharactersAccel::HILO_ACCEL[c];
             if (row) {
               hilo = row[firstCharKey];
             }
           }
           if (!hilo) {
-
+            if (P::reportErrors) {
+              errNoNamedCharacterMatch();
+            }
             emitOrAppendStrBuf(returnState);
             if (!(returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
               cstart = pos;
             }
-            state = returnState;
-            reconsume = PR_TRUE;
+            reconsume = true;
+            state = P::transition(mViewSource, returnState, reconsume, pos);
             NS_HTML5_CONTINUE(stateloop);
           }
           appendStrBuf(c);
@@ -1487,7 +1530,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           entCol = -1;
           candidate = -1;
           strBufMark = 0;
-          state = NS_HTML5TOKENIZER_CHARACTER_REFERENCE_TAIL;
+          state = P::transition(mViewSource, NS_HTML5TOKENIZER_CHARACTER_REFERENCE_TAIL, reconsume, pos);
         }
       }
       case NS_HTML5TOKENIZER_CHARACTER_REFERENCE_TAIL: {
@@ -1504,13 +1547,13 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             if (hi < lo) {
               NS_HTML5_BREAK(outer);
             }
-            if (entCol == nsHtml5NamedCharacters::NAMES[lo].length) {
+            if (entCol == nsHtml5NamedCharacters::NAMES[lo].length()) {
               candidate = lo;
               strBufMark = strBufLen;
               lo++;
-            } else if (entCol > nsHtml5NamedCharacters::NAMES[lo].length) {
+            } else if (entCol > nsHtml5NamedCharacters::NAMES[lo].length()) {
               NS_HTML5_BREAK(outer);
-            } else if (c > nsHtml5NamedCharacters::NAMES[lo][entCol]) {
+            } else if (c > nsHtml5NamedCharacters::NAMES[lo].charAt(entCol)) {
               lo++;
             } else {
               NS_HTML5_BREAK(loloop);
@@ -1521,18 +1564,25 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             if (hi < lo) {
               NS_HTML5_BREAK(outer);
             }
-            if (entCol == nsHtml5NamedCharacters::NAMES[hi].length) {
+            if (entCol == nsHtml5NamedCharacters::NAMES[hi].length()) {
               NS_HTML5_BREAK(hiloop);
             }
-            if (entCol > nsHtml5NamedCharacters::NAMES[hi].length) {
+            if (entCol > nsHtml5NamedCharacters::NAMES[hi].length()) {
               NS_HTML5_BREAK(outer);
-            } else if (c < nsHtml5NamedCharacters::NAMES[hi][entCol]) {
+            } else if (c < nsHtml5NamedCharacters::NAMES[hi].charAt(entCol)) {
               hi--;
             } else {
               NS_HTML5_BREAK(hiloop);
             }
           }
           hiloop_end: ;
+          if (c == ';') {
+            if (entCol + 1 == nsHtml5NamedCharacters::NAMES[lo].length()) {
+              candidate = lo;
+              strBufMark = strBufLen;
+            }
+            NS_HTML5_BREAK(outer);
+          }
           if (hi < lo) {
             NS_HTML5_BREAK(outer);
           }
@@ -1541,17 +1591,19 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
         }
         outer_end: ;
         if (candidate == -1) {
-
+          if (P::reportErrors) {
+            errNoNamedCharacterMatch();
+          }
           emitOrAppendStrBuf(returnState);
           if (!(returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
             cstart = pos;
           }
-          state = returnState;
-          reconsume = PR_TRUE;
+          reconsume = true;
+          state = P::transition(mViewSource, returnState, reconsume, pos);
           NS_HTML5_CONTINUE(stateloop);
         } else {
-          jArray<PRInt8,PRInt32> candidateArr = nsHtml5NamedCharacters::NAMES[candidate];
-          if (!candidateArr.length || candidateArr[candidateArr.length - 1] != ';') {
+          const nsHtml5CharacterName& candidateName = nsHtml5NamedCharacters::NAMES[candidate];
+          if (!candidateName.length() || candidateName.charAt(candidateName.length() - 1) != ';') {
             if ((returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
               PRUnichar ch;
               if (strBufMark == strBufLen) {
@@ -1560,35 +1612,47 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
                 ch = strBuf[strBufMark];
               }
               if (ch == '=' || (ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
-
+                if (P::reportErrors) {
+                  errNoNamedCharacterMatch();
+                }
                 appendStrBufToLongStrBuf();
-                state = returnState;
-                reconsume = PR_TRUE;
+                reconsume = true;
+                state = P::transition(mViewSource, returnState, reconsume, pos);
                 NS_HTML5_CONTINUE(stateloop);
               }
             }
-
+            if ((returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
+              if (P::reportErrors) {
+                errUnescapedAmpersandInterpretedAsCharacterReference();
+              }
+            } else {
+              if (P::reportErrors) {
+                errNotSemicolonTerminated();
+              }
+            }
           }
+          P::completedNamedCharacterReference(mViewSource);
           const PRUnichar* val = nsHtml5NamedCharacters::VALUES[candidate];
-          if ((val[0] & 0xFC00) == 0xD800) {
-            emitOrAppendTwo(val, returnState);
-          } else {
+          if (!val[1]) {
             emitOrAppendOne(val, returnState);
+          } else {
+            emitOrAppendTwo(val, returnState);
           }
           if (strBufMark < strBufLen) {
             if ((returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
-              for (PRInt32 i = strBufMark; i < strBufLen; i++) {
+              for (int32_t i = strBufMark; i < strBufLen; i++) {
                 appendLongStrBuf(strBuf[i]);
               }
             } else {
               tokenHandler->characters(strBuf, strBufMark, strBufLen - strBufMark);
             }
           }
+          bool earlyBreak = (c == ';' && strBufMark == strBufLen);
           if (!(returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
-            cstart = pos;
+            cstart = earlyBreak ? pos + 1 : pos;
           }
-          state = returnState;
-          reconsume = PR_TRUE;
+          reconsume = !earlyBreak;
+          state = P::transition(mViewSource, returnState, reconsume, pos);
           NS_HTML5_CONTINUE(stateloop);
         }
       }
@@ -1599,24 +1663,24 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
         c = checkChar(buf, pos);
         prevValue = -1;
         value = 0;
-        seenDigits = PR_FALSE;
+        seenDigits = false;
         switch(c) {
           case 'x':
           case 'X': {
             appendStrBuf(c);
-            state = NS_HTML5TOKENIZER_HEX_NCR_LOOP;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_HEX_NCR_LOOP, reconsume, pos);
             NS_HTML5_CONTINUE(stateloop);
           }
           default: {
-            state = NS_HTML5TOKENIZER_DECIMAL_NRC_LOOP;
-            reconsume = PR_TRUE;
+            reconsume = true;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_DECIMAL_NRC_LOOP, reconsume, pos);
           }
         }
       }
       case NS_HTML5TOKENIZER_DECIMAL_NRC_LOOP: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -1628,7 +1692,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           }
           prevValue = value;
           if (c >= '0' && c <= '9') {
-            seenDigits = PR_TRUE;
+            seenDigits = true;
             value *= 10;
             value += c - '0';
             continue;
@@ -1637,35 +1701,41 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
               if (!(returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
                 cstart = pos + 1;
               }
-              state = NS_HTML5TOKENIZER_HANDLE_NCR_VALUE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_HANDLE_NCR_VALUE, reconsume, pos);
               NS_HTML5_BREAK(decimalloop);
             } else {
-
+              if (P::reportErrors) {
+                errNoDigitsInNCR();
+              }
               appendStrBuf(';');
               emitOrAppendStrBuf(returnState);
               if (!(returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
                 cstart = pos + 1;
               }
-              state = returnState;
+              state = P::transition(mViewSource, returnState, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           } else {
             if (!seenDigits) {
-
+              if (P::reportErrors) {
+                errNoDigitsInNCR();
+              }
               emitOrAppendStrBuf(returnState);
               if (!(returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
                 cstart = pos;
               }
-              state = returnState;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, returnState, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             } else {
-
+              if (P::reportErrors) {
+                errCharRefLacksSemicolon();
+              }
               if (!(returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
                 cstart = pos;
               }
-              state = NS_HTML5TOKENIZER_HANDLE_NCR_VALUE;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_HANDLE_NCR_VALUE, reconsume, pos);
               NS_HTML5_BREAK(decimalloop);
             }
           }
@@ -1674,7 +1744,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       }
       case NS_HTML5TOKENIZER_HANDLE_NCR_VALUE: {
         handleNcrValue(returnState);
-        state = returnState;
+        state = P::transition(mViewSource, returnState, reconsume, pos);
         NS_HTML5_CONTINUE(stateloop);
       }
       case NS_HTML5TOKENIZER_HEX_NCR_LOOP: {
@@ -1688,17 +1758,17 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           }
           prevValue = value;
           if (c >= '0' && c <= '9') {
-            seenDigits = PR_TRUE;
+            seenDigits = true;
             value *= 16;
             value += c - '0';
             continue;
           } else if (c >= 'A' && c <= 'F') {
-            seenDigits = PR_TRUE;
+            seenDigits = true;
             value *= 16;
             value += c - 'A' + 10;
             continue;
           } else if (c >= 'a' && c <= 'f') {
-            seenDigits = PR_TRUE;
+            seenDigits = true;
             value *= 16;
             value += c - 'a' + 10;
             continue;
@@ -1707,35 +1777,41 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
               if (!(returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
                 cstart = pos + 1;
               }
-              state = NS_HTML5TOKENIZER_HANDLE_NCR_VALUE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_HANDLE_NCR_VALUE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             } else {
-
+              if (P::reportErrors) {
+                errNoDigitsInNCR();
+              }
               appendStrBuf(';');
               emitOrAppendStrBuf(returnState);
               if (!(returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
                 cstart = pos + 1;
               }
-              state = returnState;
+              state = P::transition(mViewSource, returnState, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           } else {
             if (!seenDigits) {
-
+              if (P::reportErrors) {
+                errNoDigitsInNCR();
+              }
               emitOrAppendStrBuf(returnState);
               if (!(returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
                 cstart = pos;
               }
-              state = returnState;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, returnState, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             } else {
-
+              if (P::reportErrors) {
+                errCharRefLacksSemicolon();
+              }
               if (!(returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
                 cstart = pos;
               }
-              state = NS_HTML5TOKENIZER_HANDLE_NCR_VALUE;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_HANDLE_NCR_VALUE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -1744,7 +1820,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_PLAINTEXT: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -1753,7 +1829,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           }
           switch(c) {
             case '\0': {
-              emitReplacementCharacter(buf, pos);
+              emitPlaintextReplacementCharacter(buf, pos);
               continue;
             }
             case '\r': {
@@ -1777,23 +1853,29 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
         c = checkChar(buf, pos);
         switch(c) {
           case '>': {
-
+            if (P::reportErrors) {
+              errLtSlashGt();
+            }
             cstart = pos + 1;
-            state = NS_HTML5TOKENIZER_DATA;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
             NS_HTML5_CONTINUE(stateloop);
           }
           case '\r': {
             silentCarriageReturn();
-
+            if (P::reportErrors) {
+              errGarbageAfterLtSlash();
+            }
             clearLongStrBufAndAppend('\n');
-            state = NS_HTML5TOKENIZER_BOGUS_COMMENT;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_COMMENT, reconsume, pos);
             NS_HTML5_BREAK(stateloop);
           }
           case '\n': {
             silentLineFeed();
-
+            if (P::reportErrors) {
+              errGarbageAfterLtSlash();
+            }
             clearLongStrBufAndAppend('\n');
-            state = NS_HTML5TOKENIZER_BOGUS_COMMENT;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_COMMENT, reconsume, pos);
             NS_HTML5_CONTINUE(stateloop);
           }
           case '\0': {
@@ -1804,14 +1886,16 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
               c += 0x20;
             }
             if (c >= 'a' && c <= 'z') {
-              endTag = PR_TRUE;
+              endTag = true;
               clearStrBufAndAppend(c);
-              state = NS_HTML5TOKENIZER_TAG_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_TAG_NAME, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             } else {
-
+              if (P::reportErrors) {
+                errGarbageAfterLtSlash();
+              }
               clearLongStrBufAndAppend(c);
-              state = NS_HTML5TOKENIZER_BOGUS_COMMENT;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_COMMENT, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -1820,7 +1904,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_RCDATA: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -1833,13 +1917,13 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
               clearStrBufAndAppend(c);
               additional = '\0';
               returnState = state;
-              state = NS_HTML5TOKENIZER_CONSUME_CHARACTER_REFERENCE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_CONSUME_CHARACTER_REFERENCE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '<': {
               flushChars(buf, pos);
               returnState = state;
-              state = NS_HTML5TOKENIZER_RAWTEXT_RCDATA_LESS_THAN_SIGN;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_RAWTEXT_RCDATA_LESS_THAN_SIGN, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\0': {
@@ -1863,7 +1947,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_RAWTEXT: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -1874,7 +1958,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '<': {
               flushChars(buf, pos);
               returnState = state;
-              state = NS_HTML5TOKENIZER_RAWTEXT_RCDATA_LESS_THAN_SIGN;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_RAWTEXT_RCDATA_LESS_THAN_SIGN, reconsume, pos);
               NS_HTML5_BREAK(rawtextloop);
             }
             case '\0': {
@@ -1905,14 +1989,14 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '/': {
               index = 0;
               clearStrBuf();
-              state = NS_HTML5TOKENIZER_NON_DATA_END_TAG_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_NON_DATA_END_TAG_NAME, reconsume, pos);
               NS_HTML5_BREAK(rawtextrcdatalessthansignloop);
             }
             default: {
               tokenHandler->characters(nsHtml5Tokenizer::LT_GT, 0, 1);
               cstart = pos;
-              state = returnState;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, returnState, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -1935,20 +2019,20 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
               tokenHandler->characters(nsHtml5Tokenizer::LT_SOLIDUS, 0, 2);
               emitStrBuf();
               cstart = pos;
-              state = returnState;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, returnState, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             appendStrBuf(c);
             index++;
             continue;
           } else {
-            endTag = PR_TRUE;
+            endTag = true;
             tagName = endTagExpectation;
             switch(c) {
               case '\r': {
                 silentCarriageReturn();
-                state = NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME;
+                state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME, reconsume, pos);
                 NS_HTML5_BREAK(stateloop);
               }
               case '\n': {
@@ -1957,15 +2041,15 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
               case ' ':
               case '\t':
               case '\f': {
-                state = NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME;
+                state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME, reconsume, pos);
                 NS_HTML5_CONTINUE(stateloop);
               }
               case '/': {
-                state = NS_HTML5TOKENIZER_SELF_CLOSING_START_TAG;
+                state = P::transition(mViewSource, NS_HTML5TOKENIZER_SELF_CLOSING_START_TAG, reconsume, pos);
                 NS_HTML5_CONTINUE(stateloop);
               }
               case '>': {
-                state = emitCurrentTagToken(PR_FALSE, pos);
+                state = P::transition(mViewSource, emitCurrentTagToken(false, pos), reconsume, pos);
                 if (shouldSuspend) {
                   NS_HTML5_BREAK(stateloop);
                 }
@@ -1979,7 +2063,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
                 } else {
                   cstart = pos;
                 }
-                state = returnState;
+                state = P::transition(mViewSource, returnState, reconsume, pos);
                 NS_HTML5_CONTINUE(stateloop);
               }
             }
@@ -1989,7 +2073,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_BOGUS_COMMENT: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -1999,12 +2083,12 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '>': {
               emitComment(0, pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '-': {
               appendLongStrBuf(c);
-              state = NS_HTML5TOKENIZER_BOGUS_COMMENT_HYPHEN;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_COMMENT_HYPHEN, reconsume, pos);
               NS_HTML5_BREAK(boguscommentloop);
             }
             case '\r': {
@@ -2035,7 +2119,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '>': {
               emitComment(0, pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '-': {
@@ -2044,12 +2128,12 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             case '\r': {
               appendLongStrBufCarriageReturn();
-              state = NS_HTML5TOKENIZER_BOGUS_COMMENT;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_COMMENT, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
               appendLongStrBufLineFeed();
-              state = NS_HTML5TOKENIZER_BOGUS_COMMENT;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_COMMENT, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\0': {
@@ -2057,7 +2141,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             default: {
               appendLongStrBuf(c);
-              state = NS_HTML5TOKENIZER_BOGUS_COMMENT;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_COMMENT, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -2067,7 +2151,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_SCRIPT_DATA: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -2078,7 +2162,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '<': {
               flushChars(buf, pos);
               returnState = state;
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_LESS_THAN_SIGN;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_LESS_THAN_SIGN, reconsume, pos);
               NS_HTML5_BREAK(scriptdataloop);
             }
             case '\0': {
@@ -2109,20 +2193,20 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '/': {
               index = 0;
               clearStrBuf();
-              state = NS_HTML5TOKENIZER_NON_DATA_END_TAG_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_NON_DATA_END_TAG_NAME, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '!': {
               tokenHandler->characters(nsHtml5Tokenizer::LT_GT, 0, 1);
               cstart = pos;
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPE_START;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPE_START, reconsume, pos);
               NS_HTML5_BREAK(scriptdatalessthansignloop);
             }
             default: {
               tokenHandler->characters(nsHtml5Tokenizer::LT_GT, 0, 1);
               cstart = pos;
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -2137,12 +2221,12 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           c = checkChar(buf, pos);
           switch(c) {
             case '-': {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPE_START_DASH;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPE_START_DASH, reconsume, pos);
               NS_HTML5_BREAK(scriptdataescapestartloop);
             }
             default: {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -2157,12 +2241,12 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           c = checkChar(buf, pos);
           switch(c) {
             case '-': {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED_DASH_DASH;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED_DASH_DASH, reconsume, pos);
               NS_HTML5_BREAK(scriptdataescapestartdashloop);
             }
             default: {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -2181,28 +2265,28 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             case '<': {
               flushChars(buf, pos);
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED_LESS_THAN_SIGN;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED_LESS_THAN_SIGN, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '>': {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\0': {
               emitReplacementCharacter(buf, pos);
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED, reconsume, pos);
               NS_HTML5_BREAK(scriptdataescapeddashdashloop);
             }
             case '\r': {
               emitCarriageReturn(buf, pos);
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
               silentLineFeed();
             }
             default: {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED, reconsume, pos);
               NS_HTML5_BREAK(scriptdataescapeddashdashloop);
             }
           }
@@ -2212,7 +2296,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -2221,12 +2305,12 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           }
           switch(c) {
             case '-': {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED_DASH;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED_DASH, reconsume, pos);
               NS_HTML5_BREAK(scriptdataescapedloop);
             }
             case '<': {
               flushChars(buf, pos);
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED_LESS_THAN_SIGN;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED_LESS_THAN_SIGN, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\0': {
@@ -2255,29 +2339,29 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           c = checkChar(buf, pos);
           switch(c) {
             case '-': {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED_DASH_DASH;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED_DASH_DASH, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '<': {
               flushChars(buf, pos);
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED_LESS_THAN_SIGN;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED_LESS_THAN_SIGN, reconsume, pos);
               NS_HTML5_BREAK(scriptdataescapeddashloop);
             }
             case '\0': {
               emitReplacementCharacter(buf, pos);
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\r': {
               emitCarriageReturn(buf, pos);
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
               silentLineFeed();
             }
             default: {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -2295,7 +2379,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
               index = 0;
               clearStrBuf();
               returnState = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED;
-              state = NS_HTML5TOKENIZER_NON_DATA_END_TAG_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_NON_DATA_END_TAG_NAME, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case 'S':
@@ -2303,14 +2387,14 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
               tokenHandler->characters(nsHtml5Tokenizer::LT_GT, 0, 1);
               cstart = pos;
               index = 1;
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPE_START;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPE_START, reconsume, pos);
               NS_HTML5_BREAK(scriptdataescapedlessthanloop);
             }
             default: {
               tokenHandler->characters(nsHtml5Tokenizer::LT_GT, 0, 1);
               cstart = pos;
-              reconsume = PR_TRUE;
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -2323,15 +2407,15 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             NS_HTML5_BREAK(stateloop);
           }
           c = checkChar(buf, pos);
-
+          MOZ_ASSERT(index > 0);
           if (index < 6) {
             PRUnichar folded = c;
             if (c >= 'A' && c <= 'Z') {
               folded += 0x20;
             }
             if (folded != nsHtml5Tokenizer::SCRIPT_ARR[index]) {
-              reconsume = PR_TRUE;
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             index++;
@@ -2340,7 +2424,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '\r': {
               emitCarriageReturn(buf, pos);
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
@@ -2351,12 +2435,12 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '\f':
             case '/':
             case '>': {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED, reconsume, pos);
               NS_HTML5_BREAK(scriptdatadoubleescapestartloop);
             }
             default: {
-              reconsume = PR_TRUE;
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -2366,7 +2450,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -2375,11 +2459,11 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           }
           switch(c) {
             case '-': {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED_DASH;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED_DASH, reconsume, pos);
               NS_HTML5_BREAK(scriptdatadoubleescapedloop);
             }
             case '<': {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED_LESS_THAN_SIGN;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED_LESS_THAN_SIGN, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\0': {
@@ -2408,28 +2492,28 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           c = checkChar(buf, pos);
           switch(c) {
             case '-': {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED_DASH_DASH;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED_DASH_DASH, reconsume, pos);
               NS_HTML5_BREAK(scriptdatadoubleescapeddashloop);
             }
             case '<': {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED_LESS_THAN_SIGN;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED_LESS_THAN_SIGN, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\0': {
               emitReplacementCharacter(buf, pos);
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\r': {
               emitCarriageReturn(buf, pos);
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
               silentLineFeed();
             }
             default: {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -2447,28 +2531,28 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
               continue;
             }
             case '<': {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED_LESS_THAN_SIGN;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED_LESS_THAN_SIGN, reconsume, pos);
               NS_HTML5_BREAK(scriptdatadoubleescapeddashdashloop);
             }
             case '>': {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\0': {
               emitReplacementCharacter(buf, pos);
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\r': {
               emitCarriageReturn(buf, pos);
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
               silentLineFeed();
             }
             default: {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -2484,12 +2568,12 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '/': {
               index = 0;
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPE_END;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPE_END, reconsume, pos);
               NS_HTML5_BREAK(scriptdatadoubleescapedlessthanloop);
             }
             default: {
-              reconsume = PR_TRUE;
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -2508,8 +2592,8 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
               folded += 0x20;
             }
             if (folded != nsHtml5Tokenizer::SCRIPT_ARR[index]) {
-              reconsume = PR_TRUE;
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             index++;
@@ -2518,7 +2602,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '\r': {
               emitCarriageReturn(buf, pos);
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
@@ -2529,12 +2613,12 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '\f':
             case '/':
             case '>': {
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_ESCAPED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             default: {
-              reconsume = PR_TRUE;
-              state = NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_SCRIPT_DATA_DOUBLE_ESCAPED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -2555,16 +2639,18 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             if (folded == nsHtml5Tokenizer::OCTYPE[index]) {
               appendLongStrBuf(c);
             } else {
-
-              state = NS_HTML5TOKENIZER_BOGUS_COMMENT;
-              reconsume = PR_TRUE;
+              if (P::reportErrors) {
+                errBogusComment();
+              }
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_COMMENT, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             index++;
             continue;
           } else {
-            state = NS_HTML5TOKENIZER_DOCTYPE;
-            reconsume = PR_TRUE;
+            reconsume = true;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE, reconsume, pos);
             NS_HTML5_BREAK(markupdeclarationdoctypeloop);
           }
         }
@@ -2573,7 +2659,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_DOCTYPE: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -2584,7 +2670,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '\r': {
               silentCarriageReturn();
-              state = NS_HTML5TOKENIZER_BEFORE_DOCTYPE_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_DOCTYPE_NAME, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
@@ -2593,13 +2679,15 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case ' ':
             case '\t':
             case '\f': {
-              state = NS_HTML5TOKENIZER_BEFORE_DOCTYPE_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_DOCTYPE_NAME, reconsume, pos);
               NS_HTML5_BREAK(doctypeloop);
             }
             default: {
-
-              state = NS_HTML5TOKENIZER_BEFORE_DOCTYPE_NAME;
-              reconsume = PR_TRUE;
+              if (P::reportErrors) {
+                errMissingSpaceBeforeDoctypeName();
+              }
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_DOCTYPE_NAME, reconsume, pos);
               NS_HTML5_BREAK(doctypeloop);
             }
           }
@@ -2609,7 +2697,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_BEFORE_DOCTYPE_NAME: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -2630,10 +2718,12 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
               continue;
             }
             case '>': {
-
-              forceQuirks = PR_TRUE;
+              if (P::reportErrors) {
+                errNamelessDoctype();
+              }
+              forceQuirks = true;
               emitDoctypeToken(pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\0': {
@@ -2644,7 +2734,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
                 c += 0x20;
               }
               clearStrBufAndAppend(c);
-              state = NS_HTML5TOKENIZER_DOCTYPE_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE_NAME, reconsume, pos);
               NS_HTML5_BREAK(beforedoctypenameloop);
             }
           }
@@ -2661,7 +2751,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '\r': {
               silentCarriageReturn();
               strBufToDoctypeName();
-              state = NS_HTML5TOKENIZER_AFTER_DOCTYPE_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_AFTER_DOCTYPE_NAME, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
@@ -2671,13 +2761,13 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case '\t':
             case '\f': {
               strBufToDoctypeName();
-              state = NS_HTML5TOKENIZER_AFTER_DOCTYPE_NAME;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_AFTER_DOCTYPE_NAME, reconsume, pos);
               NS_HTML5_BREAK(doctypenameloop);
             }
             case '>': {
               strBufToDoctypeName();
               emitDoctypeToken(pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\0': {
@@ -2715,24 +2805,24 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             case '>': {
               emitDoctypeToken(pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case 'p':
             case 'P': {
               index = 0;
-              state = NS_HTML5TOKENIZER_DOCTYPE_UBLIC;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE_UBLIC, reconsume, pos);
               NS_HTML5_BREAK(afterdoctypenameloop);
             }
             case 's':
             case 'S': {
               index = 0;
-              state = NS_HTML5TOKENIZER_DOCTYPE_YSTEM;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE_YSTEM, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             default: {
               bogusDoctype();
-              state = NS_HTML5TOKENIZER_BOGUS_DOCTYPE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_DOCTYPE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -2752,15 +2842,15 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             if (folded != nsHtml5Tokenizer::UBLIC[index]) {
               bogusDoctype();
-              state = NS_HTML5TOKENIZER_BOGUS_DOCTYPE;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_DOCTYPE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             index++;
             continue;
           } else {
-            state = NS_HTML5TOKENIZER_AFTER_DOCTYPE_PUBLIC_KEYWORD;
-            reconsume = PR_TRUE;
+            reconsume = true;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_AFTER_DOCTYPE_PUBLIC_KEYWORD, reconsume, pos);
             NS_HTML5_BREAK(doctypeublicloop);
           }
         }
@@ -2769,7 +2859,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_AFTER_DOCTYPE_PUBLIC_KEYWORD: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -2779,7 +2869,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '\r': {
               silentCarriageReturn();
-              state = NS_HTML5TOKENIZER_BEFORE_DOCTYPE_PUBLIC_IDENTIFIER;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_DOCTYPE_PUBLIC_IDENTIFIER, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
@@ -2788,31 +2878,37 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case ' ':
             case '\t':
             case '\f': {
-              state = NS_HTML5TOKENIZER_BEFORE_DOCTYPE_PUBLIC_IDENTIFIER;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_DOCTYPE_PUBLIC_IDENTIFIER, reconsume, pos);
               NS_HTML5_BREAK(afterdoctypepublickeywordloop);
             }
             case '\"': {
-
+              if (P::reportErrors) {
+                errNoSpaceBetweenDoctypePublicKeywordAndQuote();
+              }
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_DOCTYPE_PUBLIC_IDENTIFIER_DOUBLE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE_PUBLIC_IDENTIFIER_DOUBLE_QUOTED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\'': {
-
+              if (P::reportErrors) {
+                errNoSpaceBetweenDoctypePublicKeywordAndQuote();
+              }
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_DOCTYPE_PUBLIC_IDENTIFIER_SINGLE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE_PUBLIC_IDENTIFIER_SINGLE_QUOTED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '>': {
-
-              forceQuirks = PR_TRUE;
+              if (P::reportErrors) {
+                errExpectedPublicId();
+              }
+              forceQuirks = true;
               emitDoctypeToken(pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             default: {
               bogusDoctype();
-              state = NS_HTML5TOKENIZER_BOGUS_DOCTYPE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_DOCTYPE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -2840,24 +2936,26 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             case '\"': {
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_DOCTYPE_PUBLIC_IDENTIFIER_DOUBLE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE_PUBLIC_IDENTIFIER_DOUBLE_QUOTED, reconsume, pos);
               NS_HTML5_BREAK(beforedoctypepublicidentifierloop);
             }
             case '\'': {
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_DOCTYPE_PUBLIC_IDENTIFIER_SINGLE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE_PUBLIC_IDENTIFIER_SINGLE_QUOTED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '>': {
-
-              forceQuirks = PR_TRUE;
+              if (P::reportErrors) {
+                errExpectedPublicId();
+              }
+              forceQuirks = true;
               emitDoctypeToken(pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             default: {
               bogusDoctype();
-              state = NS_HTML5TOKENIZER_BOGUS_DOCTYPE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_DOCTYPE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -2873,15 +2971,17 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '\"': {
               publicIdentifier = longStrBufToString();
-              state = NS_HTML5TOKENIZER_AFTER_DOCTYPE_PUBLIC_IDENTIFIER;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_AFTER_DOCTYPE_PUBLIC_IDENTIFIER, reconsume, pos);
               NS_HTML5_BREAK(doctypepublicidentifierdoublequotedloop);
             }
             case '>': {
-
-              forceQuirks = PR_TRUE;
+              if (P::reportErrors) {
+                errGtInPublicId();
+              }
+              forceQuirks = true;
               publicIdentifier = longStrBufToString();
               emitDoctypeToken(pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\r': {
@@ -2912,7 +3012,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '\r': {
               silentCarriageReturn();
-              state = NS_HTML5TOKENIZER_BETWEEN_DOCTYPE_PUBLIC_AND_SYSTEM_IDENTIFIERS;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BETWEEN_DOCTYPE_PUBLIC_AND_SYSTEM_IDENTIFIERS, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
@@ -2921,29 +3021,33 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case ' ':
             case '\t':
             case '\f': {
-              state = NS_HTML5TOKENIZER_BETWEEN_DOCTYPE_PUBLIC_AND_SYSTEM_IDENTIFIERS;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BETWEEN_DOCTYPE_PUBLIC_AND_SYSTEM_IDENTIFIERS, reconsume, pos);
               NS_HTML5_BREAK(afterdoctypepublicidentifierloop);
             }
             case '>': {
               emitDoctypeToken(pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\"': {
-
+              if (P::reportErrors) {
+                errNoSpaceBetweenPublicAndSystemIds();
+              }
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_DOUBLE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_DOUBLE_QUOTED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\'': {
-
+              if (P::reportErrors) {
+                errNoSpaceBetweenPublicAndSystemIds();
+              }
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_SINGLE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_SINGLE_QUOTED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             default: {
               bogusDoctype();
-              state = NS_HTML5TOKENIZER_BOGUS_DOCTYPE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_DOCTYPE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -2971,22 +3075,22 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             case '>': {
               emitDoctypeToken(pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\"': {
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_DOUBLE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_DOUBLE_QUOTED, reconsume, pos);
               NS_HTML5_BREAK(betweendoctypepublicandsystemidentifiersloop);
             }
             case '\'': {
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_SINGLE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_SINGLE_QUOTED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             default: {
               bogusDoctype();
-              state = NS_HTML5TOKENIZER_BOGUS_DOCTYPE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_DOCTYPE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -3002,15 +3106,17 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '\"': {
               systemIdentifier = longStrBufToString();
-              state = NS_HTML5TOKENIZER_AFTER_DOCTYPE_SYSTEM_IDENTIFIER;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_AFTER_DOCTYPE_SYSTEM_IDENTIFIER, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '>': {
-
-              forceQuirks = PR_TRUE;
+              if (P::reportErrors) {
+                errGtInSystemId();
+              }
+              forceQuirks = true;
               systemIdentifier = longStrBufToString();
               emitDoctypeToken(pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\r': {
@@ -3053,12 +3159,12 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             case '>': {
               emitDoctypeToken(pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             default: {
               bogusDoctypeWithoutQuirks();
-              state = NS_HTML5TOKENIZER_BOGUS_DOCTYPE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_DOCTYPE, reconsume, pos);
               NS_HTML5_BREAK(afterdoctypesystemidentifierloop);
             }
           }
@@ -3068,7 +3174,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_BOGUS_DOCTYPE: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -3078,7 +3184,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '>': {
               emitDoctypeToken(pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\r': {
@@ -3107,15 +3213,15 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             if (folded != nsHtml5Tokenizer::YSTEM[index]) {
               bogusDoctype();
-              state = NS_HTML5TOKENIZER_BOGUS_DOCTYPE;
-              reconsume = PR_TRUE;
+              reconsume = true;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_DOCTYPE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             index++;
             NS_HTML5_CONTINUE(stateloop);
           } else {
-            state = NS_HTML5TOKENIZER_AFTER_DOCTYPE_SYSTEM_KEYWORD;
-            reconsume = PR_TRUE;
+            reconsume = true;
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_AFTER_DOCTYPE_SYSTEM_KEYWORD, reconsume, pos);
             NS_HTML5_BREAK(doctypeystemloop);
           }
         }
@@ -3124,7 +3230,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
       case NS_HTML5TOKENIZER_AFTER_DOCTYPE_SYSTEM_KEYWORD: {
         for (; ; ) {
           if (reconsume) {
-            reconsume = PR_FALSE;
+            reconsume = false;
           } else {
             if (++pos == endPos) {
               NS_HTML5_BREAK(stateloop);
@@ -3134,7 +3240,7 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '\r': {
               silentCarriageReturn();
-              state = NS_HTML5TOKENIZER_BEFORE_DOCTYPE_SYSTEM_IDENTIFIER;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_DOCTYPE_SYSTEM_IDENTIFIER, reconsume, pos);
               NS_HTML5_BREAK(stateloop);
             }
             case '\n': {
@@ -3143,31 +3249,37 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             case ' ':
             case '\t':
             case '\f': {
-              state = NS_HTML5TOKENIZER_BEFORE_DOCTYPE_SYSTEM_IDENTIFIER;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BEFORE_DOCTYPE_SYSTEM_IDENTIFIER, reconsume, pos);
               NS_HTML5_BREAK(afterdoctypesystemkeywordloop);
             }
             case '\"': {
-
+              if (P::reportErrors) {
+                errNoSpaceBetweenDoctypeSystemKeywordAndQuote();
+              }
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_DOUBLE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_DOUBLE_QUOTED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\'': {
-
+              if (P::reportErrors) {
+                errNoSpaceBetweenDoctypeSystemKeywordAndQuote();
+              }
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_SINGLE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_SINGLE_QUOTED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '>': {
-
-              forceQuirks = PR_TRUE;
+              if (P::reportErrors) {
+                errExpectedPublicId();
+              }
+              forceQuirks = true;
               emitDoctypeToken(pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             default: {
               bogusDoctype();
-              state = NS_HTML5TOKENIZER_BOGUS_DOCTYPE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_DOCTYPE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -3195,24 +3307,26 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
             }
             case '\"': {
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_DOUBLE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_DOUBLE_QUOTED, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\'': {
               clearLongStrBuf();
-              state = NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_SINGLE_QUOTED;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_SINGLE_QUOTED, reconsume, pos);
               NS_HTML5_BREAK(beforedoctypesystemidentifierloop);
             }
             case '>': {
-
-              forceQuirks = PR_TRUE;
+              if (P::reportErrors) {
+                errExpectedSystemId();
+              }
+              forceQuirks = true;
               emitDoctypeToken(pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             default: {
               bogusDoctype();
-              state = NS_HTML5TOKENIZER_BOGUS_DOCTYPE;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_BOGUS_DOCTYPE, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
           }
@@ -3228,15 +3342,17 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '\'': {
               systemIdentifier = longStrBufToString();
-              state = NS_HTML5TOKENIZER_AFTER_DOCTYPE_SYSTEM_IDENTIFIER;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_AFTER_DOCTYPE_SYSTEM_IDENTIFIER, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '>': {
-
-              forceQuirks = PR_TRUE;
+              if (P::reportErrors) {
+                errGtInSystemId();
+              }
+              forceQuirks = true;
               systemIdentifier = longStrBufToString();
               emitDoctypeToken(pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\r': {
@@ -3266,15 +3382,17 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           switch(c) {
             case '\'': {
               publicIdentifier = longStrBufToString();
-              state = NS_HTML5TOKENIZER_AFTER_DOCTYPE_PUBLIC_IDENTIFIER;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_AFTER_DOCTYPE_PUBLIC_IDENTIFIER, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '>': {
-
-              forceQuirks = PR_TRUE;
+              if (P::reportErrors) {
+                errGtInPublicId();
+              }
+              forceQuirks = true;
               publicIdentifier = longStrBufToString();
               emitDoctypeToken(pos);
-              state = NS_HTML5TOKENIZER_DATA;
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
               NS_HTML5_CONTINUE(stateloop);
             }
             case '\r': {
@@ -3295,6 +3413,40 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
           }
         }
       }
+      case NS_HTML5TOKENIZER_PROCESSING_INSTRUCTION: {
+        for (; ; ) {
+          if (++pos == endPos) {
+            NS_HTML5_BREAK(stateloop);
+          }
+          c = checkChar(buf, pos);
+          switch(c) {
+            case '\?': {
+              state = P::transition(mViewSource, NS_HTML5TOKENIZER_PROCESSING_INSTRUCTION_QUESTION_MARK, reconsume, pos);
+              NS_HTML5_BREAK(processinginstructionloop);
+            }
+            default: {
+              continue;
+            }
+          }
+        }
+        processinginstructionloop_end: ;
+      }
+      case NS_HTML5TOKENIZER_PROCESSING_INSTRUCTION_QUESTION_MARK: {
+        if (++pos == endPos) {
+          NS_HTML5_BREAK(stateloop);
+        }
+        c = checkChar(buf, pos);
+        switch(c) {
+          case '>': {
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_DATA, reconsume, pos);
+            NS_HTML5_CONTINUE(stateloop);
+          }
+          default: {
+            state = P::transition(mViewSource, NS_HTML5TOKENIZER_PROCESSING_INSTRUCTION, reconsume, pos);
+            NS_HTML5_CONTINUE(stateloop);
+          }
+        }
+      }
     }
   }
   stateloop_end: ;
@@ -3307,33 +3459,40 @@ nsHtml5Tokenizer::stateLoop(PRInt32 state, PRUnichar c, PRInt32 pos, PRUnichar* 
 void 
 nsHtml5Tokenizer::initDoctypeFields()
 {
-  nsHtml5Portability::releaseLocal(doctypeName);
   doctypeName = nsHtml5Atoms::emptystring;
   if (systemIdentifier) {
     nsHtml5Portability::releaseString(systemIdentifier);
-    systemIdentifier = nsnull;
+    systemIdentifier = nullptr;
   }
   if (publicIdentifier) {
     nsHtml5Portability::releaseString(publicIdentifier);
-    publicIdentifier = nsnull;
+    publicIdentifier = nullptr;
   }
-  forceQuirks = PR_FALSE;
+  forceQuirks = false;
 }
 
 void 
-nsHtml5Tokenizer::emitCarriageReturn(PRUnichar* buf, PRInt32 pos)
+nsHtml5Tokenizer::emitCarriageReturn(PRUnichar* buf, int32_t pos)
 {
   silentCarriageReturn();
   flushChars(buf, pos);
   tokenHandler->characters(nsHtml5Tokenizer::LF, 0, 1);
-  cstart = PR_INT32_MAX;
+  cstart = INT32_MAX;
 }
 
 void 
-nsHtml5Tokenizer::emitReplacementCharacter(PRUnichar* buf, PRInt32 pos)
+nsHtml5Tokenizer::emitReplacementCharacter(PRUnichar* buf, int32_t pos)
 {
   flushChars(buf, pos);
   tokenHandler->zeroOriginatingReplacementCharacter();
+  cstart = pos + 1;
+}
+
+void 
+nsHtml5Tokenizer::emitPlaintextReplacementCharacter(PRUnichar* buf, int32_t pos)
+{
+  flushChars(buf, pos);
+  tokenHandler->characters(REPLACEMENT_CHARACTER, 0, 1);
   cstart = pos + 1;
 }
 
@@ -3346,19 +3505,19 @@ nsHtml5Tokenizer::setAdditionalAndRememberAmpersandLocation(PRUnichar add)
 void 
 nsHtml5Tokenizer::bogusDoctype()
 {
-
-  forceQuirks = PR_TRUE;
+  errBogusDoctype();
+  forceQuirks = true;
 }
 
 void 
 nsHtml5Tokenizer::bogusDoctypeWithoutQuirks()
 {
-
-  forceQuirks = PR_FALSE;
+  errBogusDoctype();
+  forceQuirks = false;
 }
 
 void 
-nsHtml5Tokenizer::emitOrAppendStrBuf(PRInt32 returnState)
+nsHtml5Tokenizer::emitOrAppendStrBuf(int32_t returnState)
 {
   if ((returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
     appendStrBufToLongStrBuf();
@@ -3368,18 +3527,18 @@ nsHtml5Tokenizer::emitOrAppendStrBuf(PRInt32 returnState)
 }
 
 void 
-nsHtml5Tokenizer::handleNcrValue(PRInt32 returnState)
+nsHtml5Tokenizer::handleNcrValue(int32_t returnState)
 {
   if (value <= 0xFFFF) {
     if (value >= 0x80 && value <= 0x9f) {
-
+      errNcrInC1Range();
       PRUnichar* val = nsHtml5NamedCharacters::WINDOWS_1252[value - 0x80];
       emitOrAppendOne(val, returnState);
     } else if (value == 0x0) {
-
+      errNcrZero();
       emitOrAppendOne(nsHtml5Tokenizer::REPLACEMENT_CHARACTER, returnState);
     } else if ((value & 0xF800) == 0xD800) {
-
+      errNcrSurrogate();
       emitOrAppendOne(nsHtml5Tokenizer::REPLACEMENT_CHARACTER, returnState);
     } else {
       PRUnichar ch = (PRUnichar) value;
@@ -3391,7 +3550,7 @@ nsHtml5Tokenizer::handleNcrValue(PRInt32 returnState)
     astralChar[1] = (PRUnichar) (0xDC00 + (value & 0x3FF));
     emitOrAppendTwo(astralChar, returnState);
   } else {
-
+    errNcrOutOfRange();
     emitOrAppendOne(nsHtml5Tokenizer::REPLACEMENT_CHARACTER, returnState);
   }
 }
@@ -3399,8 +3558,8 @@ nsHtml5Tokenizer::handleNcrValue(PRInt32 returnState)
 void 
 nsHtml5Tokenizer::eof()
 {
-  PRInt32 state = stateSave;
-  PRInt32 returnState = returnStateSave;
+  int32_t state = stateSave;
+  int32_t returnState = returnStateSave;
   eofloop: for (; ; ) {
     switch(state) {
       case NS_HTML5TOKENIZER_SCRIPT_DATA_LESS_THAN_SIGN:
@@ -3409,7 +3568,7 @@ nsHtml5Tokenizer::eof()
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_TAG_OPEN: {
-
+        errEofAfterLt();
         tokenHandler->characters(nsHtml5Tokenizer::LT_GT, 0, 1);
         NS_HTML5_BREAK(eofloop);
       }
@@ -3423,33 +3582,33 @@ nsHtml5Tokenizer::eof()
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_CLOSE_TAG_OPEN: {
-
+        errEofAfterLt();
         tokenHandler->characters(nsHtml5Tokenizer::LT_SOLIDUS, 0, 2);
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_TAG_NAME: {
-
+        errEofInTagName();
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_NAME:
       case NS_HTML5TOKENIZER_AFTER_ATTRIBUTE_VALUE_QUOTED:
       case NS_HTML5TOKENIZER_SELF_CLOSING_START_TAG: {
-
+        errEofWithoutGt();
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_ATTRIBUTE_NAME: {
-
+        errEofInAttributeName();
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_AFTER_ATTRIBUTE_NAME:
       case NS_HTML5TOKENIZER_BEFORE_ATTRIBUTE_VALUE: {
-
+        errEofWithoutGt();
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_ATTRIBUTE_VALUE_DOUBLE_QUOTED:
       case NS_HTML5TOKENIZER_ATTRIBUTE_VALUE_SINGLE_QUOTED:
       case NS_HTML5TOKENIZER_ATTRIBUTE_VALUE_UNQUOTED: {
-
+        errEofInAttributeValue();
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_BOGUS_COMMENT: {
@@ -3461,72 +3620,70 @@ nsHtml5Tokenizer::eof()
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_MARKUP_DECLARATION_OPEN: {
-
+        errBogusComment();
         clearLongStrBuf();
         emitComment(0, 0);
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_MARKUP_DECLARATION_HYPHEN: {
-
+        errBogusComment();
         emitComment(0, 0);
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_MARKUP_DECLARATION_OCTYPE: {
         if (index < 6) {
-
+          errBogusComment();
           emitComment(0, 0);
         } else {
-
-          nsHtml5Portability::releaseLocal(doctypeName);
+          errEofInDoctype();
           doctypeName = nsHtml5Atoms::emptystring;
           if (systemIdentifier) {
             nsHtml5Portability::releaseString(systemIdentifier);
-            systemIdentifier = nsnull;
+            systemIdentifier = nullptr;
           }
           if (publicIdentifier) {
             nsHtml5Portability::releaseString(publicIdentifier);
-            publicIdentifier = nsnull;
+            publicIdentifier = nullptr;
           }
-          forceQuirks = PR_TRUE;
+          forceQuirks = true;
           emitDoctypeToken(0);
           NS_HTML5_BREAK(eofloop);
         }
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_COMMENT_START:
-      case NS_HTML5TOKENIZER_COMMENT:
-      case NS_HTML5TOKENIZER_COMMENT_END_SPACE: {
-
+      case NS_HTML5TOKENIZER_COMMENT: {
+        errEofInComment();
         emitComment(0, 0);
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_COMMENT_END: {
-
+        errEofInComment();
         emitComment(2, 0);
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_COMMENT_END_DASH:
       case NS_HTML5TOKENIZER_COMMENT_START_DASH: {
-
+        errEofInComment();
         emitComment(1, 0);
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_COMMENT_END_BANG: {
-
+        errEofInComment();
         emitComment(3, 0);
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_DOCTYPE:
       case NS_HTML5TOKENIZER_BEFORE_DOCTYPE_NAME: {
-
-        forceQuirks = PR_TRUE;
+        errEofInDoctype();
+        forceQuirks = true;
         emitDoctypeToken(0);
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_DOCTYPE_NAME: {
-
+        errEofInDoctype();
         strBufToDoctypeName();
-        forceQuirks = PR_TRUE;
+        forceQuirks = true;
         emitDoctypeToken(0);
         NS_HTML5_BREAK(eofloop);
       }
@@ -3536,15 +3693,15 @@ nsHtml5Tokenizer::eof()
       case NS_HTML5TOKENIZER_AFTER_DOCTYPE_PUBLIC_KEYWORD:
       case NS_HTML5TOKENIZER_AFTER_DOCTYPE_SYSTEM_KEYWORD:
       case NS_HTML5TOKENIZER_BEFORE_DOCTYPE_PUBLIC_IDENTIFIER: {
-
-        forceQuirks = PR_TRUE;
+        errEofInDoctype();
+        forceQuirks = true;
         emitDoctypeToken(0);
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_DOCTYPE_PUBLIC_IDENTIFIER_DOUBLE_QUOTED:
       case NS_HTML5TOKENIZER_DOCTYPE_PUBLIC_IDENTIFIER_SINGLE_QUOTED: {
-
-        forceQuirks = PR_TRUE;
+        errEofInPublicId();
+        forceQuirks = true;
         publicIdentifier = longStrBufToString();
         emitDoctypeToken(0);
         NS_HTML5_BREAK(eofloop);
@@ -3552,22 +3709,22 @@ nsHtml5Tokenizer::eof()
       case NS_HTML5TOKENIZER_AFTER_DOCTYPE_PUBLIC_IDENTIFIER:
       case NS_HTML5TOKENIZER_BEFORE_DOCTYPE_SYSTEM_IDENTIFIER:
       case NS_HTML5TOKENIZER_BETWEEN_DOCTYPE_PUBLIC_AND_SYSTEM_IDENTIFIERS: {
-
-        forceQuirks = PR_TRUE;
+        errEofInDoctype();
+        forceQuirks = true;
         emitDoctypeToken(0);
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_DOUBLE_QUOTED:
       case NS_HTML5TOKENIZER_DOCTYPE_SYSTEM_IDENTIFIER_SINGLE_QUOTED: {
-
-        forceQuirks = PR_TRUE;
+        errEofInSystemId();
+        forceQuirks = true;
         systemIdentifier = longStrBufToString();
         emitDoctypeToken(0);
         NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_AFTER_DOCTYPE_SYSTEM_IDENTIFIER: {
-
-        forceQuirks = PR_TRUE;
+        errEofInDoctype();
+        forceQuirks = true;
         emitDoctypeToken(0);
         NS_HTML5_BREAK(eofloop);
       }
@@ -3581,7 +3738,7 @@ nsHtml5Tokenizer::eof()
         continue;
       }
       case NS_HTML5TOKENIZER_CHARACTER_REFERENCE_HILO_LOOKUP: {
-
+        errNoNamedCharacterMatch();
         emitOrAppendStrBuf(returnState);
         state = returnState;
         continue;
@@ -3594,12 +3751,12 @@ nsHtml5Tokenizer::eof()
             if (hi == -1) {
               NS_HTML5_BREAK(hiloop);
             }
-            if (entCol == nsHtml5NamedCharacters::NAMES[hi].length) {
+            if (entCol == nsHtml5NamedCharacters::NAMES[hi].length()) {
               NS_HTML5_BREAK(hiloop);
             }
-            if (entCol > nsHtml5NamedCharacters::NAMES[hi].length) {
+            if (entCol > nsHtml5NamedCharacters::NAMES[hi].length()) {
               NS_HTML5_BREAK(outer);
-            } else if (c < nsHtml5NamedCharacters::NAMES[hi][entCol]) {
+            } else if (c < nsHtml5NamedCharacters::NAMES[hi].charAt(entCol)) {
               hi--;
             } else {
               NS_HTML5_BREAK(hiloop);
@@ -3610,13 +3767,13 @@ nsHtml5Tokenizer::eof()
             if (hi < lo) {
               NS_HTML5_BREAK(outer);
             }
-            if (entCol == nsHtml5NamedCharacters::NAMES[lo].length) {
+            if (entCol == nsHtml5NamedCharacters::NAMES[lo].length()) {
               candidate = lo;
               strBufMark = strBufLen;
               lo++;
-            } else if (entCol > nsHtml5NamedCharacters::NAMES[lo].length) {
+            } else if (entCol > nsHtml5NamedCharacters::NAMES[lo].length()) {
               NS_HTML5_BREAK(outer);
-            } else if (c > nsHtml5NamedCharacters::NAMES[lo][entCol]) {
+            } else if (c > nsHtml5NamedCharacters::NAMES[lo].charAt(entCol)) {
               lo++;
             } else {
               NS_HTML5_BREAK(loloop);
@@ -3630,13 +3787,13 @@ nsHtml5Tokenizer::eof()
         }
         outer_end: ;
         if (candidate == -1) {
-
+          errNoNamedCharacterMatch();
           emitOrAppendStrBuf(returnState);
           state = returnState;
           NS_HTML5_CONTINUE(eofloop);
         } else {
-          jArray<PRInt8,PRInt32> candidateArr = nsHtml5NamedCharacters::NAMES[candidate];
-          if (!candidateArr.length || candidateArr[candidateArr.length - 1] != ';') {
+          const nsHtml5CharacterName& candidateName = nsHtml5NamedCharacters::NAMES[candidate];
+          if (!candidateName.length() || candidateName.charAt(candidateName.length() - 1) != ';') {
             if ((returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
               PRUnichar ch;
               if (strBufMark == strBufLen) {
@@ -3645,23 +3802,27 @@ nsHtml5Tokenizer::eof()
                 ch = strBuf[strBufMark];
               }
               if ((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
-
+                errNoNamedCharacterMatch();
                 appendStrBufToLongStrBuf();
                 state = returnState;
                 NS_HTML5_CONTINUE(eofloop);
               }
             }
-
+            if ((returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
+              errUnescapedAmpersandInterpretedAsCharacterReference();
+            } else {
+              errNotSemicolonTerminated();
+            }
           }
           const PRUnichar* val = nsHtml5NamedCharacters::VALUES[candidate];
-          if ((val[0] & 0xFC00) == 0xD800) {
-            emitOrAppendTwo(val, returnState);
-          } else {
+          if (!val[1]) {
             emitOrAppendOne(val, returnState);
+          } else {
+            emitOrAppendTwo(val, returnState);
           }
           if (strBufMark < strBufLen) {
             if ((returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
-              for (PRInt32 i = strBufMark; i < strBufLen; i++) {
+              for (int32_t i = strBufMark; i < strBufLen; i++) {
                 appendLongStrBuf(strBuf[i]);
               }
             } else {
@@ -3676,14 +3837,24 @@ nsHtml5Tokenizer::eof()
       case NS_HTML5TOKENIZER_DECIMAL_NRC_LOOP:
       case NS_HTML5TOKENIZER_HEX_NCR_LOOP: {
         if (!seenDigits) {
-
+          errNoDigitsInNCR();
           emitOrAppendStrBuf(returnState);
           state = returnState;
           continue;
+        } else {
+          errCharRefLacksSemicolon();
         }
         handleNcrValue(returnState);
         state = returnState;
         continue;
+      }
+      case NS_HTML5TOKENIZER_CDATA_RSQB: {
+        tokenHandler->characters(nsHtml5Tokenizer::RSQB_RSQB, 0, 1);
+        NS_HTML5_BREAK(eofloop);
+      }
+      case NS_HTML5TOKENIZER_CDATA_RSQB_RSQB: {
+        tokenHandler->characters(nsHtml5Tokenizer::RSQB_RSQB, 0, 2);
+        NS_HTML5_BREAK(eofloop);
       }
       case NS_HTML5TOKENIZER_DATA:
       default: {
@@ -3697,28 +3868,28 @@ nsHtml5Tokenizer::eof()
 }
 
 void 
-nsHtml5Tokenizer::emitDoctypeToken(PRInt32 pos)
+nsHtml5Tokenizer::emitDoctypeToken(int32_t pos)
 {
   cstart = pos + 1;
   tokenHandler->doctype(doctypeName, publicIdentifier, systemIdentifier, forceQuirks);
-  nsHtml5Portability::releaseLocal(doctypeName);
-  doctypeName = nsnull;
+  doctypeName = nullptr;
   nsHtml5Portability::releaseString(publicIdentifier);
-  publicIdentifier = nsnull;
+  publicIdentifier = nullptr;
   nsHtml5Portability::releaseString(systemIdentifier);
-  systemIdentifier = nsnull;
+  systemIdentifier = nullptr;
 }
 
-void 
+bool 
 nsHtml5Tokenizer::internalEncodingDeclaration(nsString* internalCharset)
 {
   if (encodingDeclarationHandler) {
-    encodingDeclarationHandler->internalEncodingDeclaration(internalCharset);
+    return encodingDeclarationHandler->internalEncodingDeclaration(internalCharset);
   }
+  return false;
 }
 
 void 
-nsHtml5Tokenizer::emitOrAppendTwo(const PRUnichar* val, PRInt32 returnState)
+nsHtml5Tokenizer::emitOrAppendTwo(const PRUnichar* val, int32_t returnState)
 {
   if ((returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
     appendLongStrBuf(val[0]);
@@ -3729,7 +3900,7 @@ nsHtml5Tokenizer::emitOrAppendTwo(const PRUnichar* val, PRInt32 returnState)
 }
 
 void 
-nsHtml5Tokenizer::emitOrAppendOne(const PRUnichar* val, PRInt32 returnState)
+nsHtml5Tokenizer::emitOrAppendOne(const PRUnichar* val, int32_t returnState)
 {
   if ((returnState & NS_HTML5TOKENIZER_DATA_AND_RCDATA_MASK)) {
     appendLongStrBuf(val[0]);
@@ -3741,43 +3912,40 @@ nsHtml5Tokenizer::emitOrAppendOne(const PRUnichar* val, PRInt32 returnState)
 void 
 nsHtml5Tokenizer::end()
 {
-  strBuf.release();
-  strBuf = nsnull;
-  longStrBuf.release();
-  longStrBuf = nsnull;
-  nsHtml5Portability::releaseLocal(doctypeName);
-  doctypeName = nsnull;
+  strBuf = nullptr;
+  longStrBuf = nullptr;
+  doctypeName = nullptr;
   if (systemIdentifier) {
     nsHtml5Portability::releaseString(systemIdentifier);
-    systemIdentifier = nsnull;
+    systemIdentifier = nullptr;
   }
   if (publicIdentifier) {
     nsHtml5Portability::releaseString(publicIdentifier);
-    publicIdentifier = nsnull;
+    publicIdentifier = nullptr;
   }
   if (tagName) {
     tagName->release();
-    tagName = nsnull;
+    tagName = nullptr;
   }
   if (attributeName) {
     attributeName->release();
-    attributeName = nsnull;
+    attributeName = nullptr;
   }
   tokenHandler->endTokenization();
   if (attributes) {
     attributes->clear(0);
     delete attributes;
-    attributes = nsnull;
+    attributes = nullptr;
   }
 }
 
 void 
 nsHtml5Tokenizer::requestSuspension()
 {
-  shouldSuspend = PR_TRUE;
+  shouldSuspend = true;
 }
 
-PRBool 
+bool 
 nsHtml5Tokenizer::isInDataState()
 {
   return (stateSave == NS_HTML5TOKENIZER_DATA);
@@ -3789,33 +3957,33 @@ nsHtml5Tokenizer::resetToDataState()
   strBufLen = 0;
   longStrBufLen = 0;
   stateSave = NS_HTML5TOKENIZER_DATA;
-  lastCR = PR_FALSE;
+  lastCR = false;
   index = 0;
-  forceQuirks = PR_FALSE;
+  forceQuirks = false;
   additional = '\0';
   entCol = -1;
   firstCharKey = -1;
   lo = 0;
-  hi = (nsHtml5NamedCharacters::NAMES.length - 1);
+  hi = 0;
   candidate = -1;
   strBufMark = 0;
   prevValue = -1;
   value = 0;
-  seenDigits = PR_FALSE;
-  endTag = PR_FALSE;
-  shouldSuspend = PR_FALSE;
+  seenDigits = false;
+  endTag = false;
+  shouldSuspend = false;
   initDoctypeFields();
   if (tagName) {
     tagName->release();
-    tagName = nsnull;
+    tagName = nullptr;
   }
   if (attributeName) {
     attributeName->release();
-    attributeName = nsnull;
+    attributeName = nullptr;
   }
   if (attributes) {
     delete attributes;
-    attributes = nsnull;
+    attributes = nullptr;
   }
 }
 
@@ -3824,14 +3992,12 @@ nsHtml5Tokenizer::loadState(nsHtml5Tokenizer* other)
 {
   strBufLen = other->strBufLen;
   if (strBufLen > strBuf.length) {
-    strBuf.release();
-    strBuf = jArray<PRUnichar,PRInt32>(strBufLen);
+    strBuf = jArray<PRUnichar,int32_t>::newJArray(strBufLen);
   }
   nsHtml5ArrayCopy::arraycopy(other->strBuf, strBuf, strBufLen);
   longStrBufLen = other->longStrBufLen;
   if (longStrBufLen > longStrBuf.length) {
-    longStrBuf.release();
-    longStrBuf = jArray<PRUnichar,PRInt32>(longStrBufLen);
+    longStrBuf = jArray<PRUnichar,int32_t>::newJArray(longStrBufLen);
   }
   nsHtml5ArrayCopy::arraycopy(other->longStrBuf, longStrBuf, longStrBufLen);
   stateSave = other->stateSave;
@@ -3852,22 +4018,21 @@ nsHtml5Tokenizer::loadState(nsHtml5Tokenizer* other)
   value = other->value;
   seenDigits = other->seenDigits;
   endTag = other->endTag;
-  shouldSuspend = PR_FALSE;
-  nsHtml5Portability::releaseLocal(doctypeName);
+  shouldSuspend = false;
   if (!other->doctypeName) {
-    doctypeName = nsnull;
+    doctypeName = nullptr;
   } else {
     doctypeName = nsHtml5Portability::newLocalFromLocal(other->doctypeName, interner);
   }
   nsHtml5Portability::releaseString(systemIdentifier);
   if (!other->systemIdentifier) {
-    systemIdentifier = nsnull;
+    systemIdentifier = nullptr;
   } else {
     systemIdentifier = nsHtml5Portability::newStringFromString(other->systemIdentifier);
   }
   nsHtml5Portability::releaseString(publicIdentifier);
   if (!other->publicIdentifier) {
-    publicIdentifier = nsnull;
+    publicIdentifier = nullptr;
   } else {
     publicIdentifier = nsHtml5Portability::newStringFromString(other->publicIdentifier);
   }
@@ -3875,7 +4040,7 @@ nsHtml5Tokenizer::loadState(nsHtml5Tokenizer* other)
     tagName->release();
   }
   if (!other->tagName) {
-    tagName = nsnull;
+    tagName = nullptr;
   } else {
     tagName = other->tagName->cloneElementName(interner);
   }
@@ -3883,15 +4048,13 @@ nsHtml5Tokenizer::loadState(nsHtml5Tokenizer* other)
     attributeName->release();
   }
   if (!other->attributeName) {
-    attributeName = nsnull;
+    attributeName = nullptr;
   } else {
     attributeName = other->attributeName->cloneAttributeName(interner);
   }
-  if (attributes) {
-    delete attributes;
-  }
+  delete attributes;
   if (!other->attributes) {
-    attributes = nsnull;
+    attributes = nullptr;
   } else {
     attributes = other->attributes->cloneAttributes(interner);
   }
@@ -3900,9 +4063,9 @@ nsHtml5Tokenizer::loadState(nsHtml5Tokenizer* other)
 void 
 nsHtml5Tokenizer::initializeWithoutStarting()
 {
-  confident = PR_FALSE;
-  strBuf = jArray<PRUnichar,PRInt32>(64);
-  longStrBuf = jArray<PRUnichar,PRInt32>(1024);
+  confident = false;
+  strBuf = jArray<PRUnichar,int32_t>::newJArray(64);
+  longStrBuf = jArray<PRUnichar,int32_t>::newJArray(1024);
   line = 1;
   resetToDataState();
 }
@@ -3913,19 +4076,15 @@ nsHtml5Tokenizer::setEncodingDeclarationHandler(nsHtml5StreamParser* encodingDec
   this->encodingDeclarationHandler = encodingDeclarationHandler;
 }
 
+
+nsHtml5Tokenizer::~nsHtml5Tokenizer()
+{
+  MOZ_COUNT_DTOR(nsHtml5Tokenizer);
+}
+
 void
 nsHtml5Tokenizer::initializeStatics()
 {
-  TITLE_ARR = jArray<PRUnichar,PRInt32>((PRUnichar*)TITLE_ARR_DATA, 5);
-  SCRIPT_ARR = jArray<PRUnichar,PRInt32>((PRUnichar*)SCRIPT_ARR_DATA, 6);
-  STYLE_ARR = jArray<PRUnichar,PRInt32>((PRUnichar*)STYLE_ARR_DATA, 5);
-  PLAINTEXT_ARR = jArray<PRUnichar,PRInt32>((PRUnichar*)PLAINTEXT_ARR_DATA, 9);
-  XMP_ARR = jArray<PRUnichar,PRInt32>((PRUnichar*)XMP_ARR_DATA, 3);
-  TEXTAREA_ARR = jArray<PRUnichar,PRInt32>((PRUnichar*)TEXTAREA_ARR_DATA, 8);
-  IFRAME_ARR = jArray<PRUnichar,PRInt32>((PRUnichar*)IFRAME_ARR_DATA, 6);
-  NOEMBED_ARR = jArray<PRUnichar,PRInt32>((PRUnichar*)NOEMBED_ARR_DATA, 7);
-  NOSCRIPT_ARR = jArray<PRUnichar,PRInt32>((PRUnichar*)NOSCRIPT_ARR_DATA, 8);
-  NOFRAMES_ARR = jArray<PRUnichar,PRInt32>((PRUnichar*)NOFRAMES_ARR_DATA, 8);
 }
 
 void
@@ -3933,4 +4092,6 @@ nsHtml5Tokenizer::releaseStatics()
 {
 }
 
+
+#include "nsHtml5TokenizerCppSupplement.h"
 

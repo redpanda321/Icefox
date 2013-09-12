@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /* vim:set sw=4 sts=4 et cin: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Bradley Baetz <bbaetz@cs.mcgill.ca>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 /*
@@ -110,11 +77,11 @@ static int compare(nsIFile* aElement1, nsIFile* aElement2, void* aData)
         // but CompareString could still be smarter - see bug 99383 - bbaetz
         // NB - 99393 has been WONTFIXed. So if the I18N code is ever made
         // threadsafe so that this matters, we'd have to pass through a
-        // struct { nsIFile*, PRUint8* } with the pre-calculated key.
+        // struct { nsIFile*, uint8_t* } with the pre-calculated key.
         return Compare(name1, name2);
     }
 
-    nsCAutoString name1, name2;
+    nsAutoCString name1, name2;
     aElement1->GetNativeLeafName(name1);
     aElement2->GetNativeLeafName(name2);
 
@@ -125,7 +92,7 @@ nsresult
 nsDirectoryIndexStream::Init(nsIFile* aDir)
 {
     nsresult rv;
-    PRBool isDir;
+    bool isDir;
     rv = aDir->IsDirectory(&isDir);
     if (NS_FAILED(rv)) return rv;
     NS_PRECONDITION(isDir, "not a directory");
@@ -134,7 +101,7 @@ nsDirectoryIndexStream::Init(nsIFile* aDir)
 
 #ifdef PR_LOGGING
     if (PR_LOG_TEST(gLog, PR_LOG_DEBUG)) {
-        nsCAutoString path;
+        nsAutoCString path;
         aDir->GetNativePath(path);
         PR_LOG(gLog, PR_LOG_DEBUG,
                ("nsDirectoryIndexStream[%p]: initialized on %s",
@@ -152,7 +119,7 @@ nsDirectoryIndexStream::Init(nsIFile* aDir)
     // XXX - should we do so here, or when the first item is requested?
     // XXX - use insertion sort instead?
 
-    PRBool more;
+    bool more;
     nsCOMPtr<nsISupports> elem;
     while (NS_SUCCEEDED(iter->HasMoreElements(&more)) && more) {
         rv = iter->GetNext(getter_AddRefs(elem));
@@ -182,11 +149,11 @@ nsDirectoryIndexStream::Init(nsIFile* aDir)
 
     mArray.Sort(compare, coll);
 #else
-    mArray.Sort(compare, nsnull);
+    mArray.Sort(compare, nullptr);
 #endif
 
     mBuf.AppendLiteral("300: ");
-    nsCAutoString url;
+    nsAutoCString url;
     rv = net_GetURLSpecFromFile(aDir, url);
     if (NS_FAILED(rv)) return rv;
     mBuf.Append(url);
@@ -233,13 +200,13 @@ nsDirectoryIndexStream::Close()
 }
 
 NS_IMETHODIMP
-nsDirectoryIndexStream::Available(PRUint32* aLength)
+nsDirectoryIndexStream::Available(uint64_t* aLength)
 {
     if (NS_FAILED(mStatus))
         return mStatus;
 
     // If there's data in our buffer, use that
-    if (mOffset < (PRInt32)mBuf.Length()) {
+    if (mOffset < (int32_t)mBuf.Length()) {
         *aLength = mBuf.Length() - mOffset;
         return NS_OK;
     }
@@ -250,7 +217,7 @@ nsDirectoryIndexStream::Available(PRUint32* aLength)
 }
 
 NS_IMETHODIMP
-nsDirectoryIndexStream::Read(char* aBuf, PRUint32 aCount, PRUint32* aReadCount)
+nsDirectoryIndexStream::Read(char* aBuf, uint32_t aCount, uint32_t* aReadCount)
 {
     if (mStatus == NS_BASE_STREAM_CLOSED) {
         *aReadCount = 0;
@@ -259,11 +226,11 @@ nsDirectoryIndexStream::Read(char* aBuf, PRUint32 aCount, PRUint32* aReadCount)
     if (NS_FAILED(mStatus))
         return mStatus;
 
-    PRUint32 nread = 0;
+    uint32_t nread = 0;
 
     // If anything is enqueued (or left-over) in mBuf, then feed it to
     // the reader first.
-    while (mOffset < (PRInt32)mBuf.Length() && aCount != 0) {
+    while (mOffset < (int32_t)mBuf.Length() && aCount != 0) {
         *(aBuf++) = char(mBuf.CharAt(mOffset++));
         --aCount;
         ++nread;
@@ -275,8 +242,8 @@ nsDirectoryIndexStream::Read(char* aBuf, PRUint32 aCount, PRUint32* aReadCount)
         mBuf.Truncate();
 
         // Okay, now we'll suck stuff off of our iterator into the mBuf...
-        while (PRUint32(mBuf.Length()) < aCount) {
-            PRBool more = mPos < mArray.Count();
+        while (uint32_t(mBuf.Length()) < aCount) {
+            bool more = mPos < mArray.Count();
             if (!more) break;
 
             // don't addref, for speed - an addref happened when it
@@ -286,7 +253,7 @@ nsDirectoryIndexStream::Read(char* aBuf, PRUint32 aCount, PRUint32* aReadCount)
 
 #ifdef PR_LOGGING
             if (PR_LOG_TEST(gLog, PR_LOG_DEBUG)) {
-                nsCAutoString path;
+                nsAutoCString path;
                 current->GetNativePath(path);
                 PR_LOG(gLog, PR_LOG_DEBUG,
                        ("nsDirectoryIndexStream[%p]: iterated %s",
@@ -298,7 +265,7 @@ nsDirectoryIndexStream::Read(char* aBuf, PRUint32 aCount, PRUint32* aReadCount)
             // bbaetz: why not?
             nsresult rv;
 #ifndef XP_UNIX
-            PRBool hidden = PR_FALSE;
+            bool hidden = false;
             current->IsHidden(&hidden);
             if (hidden) {
                 PR_LOG(gLog, PR_LOG_DEBUG,
@@ -308,17 +275,17 @@ nsDirectoryIndexStream::Read(char* aBuf, PRUint32 aCount, PRUint32* aReadCount)
             }
 #endif
 
-            PRInt64 fileSize = 0;
+            int64_t fileSize = 0;
             current->GetFileSize( &fileSize );
 
-            PRInt64 fileInfoModifyTime = 0;
+            PRTime fileInfoModifyTime = 0;
             current->GetLastModifiedTime( &fileInfoModifyTime );
             fileInfoModifyTime *= PR_USEC_PER_MSEC;
 
             mBuf.AppendLiteral("201: ");
 
             // The "filename" field
-            char* escaped = nsnull;
+            char* escaped = nullptr;
             if (!NS_IsNativeUTF8()) {
                 nsAutoString leafname;
                 rv = current->GetLeafName(leafname);
@@ -326,7 +293,7 @@ nsDirectoryIndexStream::Read(char* aBuf, PRUint32 aCount, PRUint32* aReadCount)
                 if (!leafname.IsEmpty())
                     escaped = nsEscape(NS_ConvertUTF16toUTF8(leafname).get(), url_Path);
             } else {
-                nsCAutoString leafname;
+                nsAutoCString leafname;
                 rv = current->GetNativeLeafName(leafname);
                 if (NS_FAILED(rv)) return rv;
                 if (!leafname.IsEmpty())
@@ -352,20 +319,20 @@ nsDirectoryIndexStream::Read(char* aBuf, PRUint32 aCount, PRUint32* aReadCount)
             }
 
             // The "file-type" field
-            PRBool isFile = PR_TRUE;
+            bool isFile = true;
             current->IsFile(&isFile);
             if (isFile) {
                 mBuf.AppendLiteral("FILE ");
             }
             else {
-                PRBool isDir;
+                bool isDir;
                 rv = current->IsDirectory(&isDir);
                 if (NS_FAILED(rv)) return rv; 
                 if (isDir) {
                     mBuf.AppendLiteral("DIRECTORY ");
                 }
                 else {
-                    PRBool isLink;
+                    bool isLink;
                     rv = current->IsSymlink(&isLink);
                     if (NS_FAILED(rv)) return rv; 
                     if (isLink) {
@@ -379,7 +346,7 @@ nsDirectoryIndexStream::Read(char* aBuf, PRUint32 aCount, PRUint32* aReadCount)
 
         // ...and once we've either run out of directory entries, or
         // filled up the buffer, then we'll push it to the reader.
-        while (mOffset < (PRInt32)mBuf.Length() && aCount != 0) {
+        while (mOffset < (int32_t)mBuf.Length() && aCount != 0) {
             *(aBuf++) = char(mBuf.CharAt(mOffset++));
             --aCount;
             ++nread;
@@ -391,14 +358,14 @@ nsDirectoryIndexStream::Read(char* aBuf, PRUint32 aCount, PRUint32* aReadCount)
 }
 
 NS_IMETHODIMP
-nsDirectoryIndexStream::ReadSegments(nsWriteSegmentFun writer, void * closure, PRUint32 count, PRUint32 *_retval)
+nsDirectoryIndexStream::ReadSegments(nsWriteSegmentFun writer, void * closure, uint32_t count, uint32_t *_retval)
 {
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 NS_IMETHODIMP
-nsDirectoryIndexStream::IsNonBlocking(PRBool *aNonBlocking)
+nsDirectoryIndexStream::IsNonBlocking(bool *aNonBlocking)
 {
-    *aNonBlocking = PR_FALSE;
+    *aNonBlocking = false;
     return NS_OK;
 }

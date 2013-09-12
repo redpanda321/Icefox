@@ -1,36 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Initial Developer of the Original Code is
- * CSIRO
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s): Marcin Lubonski 
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** *
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
 #include "sydney_audio.h"
@@ -41,14 +11,14 @@
 #include <mmreg.h>
 #include <mmsystem.h>
 #include <math.h>
+#include <assert.h>
 
 
-// FIX ME: block size and block should be determined based on the OggPlay offset 
-// for audio track
-#define BLOCK_SIZE  16384
 #define BLOCK_COUNT 10
 #define DEFAULT_DEVICE_NAME "Default WAVE Device"
 #define DEFAULT_DEVICE WAVE_MAPPER
+#define BLOCK_DURATION_MS 100
+#define BYTES_PER_SAMPLE 2
 
 #define VERBOSE_OUTPUT 1
 
@@ -118,6 +88,7 @@ struct sa_stream {
   int				      waveCurrentBlock;
 
   int playing;
+  size_t blockSize;
 };
 
 
@@ -130,8 +101,8 @@ int writeBlock(sa_stream_t *s, WAVEHDR* current);
 int writeAudio(sa_stream_t *s, LPSTR data, int bytes);
 int getSAErrorCode(int waveErrorCode);
 
-void CALLBACK waveOutProc(HWAVEOUT hWaveOut, UINT uMsg, 
-    DWORD dwInstance, DWORD dwParam1, DWORD dwParam2);
+void CALLBACK waveOutProc(HWAVEOUT hWaveOut, UINT uMsg, DWORD_PTR dwInstance,
+                          DWORD_PTR dwParam1, DWORD_PTR dwParam2);
 
 /** Normal way to open a PCM device */
 int sa_stream_create_pcm(sa_stream_t **s, 
@@ -148,6 +119,8 @@ int sa_stream_create_pcm(sa_stream_t **s,
   
   /* FIX ME: for formats different than PCM extend using WAVEFORMATEXTENSIBLE */
   if (format != SA_PCM_FORMAT_S16_NE) {
+    /* If we ever support non 16bit sound formats, we need to change the use of
+     * BYTES_PER_SAMPLE in the blockSize calculation below. */
     return SA_ERROR_NOT_SUPPORTED;
   }
 
@@ -166,7 +139,12 @@ int sa_stream_create_pcm(sa_stream_t **s,
   _s->deviceName = DEFAULT_DEVICE_NAME;
   _s->device = DEFAULT_DEVICE;
   _s->playing = 0;
-
+  _s->blockSize = BYTES_PER_SAMPLE * nchannels * ((rate * BLOCK_DURATION_MS) / 1000);
+  /* Other parts of the code assumes that the block size is evenly
+     divisible by 2. */
+  assert((_s->blockSize & 1) != 1);
+  assert((_s->blockSize % BYTES_PER_SAMPLE) == 0);
+  assert(((_s->blockSize / BYTES_PER_SAMPLE) % nchannels) == 0);
   *s = _s; 
   return SA_SUCCESS;
 }
@@ -188,6 +166,12 @@ int sa_stream_open(sa_stream_t *s) {
   return status;
 }
 
+int sa_stream_get_min_write(sa_stream_t *s, size_t *size) {
+  ERROR_IF_NO_INIT(s);
+  *size = s->blockSize;
+  return SA_SUCCESS;
+}
+
 /** Interleaved playback function */
 int sa_stream_write(sa_stream_t *s, const void *data, size_t nbytes) {
   int status = SA_SUCCESS;
@@ -207,10 +191,10 @@ int sa_stream_get_write_size(sa_stream_t *s, size_t *size) {
   ERROR_IF_NO_INIT(s);
 
   EnterCriticalSection(&(s->waveCriticalSection));
-  avail = (s->waveFreeBlockCount-1) * BLOCK_SIZE;
+  avail = (s->waveFreeBlockCount-1) * s->blockSize;
   if (s->waveFreeBlockCount != BLOCK_COUNT) {
     current = &(s->waveBlocks[s->waveCurrentBlock]);
-    avail += BLOCK_SIZE - current->dwUser;
+    avail += s->blockSize - current->dwUser;
   }
   LeaveCriticalSection(&(s->waveCriticalSection));
 
@@ -427,7 +411,7 @@ int openAudio(sa_stream_t *s) {
   WAVEFORMATEX wfx;    
   UINT supported = FALSE;
 		  
-  status = allocateBlocks(BLOCK_SIZE, BLOCK_COUNT, &(s->waveBlocks));  
+  status = allocateBlocks(s->blockSize, BLOCK_COUNT, &(s->waveBlocks));  
 	HANDLE_WAVE_ERROR(status, "allocating audio buffer blocks");
   
   s->waveFreeBlockCount	= BLOCK_COUNT;
@@ -579,14 +563,14 @@ int writeAudio(sa_stream_t *s, LPSTR data, int bytes) {
         HANDLE_WAVE_ERROR(status, "preparing audio headers for writing");
     }
 		  
-    if(bytes < (int)(BLOCK_SIZE - current->dwUser)) {							  	    
+    if(bytes < (int)(s->blockSize - current->dwUser)) {							  	    
 		  memcpy(current->lpData + current->dwUser, data, bytes);
       current->dwUser += bytes;
       break;
     }
 
-    /* remain is even as BLOCK_SIZE and dwUser are even too */
-    remain = BLOCK_SIZE - current->dwUser;
+    /* remain is even as s->blockSize and dwUser are even too */
+    remain = s->blockSize - current->dwUser;
   	memcpy(current->lpData + current->dwUser, data, remain);
     current->dwUser += remain;
     bytes -= remain;
@@ -604,13 +588,11 @@ int writeAudio(sa_stream_t *s, LPSTR data, int bytes) {
 /**
  * \brief - audio callback function called when next WAVE header is played by audio device
  */
-void CALLBACK waveOutProc(
-    HWAVEOUT hWaveOut, 
-    UINT uMsg, 
-    DWORD dwInstance,  
-    DWORD dwParam1,    
-    DWORD dwParam2     
-)
+void CALLBACK waveOutProc(HWAVEOUT hWaveOut, 
+                          UINT uMsg,
+                          DWORD_PTR dwInstance,
+                          DWORD_PTR dwParam1,
+                          DWORD_PTR dwParam2)
 {
     /*
      * pointer to free block counter
@@ -741,7 +723,7 @@ UNSUPPORTED(int sa_stream_get_user_data(sa_stream_t *s, void **value))
 UNSUPPORTED(int sa_stream_get_xrun_mode(sa_stream_t *s, sa_xrun_mode_t *mode))
 UNSUPPORTED(int sa_stream_get_non_interleaved(sa_stream_t *s, int *enabled))
 UNSUPPORTED(int sa_stream_get_dynamic_rate(sa_stream_t *s, int *enabled))
-UNSUPPORTED(int sa_stream_get_driver(sa_stream_t *s, char *driver_name, size_t *size))            
+UNSUPPORTED(int sa_stream_get_driver(sa_stream_t *s, char *driver_name, size_t *size))
 UNSUPPORTED(int sa_stream_get_read_volume(sa_stream_t *s, int32_t vol[], unsigned int *n))
 UNSUPPORTED(int sa_stream_get_meta_data(sa_stream_t *s, const char *name, void*data, size_t *size))
 UNSUPPORTED(int sa_stream_get_adjust_rate(sa_stream_t *s, sa_adjust_t *direction))
@@ -770,6 +752,8 @@ UNSUPPORTED(int sa_stream_pwrite_ni(sa_stream_t *s, unsigned int channel, const 
 
 /** Query how much can be read without blocking */
 UNSUPPORTED(int sa_stream_get_read_size(sa_stream_t *s, size_t *size))
+
+UNSUPPORTED(int sa_stream_set_stream_type(sa_stream_t *s, const sa_stream_type_t stream_type))
 
 /** Return a human readable error */
 const char *sa_strerror(int code);

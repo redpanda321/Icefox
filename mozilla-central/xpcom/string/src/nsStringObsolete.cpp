@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et cindent: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.
- *
- * The Initial Developer of the Original Code is IBM Corporation.
- * Portions created by IBM Corporation are Copyright (C) 2003
- * IBM Corporation. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@meer.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsString.h"
 
@@ -51,7 +19,6 @@
 #include "nsCRT.h"
 #include "nsUTF8Utils.h"
 #include "prdtoa.h"
-#include "prprf.h"
 
 /* ***** BEGIN RICKG BLOCK *****
  *
@@ -87,16 +54,16 @@ ascii_tolower(char aChar)
  *  @param   aCount tells us how many characters to iterate through (which may be different than aLength); -1 means use full length.
  *  @return  index of pos if found, else -1 (kNotFound)
  */
-static PRInt32
-FindChar1(const char* aDest,PRUint32 aDestLength,PRInt32 anOffset,const PRUnichar aChar,PRInt32 aCount) {
+static int32_t
+FindChar1(const char* aDest,uint32_t aDestLength,int32_t anOffset,const PRUnichar aChar,int32_t aCount) {
 
   if(anOffset < 0)
     anOffset=0;
 
   if(aCount < 0)
-    aCount = (PRInt32)aDestLength;
+    aCount = (int32_t)aDestLength;
 
-  if((aChar < 256) && (0 < aDestLength) && ((PRUint32)anOffset < aDestLength)) {
+  if((aChar < 256) && (0 < aDestLength) && ((uint32_t)anOffset < aDestLength)) {
 
     //We'll only search if the given aChar is within the normal ascii a range,
     //(Since this string is definitely within the ascii range).
@@ -108,7 +75,7 @@ FindChar1(const char* aDest,PRUint32 aDestLength,PRInt32 anOffset,const PRUnicha
       const char* max = aDest+aDestLength;
       const char* end = (last<max) ? last : max;
 
-      PRInt32 theMax = end-left;
+      int32_t theMax = end-left;
       if(0<theMax) {
         
         unsigned char theChar = (unsigned char) aChar;
@@ -136,16 +103,16 @@ FindChar1(const char* aDest,PRUint32 aDestLength,PRInt32 anOffset,const PRUnicha
  *  @param   aCount tells us how many characters to iterate through (which may be different than aLength); -1 means use full length.
  *  @return  index of pos if found, else -1 (kNotFound)
  */
-static PRInt32
-FindChar2(const PRUnichar* aDest,PRUint32 aDestLength,PRInt32 anOffset,const PRUnichar aChar,PRInt32 aCount) {
+static int32_t
+FindChar2(const PRUnichar* aDest,uint32_t aDestLength,int32_t anOffset,const PRUnichar aChar,int32_t aCount) {
 
   if(anOffset < 0)
     anOffset=0;
 
   if(aCount < 0)
-    aCount = (PRInt32)aDestLength;
+    aCount = (int32_t)aDestLength;
 
-  if((0<aDestLength) && ((PRUint32)anOffset < aDestLength)) {
+  if((0<aDestLength) && ((uint32_t)anOffset < aDestLength)) {
  
     if(0<aCount) {
 
@@ -181,16 +148,16 @@ FindChar2(const PRUnichar* aDest,PRUint32 aDestLength,PRInt32 anOffset,const PRU
  *  @return  index of pos if found, else -1 (kNotFound)
  */
 
-static PRInt32
-RFindChar1(const char* aDest,PRUint32 aDestLength,PRInt32 anOffset,const PRUnichar aChar,PRInt32 aCount) {
+static int32_t
+RFindChar1(const char* aDest,uint32_t aDestLength,int32_t anOffset,const PRUnichar aChar,int32_t aCount) {
 
   if(anOffset < 0)
-    anOffset=(PRInt32)aDestLength-1;
+    anOffset=(int32_t)aDestLength-1;
 
   if(aCount < 0)
-    aCount = PRInt32(aDestLength);
+    aCount = int32_t(aDestLength);
 
-  if((aChar<256) && (0 < aDestLength) && ((PRUint32)anOffset < aDestLength)) {
+  if((aChar<256) && (0 < aDestLength) && ((uint32_t)anOffset < aDestLength)) {
 
     //We'll only search if the given aChar is within the normal ascii a range,
     //(Since this string is definitely within the ascii range).
@@ -227,16 +194,16 @@ RFindChar1(const char* aDest,PRUint32 aDestLength,PRInt32 anOffset,const PRUnich
  *  @param   aCount tells us how many characters to iterate through (which may be different than aLength); -1 means use full length.
  *  @return  index of pos if found, else -1 (kNotFound)
  */
-static PRInt32
-RFindChar2(const PRUnichar* aDest,PRUint32 aDestLength,PRInt32 anOffset,const PRUnichar aChar,PRInt32 aCount) {
+static int32_t
+RFindChar2(const PRUnichar* aDest,uint32_t aDestLength,int32_t anOffset,const PRUnichar aChar,int32_t aCount) {
 
   if(anOffset < 0)
-    anOffset=(PRInt32)aDestLength-1;
+    anOffset=(int32_t)aDestLength-1;
 
   if(aCount < 0)
-    aCount = PRInt32(aDestLength);
+    aCount = int32_t(aDestLength);
 
-  if((0 < aDestLength) && ((PRUint32)anOffset < aDestLength)) {
+  if((0 < aDestLength) && ((uint32_t)anOffset < aDestLength)) {
  
     if(0 < aCount) {
 
@@ -281,11 +248,11 @@ static
 #ifdef __SUNPRO_CC
 inline
 #endif /* __SUNPRO_CC */
-PRInt32
-Compare1To1(const char* aStr1,const char* aStr2,PRUint32 aCount,PRBool aIgnoreCase){ 
-  PRInt32 result=0;
+int32_t
+Compare1To1(const char* aStr1,const char* aStr2,uint32_t aCount,bool aIgnoreCase){ 
+  int32_t result=0;
   if(aIgnoreCase)
-    result=PRInt32(PL_strncasecmp(aStr1, aStr2, aCount));
+    result=int32_t(PL_strncasecmp(aStr1, aStr2, aCount));
   else 
     result=nsCharTraits<char>::compare(aStr1,aStr2,aCount);
 
@@ -311,9 +278,9 @@ static
 #ifdef __SUNPRO_CC
 inline
 #endif /* __SUNPRO_CC */
-PRInt32
-Compare2To2(const PRUnichar* aStr1,const PRUnichar* aStr2,PRUint32 aCount){
-  PRInt32 result;
+int32_t
+Compare2To2(const PRUnichar* aStr1,const PRUnichar* aStr2,uint32_t aCount){
+  int32_t result;
   
   if ( aStr1 && aStr2 )
     result = nsCharTraits<PRUnichar>::compare(aStr1, aStr2, aCount);
@@ -351,8 +318,8 @@ static
 #ifdef __SUNPRO_CC
 inline
 #endif /* __SUNPRO_CC */
-PRInt32
-Compare2To1(const PRUnichar* aStr1,const char* aStr2,PRUint32 aCount,PRBool aIgnoreCase){
+int32_t
+Compare2To1(const PRUnichar* aStr1,const char* aStr2,uint32_t aCount,bool aIgnoreCase){
   const PRUnichar* s1 = aStr1;
   const char *s2 = aStr2;
   
@@ -364,7 +331,7 @@ Compare2To1(const PRUnichar* aStr1,const char* aStr2,PRUint32 aCount,PRBool aIgn
         PRUnichar c2 = PRUnichar((unsigned char)*s2++);
         
         if (c1 != c2) {
-#ifdef NS_DEBUG
+#ifdef DEBUG
           // we won't warn on c1>=128 (the 2-byte value) because often
           // it is just fine to compare an constant, ascii value (i.e. "body")
           // against some non-ascii value (i.e. a unicode string that
@@ -401,8 +368,8 @@ Compare2To1(const PRUnichar* aStr1,const char* aStr2,PRUint32 aCount,PRBool aIgn
  * @param   aIgnoreCase tells us whether to use a case-sensitive comparison
  * @return  -1,0,1 depending on <,==,>
  */
-inline PRInt32
-Compare1To2(const char* aStr1,const PRUnichar* aStr2,PRUint32 aCount,PRBool aIgnoreCase){
+inline int32_t
+Compare1To2(const char* aStr1,const PRUnichar* aStr2,uint32_t aCount,bool aIgnoreCase){
   return Compare2To1(aStr2, aStr1, aCount, aIgnoreCase) * -1;
 }
 
@@ -424,8 +391,8 @@ Compare1To2(const char* aStr1,const PRUnichar* aStr2,PRUint32 aCount,PRBool aIgn
  * @param   aEliminateTrailing tells us whether to strip chars from the start of the buffer
  * @return  the new length of the given buffer
  */
-static PRInt32
-CompressChars1(char* aString,PRUint32 aLength,const char* aSet){ 
+static int32_t
+CompressChars1(char* aString,uint32_t aLength,const char* aSet){ 
 
   char*  from = aString;
   char*  end =  aString + aLength;
@@ -434,7 +401,7 @@ CompressChars1(char* aString,PRUint32 aLength,const char* aSet){
     //this code converts /n, /t, /r into normal space ' ';
     //it also compresses runs of whitespace down to a single char...
   if(aSet && aString && (0 < aLength)){
-    PRUint32 aSetLen=strlen(aSet);
+    uint32_t aSetLen=strlen(aSet);
 
     while (from < end) {
       char theChar = *from++;
@@ -469,8 +436,8 @@ CompressChars1(char* aString,PRUint32 aLength,const char* aSet){
  * @param   aEliminateTrailing tells us whether to strip chars from the start of the buffer
  * @return  the new length of the given buffer
  */
-static PRInt32
-CompressChars2(PRUnichar* aString,PRUint32 aLength,const char* aSet){ 
+static int32_t
+CompressChars2(PRUnichar* aString,uint32_t aLength,const char* aSet){ 
 
   PRUnichar*  from = aString;
   PRUnichar*  end =  from + aLength;
@@ -479,7 +446,7 @@ CompressChars2(PRUnichar* aString,PRUint32 aLength,const char* aSet){
     //this code converts /n, /t, /r into normal space ' ';
     //it also compresses runs of whitespace down to a single char...
   if(aSet && aString && (0 < aLength)){
-    PRUint32 aSetLen=strlen(aSet);
+    uint32_t aSetLen=strlen(aSet);
 
     while (from < end) {
       PRUnichar theChar = *from++;
@@ -512,8 +479,8 @@ CompressChars2(PRUnichar* aString,PRUint32 aLength,const char* aSet){
  * @param   aEliminateTrailing tells us whether to strip chars from the start of the buffer
  * @return  the new length of the given buffer
  */
-static PRInt32
-StripChars1(char* aString,PRUint32 aLength,const char* aSet){ 
+static int32_t
+StripChars1(char* aString,uint32_t aLength,const char* aSet){ 
 
   // XXX(darin): this code should defer writing until necessary.
 
@@ -522,7 +489,7 @@ StripChars1(char* aString,PRUint32 aLength,const char* aSet){
   char*  end  = aString + aLength;
 
   if(aSet && aString && (0 < aLength)){
-    PRUint32 aSetLen=strlen(aSet);
+    uint32_t aSetLen=strlen(aSet);
     while (++from < end) {
       char theChar = *from;
       if(kNotFound==FindChar1(aSet,aSetLen,0,theChar,aSetLen)){
@@ -546,8 +513,8 @@ StripChars1(char* aString,PRUint32 aLength,const char* aSet){
  * @param   aEliminateTrailing tells us whether to strip chars from the start of the buffer
  * @return  the new length of the given buffer
  */
-static PRInt32
-StripChars2(PRUnichar* aString,PRUint32 aLength,const char* aSet){ 
+static int32_t
+StripChars2(PRUnichar* aString,uint32_t aLength,const char* aSet){ 
 
   // XXX(darin): this code should defer writing until necessary.
 
@@ -556,7 +523,7 @@ StripChars2(PRUnichar* aString,PRUint32 aLength,const char* aSet){
   PRUnichar*  end  = to + aLength;
 
   if(aSet && aString && (0 < aLength)){
-    PRUint32 aSetLen=strlen(aSet);
+    uint32_t aSetLen=strlen(aSet);
     while (++from < end) {
       PRUnichar theChar = *from;
       //Note the test for ascii range below. If you have a real unicode char, 
@@ -594,29 +561,29 @@ GetFindInSetFilter( const CharT* set)
 // This template class is used by our code to access rickg's buffer routines.
 template <class CharT> struct nsBufferRoutines {};
 
-NS_SPECIALIZE_TEMPLATE
+template <>
 struct nsBufferRoutines<char>
   {
     static
-    PRInt32 compare( const char* a, const char* b, PRUint32 max, PRBool ic )
+    int32_t compare( const char* a, const char* b, uint32_t max, bool ic )
       {
         return Compare1To1(a, b, max, ic);
       }
 
     static
-    PRInt32 compare( const char* a, const PRUnichar* b, PRUint32 max, PRBool ic )
+    int32_t compare( const char* a, const PRUnichar* b, uint32_t max, bool ic )
       {
         return Compare1To2(a, b, max, ic);
       }
 
     static
-    PRInt32 find_char( const char* s, PRUint32 max, PRInt32 offset, const PRUnichar c, PRInt32 count )
+    int32_t find_char( const char* s, uint32_t max, int32_t offset, const PRUnichar c, int32_t count )
       {
         return FindChar1(s, max, offset, c, count);
       }
 
     static
-    PRInt32 rfind_char( const char* s, PRUint32 max, PRInt32 offset, const PRUnichar c, PRInt32 count )
+    int32_t rfind_char( const char* s, uint32_t max, int32_t offset, const PRUnichar c, int32_t count )
       {
         return RFindChar1(s, max, offset, c, count);
       }
@@ -628,42 +595,42 @@ struct nsBufferRoutines<char>
       }
 
     static
-    PRInt32 strip_chars( char* s, PRUint32 len, const char* set )
+    int32_t strip_chars( char* s, uint32_t len, const char* set )
       {
         return StripChars1(s, len, set);
       }
 
     static
-    PRInt32 compress_chars( char* s, PRUint32 len, const char* set ) 
+    int32_t compress_chars( char* s, uint32_t len, const char* set ) 
       {
         return CompressChars1(s, len, set);
       }
   };
 
-NS_SPECIALIZE_TEMPLATE
+template <>
 struct nsBufferRoutines<PRUnichar>
   {
     static
-    PRInt32 compare( const PRUnichar* a, const PRUnichar* b, PRUint32 max, PRBool ic )
+    int32_t compare( const PRUnichar* a, const PRUnichar* b, uint32_t max, bool ic )
       {
         NS_ASSERTION(!ic, "no case-insensitive compare here");
         return Compare2To2(a, b, max);
       }
 
     static
-    PRInt32 compare( const PRUnichar* a, const char* b, PRUint32 max, PRBool ic )
+    int32_t compare( const PRUnichar* a, const char* b, uint32_t max, bool ic )
       {
         return Compare2To1(a, b, max, ic);
       }
 
     static
-    PRInt32 find_char( const PRUnichar* s, PRUint32 max, PRInt32 offset, const PRUnichar c, PRInt32 count )
+    int32_t find_char( const PRUnichar* s, uint32_t max, int32_t offset, const PRUnichar c, int32_t count )
       {
         return FindChar2(s, max, offset, c, count);
       }
 
     static
-    PRInt32 rfind_char( const PRUnichar* s, PRUint32 max, PRInt32 offset, const PRUnichar c, PRInt32 count )
+    int32_t rfind_char( const PRUnichar* s, uint32_t max, int32_t offset, const PRUnichar c, int32_t count )
       {
         return RFindChar2(s, max, offset, c, count);
       }
@@ -681,13 +648,13 @@ struct nsBufferRoutines<PRUnichar>
       }
 
     static
-    PRInt32 strip_chars( PRUnichar* s, PRUint32 max, const char* set )
+    int32_t strip_chars( PRUnichar* s, uint32_t max, const char* set )
       {
         return StripChars2(s, max, set);
       }
 
     static
-    PRInt32 compress_chars( PRUnichar* s, PRUint32 len, const char* set ) 
+    int32_t compress_chars( PRUnichar* s, uint32_t len, const char* set ) 
       {
         return CompressChars2(s, len, set);
       }
@@ -699,15 +666,15 @@ template <class L, class R>
 #ifndef __SUNPRO_CC
 static
 #endif /* !__SUNPRO_CC */
-PRInt32
-FindSubstring( const L* big, PRUint32 bigLen,
-               const R* little, PRUint32 littleLen,
-               PRBool ignoreCase )
+int32_t
+FindSubstring( const L* big, uint32_t bigLen,
+               const R* little, uint32_t littleLen,
+               bool ignoreCase )
   {
     if (littleLen > bigLen)
       return kNotFound;
 
-    PRInt32 i, max = PRInt32(bigLen - littleLen);
+    int32_t i, max = int32_t(bigLen - littleLen);
     for (i=0; i<=max; ++i, ++big)
       {
         if (nsBufferRoutines<L>::compare(big, little, littleLen, ignoreCase) == 0)
@@ -721,15 +688,15 @@ template <class L, class R>
 #ifndef __SUNPRO_CC
 static
 #endif /* !__SUNPRO_CC */
-PRInt32
-RFindSubstring( const L* big, PRUint32 bigLen,
-                const R* little, PRUint32 littleLen,
-                PRBool ignoreCase )
+int32_t
+RFindSubstring( const L* big, uint32_t bigLen,
+                const R* little, uint32_t littleLen,
+                bool ignoreCase )
   {
     if (littleLen > bigLen)
       return kNotFound;
 
-    PRInt32 i, max = PRInt32(bigLen - littleLen);
+    int32_t i, max = int32_t(bigLen - littleLen);
 
     const L* iter = big + max;
     for (i=max; iter >= big; --i, --iter)
@@ -745,8 +712,8 @@ template <class CharT, class SetCharT>
 #ifndef __SUNPRO_CC
 static
 #endif /* !__SUNPRO_CC */
-PRInt32
-FindCharInSet( const CharT* data, PRUint32 dataLen, const SetCharT* set )
+int32_t
+FindCharInSet( const CharT* data, uint32_t dataLen, const SetCharT* set )
   {
     CharT filter = nsBufferRoutines<CharT>::get_find_in_set_filter(set);
 
@@ -775,8 +742,8 @@ template <class CharT, class SetCharT>
 #ifndef __SUNPRO_CC
 static
 #endif /* !__SUNPRO_CC */
-PRInt32
-RFindCharInSet( const CharT* data, PRUint32 dataLen, const SetCharT* set )
+int32_t
+RFindCharInSet( const CharT* data, uint32_t dataLen, const SetCharT* set )
   {
     CharT filter = nsBufferRoutines<CharT>::get_find_in_set_filter(set);
 
@@ -800,99 +767,6 @@ RFindCharInSet( const CharT* data, PRUint32 dataLen, const SetCharT* set )
     return kNotFound;
   }
 
-/**
- * This is a copy of |PR_cnvtf| with a bug fixed.  (The second argument
- * of PR_dtoa is 2 rather than 1.)
- *
- * XXX(darin): if this is the right thing, then why wasn't it fixed in NSPR?!?
- */
-void 
-Modified_cnvtf(char *buf, int bufsz, int prcsn, double fval)
-{
-  PRIntn decpt, sign, numdigits;
-  char *num, *nump;
-  char *bufp = buf;
-  char *endnum;
-
-  /* If anything fails, we store an empty string in 'buf' */
-  num = (char*)malloc(bufsz);
-  if (num == NULL) {
-    buf[0] = '\0';
-    return;
-  }
-  if (PR_dtoa(fval, 2, prcsn, &decpt, &sign, &endnum, num, bufsz)
-      == PR_FAILURE) {
-    buf[0] = '\0';
-    goto done;
-  }
-  numdigits = endnum - num;
-  nump = num;
-
-  /*
-   * The NSPR code had a fancy way of checking that we weren't dealing
-   * with -0.0 or -NaN, but I'll just use < instead.
-   * XXX Should we check !isnan(fval) as well?  Is it portable?  We
-   * probably don't need to bother since NAN isn't portable.
-   */
-  if (sign && fval < 0.0f) {
-    *bufp++ = '-';
-  }
-
-  if (decpt == 9999) {
-    while ((*bufp++ = *nump++) != 0) {} /* nothing to execute */
-    goto done;
-  }
-
-  if (decpt > (prcsn+1) || decpt < -(prcsn-1) || decpt < -5) {
-    *bufp++ = *nump++;
-    if (numdigits != 1) {
-      *bufp++ = '.';
-    }
-
-    while (*nump != '\0') {
-      *bufp++ = *nump++;
-    }
-    *bufp++ = 'e';
-    PR_snprintf(bufp, bufsz - (bufp - buf), "%+d", decpt-1);
-  }
-  else if (decpt >= 0) {
-    if (decpt == 0) {
-      *bufp++ = '0';
-    }
-    else {
-      while (decpt--) {
-        if (*nump != '\0') {
-          *bufp++ = *nump++;
-        }
-        else {
-          *bufp++ = '0';
-        }
-      }
-    }
-    if (*nump != '\0') {
-      *bufp++ = '.';
-      while (*nump != '\0') {
-        *bufp++ = *nump++;
-      }
-    }
-    *bufp++ = '\0';
-  }
-  else if (decpt < 0) {
-    *bufp++ = '0';
-    *bufp++ = '.';
-    while (decpt++) {
-      *bufp++ = '0';
-    }
-
-    while (*nump != '\0') {
-      *bufp++ = *nump++;
-    }
-    *bufp++ = '\0';
-  }
-done:
-  free(num);
-}
-
   /**
    * this method changes the meaning of |offset| and |count|:
    * 
@@ -901,7 +775,7 @@ done:
    *   |count| specifies length of search range
    */ 
 static void
-Find_ComputeSearchRange( PRUint32 bigLen, PRUint32 littleLen, PRInt32& offset, PRInt32& count )
+Find_ComputeSearchRange( uint32_t bigLen, uint32_t littleLen, int32_t& offset, int32_t& count )
   {
     // |count| specifies how many iterations to make from |offset|
 
@@ -909,13 +783,13 @@ Find_ComputeSearchRange( PRUint32 bigLen, PRUint32 littleLen, PRInt32& offset, P
       {
         offset = 0;
       }
-    else if (PRUint32(offset) > bigLen)
+    else if (uint32_t(offset) > bigLen)
       {
         count = 0;
         return;
       }
 
-    PRInt32 maxCount = bigLen - offset;
+    int32_t maxCount = bigLen - offset;
     if (count < 0 || count > maxCount)
       {
         count = maxCount;
@@ -953,7 +827,7 @@ Find_ComputeSearchRange( PRUint32 bigLen, PRUint32 littleLen, PRInt32& offset, P
    *
    */ 
 static void
-RFind_ComputeSearchRange( PRUint32 bigLen, PRUint32 littleLen, PRInt32& offset, PRInt32& count )
+RFind_ComputeSearchRange( uint32_t bigLen, uint32_t littleLen, int32_t& offset, int32_t& count )
   {
     if (littleLen > bigLen)
       {
@@ -967,7 +841,7 @@ RFind_ComputeSearchRange( PRUint32 bigLen, PRUint32 littleLen, PRInt32& offset, 
     if (count < 0)
       count = offset + 1;
 
-    PRInt32 start = offset - count + 1;
+    int32_t start = offset - count + 1;
     if (start < 0)
       start = 0;
 
@@ -991,51 +865,51 @@ RFind_ComputeSearchRange( PRUint32 bigLen, PRUint32 littleLen, PRInt32& offset, 
 
 // specialized methods:
 
-PRInt32
-nsString::Find( const nsAFlatString& aString, PRInt32 aOffset, PRInt32 aCount ) const
+int32_t
+nsString::Find( const nsAFlatString& aString, int32_t aOffset, int32_t aCount ) const
   {
     // this method changes the meaning of aOffset and aCount:
     Find_ComputeSearchRange(mLength, aString.Length(), aOffset, aCount);
 
-    PRInt32 result = FindSubstring(mData + aOffset, aCount, aString.get(), aString.Length(), PR_FALSE);
+    int32_t result = FindSubstring(mData + aOffset, aCount, aString.get(), aString.Length(), false);
     if (result != kNotFound)
       result += aOffset;
     return result;
   }
 
-PRInt32
-nsString::Find( const PRUnichar* aString, PRInt32 aOffset, PRInt32 aCount ) const
+int32_t
+nsString::Find( const PRUnichar* aString, int32_t aOffset, int32_t aCount ) const
   {
     return Find(nsDependentString(aString), aOffset, aCount);
   }
 
-PRInt32
-nsString::RFind( const nsAFlatString& aString, PRInt32 aOffset, PRInt32 aCount ) const
+int32_t
+nsString::RFind( const nsAFlatString& aString, int32_t aOffset, int32_t aCount ) const
   {
     // this method changes the meaning of aOffset and aCount:
     RFind_ComputeSearchRange(mLength, aString.Length(), aOffset, aCount);
 
-    PRInt32 result = RFindSubstring(mData + aOffset, aCount, aString.get(), aString.Length(), PR_FALSE);
+    int32_t result = RFindSubstring(mData + aOffset, aCount, aString.get(), aString.Length(), false);
     if (result != kNotFound)
       result += aOffset;
     return result;
   }
 
-PRInt32
-nsString::RFind( const PRUnichar* aString, PRInt32 aOffset, PRInt32 aCount ) const
+int32_t
+nsString::RFind( const PRUnichar* aString, int32_t aOffset, int32_t aCount ) const
   {
     return RFind(nsDependentString(aString), aOffset, aCount);
   }
 
-PRInt32
-nsString::FindCharInSet( const PRUnichar* aSet, PRInt32 aOffset ) const
+int32_t
+nsString::FindCharInSet( const PRUnichar* aSet, int32_t aOffset ) const
   {
     if (aOffset < 0)
       aOffset = 0;
-    else if (aOffset >= PRInt32(mLength))
+    else if (aOffset >= int32_t(mLength))
       return kNotFound;
     
-    PRInt32 result = ::FindCharInSet(mData + aOffset, mLength - aOffset, aSet);
+    int32_t result = ::FindCharInSet(mData + aOffset, mLength - aOffset, aSet);
     if (result != kNotFound)
       result += aOffset;
     return result;
@@ -1046,24 +920,24 @@ nsString::FindCharInSet( const PRUnichar* aSet, PRInt32 aOffset ) const
    * nsTString::Compare,CompareWithConversion,etc.
    */
 
-PRInt32
-nsCString::Compare( const char* aString, PRBool aIgnoreCase, PRInt32 aCount ) const
+int32_t
+nsCString::Compare( const char* aString, bool aIgnoreCase, int32_t aCount ) const
   {
-    PRUint32 strLen = char_traits::length(aString);
+    uint32_t strLen = char_traits::length(aString);
 
-    PRInt32 maxCount = PRInt32(NS_MIN(mLength, strLen));
+    int32_t maxCount = int32_t(NS_MIN(mLength, strLen));
 
-    PRInt32 compareCount;
+    int32_t compareCount;
     if (aCount < 0 || aCount > maxCount)
       compareCount = maxCount;
     else
       compareCount = aCount;
 
-    PRInt32 result =
+    int32_t result =
         nsBufferRoutines<char>::compare(mData, aString, compareCount, aIgnoreCase);
 
     if (result == 0 &&
-          (aCount < 0 || strLen < PRUint32(aCount) || mLength < PRUint32(aCount)))
+          (aCount < 0 || strLen < uint32_t(aCount) || mLength < uint32_t(aCount)))
       {
         // Since the caller didn't give us a length to test, or strings shorter
         // than aCount, and compareCount characters matched, we have to assume
@@ -1075,24 +949,24 @@ nsCString::Compare( const char* aString, PRBool aIgnoreCase, PRInt32 aCount ) co
     return result;
   }
 
-PRBool
-nsString::EqualsIgnoreCase( const char* aString, PRInt32 aCount ) const
+bool
+nsString::EqualsIgnoreCase( const char* aString, int32_t aCount ) const
   {
-    PRUint32 strLen = nsCharTraits<char>::length(aString);
+    uint32_t strLen = nsCharTraits<char>::length(aString);
 
-    PRInt32 maxCount = PRInt32(NS_MIN(mLength, strLen));
+    int32_t maxCount = int32_t(NS_MIN(mLength, strLen));
 
-    PRInt32 compareCount;
+    int32_t compareCount;
     if (aCount < 0 || aCount > maxCount)
       compareCount = maxCount;
     else
       compareCount = aCount;
 
-    PRInt32 result =
-        nsBufferRoutines<PRUnichar>::compare(mData, aString, compareCount, PR_TRUE);
+    int32_t result =
+        nsBufferRoutines<PRUnichar>::compare(mData, aString, compareCount, true);
 
     if (result == 0 &&
-          (aCount < 0 || strLen < PRUint32(aCount) || mLength < PRUint32(aCount)))
+          (aCount < 0 || strLen < uint32_t(aCount) || mLength < uint32_t(aCount)))
       {
         // Since the caller didn't give us a length to test, or strings shorter
         // than aCount, and compareCount characters matched, we have to assume
@@ -1104,37 +978,38 @@ nsString::EqualsIgnoreCase( const char* aString, PRInt32 aCount ) const
     return result == 0;
   }
 
+
   /**
-   * nsTString::ToFloat
+   * nsTString::ToDouble
    */
 
-float
-nsCString::ToFloat(PRInt32* aErrorCode) const
+double
+nsCString::ToDouble(nsresult* aErrorCode) const
   {
-    float res = 0.0f;
+    double res = 0.0;
     if (mLength > 0)
       {
         char *conv_stopped;
         const char *str = mData;
         // Use PR_strtod, not strtod, since we don't want locale involved.
-        res = (float)PR_strtod(str, &conv_stopped);
+        res = PR_strtod(str, &conv_stopped);
         if (conv_stopped == str+mLength)
-          *aErrorCode = (PRInt32) NS_OK;
+          *aErrorCode = NS_OK;
         else // Not all the string was scanned
-          *aErrorCode = (PRInt32) NS_ERROR_ILLEGAL_VALUE;
+          *aErrorCode = NS_ERROR_ILLEGAL_VALUE;
       }
     else
       {
         // The string was too short (0 characters)
-        *aErrorCode = (PRInt32) NS_ERROR_ILLEGAL_VALUE;
+        *aErrorCode = NS_ERROR_ILLEGAL_VALUE;
       }
     return res;
   }
 
-float
-nsString::ToFloat(PRInt32* aErrorCode) const
+double
+nsString::ToDouble(nsresult* aErrorCode) const
   {
-    return NS_LossyConvertUTF16toASCII(*this).ToFloat(aErrorCode);
+    return NS_LossyConvertUTF16toASCII(*this).ToDouble(aErrorCode);
   }
 
 
@@ -1152,152 +1027,6 @@ void
 nsString::AssignWithConversion( const nsACString& aData )
   {
     CopyASCIItoUTF16(aData, *this);
-  }
-
-
-  /**
-   * nsTString::AppendWithConversion
-   */
-
-void
-nsCString::AppendWithConversion( const nsAString& aData )
-  {
-    LossyAppendUTF16toASCII(aData, *this);
-  }
-
-void
-nsString::AppendWithConversion( const nsACString& aData )
-  {
-    AppendASCIItoUTF16(aData, *this);
-  }
-
-
-  /**
-   * nsTString::AppendInt
-   */
-
-void
-nsCString::AppendInt( PRInt32 aInteger, PRInt32 aRadix )
-  {
-    char buf[20];
-    const char* fmt;
-    switch (aRadix) {
-      case 8:
-        fmt = "%o";
-        break;
-      case 10:
-        fmt = "%d";
-        break;
-      default:
-        NS_ASSERTION(aRadix == 16, "Invalid radix!");
-        fmt = "%x";
-    }
-    PR_snprintf(buf, sizeof(buf), fmt, aInteger);
-    Append(buf);
-  }
-
-void
-nsString::AppendInt( PRInt32 aInteger, PRInt32 aRadix )
-  {
-    char buf[20];
-    const char* fmt;
-    switch (aRadix) {
-      case 8:
-        fmt = "%o";
-        break;
-      case 10:
-        fmt = "%d";
-        break;
-      default:
-        NS_ASSERTION(aRadix == 16, "Invalid radix!");
-        fmt = "%x";
-    }
-    PR_snprintf(buf, sizeof(buf), fmt, aInteger);
-    AppendASCIItoUTF16(buf, *this);
-  }
-
-void
-nsCString::AppendInt( PRInt64 aInteger, PRInt32 aRadix )
-  {
-    char buf[30];
-    const char* fmt;
-    switch (aRadix) {
-      case 8:
-        fmt = "%llo";
-        break;
-      case 10:
-        fmt = "%lld";
-        break;
-      default:
-        NS_ASSERTION(aRadix == 16, "Invalid radix!");
-        fmt = "%llx";
-    }
-    PR_snprintf(buf, sizeof(buf), fmt, aInteger);
-    Append(buf);
-  }
-
-void
-nsString::AppendInt( PRInt64 aInteger, PRInt32 aRadix )
-  {
-    char buf[30];
-    const char* fmt;
-    switch (aRadix) {
-      case 8:
-        fmt = "%llo";
-        break;
-      case 10:
-        fmt = "%lld";
-        break;
-      default:
-        NS_ASSERTION(aRadix == 16, "Invalid radix!");
-        fmt = "%llx";
-    }
-    PR_snprintf(buf, sizeof(buf), fmt, aInteger);
-    AppendASCIItoUTF16(buf, *this);
-  }
-
-  /**
-   * nsTString::AppendFloat
-   */
-
-void
-nsCString::AppendFloat( float aFloat )
-  {
-    char buf[40];
-    // Use Modified_cnvtf, which is locale-insensitive, instead of the
-    // locale-sensitive PR_snprintf or sprintf(3)
-    Modified_cnvtf(buf, sizeof(buf), 6, aFloat);
-    Append(buf);
-  }
-
-void
-nsString::AppendFloat( float aFloat )
-  {
-    char buf[40];
-    // Use Modified_cnvtf, which is locale-insensitive, instead of the
-    // locale-sensitive PR_snprintf or sprintf(3)
-    Modified_cnvtf(buf, sizeof(buf), 6, aFloat);
-    AppendWithConversion(buf);
-  }
-
-void
-nsCString::AppendFloat( double aFloat )
-  {
-    char buf[40];
-    // Use Modified_cnvtf, which is locale-insensitive, instead of the
-    // locale-sensitive PR_snprintf or sprintf(3)
-    Modified_cnvtf(buf, sizeof(buf), 15, aFloat);
-    Append(buf);
-  }
-
-void
-nsString::AppendFloat( double aFloat )
-  {
-    char buf[40];
-    // Use Modified_cnvtf, which is locale-insensitive, instead of the
-    // locale-sensitive PR_snprintf or sprintf(3)
-    Modified_cnvtf(buf, sizeof(buf), 15, aFloat);
-    AppendWithConversion(buf);
   }
 
 #endif // !MOZ_STRING_WITH_OBSOLETE_API

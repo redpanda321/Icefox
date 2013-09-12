@@ -20,7 +20,6 @@
 #include "nsIComponentManager.h"
 #include "nsIComponentRegistrar.h"
 #include "nsIFile.h"
-#include "nsILocalFile.h"
 #include "nsIFileStreams.h"
 #include "nsMemory.h"
 #include "nsIComponentRegistrar.h"
@@ -34,21 +33,21 @@
  */
 
 typedef struct Allocation {
-    PRInt32     start;
-    PRInt32     count;
+    int32_t     start;
+    int32_t     count;
 } Allocation;
 
 nsresult
-StressTest(nsILocalFile *  localFile, PRInt32  testNumber, PRBool readWrite)
+StressTest(nsIFile *  localFile, int32_t  testNumber, bool readWrite)
 {
     nsresult  rv = NS_OK;
 
 #define ITERATIONS      1024
 #define MAX_ALLOCATIONS 256
     Allocation  block[MAX_ALLOCATIONS];
-    PRInt32     currentAllocations = 0;
-    PRInt32     i;
-    PRUint32    a;
+    int32_t     currentAllocations = 0;
+    int32_t     i;
+    uint32_t    a;
 
     char * writeBuf[4];
     char   readBuf[256 * 4];
@@ -191,16 +190,16 @@ main(void)
     srand(now);
 
     nsCOMPtr<nsIFile>       file;
-    nsCOMPtr<nsILocalFile>  localFile;
+    nsCOMPtr<nsIFile>  localFile;
     nsresult  rv = NS_OK;
     {
         // Start up XPCOM
         nsCOMPtr<nsIServiceManager> servMan;
-        NS_InitXPCOM2(getter_AddRefs(servMan), nsnull, nsnull);
+        NS_InitXPCOM2(getter_AddRefs(servMan), nullptr, nullptr);
         nsCOMPtr<nsIComponentRegistrar> registrar = do_QueryInterface(servMan);
         NS_ASSERTION(registrar, "Null nsIComponentRegistrar");
         if (registrar)
-            registrar->AutoRegister(nsnull);
+            registrar->AutoRegister(nullptr);
 
         // Get default directory
         rv = NS_GetSpecialDirectory(NS_XPCOM_CURRENT_PROCESS_DIR,
@@ -224,10 +223,10 @@ main(void)
         if (NS_FAILED(rv)) goto exit;
 
         // Delete existing file
-        rv = file->Delete(PR_FALSE);
+        rv = file->Delete(false);
         if (NS_FAILED(rv) && rv != NS_ERROR_FILE_NOT_FOUND) goto exit;
 
-        // Need nsILocalFile to open
+        // Need nsIFile to open
 	localFile = do_QueryInterface(file, &rv);
         if (NS_FAILED(rv)) {
             printf("do_QueryInterface(file) failed : 0x%.8x\n", rv);
@@ -243,9 +242,9 @@ main(void)
         //----------------------------------------------------------------
         //  local variables used in tests
         //----------------------------------------------------------------
-        PRUint32 bytesWritten = 0;
-        PRInt32  startBlock;
-        PRInt32  i = 0;
+        uint32_t bytesWritten = 0;
+        int32_t  startBlock;
+        int32_t  i = 0;
 
 
         //----------------------------------------------------------------
@@ -289,7 +288,7 @@ main(void)
         //----------------------------------------------------------------
 
         // Delete existing file
-        rv = localFile->Delete(PR_FALSE);
+        rv = localFile->Delete(false);
         if (NS_FAILED(rv)) {
             printf("Test 3 failed (Delete returned: 0x%.8x)\n", rv);
             goto exit;
@@ -341,7 +340,7 @@ main(void)
         //----------------------------------------------------------------
 
         // Delete existing file
-        rv = localFile->Delete(PR_FALSE);
+        rv = localFile->Delete(false);
         if (NS_FAILED(rv)) {
             printf("Test 4 failed (Delete returned: 0x%.8x)\n", rv);
             goto exit;
@@ -439,7 +438,7 @@ main(void)
         //----------------------------------------------------------------
         //  Test 8: LastBlock
         //----------------------------------------------------------------
-        PRInt32  lastBlock = blockFile->LastBlock();
+        int32_t  lastBlock = blockFile->LastBlock();
         if (lastBlock != 11) {
             printf("Test 8: failed (LastBlock() returned: %d)\n", lastBlock);
             goto exit;
@@ -660,7 +659,7 @@ main(void)
         }
 
         // Delete existing file
-        rv = localFile->Delete(PR_FALSE);
+        rv = localFile->Delete(false);
         if (NS_FAILED(rv)) {
             printf("Test 14 failed (Delete returned: 0x%.8x)\n", rv);
             goto exit;
@@ -672,7 +671,7 @@ main(void)
         //  Test 15: Allocate/Deallocate stress test
         //----------------------------------------------------------------
 
-        rv = StressTest(localFile, 15, PR_FALSE);
+        rv = StressTest(localFile, 15, false);
         if (NS_FAILED(rv))
             goto exit;
 
@@ -849,7 +848,7 @@ main(void)
         //  Test 19: WriteBlocks/ReadBlocks stress
         //----------------------------------------------------------------
 
-        rv = StressTest(localFile, 19, PR_FALSE);
+        rv = StressTest(localFile, 19, false);
         if (NS_FAILED(rv))
             goto exit;
 
@@ -865,7 +864,7 @@ exit:
     if (NS_FAILED(rv))
         printf("Test failed: 0x%.8x\n", rv);
 
-    rv = NS_ShutdownXPCOM(nsnull);
+    rv = NS_ShutdownXPCOM(nullptr);
     NS_ASSERTION(NS_SUCCEEDED(rv), "NS_ShutdownXPCOM failed");
 
     printf("XPCOM shut down.\n\n");

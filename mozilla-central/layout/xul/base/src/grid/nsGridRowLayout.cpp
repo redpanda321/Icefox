@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 //
 // Eric Vaughan
@@ -54,39 +22,38 @@ nsGridRowLayout::nsGridRowLayout():nsSprocketLayout()
 }
 
 void
-nsGridRowLayout::ChildrenInserted(nsIBox* aBox, nsBoxLayoutState& aState,
-                                  nsIBox* aPrevBox,
+nsGridRowLayout::ChildrenInserted(nsIFrame* aBox, nsBoxLayoutState& aState,
+                                  nsIFrame* aPrevBox,
                                   const nsFrameList::Slice& aNewChildren)
 {
   ChildAddedOrRemoved(aBox, aState);
 }
 
 void
-nsGridRowLayout::ChildrenAppended(nsIBox* aBox, nsBoxLayoutState& aState,
+nsGridRowLayout::ChildrenAppended(nsIFrame* aBox, nsBoxLayoutState& aState,
                                   const nsFrameList::Slice& aNewChildren)
 {
   ChildAddedOrRemoved(aBox, aState);
 }
 
 void
-nsGridRowLayout::ChildrenRemoved(nsIBox* aBox, nsBoxLayoutState& aState, nsIBox* aChildList)
+nsGridRowLayout::ChildrenRemoved(nsIFrame* aBox, nsBoxLayoutState& aState, nsIFrame* aChildList)
 {
   ChildAddedOrRemoved(aBox, aState);
 }
 
 void
-nsGridRowLayout::ChildrenSet(nsIBox* aBox, nsBoxLayoutState& aState, nsIBox* aChildList)
+nsGridRowLayout::ChildrenSet(nsIFrame* aBox, nsBoxLayoutState& aState, nsIFrame* aChildList)
 {
   ChildAddedOrRemoved(aBox, aState);
 }
 
-void
-nsGridRowLayout::GetParentGridPart(nsIBox* aBox, nsIBox** aParentBox, nsIGridPart** aParentGridPart)
+nsIGridPart*
+nsGridRowLayout::GetParentGridPart(nsIFrame* aBox, nsIFrame** aParentBox)
 {
   // go up and find our parent gridRow. Skip and non gridRow
   // parents.
-  *aParentGridPart = nsnull;
-  *aParentBox = nsnull;
+  *aParentBox = nullptr;
   
   // walk up through any scrollboxes
   aBox = nsGrid::GetScrollBox(aBox);
@@ -97,47 +64,41 @@ nsGridRowLayout::GetParentGridPart(nsIBox* aBox, nsIBox** aParentBox, nsIGridPar
 
   if (aBox)
   {
-    nsCOMPtr<nsIBoxLayout> layout;
-    aBox->GetLayoutManager(getter_AddRefs(layout));
-    nsCOMPtr<nsIGridPart> parentGridRow = do_QueryInterface(layout);
+    nsIGridPart* parentGridRow = nsGrid::GetPartFromBox(aBox);
     if (parentGridRow && parentGridRow->CanContain(this)) {
-      parentGridRow.swap(*aParentGridPart);
       *aParentBox = aBox;
+      return parentGridRow;
     }
   }
+
+  return nullptr;
 }
 
 
 nsGrid*
-nsGridRowLayout::GetGrid(nsIBox* aBox, PRInt32* aIndex, nsGridRowLayout* aRequestor)
+nsGridRowLayout::GetGrid(nsIFrame* aBox, int32_t* aIndex, nsGridRowLayout* aRequestor)
 {
 
-   if (aRequestor == nsnull)
+   if (aRequestor == nullptr)
    {
-      nsCOMPtr<nsIGridPart> parent;
-      nsIBox* parentBox; // nsIBox is implemented by nsIFrame and is not refcounted.
-      GetParentGridPart(aBox, &parentBox, getter_AddRefs(parent));
+      nsIFrame* parentBox; // nsIFrame is implemented by nsIFrame and is not refcounted.
+      nsIGridPart* parent = GetParentGridPart(aBox, &parentBox);
       if (parent)
          return parent->GetGrid(parentBox, aIndex, this);
-      return nsnull;
+      return nullptr;
    }
 
-   nsresult rv = NS_OK;
-
-   PRInt32 index = -1;
-   nsIBox* child = aBox->GetChildBox();
-   PRInt32 count = 0;
+   int32_t index = -1;
+   nsIFrame* child = aBox->GetChildBox();
+   int32_t count = 0;
    while(child)
    {
      // if there is a scrollframe walk inside it to its child
-     nsIBox* childBox = nsGrid::GetScrolledBox(child);
+     nsIFrame* childBox = nsGrid::GetScrolledBox(child);
 
-     nsCOMPtr<nsIBoxLayout> layout;
-     childBox->GetLayoutManager(getter_AddRefs(layout));
-     
-     // find our requester
-     nsCOMPtr<nsIGridPart> gridRow = do_QueryInterface(layout, &rv);
-     if (NS_SUCCEEDED(rv) && gridRow) 
+     nsBoxLayout* layout = childBox->GetLayoutManager();
+     nsIGridPart* gridRow = nsGrid::GetPartFromBox(childBox);
+     if (gridRow) 
      {
        if (layout == aRequestor) {
           index = count;
@@ -155,30 +116,26 @@ nsGridRowLayout::GetGrid(nsIBox* aBox, PRInt32* aIndex, nsGridRowLayout* aReques
    // fail.
    if (index == -1) {
      *aIndex = -1;
-     return nsnull;
+     return nullptr;
    }
 
    (*aIndex) += index;
 
-   nsCOMPtr<nsIGridPart> parent;
-   nsIBox* parentBox; // nsIBox is implemented by nsIFrame and is not refcounted.
-   GetParentGridPart(aBox, &parentBox, getter_AddRefs(parent));
-
+   nsIFrame* parentBox; // nsIFrame is implemented by nsIFrame and is not refcounted.
+   nsIGridPart* parent = GetParentGridPart(aBox, &parentBox);
    if (parent)
      return parent->GetGrid(parentBox, aIndex, this);
 
-   return nsnull;
+   return nullptr;
 }
 
 nsMargin
-nsGridRowLayout::GetTotalMargin(nsIBox* aBox, PRBool aIsHorizontal)
+nsGridRowLayout::GetTotalMargin(nsIFrame* aBox, bool aIsHorizontal)
 {
   // get our parents margin
   nsMargin margin(0,0,0,0);
-  nsCOMPtr<nsIGridPart> part;
-  nsIBox* parent = nsnull;
-  GetParentGridPart(aBox, &parent, getter_AddRefs(part));
-
+  nsIFrame* parent = nullptr;
+  nsIGridPart* part = GetParentGridPart(aBox, &parent);
   if (part && parent) {
     // if we are the first or last child walk upward and add margins.
 
@@ -186,15 +143,15 @@ nsGridRowLayout::GetTotalMargin(nsIBox* aBox, PRBool aIsHorizontal)
     aBox = nsGrid::GetScrollBox(aBox);
 
     // see if we have a next to see if we are last
-    nsIBox* next = aBox->GetNextBox();
+    nsIFrame* next = aBox->GetNextBox();
 
     // get the parent first child to see if we are first
-    nsIBox* child = parent->GetChildBox();
+    nsIFrame* child = parent->GetChildBox();
 
     margin = part->GetTotalMargin(parent, aIsHorizontal);
 
     // if first or last
-    if (child == aBox || next == nsnull) {
+    if (child == aBox || next == nullptr) {
 
        // if it's not the first child remove the top margin
        // we don't need it.
@@ -208,7 +165,7 @@ nsGridRowLayout::GetTotalMargin(nsIBox* aBox, PRBool aIsHorizontal)
 
        // if it's not the last child remove the bottom margin
        // we don't need it.
-       if (next != nsnull)
+       if (next != nullptr)
        {
           if (aIsHorizontal)
               margin.bottom = 0;

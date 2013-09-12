@@ -1,11 +1,12 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 %include textbox.css
 
-/*
- * Make sure to uncomment the corresponsing code in layout/reftests/editor/xul/input.css
- * when removing this comment.
- */
-/*
-textbox html|*.textbox-input:-moz-placeholder:-moz-system-metric(windows-default-theme) {
-  font-style: italic;
+@media (-moz-windows-default-theme) {
+  textbox html|*.textbox-input::-moz-placeholder {
+    font-style: italic;
+  }
 }
-*/
+

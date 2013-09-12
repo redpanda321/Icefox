@@ -1,41 +1,9 @@
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1998
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either of the GNU General Public License Version 2 or later (the "GPL"),
-# or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH		= ../..
+DEPTH		= @DEPTH@
 topsrcdir	= @top_srcdir@
 srcdir		= @srcdir@
 VPATH		= @srcdir@
@@ -49,7 +17,7 @@ GRE_MODULE	= 1
 MOZILLA_INTERNAL_API =1
 LIBXUL_LIBRARY = 1
 
-# TODO: we do this in crashreporter too, should be centralized
+# TODO: we do this in crashreporter and storage/src too, should be centralized
 ifeq ($(OS_ARCH),Linux)
 DEFINES += -DXP_LINUX
 endif
@@ -69,8 +37,18 @@ CPPSRCS		= \
 		nsCycleCollector.cpp \
 		nsStackWalk.cpp \
 		nsMemoryReporterManager.cpp \
-		FunctionTimer.cpp \
+		ClearOnShutdown.cpp \
+		VisualEventTracer.cpp \
+		nsErrorAsserts.cpp \
+		nsGZFileWriter.cpp \
+		nsMemoryInfoDumper.cpp \
+		nsMessageLoop.cpp \
+		AvailableMemoryTracker.cpp \
 		$(NULL)
+
+ifeq ($(OS_ARCH),Linux)
+CPPSRCS += MapsMemoryReporter.cpp
+endif
 
 ifeq (cocoa,$(MOZ_WIDGET_TOOLKIT))
 CPPSRCS		+= nsMacUtilsImpl.cpp
@@ -83,25 +61,39 @@ EXPORTS		= \
 		nsDebugImpl.h \
 		nsIAllocator.h \
 		nsIID.h \
+		nsISizeOf.h \
 		nsISupportsObsolete.h \
 		nsStackWalk.h \
 		nsTraceRefcntImpl.h \
 		nsWeakPtr.h \
 		nsInterfaceRequestorAgg.h \
+		nsGZFileWriter.h \
 		$(NULL)
 
 EXPORTS_NAMESPACES = mozilla
 
 EXPORTS_mozilla = \
-	FunctionTimer.h \
+	MapsMemoryReporter.h \
+	nsMemoryInfoDumper.h \
+	ClearOnShutdown.h \
+	StaticPtr.h \
+	AvailableMemoryTracker.h \
+	StackWalk.h \
+	VisualEventTracer.h \
 	$(NULL)
 
+ifeq (windows,$(MOZ_WIDGET_TOOLKIT))
+CPPSRCS += nsCrashOnException.cpp
+endif
+
 ifeq ($(OS_ARCH),WINNT)
+
 ifdef MOZ_DEBUG
 CSRCS		+= pure_api.c
 EXPORTS		+= pure.h
 endif
-endif
+
+endif #if OS_ARCH == WINNT
 
 SDK_XPIDLSRCS   = \
 		nsIDebug.idl               \
@@ -116,15 +108,25 @@ SDK_XPIDLSRCS   = \
 SDK_HEADERS     = \
 		nsAutoPtr.h \
 		nsError.h \
+		ErrorList.h \
+		ErrorListDefines.h \
 		nsISupportsBase.h \
 		nscore.h \
+		nsAtomicRefcnt.h \
 		nsCycleCollector.h \
 		nsObjCExceptions.h \
+
+ifeq ($(OS_ARCH),WINNT)
+SDK_HEADERS += \
+		nsWindowsHelpers.h \
+		$(NULL)
+endif
 
 XPIDLSRCS	= \
 		nsIConsoleListener.idl \
 		nsIConsoleMessage.idl \
 		nsIConsoleService.idl \
+		nsICycleCollectorListener.idl \
 		nsIDebug2.idl \
 		nsIErrorService.idl \
 		nsIException.idl \
@@ -132,7 +134,10 @@ XPIDLSRCS	= \
 		nsIVersionComparator.idl \
 		nsIUUIDGenerator.idl \
 		nsIMutable.idl \
+		nsIMemoryInfoDumper.idl \
 		nsIMemoryReporter.idl \
+		nsIGZFileWriter.idl \
+		nsIMessageLoop.idl \
 		$(NULL)
 
 ifeq (cocoa,$(MOZ_WIDGET_TOOLKIT))
@@ -142,9 +147,9 @@ endif
 # we don't want the shared lib, but we want to force the creation of a static lib.
 FORCE_STATIC_LIB = 1
 
-# Force use of PIC
-FORCE_USE_PIC	= 1
 
+include $(topsrcdir)/config/config.mk
+include $(topsrcdir)/ipc/chromium/chromium-config.mk
 include $(topsrcdir)/config/rules.mk
 
 DEFINES		+= -D_IMPL_NS_COM
@@ -153,4 +158,15 @@ ifneq (,$(filter gtk2,$(MOZ_WIDGET_TOOLKIT)))
 CXXFLAGS        += $(MOZ_GTK2_CFLAGS)
 endif
 
-LOCAL_INCLUDES += -I$(srcdir)/../build
+LOCAL_INCLUDES += \
+		-I$(srcdir)/../build \
+		-I$(topsrcdir)/xpcom/ds \
+		$(NULL)
+
+# We generate ErrorListDefines.h from ErrorList.h using regex.  The -n option
+# suppresses printing the pattern space, and the p at the end prints it anyway,
+# so we don't print lines that don't match the pattern to start with.
+ErrorListDefines.h: ErrorList.h
+		sed -n 's/.*ERROR(\([A-Z_0-9]*\).*/#define \1 nsresult::\1/p' < $< > $@
+
+GARBAGE += ErrorListDefines.h

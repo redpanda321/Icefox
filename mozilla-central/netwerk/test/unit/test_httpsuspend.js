@@ -1,7 +1,12 @@
 // This file ensures that suspending a channel directly after opening it
 // suspends future notifications correctly.
 
-do_load_httpd_js();
+const Cc = Components.classes;
+const Ci = Components.interfaces;
+const Cu = Components.utils;
+const Cr = Components.results;
+
+Cu.import("resource://testing-common/httpd.js");
 
 const MIN_TIME_DIFFERENCE = 3000;
 const RESUME_DELAY = 5000;
@@ -25,7 +30,9 @@ var listener = {
     // Insert a delay between this and the next callback to ensure message buffering
     // works correctly
     request.suspend();
+    request.suspend();
     do_timeout(RESUME_DELAY, function() request.resume());
+    do_timeout(RESUME_DELAY + 1000, function() request.resume());
   },
 
   onDataAvailable: function(request, context, stream, offset, count) {
@@ -34,6 +41,8 @@ var listener = {
 
     // Ensure that suspending and resuming inside a callback works correctly
     request.suspend();
+    request.suspend();
+    request.resume();
     request.resume();
 
     this._gotData = true;
@@ -54,7 +63,7 @@ function makeChan(url) {
 var httpserv = null;
 
 function run_test() {
-  httpserv = new nsHttpServer();
+  httpserv = new HttpServer();
   httpserv.registerPathHandler("/woo", data);
   httpserv.start(4444);
 

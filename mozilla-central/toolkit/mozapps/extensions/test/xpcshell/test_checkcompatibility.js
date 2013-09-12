@@ -59,15 +59,17 @@ var ADDONS = [{
 const profileDir = gProfD.clone();
 profileDir.append("extensions");
 
+var gIsNightly = false;
+
 function run_test() {
   do_test_pending();
   createAppInfo("xpcshell@tests.mozilla.org", "XPCShell", "2.2.3", "2");
 
   ADDONS.forEach(function(a) {
-    let dest = profileDir.clone();
-    dest.append(a.id);
-    writeInstallRDFToDir(a, dest);
+    writeInstallRDFForExtension(a, profileDir);
   });
+
+  gIsNightly = isNightlyChannel();
 
   startupManager();
 
@@ -135,7 +137,10 @@ function run_test_1() {
 // Tests that with compatibility checking disabled we see the incompatible
 // add-ons enabled
 function run_test_2() {
-  Services.prefs.setBoolPref("extensions.checkCompatibility.2.2", false);
+  if (gIsNightly)
+    Services.prefs.setBoolPref("extensions.checkCompatibility.nightly", false);
+  else
+    Services.prefs.setBoolPref("extensions.checkCompatibility.2.2", false);
   restartManager();
 
   AddonManager.getAddonsByIDs(["addon1@tests.mozilla.org",
@@ -153,7 +158,8 @@ function run_test_2() {
 // Tests that with compatibility checking disabled we see the incompatible
 // add-ons enabled.
 function run_test_3() {
-  Services.prefs.setBoolPref("extensions.checkCompatibility.2.1a", false);
+  if (!gIsNightly)
+    Services.prefs.setBoolPref("extensions.checkCompatibility.2.1a", false);
   restartManager("2.1a4");
 
   AddonManager.getAddonsByIDs(["addon1@tests.mozilla.org",
@@ -171,7 +177,10 @@ function run_test_3() {
 // Tests that with compatibility checking enabled we see the incompatible
 // add-ons disabled.
 function run_test_4() {
-  Services.prefs.setBoolPref("extensions.checkCompatibility.2.1a", true);
+  if (gIsNightly)
+    Services.prefs.setBoolPref("extensions.checkCompatibility.nightly", true);
+  else
+    Services.prefs.setBoolPref("extensions.checkCompatibility.2.1a", true);
   restartManager();
 
   AddonManager.getAddonsByIDs(["addon1@tests.mozilla.org",

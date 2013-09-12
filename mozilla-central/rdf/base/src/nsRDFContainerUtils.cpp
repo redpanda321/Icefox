@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 
@@ -79,10 +46,10 @@ private:
                            nsIRDFResource* aType,
                            nsIRDFContainer** aResult);
 
-    PRBool IsA(nsIRDFDataSource* aDataSource, nsIRDFResource* aResource, nsIRDFResource* aType);
+    bool IsA(nsIRDFDataSource* aDataSource, nsIRDFResource* aResource, nsIRDFResource* aType);
 
     // pseudo constants
-    static PRInt32 gRefCnt;
+    static int32_t gRefCnt;
     static nsIRDFService* gRDFService;
     static nsIRDFResource* kRDF_instanceOf;
     static nsIRDFResource* kRDF_nextVal;
@@ -93,7 +60,7 @@ private:
 };
 
 
-PRInt32         RDFContainerUtilsImpl::gRefCnt = 0;
+int32_t         RDFContainerUtilsImpl::gRefCnt = 0;
 nsIRDFService*  RDFContainerUtilsImpl::gRDFService;
 nsIRDFResource* RDFContainerUtilsImpl::kRDF_instanceOf;
 nsIRDFResource* RDFContainerUtilsImpl::kRDF_nextVal;
@@ -111,9 +78,9 @@ NS_IMPL_THREADSAFE_ISUPPORTS1(RDFContainerUtilsImpl, nsIRDFContainerUtils)
 // nsIRDFContainerUtils interface
 
 NS_IMETHODIMP
-RDFContainerUtilsImpl::IsOrdinalProperty(nsIRDFResource *aProperty, PRBool *_retval)
+RDFContainerUtilsImpl::IsOrdinalProperty(nsIRDFResource *aProperty, bool *_retval)
 {
-    NS_PRECONDITION(aProperty != nsnull, "null ptr");
+    NS_PRECONDITION(aProperty != nullptr, "null ptr");
     if (! aProperty)
         return NS_ERROR_NULL_POINTER;
 
@@ -124,40 +91,40 @@ RDFContainerUtilsImpl::IsOrdinalProperty(nsIRDFResource *aProperty, PRBool *_ret
     if (NS_FAILED(rv)) return rv;
 
     if (PL_strncmp(propertyStr, kRDFNameSpaceURI, sizeof(kRDFNameSpaceURI) - 1) != 0) {
-        *_retval = PR_FALSE;
+        *_retval = false;
         return NS_OK;
     }
 
     const char* s = propertyStr;
     s += sizeof(kRDFNameSpaceURI) - 1;
     if (*s != '_') {
-        *_retval = PR_FALSE;
+        *_retval = false;
         return NS_OK;
     }
 
     ++s;
     while (*s) {
         if (*s < '0' || *s > '9') {
-            *_retval = PR_FALSE;
+            *_retval = false;
             return NS_OK;
         }
 
         ++s;
     }
 
-    *_retval = PR_TRUE;
+    *_retval = true;
     return NS_OK;
 }
 
 
 NS_IMETHODIMP
-RDFContainerUtilsImpl::IndexToOrdinalResource(PRInt32 aIndex, nsIRDFResource **aOrdinal)
+RDFContainerUtilsImpl::IndexToOrdinalResource(int32_t aIndex, nsIRDFResource **aOrdinal)
 {
     NS_PRECONDITION(aIndex > 0, "illegal value");
     if (aIndex <= 0)
         return NS_ERROR_ILLEGAL_VALUE;
 
-    nsCAutoString uri(kRDFNameSpaceURI);
+    nsAutoCString uri(kRDFNameSpaceURI);
     uri.Append('_');
     uri.AppendInt(aIndex);
     
@@ -170,9 +137,9 @@ RDFContainerUtilsImpl::IndexToOrdinalResource(PRInt32 aIndex, nsIRDFResource **a
 
 
 NS_IMETHODIMP
-RDFContainerUtilsImpl::OrdinalResourceToIndex(nsIRDFResource *aOrdinal, PRInt32 *aIndex)
+RDFContainerUtilsImpl::OrdinalResourceToIndex(nsIRDFResource *aOrdinal, int32_t *aIndex)
 {
-    NS_PRECONDITION(aOrdinal != nsnull, "null ptr");
+    NS_PRECONDITION(aOrdinal != nullptr, "null ptr");
     if (! aOrdinal)
         return NS_ERROR_NULL_POINTER;
 
@@ -192,7 +159,7 @@ RDFContainerUtilsImpl::OrdinalResourceToIndex(nsIRDFResource *aOrdinal, PRInt32 
         return NS_ERROR_UNEXPECTED;
     }
 
-    PRInt32 idx = 0;
+    int32_t idx = 0;
 
     ++s;
     while (*s) {
@@ -212,34 +179,34 @@ RDFContainerUtilsImpl::OrdinalResourceToIndex(nsIRDFResource *aOrdinal, PRInt32 
 }
 
 NS_IMETHODIMP
-RDFContainerUtilsImpl::IsContainer(nsIRDFDataSource *aDataSource, nsIRDFResource *aResource, PRBool *_retval)
+RDFContainerUtilsImpl::IsContainer(nsIRDFDataSource *aDataSource, nsIRDFResource *aResource, bool *_retval)
 {
-    NS_PRECONDITION(aDataSource != nsnull, "null ptr");
+    NS_PRECONDITION(aDataSource != nullptr, "null ptr");
     if (! aDataSource)
         return NS_ERROR_NULL_POINTER;
 
-    NS_PRECONDITION(aResource != nsnull, "null ptr");
+    NS_PRECONDITION(aResource != nullptr, "null ptr");
     if (! aResource)
         return NS_ERROR_NULL_POINTER;
 
-    NS_PRECONDITION(_retval != nsnull, "null ptr");
+    NS_PRECONDITION(_retval != nullptr, "null ptr");
     if (! _retval)
         return NS_ERROR_NULL_POINTER;
 
     if (IsA(aDataSource, aResource, kRDF_Seq) ||
         IsA(aDataSource, aResource, kRDF_Bag) ||
         IsA(aDataSource, aResource, kRDF_Alt)) {
-        *_retval = PR_TRUE;
+        *_retval = true;
     }
     else {
-        *_retval = PR_FALSE;
+        *_retval = false;
     }
     return NS_OK;
 }
 
 
 NS_IMETHODIMP
-RDFContainerUtilsImpl::IsEmpty(nsIRDFDataSource* aDataSource, nsIRDFResource* aResource, PRBool* _retval)
+RDFContainerUtilsImpl::IsEmpty(nsIRDFDataSource* aDataSource, nsIRDFResource* aResource, bool* _retval)
 {
     if (! aDataSource)
         return NS_ERROR_NULL_POINTER;
@@ -248,10 +215,10 @@ RDFContainerUtilsImpl::IsEmpty(nsIRDFDataSource* aDataSource, nsIRDFResource* aR
 
     // By default, say that we're an empty container. Even if we're not
     // really even a container.
-    *_retval = PR_TRUE;
+    *_retval = true;
 
     nsCOMPtr<nsIRDFNode> nextValNode;
-    rv = aDataSource->GetTarget(aResource, kRDF_nextVal, PR_TRUE, getter_AddRefs(nextValNode));
+    rv = aDataSource->GetTarget(aResource, kRDF_nextVal, true, getter_AddRefs(nextValNode));
     if (NS_FAILED(rv)) return rv;
 
     if (rv == NS_RDF_NO_VALUE)
@@ -262,24 +229,24 @@ RDFContainerUtilsImpl::IsEmpty(nsIRDFDataSource* aDataSource, nsIRDFResource* aR
     if (NS_FAILED(rv)) return rv;
 
     if (nextValLiteral.get() != kOne)
-        *_retval = PR_FALSE;
+        *_retval = false;
 
     return NS_OK;
 }
 
 
 NS_IMETHODIMP
-RDFContainerUtilsImpl::IsBag(nsIRDFDataSource *aDataSource, nsIRDFResource *aResource, PRBool *_retval)
+RDFContainerUtilsImpl::IsBag(nsIRDFDataSource *aDataSource, nsIRDFResource *aResource, bool *_retval)
 {
-    NS_PRECONDITION(aDataSource != nsnull, "null ptr");
+    NS_PRECONDITION(aDataSource != nullptr, "null ptr");
     if (! aDataSource)
         return NS_ERROR_NULL_POINTER;
 
-    NS_PRECONDITION(aResource != nsnull, "null ptr");
+    NS_PRECONDITION(aResource != nullptr, "null ptr");
     if (! aResource)
         return NS_ERROR_NULL_POINTER;
 
-    NS_PRECONDITION(_retval != nsnull, "null ptr");
+    NS_PRECONDITION(_retval != nullptr, "null ptr");
     if (! _retval)
         return NS_ERROR_NULL_POINTER;
 
@@ -289,17 +256,17 @@ RDFContainerUtilsImpl::IsBag(nsIRDFDataSource *aDataSource, nsIRDFResource *aRes
 
 
 NS_IMETHODIMP
-RDFContainerUtilsImpl::IsSeq(nsIRDFDataSource *aDataSource, nsIRDFResource *aResource, PRBool *_retval)
+RDFContainerUtilsImpl::IsSeq(nsIRDFDataSource *aDataSource, nsIRDFResource *aResource, bool *_retval)
 {
-    NS_PRECONDITION(aDataSource != nsnull, "null ptr");
+    NS_PRECONDITION(aDataSource != nullptr, "null ptr");
     if (! aDataSource)
         return NS_ERROR_NULL_POINTER;
 
-    NS_PRECONDITION(aResource != nsnull, "null ptr");
+    NS_PRECONDITION(aResource != nullptr, "null ptr");
     if (! aResource)
         return NS_ERROR_NULL_POINTER;
 
-    NS_PRECONDITION(_retval != nsnull, "null ptr");
+    NS_PRECONDITION(_retval != nullptr, "null ptr");
     if (! _retval)
         return NS_ERROR_NULL_POINTER;
 
@@ -309,17 +276,17 @@ RDFContainerUtilsImpl::IsSeq(nsIRDFDataSource *aDataSource, nsIRDFResource *aRes
 
 
 NS_IMETHODIMP
-RDFContainerUtilsImpl::IsAlt(nsIRDFDataSource *aDataSource, nsIRDFResource *aResource, PRBool *_retval)
+RDFContainerUtilsImpl::IsAlt(nsIRDFDataSource *aDataSource, nsIRDFResource *aResource, bool *_retval)
 {
-    NS_PRECONDITION(aDataSource != nsnull, "null ptr");
+    NS_PRECONDITION(aDataSource != nullptr, "null ptr");
     if (! aDataSource)
         return NS_ERROR_NULL_POINTER;
 
-    NS_PRECONDITION(aResource != nsnull, "null ptr");
+    NS_PRECONDITION(aResource != nullptr, "null ptr");
     if (! aResource)
         return NS_ERROR_NULL_POINTER;
 
-    NS_PRECONDITION(_retval != nsnull, "null ptr");
+    NS_PRECONDITION(_retval != nullptr, "null ptr");
     if (! _retval)
         return NS_ERROR_NULL_POINTER;
 
@@ -401,7 +368,7 @@ RDFContainerUtilsImpl::~RDFContainerUtilsImpl()
 nsresult
 NS_NewRDFContainerUtils(nsIRDFContainerUtils** aResult)
 {
-    NS_PRECONDITION(aResult != nsnull, "null ptr");
+    NS_PRECONDITION(aResult != nullptr, "null ptr");
     if (! aResult)
         return NS_ERROR_NULL_POINTER;
 
@@ -420,31 +387,31 @@ NS_NewRDFContainerUtils(nsIRDFContainerUtils** aResult)
 nsresult
 RDFContainerUtilsImpl::MakeContainer(nsIRDFDataSource* aDataSource, nsIRDFResource* aResource, nsIRDFResource* aType, nsIRDFContainer** aResult)
 {
-    NS_PRECONDITION(aDataSource != nsnull, "null ptr");
+    NS_PRECONDITION(aDataSource != nullptr, "null ptr");
     if (! aDataSource)	return NS_ERROR_NULL_POINTER;
 
-    NS_PRECONDITION(aResource != nsnull, "null ptr");
+    NS_PRECONDITION(aResource != nullptr, "null ptr");
     if (! aResource)	return NS_ERROR_NULL_POINTER;
 
-    NS_PRECONDITION(aType != nsnull, "null ptr");
+    NS_PRECONDITION(aType != nullptr, "null ptr");
     if (! aType)	return NS_ERROR_NULL_POINTER;
 
-    if (aResult)	*aResult = nsnull;
+    if (aResult)	*aResult = nullptr;
 
     nsresult rv;
 
     // Check to see if somebody has already turned it into a container; if so
     // don't try to do it again.
-    PRBool isContainer;
+    bool isContainer;
     rv = IsContainer(aDataSource, aResource, &isContainer);
     if (NS_FAILED(rv)) return rv;
 
     if (!isContainer)
     {
-	rv = aDataSource->Assert(aResource, kRDF_instanceOf, aType, PR_TRUE);
+	rv = aDataSource->Assert(aResource, kRDF_instanceOf, aType, true);
 	if (NS_FAILED(rv)) return rv;
 
-	rv = aDataSource->Assert(aResource, kRDF_nextVal, kOne, PR_TRUE);
+	rv = aDataSource->Assert(aResource, kRDF_nextVal, kOne, true);
 	if (NS_FAILED(rv)) return rv;
     }
 
@@ -459,23 +426,26 @@ RDFContainerUtilsImpl::MakeContainer(nsIRDFDataSource* aDataSource, nsIRDFResour
     return NS_OK;
 }
 
-PRBool
+bool
 RDFContainerUtilsImpl::IsA(nsIRDFDataSource* aDataSource, nsIRDFResource* aResource, nsIRDFResource* aType)
 {
-    if (!aDataSource || !aResource || !aType)
-        return NS_ERROR_NULL_POINTER;
+    if (!aDataSource || !aResource || !aType) {
+        NS_WARNING("Unexpected null argument");
+        return false;
+    }
 
     nsresult rv;
 
-    PRBool result;
-    rv = aDataSource->HasAssertion(aResource, kRDF_instanceOf, aType, PR_TRUE, &result);
-    if (NS_FAILED(rv)) return PR_FALSE;
+    bool result;
+    rv = aDataSource->HasAssertion(aResource, kRDF_instanceOf, aType, true, &result);
+    if (NS_FAILED(rv))
+      return false;
 
     return result;
 }
 
 NS_IMETHODIMP
-RDFContainerUtilsImpl::IndexOf(nsIRDFDataSource* aDataSource, nsIRDFResource* aContainer, nsIRDFNode* aElement, PRInt32* aIndex)
+RDFContainerUtilsImpl::IndexOf(nsIRDFDataSource* aDataSource, nsIRDFResource* aContainer, nsIRDFNode* aElement, int32_t* aIndex)
 {
     if (!aDataSource || !aContainer)
         return NS_ERROR_NULL_POINTER;
@@ -496,7 +466,7 @@ RDFContainerUtilsImpl::IndexOf(nsIRDFDataSource* aDataSource, nsIRDFResource* aC
         return NS_OK;
 
     while (1) {
-        PRBool hasMoreArcs = PR_FALSE;
+        bool hasMoreArcs = false;
         arcsIn->HasMoreElements(&hasMoreArcs);
         if (! hasMoreArcs)
             break;
@@ -512,18 +482,18 @@ RDFContainerUtilsImpl::IndexOf(nsIRDFDataSource* aDataSource, nsIRDFResource* aC
         if (! property)
             continue;
 
-        PRBool isOrdinal;
+        bool isOrdinal;
         IsOrdinalProperty(property, &isOrdinal);
         if (! isOrdinal)
             continue;
 
         nsCOMPtr<nsISimpleEnumerator> sources;
-        aDataSource->GetSources(property, aElement, PR_TRUE, getter_AddRefs(sources));
+        aDataSource->GetSources(property, aElement, true, getter_AddRefs(sources));
         if (! sources)
             continue;
 
         while (1) {
-            PRBool hasMoreSources = PR_FALSE;
+            bool hasMoreSources = false;
             sources->HasMoreElements(&hasMoreSources);
             if (! hasMoreSources)
                 break;

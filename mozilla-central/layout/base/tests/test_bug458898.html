@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=458898
 -->
 <head>
   <title>Test for Bug 458898</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
   <script type="application/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
@@ -19,19 +18,20 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=458898
 <script class="testbody" type="text/javascript">
 
 SimpleTest.waitForExplicitFinish();
+// This should be rewritten as a chrome test
 netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
 var win = window.openDialog("data:text/html,<div style='height:200px; width:100px;'>");
 
-// doesn't succeed on SeaMonkey currently, see bug 469331
-// mark it todo there instead
-var testfunc_h = (navigator.userAgent.match(/ SeaMonkey\//)) ? todo : ok;
-var testfunc_w = (navigator.userAgent.match(/Windows/)) ? ok : testfunc_h;
-
 function loaded() {
+  netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
+  var disableWindowResizePref = "dom.disable_window_move_resize";
+  var oldPrefValue = SpecialPowers.getBoolPref(disableWindowResizePref);
+  SpecialPowers.setBoolPref(disableWindowResizePref, false);
   win.sizeToContent();
-  testfunc_w(win.innerWidth >= 100, "innerWidth: " + win.innerWidth + " >= 100 ?");
-  testfunc_h(win.innerHeight >= 200, "innerHeight: " + win.innerHeight + " >= 200 ?");
+  ok(win.innerWidth >= 100, "innerWidth: " + win.innerWidth + " >= 100 ?");
+  ok(win.innerHeight >= 200, "innerHeight: " + win.innerHeight + " >= 200 ?");
   win.close();
+  SpecialPowers.setBoolPref(disableWindowResizePref, oldPrefValue);
   SimpleTest.finish();
 }
 

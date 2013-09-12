@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SMIL module.
- *
- * The Initial Developer of the Original Code is Brian Birtles.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Brian Birtles <birtles@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef NS_SMILTIMECONTAINER_H_
 #define NS_SMILTIMECONTAINER_H_
@@ -62,14 +30,15 @@ public:
    * Pause request types.
    */
   enum {
-    PAUSE_BEGIN    = 1,
-    PAUSE_SCRIPT   = 2,
-    PAUSE_PAGEHIDE = 4,
-    PAUSE_USERPREF = 8
+    PAUSE_BEGIN    =  1, // Paused because timeline has yet to begin.
+    PAUSE_SCRIPT   =  2, // Paused by script.
+    PAUSE_PAGEHIDE =  4, // Paused because our doc is hidden.
+    PAUSE_USERPREF =  8, // Paused because animations are disabled in prefs.
+    PAUSE_IMAGE    = 16  // Paused becuase we're in an image that's suspended.
   };
 
   /*
-   * Cause the time container to records its begin time.
+   * Cause the time container to record its begin time.
    */
   void Begin();
 
@@ -81,7 +50,7 @@ public:
    * each call to Pause of a given aType has been matched by at least one call
    * to Resume with the same aType.
    */
-  virtual void Pause(PRUint32 aType);
+  virtual void Pause(uint32_t aType);
 
   /*
    * Resume this time container
@@ -90,7 +59,7 @@ public:
    * this particular type of pause request. When all pause flags have been
    * cleared the time container will be resumed.
    */
-  virtual void Resume(PRUint32 aType);
+  virtual void Resume(uint32_t aType);
 
   /**
    * Returns true if this time container is paused by the specified type.
@@ -98,18 +67,18 @@ public:
    * does not test if aType is the exclusive pause source.
    *
    * @param @aType The pause source to test for.
-   * @return PR_TRUE if this container is paused by aType.
+   * @return true if this container is paused by aType.
    */
-  PRBool IsPausedByType(PRUint32 aType) const { return mPauseState & aType; }
+  bool IsPausedByType(uint32_t aType) const { return mPauseState & aType; }
 
   /**
    * Returns true if this time container is paused.
    * Generally you should test for a specific type of pausing using
    * IsPausedByType.
    *
-   * @return PR_TRUE if this container is paused, PR_FALSE otherwise.
+   * @return true if this container is paused, false otherwise.
    */
-  PRBool IsPaused() const { return mPauseState != 0; }
+  bool IsPaused() const { return mPauseState != 0; }
 
   /*
    * Return the time elapsed since this time container's begin time (expressed
@@ -168,22 +137,22 @@ public:
    * This is most useful as an optimisation for skipping time containers that
    * don't require a sample.
    */
-  PRBool NeedsSample() const { return !mPauseState || mNeedsPauseSample; }
+  bool NeedsSample() const { return !mPauseState || mNeedsPauseSample; }
 
   /*
    * Indicates if the elements of this time container need to be rewound.
    * This occurs during a backwards seek.
    */
-  PRBool NeedsRewind() const { return mNeedsRewind; }
-  void ClearNeedsRewind() { mNeedsRewind = PR_FALSE; }
+  bool NeedsRewind() const { return mNeedsRewind; }
+  void ClearNeedsRewind() { mNeedsRewind = false; }
 
   /*
    * Indicates the time container is currently processing a SetCurrentTime
    * request and appropriate seek behaviour should be applied by child elements
    * (e.g. not firing time events).
    */
-  PRBool IsSeeking() const { return mIsSeeking; }
-  void MarkSeekFinished() { mIsSeeking = PR_FALSE; }
+  bool IsSeeking() const { return mIsSeeking; }
+  void MarkSeekFinished() { mIsSeeking = false; }
 
   /*
    * Sets the parent time container.
@@ -198,9 +167,9 @@ public:
    * @param   aMilestone  The milestone to register in container time.
    * @param   aElement    The timebase element that needs a sample at
    *                      aMilestone.
-   * @return  PR_TRUE if the element was successfully added, PR_FALSE otherwise.
+   * @return  true if the element was successfully added, false otherwise.
    */
-  PRBool AddMilestone(const nsSMILMilestone& aMilestone,
+  bool AddMilestone(const nsSMILMilestone& aMilestone,
                       nsISMILAnimationElement& aElement);
 
   /*
@@ -214,10 +183,10 @@ public:
    *
    * @param[out] aNextMilestone The next milestone with time in parent time.
    *
-   * @return PR_TRUE if there exists another milestone, PR_FALSE otherwise in
+   * @return true if there exists another milestone, false otherwise in
    * which case aNextMilestone will be unmodified.
    */
-  PRBool GetNextMilestoneInParentTime(nsSMILMilestone& aNextMilestone) const;
+  bool GetNextMilestoneInParentTime(nsSMILMilestone& aNextMilestone) const;
 
   typedef nsTArray<nsRefPtr<nsISMILAnimationElement> > AnimElemArray;
 
@@ -229,9 +198,9 @@ public:
    *                         must be <= GetNextMilestoneInParentTime.
    * @param[out] aMatchedElements The array to which matching elements will be
    *                              appended.
-   * @return PR_TRUE if one or more elements match, PR_FALSE otherwise.
+   * @return true if one or more elements match, false otherwise.
    */
-  PRBool PopMilestoneElementsAtMilestone(const nsSMILMilestone& aMilestone,
+  bool PopMilestoneElementsAtMilestone(const nsSMILMilestone& aMilestone,
                                          AnimElemArray& aMatchedElements);
 
   // Cycle-collection support
@@ -292,13 +261,13 @@ protected:
   nsSMILTime mPauseStart;
 
   // Whether or not a pause sample is required
-  PRPackedBool mNeedsPauseSample;
+  bool mNeedsPauseSample;
 
-  PRPackedBool mNeedsRewind; // Backwards seek performed
-  PRPackedBool mIsSeeking; // Currently in the middle of a seek operation
+  bool mNeedsRewind; // Backwards seek performed
+  bool mIsSeeking; // Currently in the middle of a seek operation
 
   // A bitfield of the pause state for all pause requests
-  PRUint32 mPauseState;
+  uint32_t mPauseState;
 
   struct MilestoneEntry
   {
@@ -307,7 +276,7 @@ protected:
       : mMilestone(aMilestone), mTimebase(&aElement)
     { }
 
-    PRBool operator<(const MilestoneEntry& aOther) const
+    bool operator<(const MilestoneEntry& aOther) const
     {
       return mMilestone < aOther.mMilestone;
     }

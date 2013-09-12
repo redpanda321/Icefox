@@ -1,41 +1,10 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the nsSessionStore component.
- *
- * The Initial Developer of the Original Code is
- * Simon Bünzli <zeniko@gmail.com>
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 const Cc = Components.classes;
 const Ci = Components.interfaces;
+const Cu = Components.utils;
 
 var gStateObject;
 var gTreeData;
@@ -47,29 +16,38 @@ window.onload = function() {
   // (for when the tab is closed or the session crashes right again)
   var sessionData = document.getElementById("sessionData");
   if (!sessionData.value) {
-    var ss = Cc["@mozilla.org/browser/sessionstartup;1"].getService(Ci.nsISessionStartup);
-    sessionData.value = ss.state;
-    if (!sessionData.value) {
-      document.getElementById("errorTryAgain").disabled = true;
-      return;
-    }
+    document.getElementById("errorTryAgain").disabled = true;
+    return;
   }
+
+  // remove unneeded braces (added for compatibility with Firefox 2.0 and 3.0)
+  if (sessionData.value.charAt(0) == '(')
+    sessionData.value = sessionData.value.slice(1, -1);
+  try {
+    gStateObject = JSON.parse(sessionData.value);
+  }
+  catch (exJSON) {
+    var s = new Cu.Sandbox("about:blank", {sandboxName: 'aboutSessionRestore'});
+    gStateObject = Cu.evalInSandbox("(" + sessionData.value + ")", s);
+    // If we couldn't parse the string with JSON.parse originally, make sure
+    // that the value in the textbox will be parsable.
+    sessionData.value = JSON.stringify(gStateObject);
+  }
+
   // make sure the data is tracked to be restored in case of a subsequent crash
   var event = document.createEvent("UIEvents");
   event.initUIEvent("input", true, true, window, 0);
   sessionData.dispatchEvent(event);
-  
-  gStateObject = JSON.parse(sessionData.value);
-  
+
   initTreeView();
-  
+
   document.getElementById("errorTryAgain").focus();
 };
 
 function initTreeView() {
   var tabList = document.getElementById("tabList");
   var winLabel = tabList.getAttribute("_window_label");
-  
+
   gTreeData = [];
   gStateObject.windows.forEach(function(aWinData, aIx) {
     var winState = {
@@ -95,7 +73,7 @@ function initTreeView() {
     for each (var tab in winState.tabs)
       gTreeData.push(tab);
   }, this);
-  
+
   tabList.view = treeView;
   tabList.view.selection.select(0);
 }
@@ -104,7 +82,7 @@ function initTreeView() {
 
 function restoreSession() {
   document.getElementById("errorTryAgain").disabled = true;
-  
+
   // remove all unselected tabs from the state before restoring it
   var ix = gStateObject.windows.length - 1;
   for (var t = gTreeData.length - 1; t >= 0; t--) {
@@ -121,22 +99,22 @@ function restoreSession() {
     }
   }
   var stateString = JSON.stringify(gStateObject);
-  
+
   var ss = Cc["@mozilla.org/browser/sessionstore;1"].getService(Ci.nsISessionStore);
   var top = getBrowserWindow();
-  
+
   // if there's only this page open, reuse the window for restoring the session
   if (top.gBrowser.tabs.length == 1) {
     ss.setWindowState(top, stateString, true);
     return;
   }
-  
+
   // restore the session into a new window and close the current tab
   var newWindow = top.openDialog(top.location, "_blank", "chrome,dialog=no,all");
   newWindow.addEventListener("load", function() {
     newWindow.removeEventListener("load", arguments.callee, true);
     ss.setWindowState(newWindow, stateString, true);
-    
+
     var tabbrowser = top.gBrowser;
     var tabIndex = tabbrowser.getBrowserIndexForDocument(document);
     tabbrowser.removeTab(tabbrowser.tabs[tabIndex]);
@@ -155,7 +133,7 @@ function onListClick(aEvent) {
   // don't react to right-clicks
   if (aEvent.button == 2)
     return;
-  
+
   var row = {}, col = {};
   treeView.treeBox.getCellAt(aEvent.clientX, aEvent.clientY, row, col, {});
   if (col.value) {
@@ -168,8 +146,10 @@ function onListClick(aEvent) {
 #endif
     if ((aEvent.button == 1 || aEvent.button == 0 && aEvent.detail == 2 || accelKey) &&
         col.value.id == "title" &&
-        !treeView.isContainer(row.value))
+        !treeView.isContainer(row.value)) {
       restoreSingleTab(row.value, aEvent.shiftKey);
+      aEvent.stopPropagation();
+    }
     else if (col.value.id == "restore")
       toggleRowChecked(row.value);
   }
@@ -209,9 +189,9 @@ function toggleRowChecked(aIx) {
   var item = gTreeData[aIx];
   item.checked = !item.checked;
   treeView.treeBox.invalidateRow(aIx);
-  
+
   function isChecked(aItem) aItem.checked;
-  
+
   if (treeView.isContainer(aIx)) {
     // (un)check all tabs of this window as well
     for each (var tab in item.tabs) {
@@ -225,7 +205,7 @@ function toggleRowChecked(aIx) {
                           item.parent.tabs.some(isChecked) ? 0 : false;
     treeView.treeBox.invalidateRow(gTreeData.indexOf(item.parent));
   }
-  
+
   document.getElementById("errorTryAgain").disabled = !gTreeData.some(isChecked);
 }
 
@@ -233,12 +213,14 @@ function restoreSingleTab(aIx, aShifted) {
   var tabbrowser = getBrowserWindow().gBrowser;
   var newTab = tabbrowser.addTab();
   var item = gTreeData[aIx];
-  
+
   var ss = Cc["@mozilla.org/browser/sessionstore;1"].getService(Ci.nsISessionStore);
   var tabState = gStateObject.windows[item.parent.ix]
                              .tabs[aIx - gTreeData.indexOf(item.parent) - 1];
+  // ensure tab would be visible on the tabstrip.
+  tabState.hidden = false;
   ss.setTabState(newTab, JSON.stringify(tabState));
-  
+
   // respect the preference as to whether to select the tab (the Shift key inverses)
   var prefBranch = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefBranch);
   if (prefBranch.getBoolPref("browser.tabs.loadInBackground") != !aShifted)
@@ -271,6 +253,7 @@ var treeView = {
   isSeparator: function(idx)         { return false; },
   isSorted: function()               { return false; },
   isEditable: function(idx, column)  { return false; },
+  canDrop: function(idx, orientation, dt) { return false; },
   getLevel: function(idx)            { return this.isContainer(idx) ? 0 : 1; },
 
   getParentIndex: function(idx) {

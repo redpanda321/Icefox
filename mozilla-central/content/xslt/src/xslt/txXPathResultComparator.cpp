@@ -1,61 +1,25 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is TransforMiiX XSLT processor code.
- *
- * The Initial Developer of the Original Code is
- * Jonas Sicking.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Jonas Sicking <sicking@bigfoot.com>
- *   Peter Van der Beken <peterv@propagandism.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "mozilla/FloatingPoint.h"
 
 #include "txXPathResultComparator.h"
 #include "txExpr.h"
 #include "txCore.h"
-#ifndef TX_EXE
 #include "nsCollationCID.h"
 #include "nsILocale.h"
 #include "nsILocaleService.h"
 #include "nsIServiceManager.h"
 #include "nsLocaleCID.h"
 #include "prmem.h"
-#else
-#include "txStringUtils.h"
-#endif
 
 #define kAscending (1<<0)
 #define kUpperFirst (1<<1)
 
-txResultStringComparator::txResultStringComparator(MBool aAscending,
-                                                   MBool aUpperFirst,
+txResultStringComparator::txResultStringComparator(bool aAscending,
+                                                   bool aUpperFirst,
                                                    const nsAFlatString& aLanguage)
 {
     mSorting = 0;
@@ -63,14 +27,11 @@ txResultStringComparator::txResultStringComparator(MBool aAscending,
         mSorting |= kAscending;
     if (aUpperFirst)
         mSorting |= kUpperFirst;
-#ifndef TX_EXE
     nsresult rv = init(aLanguage);
     if (NS_FAILED(rv))
         NS_ERROR("Failed to initialize txResultStringComparator");
-#endif
 }
 
-#ifndef TX_EXE
 nsresult txResultStringComparator::init(const nsAFlatString& aLanguage)
 {
     nsresult rv;
@@ -98,7 +59,6 @@ nsresult txResultStringComparator::init(const nsAFlatString& aLanguage)
 
     return NS_OK;
 }
-#endif
 
 nsresult
 txResultStringComparator::createSortableValue(Expr *aExpr,
@@ -110,14 +70,6 @@ txResultStringComparator::createSortableValue(Expr *aExpr,
         return NS_ERROR_OUT_OF_MEMORY;
     }
 
-    nsresult rv;
-#ifdef TX_EXE
-    rv = aExpr->evaluateToString(aContext, val->mStr);
-    NS_ENSURE_SUCCESS(rv, rv);
-
-    // We don't support case-order on standalone
-    TX_ToLowerCase(val->mStr);
-#else
     if (!mCollation)
         return NS_ERROR_FAILURE;
 
@@ -127,7 +79,7 @@ txResultStringComparator::createSortableValue(Expr *aExpr,
     }
 
     nsString& nsCaseKey = *(nsString *)val->mCaseKey;
-    rv = aExpr->evaluateToString(aContext, nsCaseKey);
+    nsresult rv = aExpr->evaluateToString(aContext, nsCaseKey);
     NS_ENSURE_SUCCESS(rv, rv);
 
     if (nsCaseKey.IsEmpty()) {
@@ -139,38 +91,17 @@ txResultStringComparator::createSortableValue(Expr *aExpr,
     rv = mCollation->AllocateRawSortKey(nsICollation::kCollationCaseInSensitive,
                                         nsCaseKey, &val->mKey, &val->mLength);
     NS_ENSURE_SUCCESS(rv, rv);
-#endif
 
     aResult = val.forget();
 
     return NS_OK;
 }
 
-int txResultStringComparator::compareValues(TxObject* aVal1, TxObject* aVal2)
+int txResultStringComparator::compareValues(txObject* aVal1, txObject* aVal2)
 {
     StringValue* strval1 = (StringValue*)aVal1;
     StringValue* strval2 = (StringValue*)aVal2;
-#ifdef TX_EXE
-    PRUint32 len1 = strval1->mStr.Length();
-    PRUint32 len2 = strval2->mStr.Length();
-    PRUint32 minLength = (len1 < len2) ? len1 : len2;
 
-    PRUint32 c = 0;
-    while (c < minLength) {
-        PRUnichar ch1 = strval1->mStr.CharAt(c);
-        PRUnichar ch2 = strval2->mStr.CharAt(c);
-        if (ch1 < ch2)
-            return ((mSorting & kAscending) ? 1 : -1) * -1;
-        if (ch2 < ch1)
-            return ((mSorting & kAscending) ? 1 : -1) * 1;
-        c++;
-    }
-
-    if (len1 == len2)
-        return 0;
-
-    return ((mSorting & kAscending) ? 1 : -1) * ((len1 < len2) ? -1 : 1);
-#else
     if (!mCollation)
         return -1;
 
@@ -184,7 +115,7 @@ int txResultStringComparator::compareValues(TxObject* aVal1, TxObject* aVal2)
         return ((mSorting & kAscending) ? 1 : -1);
 
     nsresult rv;
-    PRInt32 result = -1;
+    int32_t result = -1;
     rv = mCollation->CompareRawSortKey(strval1->mKey, strval1->mLength,
                                        strval2->mKey, strval2->mLength,
                                        &result);
@@ -200,7 +131,7 @@ int txResultStringComparator::compareValues(TxObject* aVal1, TxObject* aVal2)
         nsString* caseString = (nsString *)strval1->mCaseKey;
         rv = mCollation->AllocateRawSortKey(nsICollation::kCollationCaseSensitive,
                                             *caseString,
-                                            (PRUint8**)&strval1->mCaseKey, 
+                                            (uint8_t**)&strval1->mCaseKey, 
                                             &strval1->mCaseLength);
         if (NS_FAILED(rv)) {
             // XXX ErrorReport
@@ -214,7 +145,7 @@ int txResultStringComparator::compareValues(TxObject* aVal1, TxObject* aVal2)
         nsString* caseString = (nsString *)strval2->mCaseKey;
         rv = mCollation->AllocateRawSortKey(nsICollation::kCollationCaseSensitive,
                                             *caseString,
-                                            (PRUint8**)&strval2->mCaseKey, 
+                                            (uint8_t**)&strval2->mCaseKey, 
                                             &strval2->mCaseLength);
         if (NS_FAILED(rv)) {
             // XXX ErrorReport
@@ -224,8 +155,8 @@ int txResultStringComparator::compareValues(TxObject* aVal1, TxObject* aVal2)
         }
         delete caseString;
     }
-    rv = mCollation->CompareRawSortKey((PRUint8*)strval1->mCaseKey, strval1->mCaseLength,
-                                       (PRUint8*)strval2->mCaseKey, strval2->mCaseLength,
+    rv = mCollation->CompareRawSortKey((uint8_t*)strval1->mCaseKey, strval1->mCaseLength,
+                                       (uint8_t*)strval2->mCaseKey, strval2->mCaseLength,
                                        &result);
     if (NS_FAILED(rv)) {
         // XXX ErrorReport
@@ -234,10 +165,8 @@ int txResultStringComparator::compareValues(TxObject* aVal1, TxObject* aVal2)
 
     return ((mSorting & kAscending) ? 1 : -1) *
            ((mSorting & kUpperFirst) ? -1 : 1) * result;
-#endif
 }
 
-#ifndef TX_EXE
 txResultStringComparator::StringValue::StringValue() : mKey(0),
                                                        mCaseKey(0),
                                                        mLength(0),
@@ -249,13 +178,12 @@ txResultStringComparator::StringValue::~StringValue()
 {
     PR_Free(mKey);
     if (mCaseLength > 0)
-        PR_Free((PRUint8*)mCaseKey);
+        PR_Free((uint8_t*)mCaseKey);
     else
         delete (nsString*)mCaseKey;
 }
-#endif
 
-txResultNumberComparator::txResultNumberComparator(MBool aAscending)
+txResultNumberComparator::txResultNumberComparator(bool aAscending)
 {
     mAscending = aAscending ? 1 : -1;
 }
@@ -263,7 +191,7 @@ txResultNumberComparator::txResultNumberComparator(MBool aAscending)
 nsresult
 txResultNumberComparator::createSortableValue(Expr *aExpr,
                                               txIEvalContext *aContext,
-                                              TxObject *&aResult)
+                                              txObject *&aResult)
 {
     nsAutoPtr<NumberValue> numval(new NumberValue);
     if (!numval) {
@@ -281,15 +209,15 @@ txResultNumberComparator::createSortableValue(Expr *aExpr,
     return NS_OK;
 }
 
-int txResultNumberComparator::compareValues(TxObject* aVal1, TxObject* aVal2)
+int txResultNumberComparator::compareValues(txObject* aVal1, txObject* aVal2)
 {
     double dval1 = ((NumberValue*)aVal1)->mVal;
     double dval2 = ((NumberValue*)aVal2)->mVal;
 
-    if (Double::isNaN(dval1))
-        return Double::isNaN(dval2) ? 0 : -mAscending;
+    if (MOZ_DOUBLE_IS_NaN(dval1))
+        return MOZ_DOUBLE_IS_NaN(dval2) ? 0 : -mAscending;
 
-    if (Double::isNaN(dval2))
+    if (MOZ_DOUBLE_IS_NaN(dval2))
         return mAscending;
 
     if (dval1 == dval2)

@@ -1,53 +1,22 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Original Author: David W. Hyatt (hyatt@netscape.com)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include "nsTArray.h"
+#include "nsString.h"
 #include "nsCSSStyleSheet.h"
 #include "nsIStyleRuleProcessor.h"
 #include "nsIDocument.h"
 #include "nsIContent.h"
 #include "nsIPresShell.h"
-#include "nsIXBLService.h"
+#include "nsXBLService.h"
 #include "nsIServiceManager.h"
 #include "nsXBLResourceLoader.h"
 #include "nsXBLPrototypeResources.h"
 #include "nsIDocumentObserver.h"
 #include "imgILoader.h"
-#include "imgIRequest.h"
+#include "imgRequestProxy.h"
 #include "mozilla/css/Loader.h"
 #include "nsIURI.h"
 #include "nsNetUtil.h"
@@ -62,10 +31,10 @@
 
 NS_IMPL_CYCLE_COLLECTION_CLASS(nsXBLResourceLoader)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(nsXBLResourceLoader)
-NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMARRAY(mBoundElements)
+NS_IMPL_CYCLE_COLLECTION_UNLINK(mBoundElements)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN(nsXBLResourceLoader)
-NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMARRAY(mBoundElements)
+NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mBoundElements)
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(nsXBLResourceLoader)
@@ -80,10 +49,10 @@ nsXBLResourceLoader::nsXBLResourceLoader(nsXBLPrototypeBinding* aBinding,
                                          nsXBLPrototypeResources* aResources)
 :mBinding(aBinding),
  mResources(aResources),
- mResourceList(nsnull),
- mLastResource(nsnull),
- mLoadingResources(PR_FALSE),
- mInLoadResourcesFunc(PR_FALSE),
+ mResourceList(nullptr),
+ mLastResource(nullptr),
+ mLoadingResources(false),
+ mInLoadResourcesFunc(false),
  mPendingSheets(0)
 {
 }
@@ -94,18 +63,18 @@ nsXBLResourceLoader::~nsXBLResourceLoader()
 }
 
 void
-nsXBLResourceLoader::LoadResources(PRBool* aResult)
+nsXBLResourceLoader::LoadResources(bool* aResult)
 {
-  mInLoadResourcesFunc = PR_TRUE;
+  mInLoadResourcesFunc = true;
 
   if (mLoadingResources) {
     *aResult = (mPendingSheets == 0);
-    mInLoadResourcesFunc = PR_FALSE;
+    mInLoadResourcesFunc = false;
     return;
   }
 
-  mLoadingResources = PR_TRUE;
-  *aResult = PR_TRUE;
+  mLoadingResources = true;
+  *aResult = true;
 
   // Declare our loaders.
   nsCOMPtr<nsIDocument> doc = mBinding->XBLDocumentInfo()->GetDocument();
@@ -133,8 +102,8 @@ nsXBLResourceLoader::LoadResources(PRBool* aResult)
       // Now kick off the image load...
       // Passing NULL for pretty much everything -- cause we don't care!
       // XXX: initialDocumentURI is NULL! 
-      nsCOMPtr<imgIRequest> req;
-      nsContentUtils::LoadImage(url, doc, docPrincipal, docURL, nsnull,
+      nsRefPtr<imgRequestProxy> req;
+      nsContentUtils::LoadImage(url, doc, docPrincipal, docURL, nullptr,
                                 nsIRequest::LOAD_BACKGROUND,
                                 getter_AddRefs(req));
     }
@@ -143,7 +112,7 @@ nsXBLResourceLoader::LoadResources(PRBool* aResult)
 
       // Always load chrome synchronously
       // XXXbz should that still do a content policy check?
-      PRBool chrome;
+      bool chrome;
       nsresult rv;
       if (NS_SUCCEEDED(url->SchemeIs("chrome", &chrome)) && chrome)
       {
@@ -156,7 +125,7 @@ nsXBLResourceLoader::LoadResources(PRBool* aResult)
           NS_ASSERTION(NS_SUCCEEDED(rv), "Load failed!!!");
           if (NS_SUCCEEDED(rv))
           {
-            rv = StyleSheetLoaded(sheet, PR_FALSE, NS_OK);
+            rv = StyleSheetLoaded(sheet, false, NS_OK);
             NS_ASSERTION(NS_SUCCEEDED(rv), "Processing the style sheet failed!!!");
           }
         }
@@ -171,17 +140,17 @@ nsXBLResourceLoader::LoadResources(PRBool* aResult)
   }
 
   *aResult = (mPendingSheets == 0);
-  mInLoadResourcesFunc = PR_FALSE;
+  mInLoadResourcesFunc = false;
   
   // Destroy our resource list.
   delete mResourceList;
-  mResourceList = nsnull;
+  mResourceList = nullptr;
 }
 
 // nsICSSLoaderObserver
 NS_IMETHODIMP
 nsXBLResourceLoader::StyleSheetLoaded(nsCSSStyleSheet* aSheet,
-                                      PRBool aWasAlternate,
+                                      bool aWasAlternate,
                                       nsresult aStatus)
 {
   if (!mResources) {
@@ -233,14 +202,17 @@ nsXBLResourceLoader::AddResourceListener(nsIContent* aBoundElement)
 void
 nsXBLResourceLoader::NotifyBoundElements()
 {
-  nsCOMPtr<nsIXBLService> xblService(do_GetService("@mozilla.org/xbl;1"));
+  nsXBLService* xblService = nsXBLService::GetInstance();
+  if (!xblService)
+    return;
+
   nsIURI* bindingURI = mBinding->BindingURI();
 
-  PRUint32 eltCount = mBoundElements.Count();
-  for (PRUint32 j = 0; j < eltCount; j++) {
+  uint32_t eltCount = mBoundElements.Count();
+  for (uint32_t j = 0; j < eltCount; j++) {
     nsCOMPtr<nsIContent> content = mBoundElements.ObjectAt(j);
     
-    PRBool ready = PR_FALSE;
+    bool ready = false;
     xblService->BindingReady(content, bindingURI, &ready);
 
     if (ready) {
@@ -287,4 +259,26 @@ nsXBLResourceLoader::NotifyBoundElements()
 
   // Delete ourselves.
   NS_RELEASE(mResources->mLoader);
+}
+
+nsresult
+nsXBLResourceLoader::Write(nsIObjectOutputStream* aStream)
+{
+  nsresult rv;
+
+  for (nsXBLResource* curr = mResourceList; curr; curr = curr->mNext) {
+    if (curr->mType == nsGkAtoms::image)
+      rv = aStream->Write8(XBLBinding_Serialize_Image);
+    else if (curr->mType == nsGkAtoms::stylesheet)
+      rv = aStream->Write8(XBLBinding_Serialize_Stylesheet);
+    else
+      continue;
+
+    NS_ENSURE_SUCCESS(rv, rv);
+
+    rv = aStream->WriteWStringZ(curr->mSrc.get());
+    NS_ENSURE_SUCCESS(rv, rv);
+  }
+
+  return NS_OK;
 }

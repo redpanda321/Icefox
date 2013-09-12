@@ -6,28 +6,27 @@
 <window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         title="Accessible XUL tree attributes tests">
 
-  <script type="application/javascript" 
-          src="chrome://mochikit/content/MochiKit/packed.js" />
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/treeview.js" />
+          src="../treeview.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js" />
+          src="../common.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/attributes.js" />
+          src="../attributes.js" />
+  <script type="application/javascript"
+          src="../events.js" />
 
   <script type="application/javascript">
   <![CDATA[
     ////////////////////////////////////////////////////////////////////////////
     // Test
 
-    function doTestAttrs()
+    function doTest()
     {
       var treeNode = getNode("tree");
-      treeNode.removeEventListener("TreeViewChanged", doTestAttrs, false);
 
       var tree = getAccessible(treeNode);
       var treeitem1 = tree.firstChild.nextSibling;
@@ -51,15 +50,8 @@
       SimpleTest.finish();
     }
 
-    function doTest()
-    {
-      var treeNode = getNode("tree");
-      treeNode.addEventListener("TreeViewChanged", doTestAttrs, false);
-      treeNode.view = new nsTreeTreeView();
-    }
-
     SimpleTest.waitForExplicitFinish();
-    addA11yLoadEvent(doTest);
+    addA11yXULTreeLoadEvent(doTest, "tree", new nsTreeTreeView());
   ]]>
   </script>
 

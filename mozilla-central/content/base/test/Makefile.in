@@ -1,50 +1,19 @@
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# The Initial Developer of the Original Code is
-# Mozilla Foundation.
-# Portions created by the Initial Developer are Copyright (C) 2007
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either of the GNU General Public License Version 2 or later (the "GPL"),
-# or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH		= ../../..
+DEPTH		= @DEPTH@
 topsrcdir	= @top_srcdir@
 srcdir		= @srcdir@
 VPATH		= @srcdir@
-relativesrcdir  = content/base/test
+relativesrcdir  = @relativesrcdir@
 
 include $(DEPTH)/config/autoconf.mk
 
 DIRS += \
   chrome \
+  websocket_hybi \
   $(NULL)
 
 MODULE = content
@@ -59,12 +28,17 @@ CPP_UNIT_TESTS = \
 XPCSHELL_TESTS = \
                unit \
                $(NULL)
+# FIXME/bug 575918: out-of-process xpcshell is broken on OS X
+ifneq ($(OS_ARCH),Darwin)
+XPCSHELL_TESTS += unit_ipc
+endif
 
-include $(topsrcdir)/config/rules.mk
 
 # Split files arbitrarily in two groups to not run into too-long command lines
 # which break on Windows (see bug 563151)
-_TEST_FILES1 = 	test_bug5141.html \
+MOCHITEST_FILES_A = \
+		responseIdentical.sjs \
+		test_bug5141.html \
 		test_bug51034.html \
 		test_bug166235.html \
 		test_bug199959.html \
@@ -78,17 +52,18 @@ _TEST_FILES1 = 	test_bug5141.html \
 		test_bug276037-2.xhtml \
 		test_bug298064.html \
 		bug298064-subframe.html \
-		test_bug308484.html \
+		test_xhr_forbidden_headers.html \
 		test_bug311681.xml \
+		test_bug320799.html \
 		test_bug322317.html \
 		test_bug330925.xhtml \
+		test_bug331959.html \
 		test_bug333673.html \
 		test_bug337631.html \
 		test_bug338541.xhtml \
 		test_bug338679.html \
 		test_bug339494.html \
 		test_bug339494.xhtml \
-		test_bug339494.xul \
 		test_bug340571.html \
 		test_bug343596.html \
 		test_bug345339.html \
@@ -100,7 +75,6 @@ _TEST_FILES1 = 	test_bug5141.html \
 		test_bug357450.js \
 		test_bug357450.html \
 		test_bug357450.xhtml \
-		test_bug357450.xul \
 		test_bug357450_svg.xhtml \
 		test_bug357509.html \
 		test_bug358660.html \
@@ -109,7 +83,6 @@ _TEST_FILES1 = 	test_bug5141.html \
 		test_bug364413.xhtml \
 		test_bug366946.html \
 		test_bug367164.html \
-		test_bug371576-1.html \
 		test_bug371576-2.html \
 		test_bug371576-3.html \
 		test_bug371576-4.html \
@@ -132,8 +105,8 @@ _TEST_FILES1 = 	test_bug5141.html \
 		test_bug395915.html \
 		test_bug397234.html \
 		test_bug398243.html \
-		$(warning test_bug419132.html disabled because it takes 60 seconds) \
-		$(warning bug419132.html disabled because it takes 60 seconds) \
+		test_bug419132.html \
+		bug419132.html \
 		formReset.html \
 		bug382113_object.html \
 		test_bug326337.html \
@@ -148,6 +121,7 @@ _TEST_FILES1 = 	test_bug5141.html \
 		test_bug401662.html \
 		test_bug403852.html \
 		test_fileapi.html \
+		test_fileapi_slice.html \
 		test_bug403868.xml \
 		test_bug405182.html \
 		test_bug403841.html \
@@ -156,7 +130,6 @@ _TEST_FILES1 = 	test_bug5141.html \
 		test_bug413974.html \
 		test_bug415860.html \
 		test_bug414190.html \
-		test_bug414796.html \
 		test_bug527896.html \
 		test_bug416317-1.html \
 		test_bug416317-2.html \
@@ -175,6 +148,8 @@ _TEST_FILES1 = 	test_bug5141.html \
 		test_bug421602.html \
 		test_bug422537.html \
 		test_bug424359-1.html \
+		test_bug499656.html \
+		test_bug499656.xhtml \
 		file_htmlserializer_1.html \
 		file_htmlserializer_1_bodyonly.html \
 		file_htmlserializer_1_format.html \
@@ -212,6 +187,9 @@ _TEST_FILES1 = 	test_bug5141.html \
 		file_XHR_fail1.txt^headers^ \
 		file_XHR_binary1.bin \
 		file_XHR_binary1.bin^headers^ \
+		file_XHR_binary2.bin \
+		file_XHR_header.sjs \
+		test_XHR_header.html \
 		test_bug428847.html \
 		file_bug428847-1.xhtml \
 		file_bug428847-2.xhtml \
@@ -223,7 +201,6 @@ _TEST_FILES1 = 	test_bug5141.html \
 		test_bug438519.html \
 		test_bug444722.html \
 		test_bug451376.html \
-		test_text_replaceWholeText.html \
 		test_text_wholeText.html \
 		test_bug433533.html \
 		wholeTexty-helper.xml \
@@ -240,11 +217,15 @@ _TEST_FILES1 = 	test_bug5141.html \
 		file_bug445225_multipart.txt^headers^ \
 		test_title.html \
 		test_bug453521.html \
-		test_bug391728.html \
-		file_bug391728.html \
 		test_bug454325.html \
-		file_bug391728_2.html \
 		test_bug456262.html \
+		test_bug482935.html \
+		     bug482935.sjs \
+		test_bug590870.html \
+		file_bug590870.html \
+		test_bug590812.html \
+		file_bug590812.xml \
+		file_bug590812-ref.xhtml \
 		test_bug368972.html \
 		test_bug448993.html \
 		test_bug450160.html \
@@ -252,7 +233,10 @@ _TEST_FILES1 = 	test_bug5141.html \
 		test_bug454326.html \
 		test_bug505783.html \
 		test_bug457746.html \
+		test_bug587931.html \
+		test_bug592829.html \
 		test_bug518104.html \
+		test_bug682463.html \
 		bug457746.sjs \
 		test_CrossSiteXHR.html \
 		test_CrossSiteXHR_origin.html \
@@ -267,9 +251,26 @@ _TEST_FILES1 = 	test_bug5141.html \
 		file_XHRDocURI.xml^headers^ \
 		file_XHRDocURI.text \
 		file_XHRDocURI.text^headers^ \
+		test_DOMException.html \
+		test_domparsing.html \
+		test_meta_viewport0.html \
+		test_meta_viewport1.html \
+		test_meta_viewport2.html \
+		test_meta_viewport3.html \
+		test_meta_viewport4.html \
+		test_meta_viewport5.html \
+		test_meta_viewport6.html \
+		test_mutationobservers.html \
+		mutationobserver_dialog.html \
+		test_bug744830.html \
+		file_bug782342.txt \
+		test_bug782342.html \
+		test_bug282547.html \
+		bug282547.sjs \
+		test_domparser_null_char.html \
 		$(NULL)
 
-_TEST_FILES2 = \
+MOCHITEST_FILES_B = \
 		test_bug459424.html \
 		bug461735-redirect1.sjs \
 		bug461735-redirect2.sjs \
@@ -302,6 +303,8 @@ _TEST_FILES2 = \
 		file_xhtmlserializer_2_latin1.xhtml \
 		test_bug500937.html \
 		test_htmlcopyencoder.html \
+		test_bug313646.html \
+		bug313646.txt \
 		test_htmlcopyencoder.xhtml \
 		test_bug270145.xhtml \
 		test_elementTraversal.html \
@@ -337,15 +340,17 @@ _TEST_FILES2 = \
 		test_classList.html \
 		test_bug514487.html \
 		test_range_bounds.html \
-		test_bug543870.html \
-		file_bug543870_img.jpg \
-		file_bug543870_inner.html \
-		file_bug543870_doc.html \
-		file_bug543870_text.txt \
+		test_mozfiledataurl.html \
+		file_mozfiledataurl_audio.ogg \
+		file_mozfiledataurl_img.jpg \
+		file_mozfiledataurl_inner.html \
+		file_mozfiledataurl_doc.html \
+		file_mozfiledataurl_text.txt \
 		test_bug475156.html \
 		bug475156.sjs \
 		test_bug544642.html \
 		test_bug564863.xhtml \
+		test_bug588990.html \
 		test_copypaste.html \
 		test_bug503481.html \
 		file_bug503481.sjs \
@@ -357,17 +362,21 @@ _TEST_FILES2 = \
 		file_CSP_main.html \
 		file_CSP_main.html^headers^ \
 		file_CSP_main.js \
- 		test_CSP_frameancestors.html \
- 		file_CSP_frameancestors.sjs \
- 		file_CSP_frameancestors_main.html \
- 		file_CSP_frameancestors_main.js \
- 		test_CSP_inlinescript.html \
- 		file_CSP_inlinescript_main.html \
- 		file_CSP_inlinescript_main.html^headers^ \
- 		test_CSP_evalscript.html \
- 		file_CSP_evalscript_main.html \
- 		file_CSP_evalscript_main.html^headers^ \
- 		file_CSP_evalscript_main.js \
+		test_CSP_frameancestors.html \
+		file_CSP_frameancestors.sjs \
+		file_CSP_frameancestors_main.html \
+		file_CSP_frameancestors_main.js \
+		test_CSP_inlinescript.html \
+		file_CSP_inlinescript_main.html \
+		file_CSP_inlinescript_main.html^headers^ \
+		test_CSP_evalscript.html \
+		file_CSP_evalscript_main.html \
+		file_CSP_evalscript_main.html^headers^ \
+		file_CSP_evalscript_main.js \
+		file_csp_bug768029.html \
+		file_csp_bug768029.sjs \
+		file_csp_bug773891.html \
+		file_csp_bug773891.sjs \
 		test_bug540854.html \
 		bug540854.sjs \
 		test_bug548463.html \
@@ -391,33 +400,233 @@ _TEST_FILES2 = \
 		test_bug562652.html \
 		test_bug562137.html \
 		file_bug562137.txt \
+		test_bug562169-1.html \
+		test_bug562169-2.html \
 		test_bug548193.html \
 		file_bug548193.sjs \
 		test_html_colors_quirks.html \
 		test_html_colors_standards.html \
-		test_bug571390.xul \
 		test_bug300992.html \
 		test_websocket_hello.html \
 		file_websocket_hello_wsh.py \
-		test_ws_basic_tests.html \
-		file_ws_basic_tests_wsh.py \
+		test_websocket_basic.html \
+		file_websocket_basic_wsh.py \
 		test_websocket.html \
 		file_websocket_wsh.py \
 		file_websocket_http_resource.txt \
-		test_bug574596.html \
 		test_x-frame-options.html \
 		file_x-frame-options_main.html \
 		file_x-frame-options_page.sjs \
+		test_createHTMLDocument.html \
+		test_bug622088.html \
+		file_bug622088_inner.html \
+		file_bug622088.sjs \
+		test_bug564047.html \
+		test_bug567350.html \
+		test_bug578096.html \
+		test_bug585978.html \
+		test_bug592366.html \
+		test_bug597345.html \
+		script-1_bug597345.sjs \
+		script-2_bug597345.js \
+		test_bug599588.html \
+		test_bug601803.html \
+		file_bug601803a.html \
+		file_bug601803b.html \
+		test_bug602838.html \
+		script_bug602838.sjs \
+		test_bug614583.html \
+		test_bug604660.html \
+		file_bug604660-1.xml \
+		file_bug604660-2.xsl \
+		file_bug604660-3.js \
+		file_bug604660-4.js \
+		file_bug604660-5.xml \
+		file_bug604660-6.xsl \
+		test_bug605982.html \
+		test_bug606729.html \
+		test_treewalker_nextsibling.xml \
+		test_bug614058.html \
+		test_bug622117.html \
+		test_base.xhtml \
+		file_base_xbl.xml \
+		test_bug622246.html \
+		test_bug484396.html \
+		test_bug466080.html \
+		bug466080.sjs \
+		test_bug625722.html \
+		test_bug631615.html \
+		test_bug558431.html \
+		file_bug558431.html \
+		file_bug558431.html^headers^ \
+		test_bug604592.html \
+		test_bug628938.html \
+		test_bug626262.html \
+		test_plugin_freezing.html \
+		test_bug638112.html \
+		bug638112-response.txt \
+		bug638112.sjs \
+		test_bug656283.html \
+		test_blobconstructor.html \
+		fileutils.js \
+		test_bug338583.html \
+		test_EventSource_redirects.html \
+		eventsource.resource \
+		eventsource.resource^headers^ \
+		eventsource_redirect.resource \
+		eventsource_redirect.resource^headers^ \
+		eventsource_redirect_to.resource \
+		eventsource_redirect_to.resource^headers^ \
+		badContentType.eventsource \
+		badContentType.eventsource^headers^ \
+		badEventFieldName.eventsource \
+		badEventFieldName.eventsource^headers^ \
+		badHTTPResponseCode.eventsource \
+		badHTTPResponseCode.eventsource^headers^ \
+		badMessageEvent.eventsource \
+		badMessageEvent.eventsource^headers^ \
+		file_restrictedEventSource.sjs \
+		forRemoval.resource \
+		forRemoval.resource^headers^ \
+		accesscontrol.resource \
+		accesscontrol.resource^headers^ \
+		invalid_accesscontrol.resource \
+		invalid_accesscontrol.resource^headers^ \
+		test_xhr_progressevents.html \
+		progressserver.sjs \
+		somedatas.resource \
+		somedatas.resource^headers^ \
+		delayedServerEvents.sjs \
+		test_html_in_xhr.html \
+		file_html_in_xhr.html \
+		file_html_in_xhr2.html \
+		file_html_in_xhr3.html \
+		file_html_in_xhr.sjs \
+		test_bug647518.html \
+		test_bug664916.html \
+		test_bug666604.html \
+		test_bug675121.html \
+		file_bug675121.sjs \
+		test_bug675166.html \
+		test_bug682554.html \
+		test_bug682592.html \
+		bug682592-subframe.html \
+		bug682592-subframe-ref.html \
+		test_bug684671.html \
+		test_bug685798.html \
+		test_bug686449.xhtml \
+		test_bug690056.html \
+		test_bug692434.html \
+		file_bug692434.xml \
+		test_bug693615.html \
+		test_bug693875.html \
+		test_bug694754.xhtml \
+		test_bug698384.html \
+		test_nodelist_holes.html \
+		test_xhr_abort_after_load.html \
+		test_bug702439.html \
+		test_bug702439.html^headers^ \
+		file_bug702439.html \
+		test_bug707142.html \
+		file_bug707142_baseline.json \
+		file_bug707142_bom.json \
+		file_bug707142_utf-16.json \
+		test_reentrant_flush.html \
+		test_bug708620.html \
+		file_bug708620.html \
+		file_bug708620-2.html \
+		test_XHR_timeout.html \
+		test_XHR_timeout.js \
+		file_XHR_timeout.sjs \
+		test_bug717511.html \
+		file_bug717511.html \
+		file_bug717511.html^headers^ \
+		file_bug717511_2.html \
+		file_bug717511_2.html^headers^ \
+		test_bug726364.html \
+		test_bug698381.html \
+		test_bug711047.html \
+		test_bug696301-1.html \
+		test_bug696301-2.html \
+		bug696301-script-1.js \
+		bug696301-script-1.js^headers^ \
+		bug696301-script-2.js \
+		test_bug737565.html \
+		test_bug737612.html \
+		test_bug738108.html \
+		test_bug366944.html \
+		test_bug650386_redirect_301.html \
+		test_bug650386_redirect_302.html \
+		test_bug650386_redirect_303.html \
+		test_bug650386_redirect_307.html \
+		file_bug650386_content.sjs \
+		file_bug650386_report.sjs \
+		test_bug687859.html \
+		file_bug687859-bom.js \
+		file_bug687859-bom.js^headers^ \
+		file_bug687859-16.js \
+		file_bug687859-16.js^headers^ \
+		file_bug687859-http.js \
+		file_bug687859-http.js^headers^ \
+		file_bug687859-charset.js \
+		file_bug687859-inherit.js \
+		test_bug719533.html \
+		test_bug737087.html \
+		test_bug433662.html \
+		test_bug749367.html \
+		test_bug753278.html \
+		test_bug761120.html \
+		test_bug787778.html \
+		file_bug787778.sjs \
+		test_XHR_onuploadprogress.html \
+		test_XHR_anon.html \
+		file_XHR_anon.sjs \
+		test_XHR_system.html \
+		test_XHR_parameters.html \
+		test_ipc_messagemanager_blob.html \
+		test_mixed_content_blocker.html \
+		file_mixed_content_main.html \
+		file_mixed_content_server.sjs \
+    test_mixed_content_blocker_bug803225.html \
+    file_mixed_content_main_bug803225.html \
+    file_mixed_content_main_bug803225_websocket_wsh.py \
+    bug803225_test_mailto.html \
+		test_bug789856.html \
+		file_bug804395.jar \
+		test_bug804395.html \
+		test_bug809003.html \
+		test_bug810494.html \
+		test_textnode_split_in_selection.html \
+		test_textnode_normalize_in_selection.html \
+		test_xhr_send_readystate.html \
+		test_bug813919.html \
+		test_bug814576.html \
+		test_xhr_withCredentials.html \
 		$(NULL)
+
+# OOP tests don't work on Windows (bug 763081) or native-fennec
+# (see Bug 774939)
+ifneq ($(OS_ARCH),WINNT)
+ifndef MOZ_ANDROID_OMTC
+MOCHITEST_FILES_B += \
+		test_messagemanager_assertpermission.html \
+		test_child_process_shutdown_message.html \
+		$(NULL)
+endif
+endif
+
+MOCHITEST_CHROME_FILES =	\
+		test_bug357450.js \
+		$(NULL)
+
+MOCHITEST_FILES_PARTS = $(foreach s,A B,MOCHITEST_FILES_$(s))
 
 # This test fails on the Mac for some reason
 ifneq (,$(filter gtk2 windows,$(MOZ_WIDGET_TOOLKIT)))
-_TEST_FILES2 += 	test_copyimage.html \
+MOCHITEST_FILES_C = 	test_copyimage.html \
 		$(NULL)
+MOCHITEST_FILES_PARTS += MOCHITEST_FILES_C
 endif
-
-# Disabled; see bug 492181
-#		test_plugin_freezing.html
 
 # Disabled for now. Mochitest isn't reliable enough for these.
 # test_bug444546.html \
@@ -427,8 +636,9 @@ endif
 #		test_bug503473.html \
 #		file_bug503473-frame.sjs \
 
-libs:: $(_TEST_FILES1)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
+MOCHITEST_BROWSER_FILES = \
+		browser_bug593387.js \
+		$(NULL)
 
-libs:: $(_TEST_FILES2)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
+include $(topsrcdir)/config/rules.mk
+

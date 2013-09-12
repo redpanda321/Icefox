@@ -1,94 +1,138 @@
 //* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Effective-TLD Service
- *
- * The Initial Developer of the Original Code is
- * Google Inc.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pamela Greene <pamg.bugs@gmail.com> (original author)
- *   Daniel Witte <dwitte@stanford.edu>
- *   Jeff Walden <jwalden+code@mit.edu>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // This service reads a file of rules describing TLD-like domain names.  For a
 // complete description of the expected file format and parsing rules, see
 // http://wiki.mozilla.org/Gecko:Effective_TLD_Service
 
+#include "mozilla/Util.h"
+
 #include "nsEffectiveTLDService.h"
 #include "nsIIDNService.h"
+#include "nsIMemoryReporter.h"
 #include "nsNetUtil.h"
 #include "prnetdb.h"
 
-#include "mozilla/FunctionTimer.h"
+using namespace mozilla;
 
 NS_IMPL_ISUPPORTS1(nsEffectiveTLDService, nsIEffectiveTLDService)
 
 // ----------------------------------------------------------------------
 
-static const ETLDEntry gEntries[] =
+#define ETLD_STR_NUM_1(line) str##line
+#define ETLD_STR_NUM(line) ETLD_STR_NUM_1(line)
+#define ETLD_ENTRY_OFFSET(name) offsetof(struct etld_string_list, ETLD_STR_NUM(__LINE__))
+
+const ETLDEntry nsDomainEntry::entries[] = {
+#define ETLD_ENTRY(name, ex, wild) { ETLD_ENTRY_OFFSET(name), ex, wild },
 #include "etld_data.inc"
-;
+#undef ETLD_ENTRY
+};
+
+const union nsDomainEntry::etld_strings nsDomainEntry::strings = {
+  {
+#define ETLD_ENTRY(name, ex, wild) name,
+#include "etld_data.inc"
+#undef ETLD_ENTRY
+  }
+};
+
+// Dummy function to statically ensure that our indices don't overflow
+// the storage provided for them.
+void
+nsDomainEntry::FuncForStaticAsserts(void)
+{
+#define ETLD_ENTRY(name, ex, wild)                                      \
+  MOZ_STATIC_ASSERT(ETLD_ENTRY_OFFSET(name) < (1 << ETLD_ENTRY_N_INDEX_BITS), \
+                    "invalid strtab index");
+#include "etld_data.inc"
+#undef ETLD_ENTRY
+}
+
+#undef ETLD_ENTRY_OFFSET
+#undef ETLD_STR_NUM
+#undef ETLD_STR_NUM1
 
 // ----------------------------------------------------------------------
+
+static nsEffectiveTLDService *gService = nullptr;
+
+NS_MEMORY_REPORTER_MALLOC_SIZEOF_FUN(EffectiveTLDServiceMallocSizeOf,
+                                     "effective-tld-service")
+
+static int64_t
+GetEffectiveTLDSize()
+{
+  return gService->SizeOfIncludingThis(EffectiveTLDServiceMallocSizeOf);
+}
+
+NS_MEMORY_REPORTER_IMPLEMENT(
+  EffectiveTLDService,
+  "explicit/xpcom/effective-TLD-service",
+  KIND_HEAP,
+  nsIMemoryReporter::UNITS_BYTES,
+  GetEffectiveTLDSize,
+  "Memory used by the effective TLD service.")
 
 nsresult
 nsEffectiveTLDService::Init()
 {
-  NS_TIME_FUNCTION;
+  const ETLDEntry *entries = nsDomainEntry::entries;
 
   // We'll probably have to rehash at least once, since nsTHashtable doesn't
   // use a perfect hash, but at least we'll save a few rehashes along the way.
   // Next optimization here is to precompute the hash using something like
   // gperf, but one step at a time.  :-)
-  if (!mHash.Init(NS_ARRAY_LENGTH(gEntries) - 1))
-    return NS_ERROR_OUT_OF_MEMORY;
+  mHash.Init(ArrayLength(nsDomainEntry::entries));
 
   nsresult rv;
   mIDNService = do_GetService(NS_IDNSERVICE_CONTRACTID, &rv);
   if (NS_FAILED(rv)) return rv;
 
   // Initialize eTLD hash from static array
-  for (PRUint32 i = 0; i < NS_ARRAY_LENGTH(gEntries) - 1; i++) {
+  for (uint32_t i = 0; i < ArrayLength(nsDomainEntry::entries); i++) {
+    const char *domain = nsDomainEntry::GetEffectiveTLDName(entries[i].strtab_index);
 #ifdef DEBUG
-    nsDependentCString name(gEntries[i].domain);
-    nsCAutoString normalizedName(gEntries[i].domain);
+    nsDependentCString name(domain);
+    nsAutoCString normalizedName(domain);
     NS_ASSERTION(NS_SUCCEEDED(NormalizeHostname(normalizedName)),
                  "normalization failure!");
     NS_ASSERTION(name.Equals(normalizedName), "domain not normalized!");
 #endif
-    nsDomainEntry *entry = mHash.PutEntry(gEntries[i].domain);
+    nsDomainEntry *entry = mHash.PutEntry(domain);
     NS_ENSURE_TRUE(entry, NS_ERROR_OUT_OF_MEMORY);
-    entry->SetData(&gEntries[i]);
+    entry->SetData(&entries[i]);
   }
+
+  MOZ_ASSERT(!gService);
+  gService = this;
+  mReporter = new NS_MEMORY_REPORTER_NAME(EffectiveTLDService);
+  (void)::NS_RegisterMemoryReporter(mReporter);
+
   return NS_OK;
+}
+
+nsEffectiveTLDService::~nsEffectiveTLDService()
+{
+  (void)::NS_UnregisterMemoryReporter(mReporter);
+  mReporter = nullptr;
+  gService = nullptr;
+}
+
+size_t
+nsEffectiveTLDService::SizeOfIncludingThis(nsMallocSizeOfFun aMallocSizeOf)
+{
+  size_t n = aMallocSizeOf(this);
+  n += mHash.SizeOfExcludingThis(nullptr, aMallocSizeOf);
+
+  // Measurement of the following members may be added later if DMD finds it is
+  // worthwhile:
+  // - mReporter
+  // - mIDNService
+
+  return n;
 }
 
 // External function for dealing with URI's correctly.
@@ -103,7 +147,7 @@ nsEffectiveTLDService::GetPublicSuffix(nsIURI     *aURI,
   nsCOMPtr<nsIURI> innerURI = NS_GetInnermostURI(aURI);
   NS_ENSURE_ARG_POINTER(innerURI);
 
-  nsCAutoString host;
+  nsAutoCString host;
   nsresult rv = innerURI->GetAsciiHost(host);
   if (NS_FAILED(rv)) return rv;
 
@@ -115,7 +159,7 @@ nsEffectiveTLDService::GetPublicSuffix(nsIURI     *aURI,
 // GetBaseDomainFromHost().
 NS_IMETHODIMP
 nsEffectiveTLDService::GetBaseDomain(nsIURI     *aURI,
-                                     PRUint32    aAdditionalParts,
+                                     uint32_t    aAdditionalParts,
                                      nsACString &aBaseDomain)
 {
   NS_ENSURE_ARG_POINTER(aURI);
@@ -123,7 +167,7 @@ nsEffectiveTLDService::GetBaseDomain(nsIURI     *aURI,
   nsCOMPtr<nsIURI> innerURI = NS_GetInnermostURI(aURI);
   NS_ENSURE_ARG_POINTER(innerURI);
 
-  nsCAutoString host;
+  nsAutoCString host;
   nsresult rv = innerURI->GetAsciiHost(host);
   if (NS_FAILED(rv)) return rv;
 
@@ -138,7 +182,7 @@ nsEffectiveTLDService::GetPublicSuffixFromHost(const nsACString &aHostname,
 {
   // Create a mutable copy of the hostname and normalize it to ACE.
   // This will fail if the hostname includes invalid characters.
-  nsCAutoString normHostname(aHostname);
+  nsAutoCString normHostname(aHostname);
   nsresult rv = NormalizeHostname(normHostname);
   if (NS_FAILED(rv)) return rv;
 
@@ -150,12 +194,12 @@ nsEffectiveTLDService::GetPublicSuffixFromHost(const nsACString &aHostname,
 // requested. See GetBaseDomainInternal().
 NS_IMETHODIMP
 nsEffectiveTLDService::GetBaseDomainFromHost(const nsACString &aHostname,
-                                             PRUint32          aAdditionalParts,
+                                             uint32_t          aAdditionalParts,
                                              nsACString       &aBaseDomain)
 {
   // Create a mutable copy of the hostname and normalize it to ACE.
   // This will fail if the hostname includes invalid characters.
-  nsCAutoString normHostname(aHostname);
+  nsAutoCString normHostname(aHostname);
   nsresult rv = NormalizeHostname(normHostname);
   if (NS_FAILED(rv)) return rv;
 
@@ -169,14 +213,14 @@ nsEffectiveTLDService::GetBaseDomainFromHost(const nsACString &aHostname,
 // on the host string and the result will be in UTF8.
 nsresult
 nsEffectiveTLDService::GetBaseDomainInternal(nsCString  &aHostname,
-                                             PRUint32    aAdditionalParts,
+                                             uint32_t    aAdditionalParts,
                                              nsACString &aBaseDomain)
 {
   if (aHostname.IsEmpty())
     return NS_ERROR_INSUFFICIENT_DOMAIN_LEVELS;
 
   // chomp any trailing dot, and keep track of it for later
-  PRBool trailingDot = aHostname.Last() == '.';
+  bool trailingDot = aHostname.Last() == '.';
   if (trailingDot)
     aHostname.Truncate(aHostname.Length() - 1);
 
@@ -194,7 +238,7 @@ nsEffectiveTLDService::GetBaseDomainInternal(nsCString  &aHostname,
   // Walk up the domain tree, most specific to least specific,
   // looking for matches at each level.  Note that a given level may
   // have multiple attributes (e.g. IsWild() and IsNormal()).
-  const char *prevDomain = nsnull;
+  const char *prevDomain = nullptr;
   const char *currDomain = aHostname.get();
   const char *nextDot = strchr(currDomain, '.');
   const char *end = currDomain + aHostname.Length();

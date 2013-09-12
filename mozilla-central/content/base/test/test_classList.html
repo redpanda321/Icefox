@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=501257
 -->
 <head>
   <title>Test for the classList element attribute</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
 </head>
@@ -36,10 +35,9 @@ function onAttrModified(event) {
   });
 }
 
-function checkModification(e, funcName, argument, expectedRes, before, after) {
-  var shouldThrow = typeof(after) === "number";
+function checkModification(e, funcName, argument, expectedRes, before, after, expectedException) {
+  var shouldThrow = typeof(expectedException) === "string";
   if (shouldThrow) {
-    var expectedException = after;
     // If an exception is thrown, the class attribute shouldn't change.
     after = before;
   }
@@ -61,7 +59,7 @@ function checkModification(e, funcName, argument, expectedRes, before, after) {
   } catch (e) {
     if (!shouldThrow)
       ok(false, "classList modification threw an exception " + contextMsg);
-    is(e.code, expectedException, "wrong exception thrown " + contextMsg);
+    is(e.name, expectedException, "wrong exception thrown " + contextMsg);
   }
   e.removeEventListener("DOMAttrModified", onAttrModified, false);
   if (expectedRes !== null)
@@ -155,6 +153,11 @@ function testClassList(e) {
 
   // [Stringifies]
 
+  ok(DOMTokenList.prototype.hasOwnProperty("toString"),
+     "Should have own toString on DOMTokenList")
+  ok(!DOMSettableTokenList.prototype.hasOwnProperty("toString"),
+     "Should not have own toString on DOMSettableTokenList")
+
   e.removeAttribute("class");
   is(e.classList.toString(), "", "wrong classList.toString() value");
   is(e.classList + "", "", "wrong classList string conversion value");
@@ -165,22 +168,17 @@ function testClassList(e) {
 
   // item() method
 
-  // TODO out of bounds array indexing should return undefined according to the
-  // WebIDL spec. They are returning an empty string at the moment. (bug 529328)
-  var OOB_VALUE = "";
-  todo_is(OOB_VALUE, undefined, "Wrong out of bounds value");
-
   e.setAttribute("class", "a");
   is(e.classList.item(-1), null, "wrong classList.item() result");
-  is(e.classList[-1], OOB_VALUE, "wrong classList[] result");
+  is(e.classList[-1], undefined, "wrong classList[] result");
   is(e.classList.item(0), "a", "wrong classList.item() result");
-  is(e.classList[0], "a", "wrong classList.item() result");
+  is(e.classList[0], "a", "wrong classList[] result");
   is(e.classList.item(1), null, "wrong classList.item() result");
-  is(e.classList[1], OOB_VALUE, "wrong classList.item() result");
+  is(e.classList[1], undefined, "wrong classList[] result");
 
   e.setAttribute("class", "aa AA aa");
   is(e.classList.item(-1), null, "wrong classList.item() result");
-  is(e.classList[-1], OOB_VALUE, "wrong classList[] result");
+  is(e.classList[-1], undefined, "wrong classList[] result");
   is(e.classList.item(0), "aa", "wrong classList.item() result");
   is(e.classList[0], "aa", "wrong classList[] result");
   is(e.classList.item(1), "AA", "wrong classList.item() result");
@@ -188,22 +186,21 @@ function testClassList(e) {
   is(e.classList.item(2), "aa", "wrong classList.item() result");
   is(e.classList[2], "aa", "wrong classList[] result");
   is(e.classList.item(3), null, "wrong classList.item() result");
-  is(e.classList[3], OOB_VALUE, "wrong classList[] result");
+  is(e.classList[3], undefined, "wrong classList[] result");
   is(e.classList.item(0xffffffff), null, "wrong classList.item() result");
-  // XXX returns undefined for index >= 0xffffffff
-  todo_is(e.classList[0xffffffff], OOB_VALUE, "wrong classList[] result");
+  is(e.classList[0xffffffff], undefined, "wrong classList[] result");
   is(e.classList.item(0xfffffffe), null, "wrong classList.item() result");
-  is(e.classList[0xffffffe], OOB_VALUE, "wrong classList[] result");
+  is(e.classList[0xffffffe], undefined, "wrong classList[] result");
 
   e.setAttribute("class", "a b");
   is(e.classList.item(-1), null, "wrong classList.item() result");
-  is(e.classList[-1], OOB_VALUE, "wrong classList[] result");
+  is(e.classList[-1], undefined, "wrong classList[] result");
   is(e.classList.item(0), "a", "wrong classList.item() result");
   is(e.classList[0], "a", "wrong classList[] result");
   is(e.classList.item(1), "b", "wrong classList.item() result");
   is(e.classList[1], "b", "wrong classList[] result");
   is(e.classList.item(2), null, "wrong classList.item() result");
-  is(e.classList[2], OOB_VALUE, "wrong classList[] result");
+  is(e.classList[2], undefined, "wrong classList[] result");
 
   // contains() method
 
@@ -213,18 +210,21 @@ function testClassList(e) {
     e.classList.contains("");
     ok(false, "classList.contains() didn't throw");
   } catch (e) {
+    is(e.name, "SyntaxError", "wrong exception thrown");
     is(e.code, DOMException.SYNTAX_ERR, "wrong exception thrown");
   }
   try {
     e.classList.contains("  ");
     ok(false, "classList.contains() didn't throw");
   } catch (e) {
+    is(e.name, "InvalidCharacterError", "wrong exception thrown");
     is(e.code, DOMException.INVALID_CHARACTER_ERR, "wrong exception thrown");
   }
   try {
     e.classList.contains("aa ");
     ok(false, "classList.contains() didn't throw");
   } catch (e) {
+    is(e.name, "InvalidCharacterError", "wrong exception thrown");
     is(e.code, DOMException.INVALID_CHARACTER_ERR, "wrong exception thrown");
   }
 
@@ -257,13 +257,13 @@ function testClassList(e) {
 
   // add() method
 
-  function checkAdd(before, argument, after) {
-    checkModification(e, "add", argument, null, before, after);
+  function checkAdd(before, argument, after, expectedException) {
+    checkModification(e, "add", argument, null, before, after, expectedException);
   }
 
-  checkAdd(null, "", DOMException.SYNTAX_ERR);
-  checkAdd(null, " ", DOMException.INVALID_CHARACTER_ERR);
-  checkAdd(null, "aa ", DOMException.INVALID_CHARACTER_ERR);
+  checkAdd(null, "", null, "SyntaxError");
+  checkAdd(null, " ", null, "InvalidCharacterError");
+  checkAdd(null, "aa ", null, "InvalidCharacterError");
 
   checkAdd("a", "a", "a");
   checkAdd("aa", "AA", "aa AA");
@@ -283,13 +283,13 @@ function testClassList(e) {
 
   // remove() method
 
-  function checkRemove(before, argument, after) {
-    checkModification(e, "remove", argument, null, before, after);
+  function checkRemove(before, argument, after, expectedException) {
+    checkModification(e, "remove", argument, null, before, after, expectedException);
   }
 
-  checkRemove(null, "", DOMException.SYNTAX_ERR);
-  checkRemove(null, " ", DOMException.INVALID_CHARACTER_ERR);
-  checkRemove(null, "aa ", DOMException.INVALID_CHARACTER_ERR);
+  checkRemove(null, "", null, "SyntaxError");
+  checkRemove(null, " ", null, "InvalidCharacterError");
+  checkRemove(null, "aa ", null, "InvalidCharacterError");
 
   checkRemove(null, "a", null);
   checkRemove("", "a", "");
@@ -322,12 +322,12 @@ function testClassList(e) {
 
   // toggle() method
 
-  function checkToggle(before, argument, expectedRes, after) {
-    checkModification(e, "toggle", argument, expectedRes, before, after);
+  function checkToggle(before, argument, expectedRes, after, expectedException) {
+    checkModification(e, "toggle", argument, expectedRes, before, after, expectedException);
   }
 
-  checkToggle(null, "", null, DOMException.SYNTAX_ERR);
-  checkToggle(null, "aa ", null, DOMException.INVALID_CHARACTER_ERR);
+  checkToggle(null, "", null, null, "SyntaxError");
+  checkToggle(null, "aa ", null, null, "InvalidCharacterError");
 
   checkToggle(null, "a", true, "a");
   checkToggle("", "a", true, "a");

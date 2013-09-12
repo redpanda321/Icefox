@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set sw=2 ts=2 et tw=79: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsIAtom.h"
 #include "nsParser.h"
@@ -47,14 +14,12 @@
 #include "nsIChannel.h"
 #include "nsICachingChannel.h"
 #include "nsICacheEntryDescriptor.h"
-#include "nsICharsetAlias.h"
 #include "nsICharsetConverterManager.h"
 #include "nsIInputStream.h"
 #include "CNavDTD.h"
 #include "prenv.h"
 #include "prlock.h"
 #include "prcvar.h"
-#include "nsAutoLock.h"
 #include "nsParserCIID.h"
 #include "nsReadableUtils.h"
 #include "nsCOMPtr.h"
@@ -65,32 +30,31 @@
 #include "nsIFragmentContentSink.h"
 #include "nsStreamUtils.h"
 #include "nsHTMLTokenizer.h"
-#include "nsIDocument.h"
 #include "nsNetUtil.h"
 #include "nsScriptLoader.h"
 #include "nsDataHashtable.h"
-#include "nsIThreadPool.h"
 #include "nsXPCOMCIDInternal.h"
 #include "nsMimeTypes.h"
+#include "mozilla/CondVar.h"
+#include "mozilla/Mutex.h"
+#include "nsParserConstants.h"
+#include "nsCharsetSource.h"
+#include "nsContentUtils.h"
 
-#ifdef MOZ_VIEW_SOURCE
-#include "nsViewSourceHTML.h"
-#endif
+#include "mozilla/dom/EncodingUtils.h"
+
+using namespace mozilla;
+using mozilla::dom::EncodingUtils;
 
 #define NS_PARSER_FLAG_PARSER_ENABLED         0x00000002
 #define NS_PARSER_FLAG_OBSERVERS_ENABLED      0x00000004
 #define NS_PARSER_FLAG_PENDING_CONTINUE_EVENT 0x00000008
-#define NS_PARSER_FLAG_CAN_INTERRUPT          0x00000010
 #define NS_PARSER_FLAG_FLUSH_TOKENS           0x00000020
 #define NS_PARSER_FLAG_CAN_TOKENIZE           0x00000040
 
 static NS_DEFINE_IID(kISupportsIID, NS_ISUPPORTS_IID);
 static NS_DEFINE_CID(kCParserCID, NS_PARSER_CID);
 static NS_DEFINE_IID(kIParserIID, NS_IPARSER_IID);
-
-//-------------------------------------------------------------------
-
-nsCOMArray<nsIUnicharStreamListener> *nsParser::sParserDataListeners;
 
 //-------------- Begin ParseContinue Event Definition ------------------------
 /*
@@ -166,518 +130,7 @@ public:
 
 //-------------- End ParseContinue Event Definition ------------------------
 
-template <class Type>
-class Holder {
-public:
-  typedef void (*Reaper)(Type *);
-
-  Holder(Reaper aReaper)
-    : mHoldee(nsnull), mReaper(aReaper)
-  {
-  }
-
-  ~Holder() {
-    if (mHoldee) {
-      mReaper(mHoldee);
-    }
-  }
-
-  Type *get() {
-    return mHoldee;
-  }
-  const Holder &operator =(Type *aHoldee) {
-    if (mHoldee && aHoldee != mHoldee) {
-      mReaper(mHoldee);
-    }
-    mHoldee = aHoldee;
-    return *this;
-  }
-
-private:
-  Type *mHoldee;
-  Reaper mReaper;
-};
-
-class nsSpeculativeScriptThread : public nsIRunnable {
-public:
-  nsSpeculativeScriptThread()
-    : mLock(nsAutoLock::DestroyLock),
-      mCVar(PR_DestroyCondVar),
-      mKeepParsing(PR_FALSE),
-      mCurrentlyParsing(PR_FALSE),
-      mNumConsumed(0),
-      mContext(nsnull),
-      mTerminated(PR_FALSE) {
-  }
-
-  ~nsSpeculativeScriptThread() {
-    NS_ASSERTION(NS_IsMainThread() || !mDocument,
-                 "Destroying the document on the wrong thread");
-  }
-
-  NS_DECL_ISUPPORTS
-  NS_DECL_NSIRUNNABLE
-
-  nsresult StartParsing(nsParser *aParser);
-  void StopParsing(PRBool aFromDocWrite);
-
-  enum PrefetchType { NONE, SCRIPT, STYLESHEET, IMAGE };
-  struct PrefetchEntry {
-    PrefetchType type;
-    nsString uri;
-    nsString charset;
-    nsString elementType;
-  };
-
-  nsIDocument *GetDocument() {
-    NS_ASSERTION(NS_IsMainThread(), "Potential threadsafety hazard");
-    return mDocument;
-  }
-
-  PRBool Parsing() {
-    return mCurrentlyParsing;
-  }
-
-  CParserContext *Context() {
-    return mContext;
-  }
-
-  typedef nsDataHashtable<nsCStringHashKey, PRBool> PreloadedType;
-  PreloadedType& GetPreloadedURIs() {
-    return mPreloadedURIs;
-  }
-
-  void Terminate() {
-    mTerminated = PR_TRUE;
-    StopParsing(PR_FALSE);
-  }
-  PRBool Terminated() {
-    return mTerminated;
-  }
-
-private:
-
-  void ProcessToken(CToken *aToken);
-
-  void AddToPrefetchList(const nsAString &src,
-                         const nsAString &charset,
-                         const nsAString &elementType,
-                         PrefetchType type);
-
-  void FlushURIs();
-
-  // These members are only accessed on the speculatively parsing thread.
-  nsTokenAllocator mTokenAllocator;
-
-  // The following members are shared across the main thread and the
-  // speculatively parsing thread.
-  Holder<PRLock> mLock;
-  Holder<PRCondVar> mCVar;
-
-  volatile PRBool mKeepParsing;
-  volatile PRBool mCurrentlyParsing;
-  nsRefPtr<nsHTMLTokenizer> mTokenizer;
-  nsAutoPtr<nsScanner> mScanner;
-
-  enum { kBatchPrefetchURIs = 5 };
-  nsAutoTArray<PrefetchEntry, kBatchPrefetchURIs> mURIs;
-
-  // Number of characters consumed by the last speculative parse.
-  PRUint32 mNumConsumed;
-
-  // These members are only accessed on the main thread.
-  nsCOMPtr<nsIDocument> mDocument;
-  CParserContext *mContext;
-  PreloadedType mPreloadedURIs;
-  PRBool mTerminated;
-};
-
-class nsPreloadURIs : public nsIRunnable {
-public:
-  nsPreloadURIs(nsAutoTArray<nsSpeculativeScriptThread::PrefetchEntry, 5> &aURIs,
-                nsSpeculativeScriptThread *aScriptThread)
-    : mURIs(aURIs),
-      mScriptThread(aScriptThread) {
-  }
-
-  NS_DECL_ISUPPORTS
-  NS_DECL_NSIRUNNABLE
-
-  static void PreloadURIs(const nsAutoTArray<nsSpeculativeScriptThread::PrefetchEntry, 5> &aURIs,
-                          nsSpeculativeScriptThread *aScriptThread);
-
-private:
-  nsAutoTArray<nsSpeculativeScriptThread::PrefetchEntry, 5> mURIs;
-  nsRefPtr<nsSpeculativeScriptThread> mScriptThread;
-};
-
-NS_IMPL_THREADSAFE_ISUPPORTS1(nsPreloadURIs, nsIRunnable)
-
-NS_IMETHODIMP
-nsPreloadURIs::Run()
-{
-  PreloadURIs(mURIs, mScriptThread);
-  return NS_OK;
-}
-
-void
-nsPreloadURIs::PreloadURIs(const nsAutoTArray<nsSpeculativeScriptThread::PrefetchEntry, 5> &aURIs,
-                           nsSpeculativeScriptThread *aScriptThread)
-{
-  NS_ASSERTION(NS_IsMainThread(), "Touching non-threadsafe objects off thread");
-
-  if (aScriptThread->Terminated()) {
-    return;
-  }
-
-  nsIDocument *doc = aScriptThread->GetDocument();
-  NS_ASSERTION(doc, "We shouldn't have started preloading without a document");
-
-  // Note: Per the code in the HTML content sink, we should be keeping track
-  // of each <base href> as it comes. However, because we do our speculative
-  // parsing off the main thread, this is hard to emulate. For now, just load
-  // the URIs using the document's base URI at the potential cost of being
-  // wrong and having to re-load a given relative URI later.
-  nsIURI *base = doc->GetDocBaseURI();
-  const nsCString &charset = doc->GetDocumentCharacterSet();
-  nsSpeculativeScriptThread::PreloadedType &alreadyPreloaded =
-    aScriptThread->GetPreloadedURIs();
-  for (PRUint32 i = 0, e = aURIs.Length(); i < e; ++i) {
-    const nsSpeculativeScriptThread::PrefetchEntry &pe = aURIs[i];
-    nsCOMPtr<nsIURI> uri;
-    nsresult rv = NS_NewURI(getter_AddRefs(uri), pe.uri, charset.get(), base);
-    if (NS_FAILED(rv)) {
-      NS_WARNING("Failed to create a URI");
-      continue;
-    }
-
-    nsCAutoString spec;
-    uri->GetSpec(spec);
-    PRBool answer;
-    if (alreadyPreloaded.Get(spec, &answer)) {
-      // Already preloaded. Don't preload again.
-      continue;
-    }
-
-    alreadyPreloaded.Put(spec, PR_TRUE);
-
-    switch (pe.type) {
-      case nsSpeculativeScriptThread::SCRIPT:
-        doc->ScriptLoader()->PreloadURI(uri, pe.charset, pe.elementType);
-        break;
-      case nsSpeculativeScriptThread::IMAGE:
-        doc->MaybePreLoadImage(uri);
-        break;
-      case nsSpeculativeScriptThread::STYLESHEET:
-        doc->PreloadStyle(uri, pe.charset);
-        break;
-      case nsSpeculativeScriptThread::NONE:
-        NS_NOTREACHED("Uninitialized preload entry?");
-        break;
-    }
-  }
-}
-
-NS_IMPL_THREADSAFE_ISUPPORTS1(nsSpeculativeScriptThread, nsIRunnable)
-
-NS_IMETHODIMP
-nsSpeculativeScriptThread::Run()
-{
-  NS_ASSERTION(!NS_IsMainThread(), "Speculative parsing on the main thread?");
-
-  mNumConsumed = 0;
-
-  mTokenizer->WillTokenize(PR_FALSE, &mTokenAllocator);
-  while (mKeepParsing) {
-    PRBool flushTokens = PR_FALSE;
-    nsresult rv = mTokenizer->ConsumeToken(*mScanner, flushTokens);
-    if (NS_FAILED(rv)) {
-      break;
-    }
-
-    mNumConsumed += mScanner->Mark();
-
-    // TODO Don't pop the tokens.
-    CToken *token;
-    while (mKeepParsing && (token = mTokenizer->PopToken())) {
-      ProcessToken(token);
-    }
-  }
-  mTokenizer->DidTokenize(PR_FALSE);
-
-  if (mKeepParsing) {
-    // Ran out of room in this part of the document -- flush out the URIs we
-    // gathered so far so we don't end up waiting for the parser's current
-    // load to finish.
-    if (!mURIs.IsEmpty()) {
-      FlushURIs();
-    }
-  }
-
-  {
-    nsAutoLock al(mLock.get());
-
-    mCurrentlyParsing = PR_FALSE;
-    PR_NotifyCondVar(mCVar.get());
-  }
-  return NS_OK;
-}
-
-nsresult
-nsSpeculativeScriptThread::StartParsing(nsParser *aParser)
-{
-  NS_ASSERTION(NS_IsMainThread(), "Called on the wrong thread");
-  NS_ASSERTION(!mCurrentlyParsing, "Bad race happening");
-
-  if (!aParser->ThreadPool()) {
-    return NS_OK;
-  }
-
-  nsIContentSink *sink = aParser->GetContentSink();
-  if (!sink) {
-    return NS_OK;
-  }
-
-  nsCOMPtr<nsIDocument> doc = do_QueryInterface(sink->GetTarget());
-  if (!doc) {
-    return NS_OK;
-  }
-
-  nsAutoString toScan;
-  CParserContext *context = aParser->PeekContext();
-  if (!mLock.get()) {
-    mLock = nsAutoLock::NewLock("nsSpeculativeScriptThread::mLock");
-    if (!mLock.get()) {
-      return NS_ERROR_OUT_OF_MEMORY;
-    }
-
-    mCVar = PR_NewCondVar(mLock.get());
-    if (!mCVar.get()) {
-      return NS_ERROR_OUT_OF_MEMORY;
-    }
-
-    if (!mPreloadedURIs.Init(15)) {
-      return NS_ERROR_OUT_OF_MEMORY;
-    }
-
-    mTokenizer = new nsHTMLTokenizer(context->mDTDMode, context->mDocType,
-                                     context->mParserCommand, 0);
-    if (!mTokenizer) {
-      return NS_ERROR_OUT_OF_MEMORY;
-    }
-    mTokenizer->CopyState(context->mTokenizer);
-    context->mScanner->CopyUnusedData(toScan);
-    if (toScan.IsEmpty()) {
-      return NS_OK;
-    }
-  } else if (context == mContext) {
-    // Don't parse the same part of the document twice.
-    nsScannerIterator end;
-    context->mScanner->EndReading(end);
-
-    nsScannerIterator start;
-    context->mScanner->CurrentPosition(start);
-
-    if (mNumConsumed > context->mNumConsumed) {
-      // We consumed more the last time we tried speculatively parsing than we
-      // did the last time we actually parsed.
-      PRUint32 distance = Distance(start, end);
-      start.advance(NS_MIN(mNumConsumed - context->mNumConsumed, distance));
-    }
-
-    if (start == end) {
-      // We're at the end of this context's buffer, nothing else to do.
-      return NS_OK;
-    }
-
-    CopyUnicodeTo(start, end, toScan);
-  } else {
-    // Grab all of the context.
-    context->mScanner->CopyUnusedData(toScan);
-    if (toScan.IsEmpty()) {
-      // Nothing to parse, don't do anything.
-      return NS_OK;
-    }
-  }
-
-  nsCAutoString charset;
-  PRInt32 source;
-  aParser->GetDocumentCharset(charset, source);
-
-  mScanner = new nsScanner(toScan, charset, source);
-  if (!mScanner) {
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
-  mScanner->SetIncremental(PR_TRUE);
-
-  mDocument.swap(doc);
-  mKeepParsing = PR_TRUE;
-  mCurrentlyParsing = PR_TRUE;
-  mContext = context;
-  return aParser->ThreadPool()->Dispatch(this, NS_DISPATCH_NORMAL);
-}
-
-void
-nsSpeculativeScriptThread::StopParsing(PRBool /*aFromDocWrite*/)
-{
-  NS_ASSERTION(NS_IsMainThread(), "Can't stop parsing from another thread");
-
-  if (!mLock.get()) {
-    // If we bailed early out of StartParsing, don't do anything.
-    return;
-  }
-
-  {
-    nsAutoLock al(mLock.get());
-
-    mKeepParsing = PR_FALSE;
-    if (mCurrentlyParsing) {
-      PR_WaitCondVar(mCVar.get(), PR_INTERVAL_NO_TIMEOUT);
-      NS_ASSERTION(!mCurrentlyParsing, "Didn't actually stop parsing?");
-    }
-  }
-
-  // The thread is now idle.
-  if (mTerminated) {
-    // If we're terminated, then we need to ensure that we release our document
-    // and tokenizer here on the main thread so that our last reference to them
-    // isn't our alter-ego rescheduled on another thread.
-    mDocument = nsnull;
-    mTokenizer = nsnull;
-    mScanner = nsnull;
-  } else if (mURIs.Length()) {
-    // Note: Don't do this if we're terminated.
-    nsPreloadURIs::PreloadURIs(mURIs, this);
-    mURIs.Clear();
-  }
-
-  // Note: Currently, we pop the tokens off (see the comment in Run) so this
-  // isn't a problem. If and when we actually use the tokens created
-  // off-thread, we'll need to use aFromDocWrite for real.
-}
-
-void
-nsSpeculativeScriptThread::ProcessToken(CToken *aToken)
-{
-  // Only called on the speculative script thread.
-
-  CHTMLToken *token = static_cast<CHTMLToken *>(aToken);
-  switch (static_cast<eHTMLTokenTypes>(token->GetTokenType())) {
-    case eToken_start: {
-        CStartToken *start = static_cast<CStartToken *>(aToken);
-        nsHTMLTag tag = static_cast<nsHTMLTag>(start->GetTypeID());
-        PRInt16 attrs = start->GetAttributeCount();
-        PRInt16 i = 0;
-        nsAutoString src;
-        nsAutoString elementType;
-        nsAutoString charset;
-        nsAutoString href;
-        nsAutoString rel;
-        PrefetchType ptype = NONE;
-
-        switch (tag) {
-          case eHTMLTag_link:
-              ptype = STYLESHEET;
-              break;
-
-          case eHTMLTag_img:
-              ptype = IMAGE;
-              break;
-
-          case eHTMLTag_script:
-              ptype = SCRIPT;
-              break;
-
-          default:
-              break;
-        }
-
-        // We currently handle the following element/attribute combos :
-        //     <link rel="stylesheet" href= charset= type>
-        //     <script src= charset= type=>
-        if (ptype != NONE) {
-            // loop over all attributes to extract relevant info
-            for (; i < attrs ; ++i) {
-              CAttributeToken *attr = static_cast<CAttributeToken *>(mTokenizer->PopToken());
-              NS_ASSERTION(attr->GetTokenType() == eToken_attribute, "Weird token");
-
-              if (attr->GetKey().EqualsLiteral("src")) {
-                src.Assign(attr->GetValue());
-              } else if (attr->GetKey().EqualsLiteral("href")) {
-                href.Assign(attr->GetValue());
-              } else if (attr->GetKey().EqualsLiteral("rel")) {
-                rel.Assign(attr->GetValue());
-              } else if (attr->GetKey().EqualsLiteral("charset")) {
-                charset.Assign(attr->GetValue());
-              } else if (attr->GetKey().EqualsLiteral("type")) {
-                elementType.Assign(attr->GetValue());
-              }
-
-              IF_FREE(attr, &mTokenAllocator);
-            }
-
-            // ensure we have the right kind if it's a link-element
-            if (ptype == STYLESHEET) {
-              if (rel.EqualsLiteral("stylesheet")) {
-                src = href; // src is the important variable below
-              } else {
-                src.Truncate(); // clear src if wrong kind of link
-              }
-            }
-
-            // add to list if we have a valid src
-            if (!src.IsEmpty()) {
-              AddToPrefetchList(src, charset, elementType, ptype);
-            }
-        } else {
-            // Irrelevant tag, but pop and free all its attributes in any case
-            for (; i < attrs ; ++i) {
-              CToken *attr = mTokenizer->PopToken();
-              IF_FREE(attr, &mTokenAllocator);
-            }
-        }
-        break;
-      }
-
-    default:
-      break;
-  }
-
-  IF_FREE(aToken, &mTokenAllocator);
-}
-
-void
-nsSpeculativeScriptThread::AddToPrefetchList(const nsAString &src,
-                                             const nsAString &charset,
-                                             const nsAString &elementType,
-                                             PrefetchType type)
-{
-  PrefetchEntry *pe = mURIs.AppendElement();
-  pe->type = type;
-  pe->uri = src;
-  pe->charset = charset;
-  pe->elementType = elementType;
-
-  if (mURIs.Length() == kBatchPrefetchURIs) {
-    FlushURIs();
-  }
-}
-
-void
-nsSpeculativeScriptThread::FlushURIs()
-{
-  nsCOMPtr<nsIRunnable> r = new nsPreloadURIs(mURIs, this);
-  if (!r) {
-    return;
-  }
-
-  mURIs.Clear();
-  NS_DispatchToMainThread(r, NS_DISPATCH_NORMAL);
-}
-
-nsICharsetAlias* nsParser::sCharsetAliasService = nsnull;
-nsICharsetConverterManager* nsParser::sCharsetConverterManager = nsnull;
-nsIThreadPool* nsParser::sSpeculativeThreadPool = nsnull;
+nsICharsetConverterManager* nsParser::sCharsetConverterManager = nullptr;
 
 /**
  *  This gets called when the htmlparser module is initialized.
@@ -687,73 +140,12 @@ nsresult
 nsParser::Init()
 {
   nsresult rv;
-  nsCOMPtr<nsICategoryManager> cm =
-    do_GetService(NS_CATEGORYMANAGER_CONTRACTID, &rv);
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  nsCOMPtr<nsISimpleEnumerator> e;
-  rv = cm->EnumerateCategory("Parser data listener", getter_AddRefs(e));
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  nsCAutoString categoryEntry;
-  nsXPIDLCString contractId;
-  nsCOMPtr<nsISupports> entry;
-
-  while (NS_SUCCEEDED(e->GetNext(getter_AddRefs(entry)))) {
-    nsCOMPtr<nsISupportsCString> category(do_QueryInterface(entry));
-
-    if (!category) {
-      NS_WARNING("Category entry not an nsISupportsCString!");
-      continue;
-    }
-
-    rv = category->GetData(categoryEntry);
-    NS_ENSURE_SUCCESS(rv, rv);
-
-    rv = cm->GetCategoryEntry("Parser data listener", categoryEntry.get(),
-                              getter_Copies(contractId));
-    NS_ENSURE_SUCCESS(rv, rv);
-
-    nsCOMPtr<nsIUnicharStreamListener> listener =
-      do_CreateInstance(contractId.get());
-
-    if (listener) {
-      if (!sParserDataListeners) {
-        sParserDataListeners = new nsCOMArray<nsIUnicharStreamListener>();
-
-        if (!sParserDataListeners)
-          return NS_ERROR_OUT_OF_MEMORY;
-      }
-
-      sParserDataListeners->AppendObject(listener);
-    }
-  }
-
-  nsCOMPtr<nsICharsetAlias> charsetAlias =
-    do_GetService(NS_CHARSETALIAS_CONTRACTID, &rv);
-  NS_ENSURE_SUCCESS(rv, rv);
 
   nsCOMPtr<nsICharsetConverterManager> charsetConverter =
     do_GetService(NS_CHARSETCONVERTERMANAGER_CONTRACTID, &rv);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  charsetAlias.swap(sCharsetAliasService);
   charsetConverter.swap(sCharsetConverterManager);
-
-  nsCOMPtr<nsIThreadPool> threadPool =
-    do_CreateInstance(NS_THREADPOOL_CONTRACTID, &rv);
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  rv = threadPool->SetThreadLimit(kSpeculativeThreadLimit);
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  rv = threadPool->SetIdleThreadLimit(kIdleThreadLimit);
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  rv = threadPool->SetIdleThreadTimeout(kIdleThreadTimeout);
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  threadPool.swap(sSpeculativeThreadPool);
 
   return NS_OK;
 }
@@ -765,19 +157,11 @@ nsParser::Init()
 // static
 void nsParser::Shutdown()
 {
-  delete sParserDataListeners;
-  sParserDataListeners = nsnull;
-
-  NS_IF_RELEASE(sCharsetAliasService);
   NS_IF_RELEASE(sCharsetConverterManager);
-  if (sSpeculativeThreadPool) {
-    sSpeculativeThreadPool->Shutdown();
-    NS_RELEASE(sSpeculativeThreadPool);
-  }
 }
 
 #ifdef DEBUG
-static PRBool gDumpContent=PR_FALSE;
+static bool gDumpContent=false;
 #endif
 
 /**
@@ -785,7 +169,7 @@ static PRBool gDumpContent=PR_FALSE;
  */
 nsParser::nsParser()
 {
-  Initialize(PR_TRUE);
+  Initialize(true);
 }
 
 nsParser::~nsParser()
@@ -794,11 +178,11 @@ nsParser::~nsParser()
 }
 
 void
-nsParser::Initialize(PRBool aConstructor)
+nsParser::Initialize(bool aConstructor)
 {
-#ifdef NS_DEBUG
+#ifdef DEBUG
   if (!gDumpContent) {
-    gDumpContent = PR_GetEnv("PARSER_DUMP_CONTENT") != nsnull;
+    gDumpContent = PR_GetEnv("PARSER_DUMP_CONTENT") != nullptr;
   }
 #endif
 
@@ -808,28 +192,28 @@ nsParser::Initialize(PRBool aConstructor)
   }
   else {
     // nsCOMPtrs
-    mObserver = nsnull;
-    mParserFilter = nsnull;
+    mObserver = nullptr;
     mUnusedInput.Truncate();
   }
 
-  mContinueEvent = nsnull;
+  mContinueEvent = nullptr;
   mCharsetSource = kCharsetUninitialized;
   mCharset.AssignLiteral("ISO-8859-1");
   mInternalState = NS_OK;
-  mStreamStatus = 0;
+  mStreamStatus = NS_OK;
   mCommand = eViewNormal;
   mFlags = NS_PARSER_FLAG_OBSERVERS_ENABLED |
            NS_PARSER_FLAG_PARSER_ENABLED |
            NS_PARSER_FLAG_CAN_TOKENIZE;
 
-  mProcessingNetworkData = PR_FALSE;
+  mProcessingNetworkData = false;
+  mIsAboutBlank = false;
 }
 
 void
 nsParser::Cleanup()
 {
-#ifdef NS_DEBUG
+#ifdef DEBUG
   if (gDumpContent) {
     if (mSink) {
       // Sink (HTMLContentSink at this time) supports nsIDebugDumpContent
@@ -859,24 +243,20 @@ nsParser::Cleanup()
   // destroyed since this flag implies a pending nsParserContinueEvent, which
   // has an owning reference to |this|.
   NS_ASSERTION(!(mFlags & NS_PARSER_FLAG_PENDING_CONTINUE_EVENT), "bad");
-  if (mSpeculativeScriptThread) {
-    mSpeculativeScriptThread->Terminate();
-    mSpeculativeScriptThread = nsnull;
-  }
 }
 
 NS_IMPL_CYCLE_COLLECTION_CLASS(nsParser)
 
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(nsParser)
-  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mDTD)
-  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mSink)
-  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mObserver)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK(mDTD)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK(mSink)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK(mObserver)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN(nsParser)
-  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mDTD)
-  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mSink)
-  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mObserver)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mDTD)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mSink)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mObserver)
   CParserContext *pc = tmp->mParserContext;
   while (pc) {
     cb.NoteXPCOMChild(pc->mTokenizer);
@@ -884,12 +264,13 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN(nsParser)
   }
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
-NS_IMPL_CYCLE_COLLECTING_ADDREF_AMBIGUOUS(nsParser, nsIParser)
-NS_IMPL_CYCLE_COLLECTING_RELEASE_AMBIGUOUS(nsParser, nsIParser)
+NS_IMPL_CYCLE_COLLECTING_ADDREF(nsParser)
+NS_IMPL_CYCLE_COLLECTING_RELEASE(nsParser)
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(nsParser)
   NS_INTERFACE_MAP_ENTRY(nsIStreamListener)
   NS_INTERFACE_MAP_ENTRY(nsIParser)
   NS_INTERFACE_MAP_ENTRY(nsIRequestObserver)
+  NS_INTERFACE_MAP_ENTRY(nsISupportsWeakReference)
   NS_INTERFACE_MAP_ENTRY_AMBIGUOUS(nsISupports, nsIParser)
 NS_INTERFACE_MAP_END
 
@@ -916,12 +297,6 @@ nsParser::PostContinueEvent()
     }
   }
   return NS_OK;
-}
-
-NS_IMETHODIMP_(void)
-nsParser::SetParserFilter(nsIParserFilter * aFilter)
-{
-  mParserFilter = aFilter;
 }
 
 NS_IMETHODIMP_(void)
@@ -971,7 +346,7 @@ nsParser::SetCommand(eParserCommands aParserCommand)
  *  @param   aCharsetSource- the source of the charset
  */
 NS_IMETHODIMP_(void)
-nsParser::SetDocumentCharset(const nsACString& aCharset, PRInt32 aCharsetSource)
+nsParser::SetDocumentCharset(const nsACString& aCharset, int32_t aCharsetSource)
 {
   mCharset = aCharset;
   mCharsetSource = aCharsetSource;
@@ -1002,6 +377,10 @@ nsParser::SetContentSink(nsIContentSink* aSink)
 
   if (mSink) {
     mSink->SetParser(this);
+    nsCOMPtr<nsIHTMLContentSink> htmlSink = do_QueryInterface(mSink);
+    if (htmlSink) {
+      mIsAboutBlank = true;
+    }
   }
 }
 
@@ -1028,8 +407,8 @@ nsParser::GetContentSink()
 // Parse the PS production in the SGML spec (excluding the part dealing
 // with entity references) starting at theIndex into theBuffer, and
 // return the first index after the end of the production.
-static PRInt32
-ParsePS(const nsString& aBuffer, PRInt32 aIndex)
+static int32_t
+ParsePS(const nsString& aBuffer, int32_t aIndex)
 {
   for (;;) {
     PRUnichar ch = aBuffer.CharAt(aIndex);
@@ -1037,9 +416,9 @@ ParsePS(const nsString& aBuffer, PRInt32 aIndex)
         (ch == PRUnichar('\n')) || (ch == PRUnichar('\r'))) {
       ++aIndex;
     } else if (ch == PRUnichar('-')) {
-      PRInt32 tmpIndex;
+      int32_t tmpIndex;
       if (aBuffer.CharAt(aIndex+1) == PRUnichar('-') &&
-          kNotFound != (tmpIndex=aBuffer.Find("--",PR_FALSE,aIndex+2,-1))) {
+          kNotFound != (tmpIndex=aBuffer.Find("--",false,aIndex+2,-1))) {
         aIndex = tmpIndex + 2;
       } else {
         return aIndex;
@@ -1055,28 +434,28 @@ ParsePS(const nsString& aBuffer, PRInt32 aIndex)
 #define PARSE_DTD_HAVE_SYSTEM_ID        (1<<2)
 #define PARSE_DTD_HAVE_INTERNAL_SUBSET  (1<<3)
 
-// return PR_TRUE on success (includes not present), PR_FALSE on failure
-static PRBool
+// return true on success (includes not present), false on failure
+static bool
 ParseDocTypeDecl(const nsString &aBuffer,
-                 PRInt32 *aResultFlags,
+                 int32_t *aResultFlags,
                  nsString &aPublicID,
                  nsString &aSystemID)
 {
-  PRBool haveDoctype = PR_FALSE;
+  bool haveDoctype = false;
   *aResultFlags = 0;
 
   // Skip through any comments and processing instructions
   // The PI-skipping is a bit of a hack.
-  PRInt32 theIndex = 0;
+  int32_t theIndex = 0;
   do {
     theIndex = aBuffer.FindChar('<', theIndex);
     if (theIndex == kNotFound) break;
     PRUnichar nextChar = aBuffer.CharAt(theIndex+1);
     if (nextChar == PRUnichar('!')) {
-      PRInt32 tmpIndex = theIndex + 2;
+      int32_t tmpIndex = theIndex + 2;
       if (kNotFound !=
-          (theIndex=aBuffer.Find("DOCTYPE", PR_TRUE, tmpIndex, 0))) {
-        haveDoctype = PR_TRUE;
+          (theIndex=aBuffer.Find("DOCTYPE", true, tmpIndex, 0))) {
+        haveDoctype = true;
         theIndex += 7; // skip "DOCTYPE"
         break;
       }
@@ -1090,15 +469,15 @@ ParseDocTypeDecl(const nsString &aBuffer,
   } while (theIndex != kNotFound);
 
   if (!haveDoctype)
-    return PR_TRUE;
+    return true;
   *aResultFlags |= PARSE_DTD_HAVE_DOCTYPE;
 
   theIndex = ParsePS(aBuffer, theIndex);
-  theIndex = aBuffer.Find("HTML", PR_TRUE, theIndex, 0);
+  theIndex = aBuffer.Find("HTML", true, theIndex, 0);
   if (kNotFound == theIndex)
-    return PR_FALSE;
+    return false;
   theIndex = ParsePS(aBuffer, theIndex+4);
-  PRInt32 tmpIndex = aBuffer.Find("PUBLIC", PR_TRUE, theIndex, 0);
+  int32_t tmpIndex = aBuffer.Find("PUBLIC", true, theIndex, 0);
 
   if (kNotFound != tmpIndex) {
     theIndex = ParsePS(aBuffer, tmpIndex+6);
@@ -1111,15 +490,15 @@ ParseDocTypeDecl(const nsString &aBuffer,
 
     PRUnichar lit = aBuffer.CharAt(theIndex);
     if ((lit != PRUnichar('\"')) && (lit != PRUnichar('\'')))
-      return PR_FALSE;
+      return false;
 
     // Start is the first character, excluding the quote, and End is
     // the final quote, so there are (end-start) characters.
 
-    PRInt32 PublicIDStart = theIndex + 1;
-    PRInt32 PublicIDEnd = aBuffer.FindChar(lit, PublicIDStart);
+    int32_t PublicIDStart = theIndex + 1;
+    int32_t PublicIDEnd = aBuffer.FindChar(lit, PublicIDStart);
     if (kNotFound == PublicIDEnd)
-      return PR_FALSE;
+      return false;
     theIndex = ParsePS(aBuffer, PublicIDEnd + 1);
     PRUnichar next = aBuffer.CharAt(theIndex);
     if (next == PRUnichar('>')) {
@@ -1132,10 +511,10 @@ ParseDocTypeDecl(const nsString &aBuffer,
                (next == PRUnichar('\''))) {
       // We found a system identifier.
       *aResultFlags |= PARSE_DTD_HAVE_SYSTEM_ID;
-      PRInt32 SystemIDStart = theIndex + 1;
-      PRInt32 SystemIDEnd = aBuffer.FindChar(next, SystemIDStart);
+      int32_t SystemIDStart = theIndex + 1;
+      int32_t SystemIDEnd = aBuffer.FindChar(next, SystemIDStart);
       if (kNotFound == SystemIDEnd)
-        return PR_FALSE;
+        return false;
       aSystemID =
         Substring(aBuffer, SystemIDStart, SystemIDEnd - SystemIDStart);
     } else if (next == PRUnichar('[')) {
@@ -1143,16 +522,16 @@ ParseDocTypeDecl(const nsString &aBuffer,
       *aResultFlags |= PARSE_DTD_HAVE_INTERNAL_SUBSET;
     } else {
       // Something's wrong.
-      return PR_FALSE;
+      return false;
     }
 
     // Since a public ID is a minimum literal, we must trim
     // and collapse whitespace
     aPublicID = Substring(aBuffer, PublicIDStart, PublicIDEnd - PublicIDStart);
-    aPublicID.CompressWhitespace(PR_TRUE, PR_TRUE);
+    aPublicID.CompressWhitespace(true, true);
     *aResultFlags |= PARSE_DTD_HAVE_PUBLIC_ID;
   } else {
-    tmpIndex=aBuffer.Find("SYSTEM", PR_TRUE, theIndex, 0);
+    tmpIndex=aBuffer.Find("SYSTEM", true, theIndex, 0);
     if (kNotFound != tmpIndex) {
       // DOCTYPES with system ID but no Public ID
       *aResultFlags |= PARSE_DTD_HAVE_SYSTEM_ID;
@@ -1160,13 +539,13 @@ ParseDocTypeDecl(const nsString &aBuffer,
       theIndex = ParsePS(aBuffer, tmpIndex+6);
       PRUnichar next = aBuffer.CharAt(theIndex);
       if (next != PRUnichar('\"') && next != PRUnichar('\''))
-        return PR_FALSE;
+        return false;
 
-      PRInt32 SystemIDStart = theIndex + 1;
-      PRInt32 SystemIDEnd = aBuffer.FindChar(next, SystemIDStart);
+      int32_t SystemIDStart = theIndex + 1;
+      int32_t SystemIDEnd = aBuffer.FindChar(next, SystemIDStart);
 
       if (kNotFound == SystemIDEnd)
-        return PR_FALSE;
+        return false;
       aSystemID =
         Substring(aBuffer, SystemIDStart, SystemIDEnd - SystemIDStart);
       theIndex = ParsePS(aBuffer, SystemIDEnd + 1);
@@ -1176,9 +555,9 @@ ParseDocTypeDecl(const nsString &aBuffer,
     if (nextChar == PRUnichar('['))
       *aResultFlags |= PARSE_DTD_HAVE_INTERNAL_SUBSET;
     else if (nextChar != PRUnichar('>'))
-      return PR_FALSE;
+      return false;
   }
-  return PR_TRUE;
+  return true;
 }
 
 struct PubIDInfo
@@ -1293,10 +672,10 @@ static const PubIDInfo kPublicIDs[] = {
 static void
 VerifyPublicIDs()
 {
-  static PRBool gVerified = PR_FALSE;
+  static bool gVerified = false;
   if (!gVerified) {
-    gVerified = PR_TRUE;
-    PRUint32 i;
+    gVerified = true;
+    uint32_t i;
     for (i = 0; i < ELEMENTS_OF(kPublicIDs) - 1; ++i) {
       if (nsCRT::strcmp(kPublicIDs[i].name, kPublicIDs[i+1].name) >= 0) {
         NS_NOTREACHED("doctypes out of order");
@@ -1305,7 +684,7 @@ VerifyPublicIDs()
       }
     }
     for (i = 0; i < ELEMENTS_OF(kPublicIDs); ++i) {
-      nsCAutoString lcPubID(kPublicIDs[i].name);
+      nsAutoCString lcPubID(kPublicIDs[i].name);
       ToLowerCase(lcPubID);
       if (nsCRT::strcmp(kPublicIDs[i].name, lcPubID.get()) != 0) {
         NS_NOTREACHED("doctype not lower case");
@@ -1324,7 +703,7 @@ DetermineHTMLParseMode(const nsString& aBuffer,
 #ifdef DEBUG
   VerifyPublicIDs();
 #endif
-  PRInt32 resultFlags;
+  int32_t resultFlags;
   nsAutoString publicIDUCS2, sysIDUCS2;
   if (ParseDocTypeDecl(aBuffer, &resultFlags, publicIDUCS2, sysIDUCS2)) {
     if (!(resultFlags & PARSE_DTD_HAVE_DOCTYPE)) {
@@ -1349,7 +728,7 @@ DetermineHTMLParseMode(const nsString& aBuffer,
     } else {
       // We have to check our list of public IDs to see what to do.
       // Yes, we want UCS2 to ASCII lossy conversion.
-      nsCAutoString publicID;
+      nsAutoCString publicID;
       publicID.AssignWithConversion(publicIDUCS2);
 
       // See comment above definition of kPublicIDs about case
@@ -1359,12 +738,12 @@ DetermineHTMLParseMode(const nsString& aBuffer,
       // Binary search to see if we can find the correct public ID
       // These must be signed since maximum can go below zero and we'll
       // crash if it's unsigned.
-      PRInt32 minimum = 0;
-      PRInt32 maximum = ELEMENTS_OF(kPublicIDs) - 1;
-      PRInt32 index;
+      int32_t minimum = 0;
+      int32_t maximum = ELEMENTS_OF(kPublicIDs) - 1;
+      int32_t index;
       for (;;) {
         index = (minimum + maximum) / 2;
-        PRInt32 comparison =
+        int32_t comparison =
             nsCRT::strcmp(publicID.get(), kPublicIDs[index].name);
         if (comparison == 0)
           break;
@@ -1415,9 +794,11 @@ DetermineParseMode(const nsString& aBuffer, nsDTDMode& aParseMode,
   if (aMimeType.EqualsLiteral(TEXT_HTML)) {
     DetermineHTMLParseMode(aBuffer, aParseMode, aDocType);
   } else if (aMimeType.EqualsLiteral(TEXT_PLAIN) ||
+             aMimeType.EqualsLiteral(TEXT_CACHE_MANIFEST) ||
              aMimeType.EqualsLiteral(TEXT_CSS) ||
              aMimeType.EqualsLiteral(APPLICATION_JAVASCRIPT) ||
              aMimeType.EqualsLiteral(APPLICATION_XJAVASCRIPT) ||
+             aMimeType.EqualsLiteral(APPLICATION_JSON) ||
              aMimeType.EqualsLiteral(TEXT_ECMASCRIPT) ||
              aMimeType.EqualsLiteral(APPLICATION_ECMASCRIPT) ||
              aMimeType.EqualsLiteral(TEXT_JAVASCRIPT)) {
@@ -1435,12 +816,9 @@ FindSuitableDTD(CParserContext& aParserContext)
   // We always find a DTD.
   aParserContext.mAutoDetectStatus = ePrimaryDetect;
 
-#ifdef MOZ_VIEW_SOURCE
   // Quick check for view source.
-  if (aParserContext.mParserCommand == eViewSource) {
-    return new CViewSourceHTML();
-  }
-#endif
+  NS_ABORT_IF_FALSE(aParserContext.mParserCommand != eViewSource,
+    "The old parser is not supposed to be used for View Source anymore.");
 
   // Now see if we're parsing HTML (which, as far as we're concerned, simply
   // means "not XML").
@@ -1459,7 +837,7 @@ nsParser::CancelParsingEvents()
   if (mFlags & NS_PARSER_FLAG_PENDING_CONTINUE_EVENT) {
     NS_ASSERTION(mContinueEvent, "mContinueEvent is null");
     // Revoke the pending continue parsing event
-    mContinueEvent = nsnull;
+    mContinueEvent = nullptr;
     mFlags &= ~NS_PARSER_FLAG_PENDING_CONTINUE_EVENT;
   }
   return NS_OK;
@@ -1582,7 +960,7 @@ nsParser::DidBuildModel(nsresult anErrorCode)
     if (mParserContext && !mParserContext->mPrevContext) {
       // Let sink know if we're about to end load because we've been terminated.
       // In that case we don't want it to run deferred scripts.
-      PRBool terminated = mInternalState == NS_ERROR_HTMLPARSER_STOPPARSING;
+      bool terminated = mInternalState == NS_ERROR_HTMLPARSER_STOPPARSING;
       if (mDTD && mSink) {
         nsresult dtdResult =  mDTD->DidBuildModel(anErrorCode),
                 sinkResult = mSink->DidBuildModel(terminated);
@@ -1598,36 +976,10 @@ nsParser::DidBuildModel(nsresult anErrorCode)
 
       //Ref. to bug 61462.
       mParserContext->mRequest = 0;
-
-      if (mSpeculativeScriptThread) {
-        mSpeculativeScriptThread->Terminate();
-        mSpeculativeScriptThread = nsnull;
-      }
     }
   }
 
   return result;
-}
-
-void
-nsParser::SpeculativelyParse()
-{
-  if (mParserContext->mParserCommand == eViewNormal &&
-      !mParserContext->mMimeType.EqualsLiteral("text/html")) {
-    return;
-  }
-
-  if (!mSpeculativeScriptThread) {
-    mSpeculativeScriptThread = new nsSpeculativeScriptThread();
-    if (!mSpeculativeScriptThread) {
-      return;
-    }
-  }
-
-  nsresult rv = mSpeculativeScriptThread->StartParsing(this);
-  if (NS_FAILED(rv)) {
-    mSpeculativeScriptThread = nsnull;
-  }
 }
 
 /**
@@ -1690,21 +1042,6 @@ nsParser::SetUnusedInput(nsString& aBuffer)
   mUnusedInput = aBuffer;
 }
 
-NS_IMETHODIMP_(void *)
-nsParser::GetRootContextKey()
-{
-  CParserContext* pc = mParserContext;
-  if (!pc) {
-    return nsnull;
-  }
-
-  while (pc->mPrevContext) {
-    pc = pc->mPrevContext;
-  }
-
-  return pc->mKey;
-}
-
 /**
  *  Call this when you want to *force* the parser to terminate the
  *  parsing process altogether. This is binary -- so once you terminate
@@ -1731,10 +1068,6 @@ nsParser::Terminate(void)
   // will reset it so DidBuildModel will call DidBuildModel on the DTD. Note:
   // The IsComplete() call inside of DidBuildModel looks at the pendingContinueEvents flag.
   CancelParsingEvents();
-  if (mSpeculativeScriptThread) {
-    mSpeculativeScriptThread->Terminate();
-    mSpeculativeScriptThread = nsnull;
-  }
 
   // If we got interrupted in the middle of a document.write, then we might
   // have more than one parser context on our parsercontext stack. This has
@@ -1753,7 +1086,7 @@ nsParser::Terminate(void)
   } else if (mSink) {
     // We have no parser context or no DTD yet (so we got terminated before we
     // got any data).  Manually break the reference cycle with the sink.
-    result = mSink->DidBuildModel(PR_TRUE);
+    result = mSink->DidBuildModel(true);
     NS_ENSURE_SUCCESS(result, result);
   }
 
@@ -1783,19 +1116,15 @@ nsParser::ContinueInterruptedParsing()
   }
 #endif
 
-  if (mSpeculativeScriptThread) {
-    mSpeculativeScriptThread->StopParsing(PR_FALSE);
-  }
-
-  PRBool isFinalChunk = mParserContext &&
+  bool isFinalChunk = mParserContext &&
                         mParserContext->mStreamListenerState == eOnStop;
 
-  mProcessingNetworkData = PR_TRUE;
+  mProcessingNetworkData = true;
   if (mSink) {
     mSink->WillParse();
   }
-  result = ResumeParse(PR_TRUE, isFinalChunk); // Ref. bug 57999
-  mProcessingNetworkData = PR_FALSE;
+  result = ResumeParse(true, isFinalChunk); // Ref. bug 57999
+  mProcessingNetworkData = false;
 
   if (result != NS_OK) {
     result=mInternalState;
@@ -1830,10 +1159,16 @@ nsParser::UnblockParser()
   }
 }
 
+NS_IMETHODIMP_(void)
+nsParser::ContinueInterruptedParsingAsync()
+{
+  mSink->ContinueInterruptedParsingAsync();
+}
+
 /**
  * Call this to query whether the parser is enabled or not.
  */
-NS_IMETHODIMP_(PRBool)
+NS_IMETHODIMP_(bool)
 nsParser::IsParserEnabled()
 {
   return (mFlags & NS_PARSER_FLAG_PARSER_ENABLED) != 0;
@@ -1842,7 +1177,7 @@ nsParser::IsParserEnabled()
 /**
  * Call this to query whether the parser thinks it's done with parsing.
  */
-NS_IMETHODIMP_(PRBool)
+NS_IMETHODIMP_(bool)
 nsParser::IsComplete()
 {
   return !(mFlags & NS_PARSER_FLAG_PENDING_CONTINUE_EVENT);
@@ -1856,52 +1191,17 @@ void nsParser::HandleParserContinueEvent(nsParserContinueEvent *ev)
     return;
 
   mFlags &= ~NS_PARSER_FLAG_PENDING_CONTINUE_EVENT;
-  mContinueEvent = nsnull;
+  mContinueEvent = nullptr;
 
   NS_ASSERTION(IsOkToProcessNetworkData(),
                "Interrupted in the middle of a script?");
   ContinueInterruptedParsing();
 }
 
-nsresult
-nsParser::DataAdded(const nsSubstring& aData, nsIRequest *aRequest)
-{
-  NS_ASSERTION(sParserDataListeners,
-               "Don't call this with no parser data listeners!");
-
-  if (!mSink || !aRequest) {
-    return NS_OK;
-  }
-
-  nsISupports *ctx = mSink->GetTarget();
-  PRInt32 count = sParserDataListeners->Count();
-  nsresult rv = NS_OK;
-  PRBool canceled = PR_FALSE;
-
-  while (count--) {
-    rv |= sParserDataListeners->ObjectAt(count)->
-      OnUnicharDataAvailable(aRequest, ctx, aData);
-
-    if (NS_FAILED(rv) && !canceled) {
-      aRequest->Cancel(rv);
-
-      canceled = PR_TRUE;
-    }
-  }
-
-  return rv;
-}
-
-PRBool
-nsParser::CanInterrupt()
-{
-  return (mFlags & NS_PARSER_FLAG_CAN_INTERRUPT) != 0;
-}
-
-PRBool
+bool
 nsParser::IsInsertionPointDefined()
 {
-  return PR_TRUE;
+  return false;
 }
 
 void
@@ -1915,24 +1215,14 @@ nsParser::EndEvaluatingParserInsertedScript()
 }
 
 void
-nsParser::MarkAsNotScriptCreated()
+nsParser::MarkAsNotScriptCreated(const char* aCommand)
 {
 }
 
-PRBool
+bool
 nsParser::IsScriptCreated()
 {
-  return PR_FALSE;
-}
-
-void
-nsParser::SetCanInterrupt(PRBool aCanInterrupt)
-{
-  if (aCanInterrupt) {
-    mFlags |= NS_PARSER_FLAG_CAN_INTERRUPT;
-  } else {
-    mFlags &= ~NS_PARSER_FLAG_CAN_INTERRUPT;
-  }
+  return false;
 }
 
 /**
@@ -1950,34 +1240,26 @@ nsParser::Parse(nsIURI* aURL,
 {
 
   NS_PRECONDITION(aURL, "Error: Null URL given");
-  NS_ASSERTION(!mSpeculativeScriptThread, "Can't reuse a parser like this");
 
   nsresult result=kBadURL;
   mObserver = aListener;
 
   if (aURL) {
-    nsCAutoString spec;
+    nsAutoCString spec;
     nsresult rv = aURL->GetSpec(spec);
     if (rv != NS_OK) {
       return rv;
     }
     NS_ConvertUTF8toUTF16 theName(spec);
 
-    nsScanner* theScanner = new nsScanner(theName, PR_FALSE, mCharset,
-                                          mCharsetSource);
+    nsScanner* theScanner = new nsScanner(theName, false);
     CParserContext* pc = new CParserContext(mParserContext, theScanner, aKey,
                                             mCommand, aListener);
     if (pc && theScanner) {
-      pc->mMultipart = PR_TRUE;
+      pc->mMultipart = true;
       pc->mContextType = CParserContext::eCTURL;
       pc->mDTDMode = aMode;
       PushContext(*pc);
-
-      // Here, and only here, hand this parser off to the scanner. We
-      // only want to do that here since the only reason the scanner
-      // needs the parser is to call DataAdded() on it, and that's
-      // only ever wanted when parsing from an URI.
-      theScanner->SetParser(this);
 
       result = NS_OK;
     } else {
@@ -1988,19 +1270,14 @@ nsParser::Parse(nsIURI* aURL,
 }
 
 /**
- * Call this method if all you want to do is parse 1 string full of HTML text.
- * In particular, this method should be called by the DOM when it has an HTML
- * string to feed to the parser in real-time.
+ * Used by XML fragment parsing below.
  *
  * @param   aSourceBuffer contains a string-full of real content
- * @param   aMimeType tells us what type of content to expect in the given string
  */
-NS_IMETHODIMP
+nsresult
 nsParser::Parse(const nsAString& aSourceBuffer,
                 void* aKey,
-                const nsACString& aMimeType,
-                PRBool aLastCall,
-                nsDTDMode aMode)
+                bool aLastCall)
 {
   nsresult result = NS_OK;
 
@@ -2017,15 +1294,6 @@ nsParser::Parse(const nsAString& aSourceBuffer,
     // stuff correctly.
     return result;
   }
-
-  if (mSpeculativeScriptThread) {
-    mSpeculativeScriptThread->StopParsing(PR_TRUE);
-  }
-
-  // Hack to pass on to the dtd the caller's desire to
-  // parse a fragment without worrying about containment rules
-  if (aMode == eDTDMode_fragment)
-    mCommand = eViewFragment;
 
   // Maintain a reference to ourselves so we don't go away
   // till we're completely done.
@@ -2044,12 +1312,13 @@ nsParser::Parse(const nsAString& aSourceBuffer,
     if (!pc) {
       // Only make a new context if we don't have one, OR if we do, but has a
       // different context key.
-      nsScanner* theScanner = new nsScanner(mUnusedInput, mCharset, mCharsetSource);
+      nsScanner* theScanner = new nsScanner(mUnusedInput);
       NS_ENSURE_TRUE(theScanner, NS_ERROR_OUT_OF_MEMORY);
 
       eAutoDetectResult theStatus = eUnknownDetect;
 
-      if (mParserContext && mParserContext->mMimeType == aMimeType) {
+      if (mParserContext &&
+          mParserContext->mMimeType.EqualsLiteral("application/xml")) {
         // Ref. Bug 90379
         NS_ASSERTION(mDTD, "How come the DTD is null?");
 
@@ -2074,30 +1343,25 @@ nsParser::Parse(const nsAString& aSourceBuffer,
       if (pc->mMultipart) {
         pc->mStreamListenerState = eOnDataAvail;
         if (pc->mScanner) {
-          pc->mScanner->SetIncremental(PR_TRUE);
+          pc->mScanner->SetIncremental(true);
         }
       } else {
         pc->mStreamListenerState = eOnStop;
         if (pc->mScanner) {
-          pc->mScanner->SetIncremental(PR_FALSE);
+          pc->mScanner->SetIncremental(false);
         }
       }
       // end fix for 40143
 
       pc->mContextType=CParserContext::eCTString;
-      pc->SetMimeType(aMimeType);
-      if (pc->mPrevContext && aMode == eDTDMode_autodetect) {
-        // Preserve the DTD mode from the last context, bug 265814.
-        pc->mDTDMode = pc->mPrevContext->mDTDMode;
-      } else {
-        pc->mDTDMode = aMode;
-      }
+      pc->SetMimeType(NS_LITERAL_CSTRING("application/xml"));
+      pc->mDTDMode = eDTDMode_full_standards;
 
       mUnusedInput.Truncate();
 
       pc->mScanner->Append(aSourceBuffer);
       // Do not interrupt document.write() - bug 95487
-      result = ResumeParse(PR_FALSE, PR_FALSE, PR_FALSE);
+      result = ResumeParse(false, false, false);
     } else {
       pc->mScanner->Append(aSourceBuffer);
       if (!pc->mPrevContext) {
@@ -2105,14 +1369,14 @@ nsParser::Parse(const nsAString& aSourceBuffer,
         // to guarantee DidBuildModel() call - Fix 36148
         if (aLastCall) {
           pc->mStreamListenerState = eOnStop;
-          pc->mScanner->SetIncremental(PR_FALSE);
+          pc->mScanner->SetIncremental(false);
         }
 
         if (pc == mParserContext) {
           // If pc is not mParserContext, then this call to ResumeParse would
           // do the wrong thing and try to continue parsing using
           // mParserContext. We need to wait to actually resume parsing on pc.
-          ResumeParse(PR_FALSE, PR_FALSE, PR_FALSE);
+          ResumeParse(false, false, false);
         }
       }
     }
@@ -2123,31 +1387,15 @@ nsParser::Parse(const nsAString& aSourceBuffer,
 
 NS_IMETHODIMP
 nsParser::ParseFragment(const nsAString& aSourceBuffer,
-                        nsIContent* aTargetNode,
-                        nsIAtom* aContextLocalName,
-                        PRInt32 aContextNamespace,
-                        PRBool aQuirks)
-{
-  return NS_ERROR_NOT_IMPLEMENTED;
-}
-
-NS_IMETHODIMP
-nsParser::ParseFragment(const nsAString& aSourceBuffer,
-                        void* aKey,
-                        nsTArray<nsString>& aTagStack,
-                        PRBool aXMLMode,
-                        const nsACString& aMimeType,
-                        nsDTDMode aMode)
+                        nsTArray<nsString>& aTagStack)
 {
   nsresult result = NS_OK;
   nsAutoString  theContext;
-  PRUint32 theCount = aTagStack.Length();
-  PRUint32 theIndex = 0;
+  uint32_t theCount = aTagStack.Length();
+  uint32_t theIndex = 0;
 
   // Disable observers for fragments
   mFlags &= ~NS_PARSER_FLAG_OBSERVERS_ENABLED;
-
-  NS_ASSERTION(!mSpeculativeScriptThread, "Can't reuse a parser like this");
 
   for (theIndex = 0; theIndex < theCount; theIndex++) {
     theContext.AppendLiteral("<");
@@ -2162,8 +1410,10 @@ nsParser::ParseFragment(const nsAString& aSourceBuffer,
   }
 
   // First, parse the context to build up the DTD's tag stack. Note that we
-  // pass PR_FALSE for the aLastCall parameter.
-  result = Parse(theContext, (void*)&theContext, aMimeType, PR_FALSE, aMode);
+  // pass false for the aLastCall parameter.
+  result = Parse(theContext,
+                 (void*)&theContext,
+                 false);
   if (NS_FAILED(result)) {
     mFlags |= NS_PARSER_FLAG_OBSERVERS_ENABLED;
     return result;
@@ -2171,64 +1421,28 @@ nsParser::ParseFragment(const nsAString& aSourceBuffer,
 
   if (!mSink) {
     // Parse must have failed in the XML case and so the sink was killed.
-    NS_ASSERTION(aXMLMode, "Unexpected!");
     return NS_ERROR_HTMLPARSER_STOPPARSING;
   }
 
   nsCOMPtr<nsIFragmentContentSink> fragSink = do_QueryInterface(mSink);
   NS_ASSERTION(fragSink, "ParseFragment requires a fragment content sink");
 
-  if (!aXMLMode && theCount) {
-    // First, we have to flush any tags that don't belong in the head if there
-    // was no <body> in the context.
-    // XXX This is extremely ugly. Maybe CNavDTD should have FlushMisplaced()?
-    NS_ASSERTION(mParserContext, "Parsing didn't create a parser context?");
-
-    CNavDTD* dtd = static_cast<CNavDTD*>
-                              (static_cast<nsIDTD*>(mDTD));
-    NS_ASSERTION(dtd, "How did we parse anything without a dtd?");
-
-    CStartToken bodyToken(NS_LITERAL_STRING("BODY"), eHTMLTag_body);
-    nsCParserNode bodyNode(&bodyToken, 0);
-
-    dtd->OpenContainer(&bodyNode, eHTMLTag_body);
-
-    // Now parse the flushed out tags.
-    result = BuildModel();
-    if (NS_FAILED(result)) {
-      mFlags |= NS_PARSER_FLAG_OBSERVERS_ENABLED;
-      return result;
-    }
-
-    // Now that we've flushed all of the tags out of the body, we have to make
-    // sure that there aren't any context tags left in the scanner.
-    NS_ASSERTION(mParserContext->mScanner, "Where'd the scanner go?");
-
-    PRUnichar next;
-    if (NS_SUCCEEDED(mParserContext->mScanner->Peek(next))) {
-      // Uh, oh. This must mean that the context stack has a special tag on
-      // it, such as <textarea> or <title> that requires its end tag before it
-      // will be consumed. Tell the content sink that it will be coming.
-      // Note: For now, we can assume that there is only one such tag.
-      NS_ASSERTION(next == '<', "The tokenizer failed to consume a token");
-      fragSink->IgnoreFirstContainer();
-    }
-  }
-
   fragSink->WillBuildContent();
   // Now, parse the actual content. Note that this is the last call
   // for HTML content, but for XML, we will want to build and parse
   // the end tags.  However, if tagStack is empty, it's the last call
   // for XML as well.
-  if (!aXMLMode || (theCount == 0)) {
-    result = Parse(aSourceBuffer, &theContext, aMimeType,
-                   PR_TRUE, aMode);
+  if (theCount == 0) {
+    result = Parse(aSourceBuffer,
+                   &theContext,
+                   true);
     fragSink->DidBuildContent();
   } else {
     // Add an end tag chunk, so expat will read the whole source buffer,
     // and not worry about ']]' etc.
     result = Parse(aSourceBuffer + NS_LITERAL_STRING("</"),
-                   &theContext, aMimeType, PR_FALSE, aMode);
+                   &theContext,
+                   false);
     fragSink->DidBuildContent();
 
     if (NS_SUCCEEDED(result)) {
@@ -2241,7 +1455,7 @@ nsParser::ParseFragment(const nsAString& aSourceBuffer,
 
         nsString& thisTag = aTagStack[theIndex];
         // was there an xmlns=?
-        PRInt32 endOfTag = thisTag.FindChar(PRUnichar(' '));
+        int32_t endOfTag = thisTag.FindChar(PRUnichar(' '));
         if (endOfTag == -1) {
           endContext.Append(thisTag);
         } else {
@@ -2251,8 +1465,9 @@ nsParser::ParseFragment(const nsAString& aSourceBuffer,
         endContext.AppendLiteral(">");
       }
 
-      result = Parse(endContext, &theContext, aMimeType,
-                     PR_TRUE, aMode);
+      result = Parse(endContext,
+                     &theContext,
+                     true);
     }
   }
 
@@ -2284,15 +1499,13 @@ nsParser::ParseFragment(const nsAString& aSourceBuffer,
  *  @return  error code -- 0 if ok, non-zero if error.
  */
 nsresult
-nsParser::ResumeParse(PRBool allowIteration, PRBool aIsFinalChunk,
-                      PRBool aCanInterrupt)
+nsParser::ResumeParse(bool allowIteration, bool aIsFinalChunk,
+                      bool aCanInterrupt)
 {
   nsresult result = NS_OK;
 
   if ((mFlags & NS_PARSER_FLAG_PARSER_ENABLED) &&
       mInternalState != NS_ERROR_HTMLPARSER_STOPPARSING) {
-    NS_ASSERTION(!mSpeculativeScriptThread || !mSpeculativeScriptThread->Parsing(),
-                 "Bad races happening, expect to crash!");
 
     result = WillBuildModel(mParserContext->mScanner->GetFilename());
     if (NS_FAILED(result)) {
@@ -2302,7 +1515,7 @@ nsParser::ResumeParse(PRBool allowIteration, PRBool aIsFinalChunk,
 
     if (mDTD) {
       mSink->WillResume();
-      PRBool theIterationIsOk = PR_TRUE;
+      bool theIterationIsOk = true;
 
       while (result == NS_OK && theIterationIsOk) {
         if (!mUnusedInput.IsEmpty() && mParserContext->mScanner) {
@@ -2316,7 +1529,6 @@ nsParser::ResumeParse(PRBool allowIteration, PRBool aIsFinalChunk,
 
         // Only allow parsing to be interrupted in the subsequent call to
         // build model.
-        SetCanInterrupt(aCanInterrupt);
         nsresult theTokenizerResult = (mFlags & NS_PARSER_FLAG_CAN_TOKENIZE)
                                       ? Tokenize(aIsFinalChunk)
                                       : NS_OK;
@@ -2325,7 +1537,6 @@ nsParser::ResumeParse(PRBool allowIteration, PRBool aIsFinalChunk,
         if (result == NS_ERROR_HTMLPARSER_INTERRUPTED && aIsFinalChunk) {
           PostContinueEvent();
         }
-        SetCanInterrupt(PR_FALSE);
 
         theIterationIsOk = theTokenizerResult != kEOF &&
                            result != NS_ERROR_HTMLPARSER_INTERRUPTED;
@@ -2342,7 +1553,6 @@ nsParser::ResumeParse(PRBool allowIteration, PRBool aIsFinalChunk,
           if (mFlags & NS_PARSER_FLAG_PARSER_ENABLED) {
             // If we were blocked by a recursive invocation, don't re-block.
             BlockParser();
-            SpeculativelyParse();
           }
           return NS_OK;
         }
@@ -2357,7 +1567,7 @@ nsParser::ResumeParse(PRBool allowIteration, PRBool aIsFinalChunk,
         }
         if ((NS_OK == result && theTokenizerResult == kEOF) ||
              result == NS_ERROR_HTMLPARSER_INTERRUPTED) {
-          PRBool theContextIsStringBased =
+          bool theContextIsStringBased =
             CParserContext::eCTString == mParserContext->mContextType;
 
           if (mParserContext->mStreamListenerState == eOnStop ||
@@ -2407,7 +1617,7 @@ nsParser::ResumeParse(PRBool allowIteration, PRBool aIsFinalChunk,
 nsresult
 nsParser::BuildModel()
 {
-  nsITokenizer* theTokenizer = nsnull;
+  nsITokenizer* theTokenizer = nullptr;
 
   nsresult result = NS_OK;
   if (mParserContext) {
@@ -2416,11 +1626,9 @@ nsParser::BuildModel()
 
   if (NS_SUCCEEDED(result)) {
     if (mDTD) {
-      // XXXbenjamn CanInterrupt() and !inDocWrite appear to be covariant.
-      PRBool inDocWrite = !!mParserContext->mPrevContext;
+      bool inDocWrite = !!mParserContext->mPrevContext;
       result = mDTD->BuildModel(theTokenizer,
                                 // ignore interruptions in document.write
-                                CanInterrupt() && !inDocWrite,
                                 !inDocWrite, // don't count lines in document.write
                                 &mCharset);
     }
@@ -2449,10 +1657,10 @@ nsParser::OnStartRequest(nsIRequest *request, nsISupports* aContext)
 
   NS_ASSERTION(!mParserContext->mPrevContext,
                "Clobbering DTD for non-root parser context!");
-  mDTD = nsnull;
+  mDTD = nullptr;
 
   nsresult rv;
-  nsCAutoString contentType;
+  nsAutoCString contentType;
   nsCOMPtr<nsIChannel> channel = do_QueryInterface(request);
   if (channel) {
     rv = channel->GetContentType(contentType);
@@ -2463,215 +1671,105 @@ nsParser::OnStartRequest(nsIRequest *request, nsISupports* aContext)
 
   rv = NS_OK;
 
-  if (sParserDataListeners && mSink) {
-    nsISupports *ctx = mSink->GetTarget();
-    PRInt32 count = sParserDataListeners->Count();
-
-    while (count--) {
-      rv |= sParserDataListeners->ObjectAt(count)->
-              OnStartRequest(request, ctx);
-    }
-  }
-
   return rv;
 }
 
 
-#define UTF16_BOM "UTF-16"
-#define UTF16_BE "UTF-16BE"
-#define UTF16_LE "UTF-16LE"
-#define UCS4_BOM "UTF-32"
-#define UCS4_BE "UTF-32BE"
-#define UCS4_LE "UTF-32LE"
-#define UCS4_2143 "X-ISO-10646-UCS-4-2143"
-#define UCS4_3412 "X-ISO-10646-UCS-4-3412"
-#define UTF8 "UTF-8"
-
-static inline PRBool IsSecondMarker(unsigned char aChar)
+static inline bool IsSecondMarker(unsigned char aChar)
 {
   switch (aChar) {
     case '!':
     case '?':
     case 'h':
     case 'H':
-      return PR_TRUE;
+      return true;
     default:
-      return PR_FALSE;
+      return false;
   }
 }
 
-static PRBool
-DetectByteOrderMark(const unsigned char* aBytes, PRInt32 aLen,
-                    nsCString& oCharset, PRInt32& oCharsetSource)
+static bool
+ExtractCharsetFromXmlDeclaration(const unsigned char* aBytes, int32_t aLen,
+                                 nsCString& oCharset)
 {
- oCharsetSource= kCharsetFromAutoDetection;
- oCharset.Truncate();
- // See http://www.w3.org/TR/2000/REC-xml-20001006#sec-guessing
- // for details
- // Also, MS Win2K notepad now generate 3 bytes BOM in UTF8 as UTF8 signature
- // We need to check that
- // UCS2 BOM FEFF = UTF8 EF BB BF
- switch(aBytes[0])
-	 {
-   case 0x00:
-     if(0x00==aBytes[1]) {
-        // 00 00
-        if((0xFE==aBytes[2]) && (0xFF==aBytes[3])) {
-           // 00 00 FE FF UCS-4, big-endian machine (1234 order)
-           oCharset.Assign(UCS4_BOM);
-        } else if((0x00==aBytes[2]) && (0x3C==aBytes[3])) {
-           // 00 00 00 3C UCS-4, big-endian machine (1234 order)
-           oCharset.Assign(UCS4_BE);
-        } else if((0xFF==aBytes[2]) && (0xFE==aBytes[3])) {
-           // 00 00 FF FE UCS-4, unusual octet order (2143)
-           oCharset.Assign(UCS4_2143);
-        } else if((0x3C==aBytes[2]) && (0x00==aBytes[3])) {
-           // 00 00 3C 00 UCS-4, unusual octet order (2143)
-           oCharset.Assign(UCS4_2143);
-        } 
-        oCharsetSource = kCharsetFromByteOrderMark;
-     } else if((0x3C==aBytes[1]) && (0x00==aBytes[2])) {
-        // 00 3C 00
-        if(IsSecondMarker(aBytes[3])) {
-           // 00 3C 00 SM UTF-16,  big-endian, no Byte Order Mark 
-           oCharset.Assign(UTF16_BE); 
-        } else if((0x00==aBytes[3])) {
-           // 00 3C 00 00 UCS-4, unusual octet order (3412)
-           oCharset.Assign(UCS4_3412);
-        } 
-        oCharsetSource = kCharsetFromByteOrderMark;
-     }
-   break;
-   case 0x3C:
-     if(0x00==aBytes[1] && (0x00==aBytes[3])) {
-        // 3C 00 XX 00
-        if(IsSecondMarker(aBytes[2])) {
-           // 3C 00 SM 00 UTF-16,  little-endian, no Byte Order Mark 
-           oCharset.Assign(UTF16_LE); 
-        } else if((0x00==aBytes[2])) {
-           // 3C 00 00 00 UCS-4, little-endian machine (4321 order)
-           oCharset.Assign(UCS4_LE); 
-        } 
-        oCharsetSource = kCharsetFromByteOrderMark;
-     // For html, meta tag detector is invoked before this so that we have 
-     // to deal only with XML here.
-     } else if(                     (0x3F==aBytes[1]) &&
-               (0x78==aBytes[2]) && (0x6D==aBytes[3]) &&
-               (0 == PL_strncmp("<?xml", (char*)aBytes, 5 ))) {
-       // 3C 3F 78 6D
-       // ASCII characters are in their normal positions, so we can safely
-       // deal with the XML declaration in the old C way
-       // The shortest string so far (strlen==5):
-       // <?xml
-       PRInt32 i;
-       PRBool versionFound = PR_FALSE, encodingFound = PR_FALSE;
-       for (i=6; i < aLen && !encodingFound; ++i) {
-         // end of XML declaration?
-         if ((((char*)aBytes)[i] == '?') && 
-           ((i+1) < aLen) &&
-           (((char*)aBytes)[i+1] == '>')) {
-           break;
-         }
-         // Version is required.
-         if (!versionFound) {
-           // Want to avoid string comparisons, hence looking for 'n'
-           // and only if found check the string leading to it. Not
-           // foolproof, but fast.
-           // The shortest string allowed before this is  (strlen==13):
-           // <?xml version
-           if ((((char*)aBytes)[i] == 'n') &&
-             (i >= 12) && 
-             (0 == PL_strncmp("versio", (char*)(aBytes+i-6), 6 ))) {
-             // Fast forward through version
-             char q = 0;
-             for (++i; i < aLen; ++i) {
-               char qi = ((char*)aBytes)[i];
-               if (qi == '\'' || qi == '"') {
-                 if (q && q == qi) {
-                   //  ending quote
-                   versionFound = PR_TRUE;
-                   break;
-                 } else {
-                   // Starting quote
-                   q = qi;
-                 }
-               }
-             }
-           }
-         } else {
-           // encoding must follow version
-           // Want to avoid string comparisons, hence looking for 'g'
-           // and only if found check the string leading to it. Not
-           // foolproof, but fast.
-           // The shortest allowed string before this (strlen==26):
-           // <?xml version="1" encoding
-           if ((((char*)aBytes)[i] == 'g') &&
-             (i >= 25) && 
-             (0 == PL_strncmp("encodin", (char*)(aBytes+i-7), 7 ))) {
-             PRInt32 encStart = 0;
-             char q = 0;
-             for (++i; i < aLen; ++i) {
-               char qi = ((char*)aBytes)[i];
-               if (qi == '\'' || qi == '"') {
-                 if (q && q == qi) {
-                   PRInt32 count = i - encStart;
-                   // encoding value is invalid if it is UTF-16
-                   if (count > 0 && 
-                     (0 != PL_strcmp("UTF-16", (char*)(aBytes+encStart)))) {
-                     oCharset.Assign((char*)(aBytes+encStart),count);
-                     oCharsetSource = kCharsetFromMetaTag;
-                   }
-                   encodingFound = PR_TRUE;
-                   break;
-                 } else {
-                   encStart = i+1;
-                   q = qi;
-                 }
-               }
-             }
-           }
-         } // if (!versionFound)
-       } // for
-     }
-   break;
-   case 0xEF:  
-     if((0xBB==aBytes[1]) && (0xBF==aBytes[2])) {
-        // EF BB BF
-        // Win2K UTF-8 BOM
-        oCharset.Assign(UTF8); 
-        oCharsetSource= kCharsetFromByteOrderMark;
-     }
-   break;
-   case 0xFE:
-     if(0xFF==aBytes[1]) {
-        if(0x00==aBytes[2] && 0x00==aBytes[3]) {
-          // FE FF 00 00  UCS-4, unusual octet order (3412)
-          oCharset.Assign(UCS4_3412);
-        } else {
-          // FE FF UTF-16, big-endian 
-          oCharset.Assign(UTF16_BOM); 
+  // This code is rather pointless to have. Might as well reuse expat as
+  // seen in nsHtml5StreamParser. -- hsivonen
+  oCharset.Truncate();
+  if ((aLen >= 5) &&
+      ('<' == aBytes[0]) &&
+      ('?' == aBytes[1]) &&
+      ('x' == aBytes[2]) &&
+      ('m' == aBytes[3]) &&
+      ('l' == aBytes[4])) {
+    int32_t i;
+    bool versionFound = false, encodingFound = false;
+    for (i = 6; i < aLen && !encodingFound; ++i) {
+      // end of XML declaration?
+      if ((((char*) aBytes)[i] == '?') &&
+          ((i + 1) < aLen) &&
+          (((char*) aBytes)[i + 1] == '>')) {
+        break;
+      }
+      // Version is required.
+      if (!versionFound) {
+        // Want to avoid string comparisons, hence looking for 'n'
+        // and only if found check the string leading to it. Not
+        // foolproof, but fast.
+        // The shortest string allowed before this is  (strlen==13):
+        // <?xml version
+        if ((((char*) aBytes)[i] == 'n') &&
+            (i >= 12) &&
+            (0 == PL_strncmp("versio", (char*) (aBytes + i - 6), 6))) {
+          // Fast forward through version
+          char q = 0;
+          for (++i; i < aLen; ++i) {
+            char qi = ((char*) aBytes)[i];
+            if (qi == '\'' || qi == '"') {
+              if (q && q == qi) {
+                //  ending quote
+                versionFound = true;
+                break;
+              } else {
+                // Starting quote
+                q = qi;
+              }
+            }
+          }
         }
-        oCharsetSource= kCharsetFromByteOrderMark;
-     }
-   break;
-   case 0xFF:
-     if(0xFE==aBytes[1]) {
-        if(0x00==aBytes[2] && 0x00==aBytes[3]) 
-         // FF FE 00 00  UTF-32, little-endian
-           oCharset.Assign(UCS4_BOM); 
-        else
-        // FF FE
-        // UTF-16, little-endian 
-           oCharset.Assign(UTF16_BOM); 
-        oCharsetSource= kCharsetFromByteOrderMark;
-     }
-   break;
-   // case 0x4C: if((0x6F==aBytes[1]) && ((0xA7==aBytes[2] && (0x94==aBytes[3])) {
-   //   We do not care EBCIDIC here....
-   // }
-   // break;
- }  // switch
- return !oCharset.IsEmpty();
+      } else {
+        // encoding must follow version
+        // Want to avoid string comparisons, hence looking for 'g'
+        // and only if found check the string leading to it. Not
+        // foolproof, but fast.
+        // The shortest allowed string before this (strlen==26):
+        // <?xml version="1" encoding
+        if ((((char*) aBytes)[i] == 'g') && (i >= 25) && (0 == PL_strncmp(
+            "encodin", (char*) (aBytes + i - 7), 7))) {
+          int32_t encStart = 0;
+          char q = 0;
+          for (++i; i < aLen; ++i) {
+            char qi = ((char*) aBytes)[i];
+            if (qi == '\'' || qi == '"') {
+              if (q && q == qi) {
+                int32_t count = i - encStart;
+                // encoding value is invalid if it is UTF-16
+                if (count > 0 && (0 != PL_strcmp("UTF-16",
+                    (char*) (aBytes + encStart)))) {
+                  oCharset.Assign((char*) (aBytes + encStart), count);
+                }
+                encodingFound = true;
+                break;
+              } else {
+                encStart = i + 1;
+                q = qi;
+              }
+            }
+          }
+        }
+      } // if (!versionFound)
+    } // for
+  }
+  return !oCharset.IsEmpty();
 }
 
 inline const char
@@ -2682,135 +1780,21 @@ GetNextChar(nsACString::const_iterator& aStart,
   return (++aStart != aEnd) ? *aStart : '\0';
 }
 
-PRBool
-nsParser::DetectMetaTag(const char* aBytes,
-                        PRInt32 aLen,
-                        nsCString& aCharset,
-                        PRInt32& aCharsetSource)
+static NS_METHOD
+NoOpParserWriteFunc(nsIInputStream* in,
+                void* closure,
+                const char* fromRawSegment,
+                uint32_t toOffset,
+                uint32_t count,
+                uint32_t *writeCount)
 {
-  aCharsetSource= kCharsetFromMetaTag;
-  aCharset.SetLength(0);
-
-  // XXX Only look inside HTML documents for now. For XML
-  // documents we should be looking inside the XMLDecl.
-  if (!mParserContext->mMimeType.EqualsLiteral(TEXT_HTML)) {
-    return PR_FALSE;
-  }
-
-  // Fast and loose parsing to determine if we have a complete
-  // META tag in this block, looking upto 2k into it.
-  const nsASingleFragmentCString& str =
-      Substring(aBytes, aBytes + NS_MIN(aLen, 2048));
-  // XXXldb Should be const_char_iterator when FindInReadable supports it.
-  nsACString::const_iterator begin, end;
-
-  str.BeginReading(begin);
-  str.EndReading(end);
-  nsACString::const_iterator currPos(begin);
-  nsACString::const_iterator tokEnd;
-  nsACString::const_iterator tagEnd(begin);
-
-  while (currPos != end) {
-    if (!FindCharInReadable('<', currPos, end))
-      break; // no tag found in this buffer
-
-    if (GetNextChar(currPos, end) == '!') {
-      if (GetNextChar(currPos, end) != '-' ||
-          GetNextChar(currPos, end) != '-') {
-        // If we only see a <! not followed by --, just skip to the next >.
-        if (!FindCharInReadable('>', currPos, end)) {
-          return PR_FALSE; // No more tags to follow.
-        }
-
-        // Continue searching for a meta tag following this "comment".
-        ++currPos;
-        continue;
-      }
-
-      // Found MDO ( <!-- ). Now search for MDC ( --[*s]> )
-      PRBool foundMDC = PR_FALSE;
-      PRBool foundMatch = PR_FALSE;
-      while (!foundMDC) {
-        if (GetNextChar(currPos, end) == '-' &&
-            GetNextChar(currPos, end) == '-') {
-          foundMatch = !foundMatch; // toggle until we've matching "--"
-        } else if (currPos == end) {
-          return PR_FALSE; // Couldn't find --[*s]> in this buffer
-        } else if (foundMatch && *currPos == '>') {
-          foundMDC = PR_TRUE; // found comment end delimiter.
-          ++currPos;
-        }
-      }
-      continue; // continue searching for META tag.
-    }
-
-    // Find the end of the tag, break if incomplete
-    tagEnd = currPos;
-    if (!FindCharInReadable('>', tagEnd, end))
-      break;
-
-    // If this is not a META tag, continue to next loop
-    if ( (*currPos != 'm' && *currPos != 'M') ||
-         (*(++currPos) != 'e' && *currPos != 'E') ||
-         (*(++currPos) != 't' && *currPos != 'T') ||
-         (*(++currPos) != 'a' && *currPos != 'A') ||
-         !nsCRT::IsAsciiSpace(*(++currPos))) {
-      currPos = tagEnd;
-      continue;
-    }
-
-    // If could not find "charset" in this tag, skip this tag and try next
-    tokEnd = tagEnd;
-    if (!CaseInsensitiveFindInReadable(NS_LITERAL_CSTRING("CHARSET"),
-                                       currPos, tokEnd)) {
-      currPos = tagEnd;
-      continue;
-    }
-    currPos = tokEnd;
-
-    // skip spaces before '='
-    while (*currPos == kSpace || *currPos == kNewLine ||
-           *currPos == kCR || *currPos == kTab) {
-      ++currPos;
-    }
-    // skip '='
-    if (*currPos != '=') {
-      currPos = tagEnd;
-      continue;
-    }
-    ++currPos;
-    // skip spaces after '='
-    while (*currPos == kSpace || *currPos == kNewLine ||
-           *currPos == kCR || *currPos == kTab) {
-      ++currPos;
-    }
-
-    // skip open quote
-    if (*currPos == '\'' || *currPos == '\"')
-      ++currPos;
-
-    // find the end of charset string
-    tokEnd = currPos;
-    while (*tokEnd != '\'' && *tokEnd != '\"' && tokEnd != tagEnd)
-      ++tokEnd;
-
-    // return true if we successfully got something for charset
-    if (currPos != tokEnd) {
-      aCharset.Assign(currPos.get(), tokEnd.get() - currPos.get());
-      return PR_TRUE;
-    }
-
-    // Nothing specified as charset, continue next loop
-    currPos = tagEnd;
-  }
-
-  return PR_FALSE;
+  *writeCount = count;
+  return NS_OK;
 }
 
 typedef struct {
-  PRBool mNeedCharsetCheck;
+  bool mNeedCharsetCheck;
   nsParser* mParser;
-  nsIParserFilter* mParserFilter;
   nsScanner* mScanner;
   nsIRequest* mRequest;
 } ParserWriteStruct;
@@ -2825,68 +1809,51 @@ static NS_METHOD
 ParserWriteFunc(nsIInputStream* in,
                 void* closure,
                 const char* fromRawSegment,
-                PRUint32 toOffset,
-                PRUint32 count,
-                PRUint32 *writeCount)
+                uint32_t toOffset,
+                uint32_t count,
+                uint32_t *writeCount)
 {
   nsresult result;
   ParserWriteStruct* pws = static_cast<ParserWriteStruct*>(closure);
-  const char* buf = fromRawSegment;
-  PRUint32 theNumRead = count;
+  const unsigned char* buf =
+    reinterpret_cast<const unsigned char*> (fromRawSegment);
+  uint32_t theNumRead = count;
 
   if (!pws) {
     return NS_ERROR_FAILURE;
   }
 
   if (pws->mNeedCharsetCheck) {
-    PRInt32 guessSource;
-    nsCAutoString guess;
-    nsCAutoString preferred;
+    pws->mNeedCharsetCheck = false;
+    int32_t source;
+    nsAutoCString preferred;
+    nsAutoCString maybePrefer;
+    pws->mParser->GetDocumentCharset(preferred, source);
 
-    pws->mNeedCharsetCheck = PR_FALSE;
-    if (pws->mParser->DetectMetaTag(buf, theNumRead, guess, guessSource) ||
-        ((count >= 4) &&
-         DetectByteOrderMark((const unsigned char*)buf,
-                             theNumRead, guess, guessSource))) {
-      nsCOMPtr<nsICharsetAlias> alias(do_GetService(NS_CHARSETALIAS_CONTRACTID));
-      result = alias->GetPreferred(guess, preferred);
-      // Only continue if it's a recognized charset and not
-      // one of a designated set that we ignore.
-      if (NS_SUCCEEDED(result) &&
-          ((kCharsetFromByteOrderMark == guessSource) ||
-           (!preferred.EqualsLiteral("UTF-16") &&
-            !preferred.EqualsLiteral("UTF-16BE") &&
-            !preferred.EqualsLiteral("UTF-16LE") &&
-            !preferred.EqualsLiteral("UTF-32") &&
-            !preferred.EqualsLiteral("UTF-32BE") &&
-            !preferred.EqualsLiteral("UTF-32LE")))) {
-        guess = preferred;
-        pws->mParser->SetDocumentCharset(guess, guessSource);
-        pws->mParser->SetSinkCharset(preferred);
-        nsCOMPtr<nsICachingChannel> channel(do_QueryInterface(pws->mRequest));
-        if (channel) {
-          nsCOMPtr<nsISupports> cacheToken;
-          channel->GetCacheToken(getter_AddRefs(cacheToken));
-          if (cacheToken) {
-            nsCOMPtr<nsICacheEntryDescriptor> cacheDescriptor(do_QueryInterface(cacheToken));
-            if (cacheDescriptor) {
-#ifdef DEBUG
-              nsresult rv =
-#endif
-                cacheDescriptor->SetMetaDataElement("charset",
-                                                    guess.get());
-              NS_ASSERTION(NS_SUCCEEDED(rv),"cannot SetMetaDataElement");
-            }
-          }
+    // This code was bogus when I found it. It expects the BOM or the XML
+    // declaration to be entirely in the first network buffer. -- hsivonen
+    if (nsContentUtils::CheckForBOM(buf, count, maybePrefer)) {
+      // The decoder will swallow the BOM. The UTF-16 will re-sniff for
+      // endianness. The value of preferred is now either "UTF-8" or "UTF-16".
+      preferred.Assign(maybePrefer);
+      source = kCharsetFromByteOrderMark;
+    } else if (source < kCharsetFromChannel) {
+      nsAutoCString declCharset;
+
+      if (ExtractCharsetFromXmlDeclaration(buf, count, declCharset)) {
+        if (EncodingUtils::FindEncodingForLabel(declCharset, maybePrefer)) {
+          preferred.Assign(maybePrefer);
+          source = kCharsetFromMetaTag;
         }
       }
     }
+
+    pws->mParser->SetDocumentCharset(preferred, source);
+    pws->mParser->SetSinkCharset(preferred);
+
   }
 
-  if (pws->mParserFilter)
-    pws->mParserFilter->RawBuffer(buf, &theNumRead);
-
-  result = pws->mScanner->Append(buf, theNumRead, pws->mRequest);
+  result = pws->mScanner->Append(fromRawSegment, theNumRead, pws->mRequest);
   if (NS_SUCCEEDED(result)) {
     *writeCount = count;
   }
@@ -2896,8 +1863,8 @@ ParserWriteFunc(nsIInputStream* in,
 
 nsresult
 nsParser::OnDataAvailable(nsIRequest *request, nsISupports* aContext,
-                          nsIInputStream *pIStream, PRUint32 sourceOffset,
-                          PRUint32 aLength)
+                          nsIInputStream *pIStream, uint64_t sourceOffset,
+                          uint32_t aLength)
 {
   NS_PRECONDITION((eOnStart == mParserContext->mStreamListenerState ||
                    eOnDataAvail == mParserContext->mStreamListenerState),
@@ -2906,6 +1873,18 @@ nsParser::OnDataAvailable(nsIRequest *request, nsISupports* aContext,
                   "Must have a buffered input stream");
 
   nsresult rv = NS_OK;
+
+  if (mIsAboutBlank) {
+    MOZ_ASSERT(false, "Must not get OnDataAvailable for about:blank");
+    // ... but if an extension tries to feed us data for about:blank in a
+    // release build, silently ignore the data.
+    uint32_t totalRead;
+    rv = pIStream->ReadSegments(NoOpParserWriteFunc,
+                                nullptr,
+                                aLength,
+                                &totalRead);
+    return rv;
+  }
 
   CParserContext *theContext = mParserContext;
 
@@ -2916,25 +1895,18 @@ nsParser::OnDataAvailable(nsIRequest *request, nsISupports* aContext,
   if (theContext) {
     theContext->mStreamListenerState = eOnDataAvail;
 
-    if ((mFlags & NS_PARSER_FLAG_PARSER_ENABLED) &&
-        mSpeculativeScriptThread) {
-      mSpeculativeScriptThread->StopParsing(PR_FALSE);
-    }
-
     if (eInvalidDetect == theContext->mAutoDetectStatus) {
       if (theContext->mScanner) {
         nsScannerIterator iter;
         theContext->mScanner->EndReading(iter);
-        theContext->mScanner->SetPosition(iter, PR_TRUE);
+        theContext->mScanner->SetPosition(iter, true);
       }
     }
 
-    PRUint32 totalRead;
+    uint32_t totalRead;
     ParserWriteStruct pws;
-    pws.mNeedCharsetCheck =
-      (0 == sourceOffset) && (mCharsetSource < kCharsetFromMetaTag);
+    pws.mNeedCharsetCheck = true;
     pws.mParser = this;
-    pws.mParserFilter = mParserFilter;
     pws.mScanner = theContext->mScanner;
     pws.mRequest = request;
 
@@ -2947,12 +1919,12 @@ nsParser::OnDataAvailable(nsIRequest *request, nsISupports* aContext,
     // non-whitespace data
     if (IsOkToProcessNetworkData() &&
         theContext->mScanner->FirstNonWhitespacePosition() >= 0) {
-      mProcessingNetworkData = PR_TRUE;
+      mProcessingNetworkData = true;
       if (mSink) {
         mSink->WillParse();
       }
       rv = ResumeParse();
-      mProcessingNetworkData = PR_FALSE;
+      mProcessingNetworkData = false;
     }
   } else {
     rv = NS_ERROR_UNEXPECTED;
@@ -2971,16 +1943,11 @@ nsParser::OnStopRequest(nsIRequest *request, nsISupports* aContext,
 {
   nsresult rv = NS_OK;
 
-  if ((mFlags & NS_PARSER_FLAG_PARSER_ENABLED) &&
-      mSpeculativeScriptThread) {
-    mSpeculativeScriptThread->StopParsing(PR_FALSE);
-  }
-
   CParserContext *pc = mParserContext;
   while (pc) {
     if (pc->mRequest == request) {
       pc->mStreamListenerState = eOnStop;
-      pc->mScanner->SetIncremental(PR_FALSE);
+      pc->mScanner->SetIncremental(false);
       break;
     }
 
@@ -2989,16 +1956,13 @@ nsParser::OnStopRequest(nsIRequest *request, nsISupports* aContext,
 
   mStreamStatus = status;
 
-  if (mParserFilter)
-    mParserFilter->Finish();
-
   if (IsOkToProcessNetworkData() && NS_SUCCEEDED(rv)) {
-    mProcessingNetworkData = PR_TRUE;
+    mProcessingNetworkData = true;
     if (mSink) {
       mSink->WillParse();
     }
-    rv = ResumeParse(PR_TRUE, PR_TRUE);
-    mProcessingNetworkData = PR_FALSE;
+    rv = ResumeParse(true, true);
+    mProcessingNetworkData = false;
   }
 
   // If the parser isn't enabled, we don't finish parsing till
@@ -3009,16 +1973,6 @@ nsParser::OnStopRequest(nsIRequest *request, nsISupports* aContext,
   // parser isn't yet enabled?
   if (mObserver) {
     mObserver->OnStopRequest(request, aContext, status);
-  }
-
-  if (sParserDataListeners && mSink) {
-    nsISupports *ctx = mSink->GetTarget();
-    PRInt32 count = sParserDataListeners->Count();
-
-    while (count--) {
-      rv |= sParserDataListeners->ObjectAt(count)->OnStopRequest(request, ctx,
-                                                                 status);
-    }
   }
 
   return rv;
@@ -3035,16 +1989,16 @@ nsParser::OnStopRequest(nsIRequest *request, nsISupports* aContext,
  *  the tokenization process begins. The main reason for
  *  this call is to allow the delegate to do initialization.
  */
-PRBool
-nsParser::WillTokenize(PRBool aIsFinalChunk)
+bool
+nsParser::WillTokenize(bool aIsFinalChunk)
 {
   if (!mParserContext) {
-    return PR_TRUE;
+    return true;
   }
 
   nsITokenizer* theTokenizer;
   nsresult result = mParserContext->GetTokenizer(mDTD, mSink, theTokenizer);
-  NS_ENSURE_SUCCESS(result, PR_FALSE);
+  NS_ENSURE_SUCCESS(result, false);
   return NS_SUCCEEDED(theTokenizer->WillTokenize(aIsFinalChunk,
                                                  &mTokenAllocator));
 }
@@ -3055,7 +2009,7 @@ nsParser::WillTokenize(PRBool aIsFinalChunk)
  * It iteratively consumes tokens until an error occurs or
  * you run out of data.
  */
-nsresult nsParser::Tokenize(PRBool aIsFinalChunk)
+nsresult nsParser::Tokenize(bool aIsFinalChunk)
 {
   nsITokenizer* theTokenizer;
 
@@ -3077,11 +2031,11 @@ nsresult nsParser::Tokenize(PRBool aIsFinalChunk)
       mFlags &= ~NS_PARSER_FLAG_FLUSH_TOKENS;
     }
 
-    PRBool flushTokens = PR_FALSE;
+    bool flushTokens = false;
 
     mParserContext->mNumConsumed = 0;
 
-    PRBool killSink = PR_FALSE;
+    bool killSink = false;
 
     WillTokenize(aIsFinalChunk);
     while (NS_SUCCEEDED(result)) {
@@ -3094,7 +2048,7 @@ nsresult nsParser::Tokenize(PRBool aIsFinalChunk)
           break;
         }
         if (NS_ERROR_HTMLPARSER_STOPPARSING == result) {
-          killSink = PR_TRUE;
+          killSink = true;
           result = Terminate();
           break;
         }
@@ -3110,7 +2064,7 @@ nsresult nsParser::Tokenize(PRBool aIsFinalChunk)
     DidTokenize(aIsFinalChunk);
 
     if (killSink) {
-      mSink = nsnull;
+      mSink = nullptr;
     }
   } else {
     result = mInternalState = NS_ERROR_HTMLPARSER_BADTOKENIZER;
@@ -3124,16 +2078,16 @@ nsresult nsParser::Tokenize(PRBool aIsFinalChunk)
  *  tokenization process. It gets called once tokenziation
  *  has completed for each phase.
  */
-PRBool
-nsParser::DidTokenize(PRBool aIsFinalChunk)
+bool
+nsParser::DidTokenize(bool aIsFinalChunk)
 {
   if (!mParserContext) {
-    return PR_TRUE;
+    return true;
   }
 
   nsITokenizer* theTokenizer;
   nsresult rv = mParserContext->GetTokenizer(mDTD, mSink, theTokenizer);
-  NS_ENSURE_SUCCESS(rv, PR_FALSE);
+  NS_ENSURE_SUCCESS(rv, false);
 
   rv = theTokenizer->DidTokenize(aIsFinalChunk);
   return NS_SUCCEEDED(rv);
@@ -3171,9 +2125,8 @@ nsParser::GetDTD(nsIDTD** aDTD)
 /**
  * Get this as nsIStreamListener
  */
-NS_IMETHODIMP
-nsParser::GetStreamListener(nsIStreamListener** aListener)
+nsIStreamListener*
+nsParser::GetStreamListener()
 {
-  NS_ADDREF(*aListener = this);
-  return NS_OK;
+  return this;
 }

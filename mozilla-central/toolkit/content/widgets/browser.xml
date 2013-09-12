@@ -1,45 +1,8 @@
 <?xml version="1.0"?>
 
-<!-- ***** BEGIN LICENSE BLOCK *****
-   - Version: MPL 1.1/GPL 2.0/LGPL 2.1
-   -
-   - The contents of this file are subject to the Mozilla Public License Version
-   - 1.1 (the "License"); you may not use this file except in compliance with
-   - the License. You may obtain a copy of the License at
-   - http://www.mozilla.org/MPL/
-   -
-   - Software distributed under the License is distributed on an "AS IS" basis,
-   - WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-   - for the specific language governing rights and limitations under the
-   - License.
-   -
-   - The Original Code is this file as it was released on March 28, 2001.
-   -
-   - The Initial Developer of the Original Code is
-   - Peter Annema.
-   - Portions created by the Initial Developer are Copyright (C) 2001
-   - the Initial Developer. All Rights Reserved.
-   -
-   - Contributor(s):
-   -   Peter Annema <disttsc@bart.nl> (Original Author of <browser>)
-   -   Peter Parente <parente@cs.unc.edu>
-   -   Christopher Thomas <cst@yecc.com>
-   -   Michael Ventnor <m.ventnor@gmail.com>
-   -   Arpad Borsos <arpad.borsos@googlemail.com>
-   -
-   - Alternatively, the contents of this file may be used under the terms of
-   - either the GNU General Public License Version 2 or later (the "GPL"), or
-   - the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-   - in which case the provisions of the GPL or the LGPL are applicable instead
-   - of those above. If you wish to allow use of your version of this file only
-   - under the terms of either the GPL or the LGPL, and not to allow others to
-   - use your version of this file under the terms of the MPL, indicate your
-   - decision by deleting the provisions above and replace them with the notice
-   - and other provisions required by the GPL or the LGPL. If you do not delete
-   - the provisions above, a recipient may use your version of this file under
-   - the terms of any one of the MPL, the GPL or the LGPL.
-   -
-   - ***** END LICENSE BLOCK ***** -->
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
 
 <!DOCTYPE bindings [
   <!ENTITY % findBarDTD SYSTEM "chrome://global/locale/findbar.dtd" >
@@ -54,7 +17,7 @@
     <content clickthrough="never">
       <children/>
     </content>
-    <implementation type="application/javascript" implements="nsIAccessibleProvider, nsIObserver, nsIDOMEventListener">
+    <implementation type="application/javascript" implements="nsIAccessibleProvider, nsIObserver, nsIDOMEventListener, nsIFrameRequestCallback">
       <property name="accessibleType" readonly="true">
         <getter>
           <![CDATA[
@@ -68,14 +31,14 @@
           <![CDATA[
             if (this.getAttribute("autoscroll") == "false")
               return false;
-            
+
             var enabled = true;
             try {
               enabled = this.mPrefs.getBoolPref("general.autoScroll");
             }
             catch(ex) {
             }
-            
+
             return enabled;
           ]]>
         </getter>
@@ -179,8 +142,8 @@
               aURI = "about:blank";
 
             if (aCharset) {
-              try { 
-                this.documentCharsetInfo.parentCharset = this.mAtomService.getAtom(aCharset);
+              try {
+                this.docShell.parentCharset = this.mAtomService.getAtom(aCharset);
               }
               catch (e) {
               }
@@ -252,7 +215,7 @@
                 readonly="true"/>
 
       <property name="preferences"
-                onget="return Components.classes['@mozilla.org/preferences-service;1'].getService(Components.interfaces.nsIPrefService);"
+                onget="return this.mPrefs.QueryInterface(Components.interfaces.nsIPrefService);"
                 readonly="true"/>
 
       <field name="_docShell">null</field>
@@ -261,11 +224,107 @@
                 onget="return this._docShell || (this._docShell = this.boxObject.QueryInterface(Components.interfaces.nsIContainerBoxObject).docShell);"
                 readonly="true"/>
 
+      <property name="docShellIsActive">
+        <getter>
+          <![CDATA[
+            return this.docShell && this.docShell.isActive;
+          ]]>
+        </getter>
+        <setter>
+          <![CDATA[
+            if (this.docShell)
+              return this.docShell.isActive = val;
+            return false;
+          ]]>
+        </setter>
+      </property>
+
+      <property name="isRemoteBrowser"
+                onget="return (this.getAttribute('remote') == 'true');"
+                readonly="true"/>
+
+      <property name="messageManager"
+                onget="return this.QueryInterface(Components.interfaces.nsIFrameLoaderOwner).frameLoader.messageManager;"
+                readonly="true"/>
+
       <field name="_webNavigation">null</field>
 
+      <field name="_remoteWebNavigation"><![CDATA[
+        ({
+          LOAD_FLAGS_MASK: 65535,
+          LOAD_FLAGS_NONE: 0,
+          LOAD_FLAGS_IS_REFRESH: 16,
+          LOAD_FLAGS_IS_LINK: 32,
+          LOAD_FLAGS_BYPASS_HISTORY: 64,
+          LOAD_FLAGS_REPLACE_HISTORY: 128,
+          LOAD_FLAGS_BYPASS_CACHE: 256,
+          LOAD_FLAGS_BYPASS_PROXY: 512,
+          LOAD_FLAGS_CHARSET_CHANGE: 1024,
+          LOAD_FLAGS_STOP_CONTENT: 2048,
+          LOAD_FLAGS_FROM_EXTERNAL: 4096,
+          LOAD_FLAGS_ALLOW_THIRD_PARTY_FIXUP: 8192,
+          LOAD_FLAGS_FIRST_LOAD: 16384,
+          LOAD_FLAGS_ALLOW_POPUPS: 32768,
+          LOAD_FLAGS_BYPASS_CLASSIFIER: 65536,
+          LOAD_FLAGS_FORCE_ALLOW_COOKIES: 131072,
+
+          STOP_NETWORK: 1,
+          STOP_CONTENT: 2,
+          STOP_ALL: 3,
+
+          canGoBack: false,
+          canGoForward: false,
+          goBack: function() { this._sendMessage("WebNavigation:GoBack", {}); },
+          goForward: function() { this._sendMessage("WebNavigation:GoForward", {}); },
+          gotoIndex: function(aIndex) { this._sendMessage("WebNavigation:GotoIndex", {index: aIndex}); },
+          loadURI: function(aURI, aLoadFlags, aReferrer, aPostData, aHeaders) {
+            this._browser.userTypedValue = aURI;
+            this._browser._contentTitle = "";
+            this._sendMessage("WebNavigation:LoadURI", {uri: aURI, flags: aLoadFlags});
+          },
+          reload: function(aReloadFlags) { this._sendMessage("WebNavigation:Reload", {flags: aReloadFlags}); },
+          stop: function(aStopFlags) { this._sendMessage("WebNavigation:Stop", {flags: aStopFlags}); },
+          get document() { Components.utils.reportError("contentDocument is not available"); return null; },
+          get currentURI() {
+            if (!this._currentURI)
+               this._currentURI = Components.classes["@mozilla.org/network/io-service;1"].getService(Components.interfaces.nsIIOService).newURI("about:blank", null, null);
+
+            return this._currentURI;
+          },
+          set currentURI(aURI) { this.loadURI(aURI.spec, null, null, null); },
+          referringURI: null,
+          get sessionHistory() { return null; },
+          set sessionHistory(aValue) { },
+
+          _currentURI: null,
+          _browser: this,
+          _sendMessage: function(aMessage, aData) {
+            try {
+              this._browser.messageManager.sendAsyncMessage(aMessage, aData);
+            }
+            catch (e) {
+              Components.utils.reportError(e);
+            }
+         },
+
+         QueryInterface: function(aIID) {
+           if (aIID.equals(Components.interfaces.nsIWebNavigation) || aIID.equals(Components.interfaces.nsISupports))
+             return this;
+           throw Components.results.NS_NOINTERFACE;
+         }
+        })
+      ]]></field>
+
       <property name="webNavigation"
-                onget="return this._webNavigation || (this._webNavigation = this.docShell.QueryInterface(Components.interfaces.nsIWebNavigation));"
-                readonly="true"/>
+                readonly="true">
+        <getter>
+        <![CDATA[
+          if (!this._webNavigation)
+            this._webNavigation = this.isRemoteBrowser ? this._remoteWebNavigation : this.docShell.QueryInterface(Components.interfaces.nsIWebNavigation);
+          return this._webNavigation;
+        ]]>
+        </getter>
+      </property>
 
       <field name="_webBrowserFind">null</field>
 
@@ -308,17 +367,17 @@
               return null;
 
             this._fastFind = Components.classes["@mozilla.org/typeaheadfind;1"]
-                                       .createInstance(Components.interfaces.nsITypeAheadFind);                                
+                                       .createInstance(Components.interfaces.nsITypeAheadFind);
             this._fastFind.init(this.docShell);
           }
           return this._fastFind;
         ]]>
         </getter>
       </property>
-      
+
       <property name="webProgress"
                 readonly="true"
-                onget="return this.QueryInterface(Components.interfaces.nsIFrameLoaderOwner).frameLoader.webProgress;"/>
+                onget="return this.docShell.QueryInterface(Components.interfaces.nsIInterfaceRequestor).getInterface(Components.interfaces.nsIWebProgress);"/>
 
       <field name="_contentWindow">null</field>
 
@@ -342,10 +401,6 @@
                 onget="return this.docShell.contentViewer.QueryInterface(Components.interfaces.nsIContentViewerFile);"
                 readonly="true"/>
 
-      <property name="documentCharsetInfo"
-                onget="return this.docShell.documentCharsetInfo;"
-                readonly="true"/>
-
       <property name="contentDocument"
                 onget="return this.webNavigation.document;"
                 readonly="true"/>
@@ -358,10 +413,15 @@
                 onget="return this.contentDocument.nodePrincipal;"
                 readonly="true"/>
 
+      <property name="showWindowResizer"
+                onset="if (val) this.setAttribute('showresizer', 'true');
+                       else this.removeAttribute('showresizer');
+                       return val;"
+                onget="return this.getAttribute('showresizer') == 'true';"/>
+
       <field name="mPrefs" readonly="true">
         Components.classes['@mozilla.org/preferences-service;1']
-                  .getService(Components.interfaces.nsIPrefService)
-                  .getBranch(null);
+                  .getService(Components.interfaces.nsIPrefBranch);
       </field>
 
       <field name="mAtomService" readonly="true">
@@ -387,9 +447,13 @@
 
       <method name="addProgressListener">
         <parameter name="aListener"/>
+        <parameter name="aNotifyMask"/>
         <body>
           <![CDATA[
-            this.webProgress.addProgressListener(aListener, Components.interfaces.nsIWebProgress.NOTIFY_ALL);
+            if (!aNotifyMask) {
+              aNotifyMask = Components.interfaces.nsIWebProgress.NOTIFY_ALL;
+            }
+            this.webProgress.addProgressListener(aListener, aNotifyMask);
           ]]>
         </body>
       </method>
@@ -429,13 +493,13 @@
             var controller = Components.classes["@mozilla.org/satchel/form-fill-controller;1"].
                                getService(Components.interfaces.nsIFormFillController);
             controller.detachFromBrowser(this.docShell);
-            
+
             this.mFormFillAttached = false;
           }
           ]]>
         </body>
       </method>
-      
+
       <method name="findChildShell">
         <parameter name="aDocShell"/>
         <parameter name="aSoughtURI"/>
@@ -500,8 +564,13 @@
             if (!tabBrowser || tabBrowser.mCurrentBrowser == this)
               this.fastFind.setDocShell(this.docShell);
 
-            if (this._scrollable)
-              this._autoScrollPopup.hidePopup();
+            if (this._scrollable) {
+              var doc =
+                this._scrollable.ownerDocument || this._scrollable.document;
+              if (doc == aEvent.target) {
+                this._autoScrollPopup.hidePopup();
+              }
+            }
          ]]>
         </body>
       </method>
@@ -535,7 +604,7 @@
             this.pageReport.push(obj);
             this.pageReport.reported = false;
             this.updatePageReport();
-          ]]> 
+          ]]>
         </body>
       </method>
 
@@ -553,7 +622,7 @@
                 securityUI.init(this.contentWindow);
               }
             }
-            
+
             return this.docShell.securityUI;
           ]]>
         </getter>
@@ -618,7 +687,7 @@
       <field name="mFormFillAttached">
         false
       </field>
-      
+
       <field name="isShowingMessage">
         false
       </field>
@@ -642,11 +711,12 @@
                                  .getService(Components.interfaces.nsIObserverService);
               os.addObserver(this, "browser:purge-session-history", false);
               // wire up session history
-              this.webNavigation.sessionHistory = 
+              this.webNavigation.sessionHistory =
                       Components.classes["@mozilla.org/browser/shistory;1"]
                                 .createInstance(Components.interfaces.nsISHistory);
-              // enable global history
-              this.docShell.QueryInterface(Components.interfaces.nsIDocShellHistory).useGlobalHistory = true;
+              // enable global history if we weren't told otherwise
+              if (this.docShell && !this.hasAttribute("disableglobalhistory"))
+                this.docShell.QueryInterface(Components.interfaces.nsIDocShellHistory).useGlobalHistory = true;
             }
           }
           catch (e) {
@@ -664,7 +734,7 @@
           this.addEventListener("DOMPopupBlocked", this.onPopupBlocked, true);
         ]]>
       </constructor>
-      
+
       <destructor>
         <![CDATA[
           this.destroy();
@@ -691,10 +761,10 @@
           }
 
           this.detachFormFill();
-          
+
           this._fastFind = null;
           this._webBrowserFind = null;
-          
+
           // The feeds cache can keep the document inside this browser alive.
           this.feeds = null;
 
@@ -711,7 +781,7 @@
           ]]>
         </body>
       </method>
-      
+
       <method name="observe">
         <parameter name="aSubject"/>
         <parameter name="aTopic"/>
@@ -720,7 +790,7 @@
           <![CDATA[
             if (aTopic != "browser:purge-session-history" || !this.sessionHistory)
               return;
-              
+
             // place the entry at current index at the end of the history list, so it won't get removed
             if (this.sessionHistory.index < this.sessionHistory.count - 1) {
               var indexEntry = this.sessionHistory.getEntryAtIndex(this.sessionHistory.index, false);
@@ -728,25 +798,24 @@
               indexEntry.QueryInterface(Components.interfaces.nsISHEntry);
               this.sessionHistory.addEntry(indexEntry, true);
             }
-            
+
             var purge = this.sessionHistory.count;
             if (this.currentURI != "about:blank")
               --purge; // Don't remove the page the user's staring at from shistory
-            
+
             if (purge > 0)
               this.sessionHistory.PurgeHistory(purge);
           ]]>
         </body>
       </method>
-          
-      <field name="_AUTOSCROLL_SPEED">3</field>
+
       <field name="_AUTOSCROLL_SNAP">10</field>
       <field name="_scrollable">null</field>
-      <field name="_autoScrollTimer">null</field>
       <field name="_startX">null</field>
       <field name="_startY">null</field>
       <field name="_screenX">null</field>
       <field name="_screenY">null</field>
+      <field name="_lastFrame">null</field>
       <field name="_autoScrollPopup">null</field>
       <field name="_autoScrollNeedsCleanup">false</field>
 
@@ -762,7 +831,6 @@
               window.removeEventListener("keydown", this, true);
               window.removeEventListener("keypress", this, true);
               window.removeEventListener("keyup", this, true);
-              clearInterval(this._autoScrollTimer);
             }
          ]]>
        </body>
@@ -778,7 +846,7 @@
           ]]>
         </body>
       </method>
-     
+
       <method name="startScroll">
         <parameter name="event"/>
         <body>
@@ -813,11 +881,12 @@
             // area and can therefore be scrolled
             for (this._scrollable = event.originalTarget; this._scrollable;
                  this._scrollable = this._scrollable.parentNode) {
-              // do not use overflow based autoscroll for <html> Elements
-              // or non-html elements such as svg or Document nodes
+              // do not use overflow based autoscroll for <html> and <body>
+              // Elements or non-html elements such as svg or Document nodes
               // also make sure to skip select elements that are not multiline
               if (!(this._scrollable instanceof HTMLElement) ||
                   (this._scrollable instanceof HTMLHtmlElement) ||
+                  (this._scrollable instanceof HTMLBodyElement) ||
                   ((this._scrollable instanceof HTMLSelectElement) && !this._scrollable.multiple)) {
                 continue;
               }
@@ -865,7 +934,6 @@
               }
             }
 
-            document.popupNode = null;
             this._autoScrollPopup.showPopup(document.documentElement,
                                             event.screenX,
                                             event.screenY,
@@ -875,6 +943,9 @@
             this._startY = event.screenY;
             this._screenX = event.screenX;
             this._screenY = event.screenY;
+            this._scrollErrorX = 0;
+            this._scrollErrorY = 0;
+            this._lastFrame = window.mozAnimationStartTime;
 
             window.addEventListener("mousemove", this, true);
             window.addEventListener("mousedown", this, true);
@@ -884,11 +955,7 @@
             window.addEventListener("keypress", this, true);
             window.addEventListener("keyup", this, true);
 
-            this._scrollErrorX = 0;
-            this._scrollErrorY = 0;
-
-            this._autoScrollTimer = setInterval(function(self) { self.autoScrollLoop(); },
-                                                20, this);
+            window.mozRequestAnimationFrame(this);
          ]]>
        </body>
      </method>
@@ -922,21 +989,35 @@
      </method>
 
      <method name="autoScrollLoop">
+       <parameter name="timestamp"/>
        <body>
          <![CDATA[
+           if (!this._scrollable) {
+             // Scrolling has been canceled
+             return;
+           }
+
+           // avoid long jumps when the browser hangs for more than
+           // |maxTimeDelta| ms
+           const maxTimeDelta = 100;
+           var timeDelta = Math.min(maxTimeDelta, timestamp - this._lastFrame);
+           // we used to scroll |_accelerate()| pixels every 20ms (50fps)
+           var timeCompensation = timeDelta / 20;
+           this._lastFrame = timestamp;
+
            var actualScrollX = 0;
            var actualScrollY = 0;
            // don't bother scrolling vertically when the scrolldir is only horizontal
            // and the other way around
            var scrolldir = this._autoScrollPopup.getAttribute("scrolldir");
            if (scrolldir != 'EW') {
-             var y = this._accelerate(this._screenY, this._startY);
+             var y = this._accelerate(this._screenY, this._startY) * timeCompensation;
              var desiredScrollY = this._scrollErrorY + y;
              actualScrollY = this._roundToZero(desiredScrollY);
              this._scrollErrorY = (desiredScrollY - actualScrollY);
            }
            if (scrolldir != 'NS') {
-             var x = this._accelerate(this._screenX, this._startX);
+             var x = this._accelerate(this._screenX, this._startX) * timeCompensation;
              var desiredScrollX = this._scrollErrorX + x;
              actualScrollX = this._roundToZero(desiredScrollX);
              this._scrollErrorX = (desiredScrollX - actualScrollX);
@@ -948,6 +1029,7 @@
              this._scrollable.scrollLeft += actualScrollX;
              this._scrollable.scrollTop += actualScrollY;
            }
+           window.mozRequestAnimationFrame(this);
          ]]>
        </body>
      </method>
@@ -988,6 +1070,16 @@
        </body>
      </method>
 
+      <!-- nsIFrameRequestCallback implementation -->
+      <method name="sample">
+        <parameter name="timeStamp"/>
+        <body>
+          <![CDATA[
+            this.autoScrollLoop(timeStamp);
+          ]]>
+        </body>
+      </method>
+
       <method name="handleEvent">
         <parameter name="aEvent"/>
         <body>
@@ -1000,7 +1092,7 @@
 
                 var x = this._screenX - this._startX;
                 var y = this._screenY - this._startY;
-        
+
                 if ((x > this._AUTOSCROLL_SNAP || x < -this._AUTOSCROLL_SNAP) ||
                     (y > this._AUTOSCROLL_SNAP || y < -this._AUTOSCROLL_SNAP))
                   this._ignoreMouseEvents = false;
@@ -1053,16 +1145,6 @@
           // are swapped.
           var fieldsToSwap = [ "_docShell", "_webBrowserFind", "_contentWindow", "_webNavigation"];
 
-          var ourTabBrowser = this.getTabBrowser();
-
-          // _fastFind is tied to the docshell if we don't have a tabbrowser
-          if ((ourTabBrowser != null) !=
-              (aOtherBrowser.getTabBrowser() != null))
-            throw "Unable to perform swap on <browsers> if one is in a <tabbrowser> and one is not";
-
-          if (!ourTabBrowser)
-            fieldsToSwap.push("_fastFind");
-
           var ourFieldValues = {};
           var otherFieldValues = {};
           for each (var field in fieldsToSwap) {
@@ -1071,10 +1153,25 @@
           }
           this.QueryInterface(Components.interfaces.nsIFrameLoaderOwner)
               .swapFrameLoaders(aOtherBrowser);
+
+          // Before we swap the actual docShell property we need to detach the
+          // form fill controller from those docShells.
+          this.detachFormFill();
+          aOtherBrowser.detachFormFill();
+
           for each (var field in fieldsToSwap) {
             this[field] = otherFieldValues[field];
             aOtherBrowser[field] = ourFieldValues[field];
           }
+
+          // Re-attach the docShells to the form fill controller.
+          this.attachFormFill();
+          aOtherBrowser.attachFormFill();
+
+          // Null the current nsITypeAheadFind instances so that they're
+          // lazily re-created on access. We need to do this because they
+          // might have attached the wrong docShell.
+          this._fastFind = aOtherBrowser._fastFind = null;
         ]]>
         </body>
       </method>
@@ -1083,7 +1180,7 @@
     <handlers>
       <handler event="keypress" keycode="VK_F7" group="system">
         <![CDATA[
-          if (event.getPreventDefault() || !event.isTrusted)
+          if (event.defaultPrevented || !event.isTrusted)
             return;
 
           var isEnabled = this.mPrefs.getBoolPref("accessibility.browsewithcaret_shortcut.enabled");
@@ -1105,10 +1202,11 @@
           }
           if (warn && !browseWithCaretOn) {
             var checkValue = {value:false};
-            promptService = Components.classes["@mozilla.org/embedcomp/prompt-service;1"].getService(Components.interfaces.nsIPromptService);
+            var promptService = Components.classes["@mozilla.org/embedcomp/prompt-service;1"]
+                                          .getService(Components.interfaces.nsIPromptService);
 
-            var buttonPressed = promptService.confirmEx(window, 
-              this.mStrBundle.GetStringFromName('browsewithcaret.checkWindowTitle'), 
+            var buttonPressed = promptService.confirmEx(window,
+              this.mStrBundle.GetStringFromName('browsewithcaret.checkWindowTitle'),
               this.mStrBundle.GetStringFromName('browsewithcaret.checkLabel'),
               promptService.STD_YES_NO_BUTTONS,
               null, null, null, this.mStrBundle.GetStringFromName('browsewithcaret.checkMsg'),
@@ -1144,7 +1242,7 @@
       </handler>
       <handler event="dragover" group="system">
       <![CDATA[
-        if (event.getPreventDefault())
+        if (!this.droppedLinkHandler || event.defaultPrevented)
           return;
 
         // For drags that appear to be internal text (for example, tab drags),
@@ -1165,27 +1263,21 @@
       </handler>
       <handler event="drop" group="system">
       <![CDATA[
-        if (event.getPreventDefault())
+        if (!this.droppedLinkHandler || event.defaultPrevented)
           return;
 
         let name = { };
         let linkHandler = Components.classes["@mozilla.org/content/dropped-link-handler;1"].
                             getService(Components.interfaces.nsIDroppedLinkHandler);
         try {
-          var uri = linkHandler.dropLink(event, name);
+          // Pass true to prevent the dropping of javascript:/data: URIs
+          var uri = linkHandler.dropLink(event, name, true);
         } catch (ex) {
           return;
         }
 
-        // don't allow dropping javascript or data urls
-        if (/^\s*(javascript|data):/.test(uri))
-          return;
-
         if (uri) {
-          if (this.droppedLinkHandler)
-            this.droppedLinkHandler(event, uri, name.value);
-          else
-            this.loadURI(uri, null, "");
+          this.droppedLinkHandler(event, uri, name.value);
         }
       ]]>
       </handler>

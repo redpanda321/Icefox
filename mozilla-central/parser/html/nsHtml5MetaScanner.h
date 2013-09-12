@@ -29,23 +29,18 @@
 #ifndef nsHtml5MetaScanner_h__
 #define nsHtml5MetaScanner_h__
 
-#include "prtypes.h"
 #include "nsIAtom.h"
 #include "nsHtml5AtomTable.h"
 #include "nsString.h"
 #include "nsINameSpaceManager.h"
 #include "nsIContent.h"
-#include "nsIDocument.h"
 #include "nsTraceRefcnt.h"
 #include "jArray.h"
-#include "nsHtml5DocumentMode.h"
 #include "nsHtml5ArrayCopy.h"
-#include "nsHtml5NamedCharacters.h"
-#include "nsHtml5NamedCharactersAccel.h"
+#include "nsAHtml5TreeBuilderState.h"
 #include "nsHtml5Atoms.h"
 #include "nsHtml5ByteReadable.h"
 #include "nsIUnicodeDecoder.h"
-#include "nsAHtml5TreeBuilderState.h"
 #include "nsHtml5Macros.h"
 
 class nsHtml5StreamParser;
@@ -63,37 +58,53 @@ class nsHtml5Portability;
 class nsHtml5MetaScanner
 {
   private:
-    static PRUnichar CHARSET[];
-    static PRUnichar CONTENT[];
+    static staticJArray<PRUnichar,int32_t> CHARSET;
+    static staticJArray<PRUnichar,int32_t> CONTENT;
+    static staticJArray<PRUnichar,int32_t> HTTP_EQUIV;
+    static staticJArray<PRUnichar,int32_t> CONTENT_TYPE;
   protected:
     nsHtml5ByteReadable* readable;
   private:
-    PRInt32 metaState;
-    PRInt32 contentIndex;
-    PRInt32 charsetIndex;
+    int32_t metaState;
+    int32_t contentIndex;
+    int32_t charsetIndex;
+    int32_t httpEquivIndex;
+    int32_t contentTypeIndex;
   protected:
-    PRInt32 stateSave;
+    int32_t stateSave;
   private:
-    PRInt32 strBufLen;
-    jArray<PRUnichar,PRInt32> strBuf;
+    int32_t strBufLen;
+    autoJArray<PRUnichar,int32_t> strBuf;
+    nsString* content;
+    nsString* charset;
+    int32_t httpEquivState;
+  public:
+    nsHtml5MetaScanner();
+    ~nsHtml5MetaScanner();
   protected:
-    void stateLoop(PRInt32 state);
+    void stateLoop(int32_t state);
   private:
-    void addToBuffer(PRInt32 c);
-    PRBool tryCharset();
+    void handleCharInAttributeValue(int32_t c);
+    inline int32_t toAsciiLowerCase(int32_t c)
+    {
+      if (c >= 'A' && c <= 'Z') {
+        return c + 0x20;
+      }
+      return c;
+    }
+
+    void addToBuffer(int32_t c);
+    void handleAttributeValue();
+    bool handleTag();
+    bool handleTagInner();
   protected:
-    PRBool tryCharset(nsString* encoding);
+    bool tryCharset(nsString* encoding);
   public:
     static void initializeStatics();
     static void releaseStatics();
 
 #include "nsHtml5MetaScannerHSupplement.h"
 };
-
-#ifdef nsHtml5MetaScanner_cpp__
-PRUnichar nsHtml5MetaScanner::CHARSET[] = { 'c', 'h', 'a', 'r', 's', 'e', 't' };
-PRUnichar nsHtml5MetaScanner::CONTENT[] = { 'c', 'o', 'n', 't', 'e', 'n', 't' };
-#endif
 
 #define NS_HTML5META_SCANNER_NO 0
 #define NS_HTML5META_SCANNER_M 1
@@ -120,6 +131,9 @@ PRUnichar nsHtml5MetaScanner::CONTENT[] = { 'c', 'o', 'n', 't', 'e', 'n', 't' };
 #define NS_HTML5META_SCANNER_COMMENT_END_DASH 18
 #define NS_HTML5META_SCANNER_COMMENT_END 19
 #define NS_HTML5META_SCANNER_SELF_CLOSING_START_TAG 20
+#define NS_HTML5META_SCANNER_HTTP_EQUIV_NOT_SEEN 0
+#define NS_HTML5META_SCANNER_HTTP_EQUIV_CONTENT_TYPE 1
+#define NS_HTML5META_SCANNER_HTTP_EQUIV_OTHER 2
 
 
 #endif

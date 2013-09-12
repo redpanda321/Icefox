@@ -1,47 +1,11 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Jonas Sicking <jonas@sicking.cc> (Original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
  
 #include "nsXMLPrettyPrinter.h"
 #include "nsContentUtils.h"
-#include "nsIDOMDocumentView.h"
-#include "nsIDOMAbstractView.h"
 #include "nsIDOMCSSStyleDeclaration.h"
-#include "nsIDOMViewCSS.h"
 #include "nsIDOMDocumentXBL.h"
 #include "nsIObserver.h"
 #include "nsIXSLTProcessor.h"
@@ -55,16 +19,17 @@
 #include "nsIDOMDocumentFragment.h"
 #include "nsBindingManager.h"
 #include "nsIScriptSecurityManager.h"
+#include "mozilla/Preferences.h"
 
+using namespace mozilla;
 using namespace mozilla::dom;
 
 NS_IMPL_ISUPPORTS2(nsXMLPrettyPrinter,
                    nsIDocumentObserver,
                    nsIMutationObserver)
 
-nsXMLPrettyPrinter::nsXMLPrettyPrinter() : mDocument(nsnull),
-                                           mUpdateDepth(0),
-                                           mUnhookPending(PR_FALSE)
+nsXMLPrettyPrinter::nsXMLPrettyPrinter() : mDocument(nullptr),
+                                           mUnhookPending(false)
 {
 }
 
@@ -75,10 +40,10 @@ nsXMLPrettyPrinter::~nsXMLPrettyPrinter()
 
 nsresult
 nsXMLPrettyPrinter::PrettyPrint(nsIDocument* aDocument,
-                                PRBool* aDidPrettyPrint)
+                                bool* aDidPrettyPrint)
 {
-    *aDidPrettyPrint = PR_FALSE;
-    
+    *aDidPrettyPrint = false;
+
     // Check for iframe with display:none. Such iframes don't have presshells
     if (!aDocument->GetShell()) {
         return NS_OK;
@@ -95,16 +60,13 @@ nsXMLPrettyPrinter::PrettyPrint(nsIDocument* aDocument,
         nsCOMPtr<nsIDOMCSSStyleDeclaration> computedStyle;
         nsCOMPtr<nsIDOMDocument> frameOwnerDoc;
         frameElem->GetOwnerDocument(getter_AddRefs(frameOwnerDoc));
-        nsCOMPtr<nsIDOMDocumentView> docView = do_QueryInterface(frameOwnerDoc);
-        if (docView) {
-            nsCOMPtr<nsIDOMAbstractView> defaultView;
-            docView->GetDefaultView(getter_AddRefs(defaultView));
-            nsCOMPtr<nsIDOMViewCSS> defaultCSSView =
-                do_QueryInterface(defaultView);
-            if (defaultCSSView) {
-                defaultCSSView->GetComputedStyle(frameElem,
-                                                 EmptyString(),
-                                                 getter_AddRefs(computedStyle));
+        if (frameOwnerDoc) {
+            nsCOMPtr<nsIDOMWindow> window;
+            frameOwnerDoc->GetDefaultView(getter_AddRefs(window));
+            if (window) {
+                window->GetComputedStyle(frameElem,
+                                         EmptyString(),
+                                         getter_AddRefs(computedStyle));
             }
         }
 
@@ -120,12 +82,12 @@ nsXMLPrettyPrinter::PrettyPrint(nsIDocument* aDocument,
     }
 
     // check the pref
-    if (!nsContentUtils::GetBoolPref("layout.xml.prettyprint", PR_TRUE)) {
+    if (!Preferences::GetBool("layout.xml.prettyprint", true)) {
         return NS_OK;
     }
 
     // Ok, we should prettyprint. Let's do it!
-    *aDidPrettyPrint = PR_TRUE;
+    *aDidPrettyPrint = true;
     nsresult rv = NS_OK;
 
     // Load the XSLT
@@ -135,7 +97,7 @@ nsXMLPrettyPrinter::PrettyPrint(nsIDocument* aDocument,
     NS_ENSURE_SUCCESS(rv, rv);
 
     nsCOMPtr<nsIDOMDocument> xslDocument;
-    rv = nsSyncLoadService::LoadDocument(xslUri, nsnull, nsnull, PR_TRUE,
+    rv = nsSyncLoadService::LoadDocument(xslUri, nullptr, nullptr, true,
                                          getter_AddRefs(xslDocument));
     NS_ENSURE_SUCCESS(rv, rv);
 
@@ -202,52 +164,41 @@ nsXMLPrettyPrinter::MaybeUnhook(nsIContent* aContent)
 {
     // If there either aContent is null (the document-node was modified) or
     // there isn't a binding parent we know it's non-anonymous content.
-    if (!aContent || !aContent->GetBindingParent()) {
-        mUnhookPending = PR_TRUE;
+    if ((!aContent || !aContent->GetBindingParent()) && !mUnhookPending) {
+        // Can't blindly to mUnhookPending after AddScriptRunner,
+        // since AddScriptRunner _could_ in theory run us
+        // synchronously
+        mUnhookPending = true;
+        nsContentUtils::AddScriptRunner(
+          NS_NewRunnableMethod(this, &nsXMLPrettyPrinter::Unhook));
     }
 }
 
-// nsIDocumentObserver implementation
-
 void
-nsXMLPrettyPrinter::BeginUpdate(nsIDocument* aDocument,
-                                nsUpdateType aUpdateType)
+nsXMLPrettyPrinter::Unhook()
 {
-    mUpdateDepth++;
-}
+    mDocument->RemoveObserver(this);
+    nsCOMPtr<nsIDOMDocument> document = do_QueryInterface(mDocument);
+    nsCOMPtr<nsIDOMElement> rootElem;
+    document->GetDocumentElement(getter_AddRefs(rootElem));
 
-void
-nsXMLPrettyPrinter::EndUpdate(nsIDocument* aDocument, nsUpdateType aUpdateType)
-{
-    mUpdateDepth--;
-
-    // Only remove the binding once we're outside all updates. This protects us
-    // from nasty surprices of elements being removed from the document in the
-    // midst of setting attributes etc.
-    if (mUnhookPending && mUpdateDepth == 0) {
-        mDocument->RemoveObserver(this);
-        nsCOMPtr<nsIDOMDocument> document = do_QueryInterface(mDocument);
-        nsCOMPtr<nsIDOMElement> rootElem;
-        document->GetDocumentElement(getter_AddRefs(rootElem));
-
-        if (rootElem) {
-            nsCOMPtr<nsIDOMDocumentXBL> xblDoc = do_QueryInterface(mDocument);
-            xblDoc->RemoveBinding(rootElem,
-                                  NS_LITERAL_STRING("chrome://global/content/xml/XMLPrettyPrint.xml#prettyprint"));
-        }
-
-        mDocument = nsnull;
-
-        NS_RELEASE_THIS();
+    if (rootElem) {
+        nsCOMPtr<nsIDOMDocumentXBL> xblDoc = do_QueryInterface(mDocument);
+        xblDoc->RemoveBinding(rootElem,
+                              NS_LITERAL_STRING("chrome://global/content/xml/XMLPrettyPrint.xml#prettyprint"));
     }
+
+    mDocument = nullptr;
+
+    NS_RELEASE_THIS();
 }
 
 void
 nsXMLPrettyPrinter::AttributeChanged(nsIDocument* aDocument,
                                      Element* aElement,
-                                     PRInt32 aNameSpaceID,
+                                     int32_t aNameSpaceID,
                                      nsIAtom* aAttribute,
-                                     PRInt32 aModType)
+                                     int32_t aModType)
 {
     MaybeUnhook(aElement);
 }
@@ -256,7 +207,7 @@ void
 nsXMLPrettyPrinter::ContentAppended(nsIDocument* aDocument,
                                     nsIContent* aContainer,
                                     nsIContent* aFirstNewContent,
-                                    PRInt32 aNewIndexInContainer)
+                                    int32_t aNewIndexInContainer)
 {
     MaybeUnhook(aContainer);
 }
@@ -265,7 +216,7 @@ void
 nsXMLPrettyPrinter::ContentInserted(nsIDocument* aDocument,
                                     nsIContent* aContainer,
                                     nsIContent* aChild,
-                                    PRInt32 aIndexInContainer)
+                                    int32_t aIndexInContainer)
 {
     MaybeUnhook(aContainer);
 }
@@ -274,7 +225,7 @@ void
 nsXMLPrettyPrinter::ContentRemoved(nsIDocument* aDocument,
                                    nsIContent* aContainer,
                                    nsIContent* aChild,
-                                   PRInt32 aIndexInContainer,
+                                   int32_t aIndexInContainer,
                                    nsIContent* aPreviousSibling)
 {
     MaybeUnhook(aContainer);
@@ -283,7 +234,7 @@ nsXMLPrettyPrinter::ContentRemoved(nsIDocument* aDocument,
 void
 nsXMLPrettyPrinter::NodeWillBeDestroyed(const nsINode* aNode)
 {
-    mDocument = nsnull;
+    mDocument = nullptr;
     NS_RELEASE_THIS();
 }
 

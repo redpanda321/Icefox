@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla XUL Toolkit.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Stan Shebs <shebs@mozilla.com>
- *   Thomas K. Dyas <tom.dyas@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // NSApplication delegate for Mac OS X Cocoa API.
 
@@ -64,6 +30,21 @@
 #include "nsIStandaloneNativeMenu.h"
 #include "nsILocalFileMac.h"
 #include "nsString.h"
+#include "nsCommandLineServiceMac.h"
+
+class AutoAutoreleasePool {
+public:
+  AutoAutoreleasePool()
+  {
+    mLocalPool = [[NSAutoreleasePool alloc] init];
+  }
+  ~AutoAutoreleasePool()
+  {
+    [mLocalPool release];
+  }
+private:
+  NSAutoreleasePool *mLocalPool;
+};
 
 @interface MacApplicationDelegate : NSObject
 {
@@ -71,7 +52,11 @@
 
 @end
 
-// Something to call from non-objective code.
+static bool sProcessedGetURLEvent = false;
+
+@class GeckoNSApplication;
+
+// Methods that can be called from non-Objective-C code.
 
 // This is needed, on relaunch, to force the OS to use the "Cocoa Dock API"
 // instead of the "Carbon Dock API".  For more info see bmo bug 377166.
@@ -80,7 +65,7 @@ EnsureUseCocoaDockAPI()
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
 
-  [NSApplication sharedApplication];
+  [GeckoNSApplication sharedApplication];
 
   NS_OBJC_END_TRY_ABORT_BLOCK;
 }
@@ -92,7 +77,10 @@ SetupMacApplicationDelegate()
 
   // this is called during startup, outside an event loop, and therefore
   // needs an autorelease pool to avoid cocoa object leakage (bug 559075)
-  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  AutoAutoreleasePool pool;
+
+  // Ensure that ProcessPendingGetURLAppleEvents() doesn't regress bug 377166.
+  [GeckoNSApplication sharedApplication];
 
   // This call makes it so that application:openFile: doesn't get bogus calls
   // from Cocoa doing its own parsing of the argument string. And yes, we need
@@ -104,9 +92,31 @@ SetupMacApplicationDelegate()
   MacApplicationDelegate *delegate = [[MacApplicationDelegate alloc] init];
   [NSApp setDelegate:delegate];
 
-  [pool release];
-
   NS_OBJC_END_TRY_ABORT_BLOCK;
+}
+
+// Indirectly make the OS process any pending GetURL Apple events.  This is
+// done via _DPSNextEvent() (an undocumented AppKit function called from
+// [NSApplication nextEventMatchingMask:untilDate:inMode:dequeue:]).  Apple
+// events are only processed if 'dequeue' is 'YES' -- so we need to call
+// [NSApplication sendEvent:] on any event that gets returned.  'event' will
+// never itself be an Apple event, and it may be 'nil' even when Apple events
+// are processed.
+void
+ProcessPendingGetURLAppleEvents()
+{
+  AutoAutoreleasePool pool;
+  bool keepSpinning = true;
+  while (keepSpinning) {
+    sProcessedGetURLEvent = false;
+    NSEvent *event = [NSApp nextEventMatchingMask:NSAnyEventMask
+                                        untilDate:nil
+                                           inMode:NSDefaultRunLoopMode
+                                          dequeue:YES];
+    if (event)
+      [NSApp sendEvent:event];
+    keepSpinning = sProcessedGetURLEvent;
+  }
 }
 
 @implementation MacApplicationDelegate
@@ -128,6 +138,11 @@ SetupMacApplicationDelegate()
              forEventClass:'WWW!'
                 andEventID:'OURL'];
 
+    [aeMgr setEventHandler:self
+               andSelector:@selector(handleAppleEvent:withReplyEvent:)
+             forEventClass:kCoreEventClass
+                andEventID:kAEOpenDocuments];
+
     if (![NSApp windowsMenu]) {
       // If the application has a windows menu, it will keep it up to date and
       // prepend the window list to the Dock menu automatically.
@@ -148,6 +163,7 @@ SetupMacApplicationDelegate()
   NSAppleEventManager *aeMgr = [NSAppleEventManager sharedAppleEventManager];
   [aeMgr removeEventHandlerForEventClass:kInternetEventClass andEventID:kAEGetURL];
   [aeMgr removeEventHandlerForEventClass:'WWW!' andEventID:'OURL'];
+  [aeMgr removeEventHandlerForEventClass:kCoreEventClass andEventID:kAEOpenDocuments];
   [super dealloc];
 
   NS_OBJC_END_TRY_ABORT_BLOCK;
@@ -175,10 +191,20 @@ SetupMacApplicationDelegate()
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK_RETURN;
 
-  NSString *escapedPath = [filename stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
+  NSURL *url = [NSURL fileURLWithPath:filename];
+  if (!url)
+    return NO;
+
+  NSString *urlString = [url absoluteString];
+  if (!urlString)
+    return NO;
+
+  // Add the URL to any command line we're currently setting up.
+  if (CommandLineServiceMac::AddURLToCurrentCommandLine([urlString UTF8String]))
+    return YES;
 
   nsCOMPtr<nsILocalFileMac> inFile;
-  nsresult rv = NS_NewLocalFileWithCFURL((CFURLRef)[NSURL URLWithString:escapedPath], PR_TRUE, getter_AddRefs(inFile));
+  nsresult rv = NS_NewLocalFileWithCFURL((CFURLRef)url, true, getter_AddRefs(inFile));
   if (NS_FAILED(rv))
     return NO;
 
@@ -198,7 +224,7 @@ SetupMacApplicationDelegate()
   if (NS_FAILED(rv))
     return NO;
 
-  const char *argv[3] = {nsnull, "-file", filePath.get()};
+  const char *argv[3] = {nullptr, "-file", filePath.get()};
   rv = cmdLine->Init(3, const_cast<char**>(argv), workingDir, nsICommandLine::STATE_REMOTE_EXPLICIT);
   if (NS_FAILED(rv))
     return NO;
@@ -242,7 +268,7 @@ SetupMacApplicationDelegate()
 
   // Determine if the dock menu items should be displayed. This also gives
   // the menu the opportunity to update itself before display.
-  PRBool shouldShowItems;
+  bool shouldShowItems;
   rv = dockMenu->MenuWillOpen(&shouldShowItems);
   if (NS_FAILED(rv) || !shouldShowItems)
     return menu;
@@ -286,10 +312,10 @@ SetupMacApplicationDelegate()
   if (!cancelQuit)
     return NSTerminateNow;
 
-  cancelQuit->SetData(PR_FALSE);
-  obsServ->NotifyObservers(cancelQuit, "quit-application-requested", nsnull);
+  cancelQuit->SetData(false);
+  obsServ->NotifyObservers(cancelQuit, "quit-application-requested", nullptr);
 
-  PRBool abortQuit;
+  bool abortQuit;
   cancelQuit->GetData(&abortQuit);
   if (abortQuit)
     return NSTerminateCancel;
@@ -307,7 +333,14 @@ SetupMacApplicationDelegate()
   if (!event)
     return;
 
-  if (([event eventClass] == kInternetEventClass && [event eventID] == kAEGetURL) ||
+  AutoAutoreleasePool pool;
+
+  bool isGetURLEvent =
+    ([event eventClass] == kInternetEventClass && [event eventID] == kAEGetURL);
+  if (isGetURLEvent)
+    sProcessedGetURLEvent = true;
+
+  if (isGetURLEvent ||
       ([event eventClass] == 'WWW!' && [event eventID] == 'OURL')) {
     NSString* urlString = [[event paramDescriptorForKeyword:keyDirectObject] stringValue];
 
@@ -320,6 +353,10 @@ SetupMacApplicationDelegate()
       return;
     }
 
+    // Add the URL to any command line we're currently setting up.
+    if (CommandLineServiceMac::AddURLToCurrentCommandLine([urlString UTF8String]))
+      return;
+
     nsCOMPtr<nsICommandLineRunner> cmdLine(do_CreateInstance("@mozilla.org/toolkit/command-line;1"));
     if (!cmdLine) {
       NS_ERROR("Couldn't create command line!");
@@ -329,11 +366,31 @@ SetupMacApplicationDelegate()
     nsresult rv = NS_GetSpecialDirectory(NS_OS_CURRENT_WORKING_DIR, getter_AddRefs(workingDir));
     if (NS_FAILED(rv))
       return;
-    const char *argv[3] = {nsnull, "-url", [urlString UTF8String]};
+    const char *argv[3] = {nullptr, "-url", [urlString UTF8String]};
     rv = cmdLine->Init(3, const_cast<char**>(argv), workingDir, nsICommandLine::STATE_REMOTE_EXPLICIT);
     if (NS_FAILED(rv))
       return;
     rv = cmdLine->Run();
+  }
+  else if ([event eventClass] == kCoreEventClass && [event eventID] == kAEOpenDocuments) {
+    NSAppleEventDescriptor* fileListDescriptor = [event paramDescriptorForKeyword:keyDirectObject];
+    if (!fileListDescriptor)
+      return;
+
+    // Descriptor list indexing is one-based...
+    NSInteger numberOfFiles = [fileListDescriptor numberOfItems];
+    for (NSInteger i = 1; i <= numberOfFiles; i++) {
+      NSString* urlString = [[fileListDescriptor descriptorAtIndex:i] stringValue];
+      if (!urlString)
+        continue;
+
+      // We need a path, not a URL
+      NSURL* url = [NSURL URLWithString:urlString];
+      if (!url)
+        continue;
+
+      [self application:NSApp openFile:[url path]];
+    }
   }
 }
 

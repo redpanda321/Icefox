@@ -30,9 +30,10 @@ load 269095-1.html
 load 286733-1.html
 load 286733-2.html
 load 299036-1.html
-load 328751-1.html
+asserts-if(Android,1) skip-if(isDebugBuild&&(OSX==10.7||OSX==10.8)) load 328751-1.html # 10.7 and 10.8 leaks are bug 705570
 load 408939-1.html
 load 423373-1.html
+load 445171-1.html
 skip load 460706-1.xhtml # Bug 479499
 load 468538-1.xhtml
 load 515278-1.html
@@ -44,3 +45,9 @@ load 536097-1.html
 load 563514-1.html
 load 574884-1.html
 load 574884-2.html
+load 591330-1.html
+load 650501-1.xhtml
+load 696651-1.html
+load view-source:699347-1.xml
+load 721313-1.html
+load view-source:742414-1.html

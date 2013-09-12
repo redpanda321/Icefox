@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   David Hyatt <hyatt@netscape.com> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsXBLContentSink_h__
 #define nsXBLContentSink_h__
@@ -100,63 +67,63 @@ public:
   // nsIContentSink overrides
   NS_IMETHOD HandleStartElement(const PRUnichar *aName, 
                                 const PRUnichar **aAtts, 
-                                PRUint32 aAttsCount, 
-                                PRInt32 aIndex, 
-                                PRUint32 aLineNumber);
+                                uint32_t aAttsCount, 
+                                int32_t aIndex, 
+                                uint32_t aLineNumber);
 
   NS_IMETHOD HandleEndElement(const PRUnichar *aName);
   
   NS_IMETHOD HandleCDataSection(const PRUnichar *aData, 
-                                PRUint32 aLength);
+                                uint32_t aLength);
 
 protected:
     // nsXMLContentSink overrides
-    virtual void MaybeStartLayout(PRBool aIgnorePendingSheets);
+    virtual void MaybeStartLayout(bool aIgnorePendingSheets);
 
-    PRBool OnOpenContainer(const PRUnichar **aAtts, 
-                           PRUint32 aAttsCount, 
-                           PRInt32 aNameSpaceID, 
+    bool OnOpenContainer(const PRUnichar **aAtts, 
+                           uint32_t aAttsCount, 
+                           int32_t aNameSpaceID, 
                            nsIAtom* aTagName,
-                           PRUint32 aLineNumber);
+                           uint32_t aLineNumber);
 
-    PRBool NotifyForDocElement() { return PR_FALSE; }
+    bool NotifyForDocElement() { return false; }
 
-    nsresult CreateElement(const PRUnichar** aAtts, PRUint32 aAttsCount,
-                           nsINodeInfo* aNodeInfo, PRUint32 aLineNumber,
-                           nsIContent** aResult, PRBool* aAppendContent,
-                           PRUint32 aFromParser);
+    nsresult CreateElement(const PRUnichar** aAtts, uint32_t aAttsCount,
+                           nsINodeInfo* aNodeInfo, uint32_t aLineNumber,
+                           nsIContent** aResult, bool* aAppendContent,
+                           mozilla::dom::FromParser aFromParser);
     
     nsresult AddAttributes(const PRUnichar** aAtts, 
                            nsIContent* aContent);
 
 #ifdef MOZ_XUL    
     nsresult AddAttributesToXULPrototype(const PRUnichar **aAtts, 
-                                         PRUint32 aAttsCount, 
+                                         uint32_t aAttsCount, 
                                          nsXULPrototypeElement* aElement);
 #endif
 
     // Our own helpers for constructing XBL prototype objects.
-    nsresult ConstructBinding();
-    void ConstructHandler(const PRUnichar **aAtts, PRUint32 aLineNumber);
+    nsresult ConstructBinding(uint32_t aLineNumber);
+    void ConstructHandler(const PRUnichar **aAtts, uint32_t aLineNumber);
     void ConstructResource(const PRUnichar **aAtts, nsIAtom* aResourceType);
     void ConstructImplementation(const PRUnichar **aAtts);
-    void ConstructProperty(const PRUnichar **aAtts);
+    void ConstructProperty(const PRUnichar **aAtts, uint32_t aLineNumber);
     void ConstructMethod(const PRUnichar **aAtts);
     void ConstructParameter(const PRUnichar **aAtts);
-    void ConstructField(const PRUnichar **aAtts, PRUint32 aLineNumber);
+    void ConstructField(const PRUnichar **aAtts, uint32_t aLineNumber);
   
 
   // nsXMLContentSink overrides
-  nsresult FlushText(PRBool aReleaseTextNode = PR_TRUE);
+  nsresult FlushText(bool aReleaseTextNode = true);
 
   // nsIExpatSink overrides
   NS_IMETHOD ReportError(const PRUnichar* aErrorText,
                          const PRUnichar* aSourceText,
                          nsIScriptError *aError,
-                         PRBool *_retval);
+                         bool *_retval);
 
 protected:
-  nsresult ReportUnexpectedElement(nsIAtom* aElementName, PRUint32 aLineNumber);
+  nsresult ReportUnexpectedElement(nsIAtom* aElementName, uint32_t aLineNumber);
 
   void AddMember(nsXBLProtoImplMember* aMember);
   void AddField(nsXBLProtoImplField* aField);
@@ -164,8 +131,8 @@ protected:
   XBLPrimaryState mState;
   XBLSecondaryState mSecondaryState;
   nsXBLDocumentInfo* mDocInfo;
-  PRPackedBool mIsChromeOrResource; // For bug #45989
-  PRPackedBool mFoundFirstBinding;
+  bool mIsChromeOrResource; // For bug #45989
+  bool mFoundFirstBinding;
 
   nsXBLPrototypeBinding* mBinding;
   nsXBLPrototypeHandler* mHandler; // current handler, owned by its PrototypeBinding

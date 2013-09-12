@@ -1,43 +1,11 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SVG project.
- *
- * The Initial Developer of the Original Code is
- * Scooter Morris.
- * Portions created by the Initial Developer are Copyright (C) 2004
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Scooter Morris <scootermorris@comcast.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "nsSVGTransformList.h"
-#include "nsSVGAnimatedTransformList.h"
+#include "mozilla/Util.h"
+
+#include "DOMSVGAnimatedTransformList.h"
 #include "nsIDOMSVGAnimatedEnum.h"
 #include "nsIDOMSVGURIReference.h"
 #include "nsIDOMSVGGradientElement.h"
@@ -46,7 +14,8 @@
 #include "nsSVGStylableElement.h"
 #include "nsGkAtoms.h"
 #include "nsSVGGradientElement.h"
-#include "nsIFrame.h"
+
+using namespace mozilla;
 
 //--------------------- Gradients------------------------
 
@@ -54,7 +23,7 @@ nsSVGEnumMapping nsSVGGradientElement::sSpreadMethodMap[] = {
   {&nsGkAtoms::pad, nsIDOMSVGGradientElement::SVG_SPREADMETHOD_PAD},
   {&nsGkAtoms::reflect, nsIDOMSVGGradientElement::SVG_SPREADMETHOD_REFLECT},
   {&nsGkAtoms::repeat, nsIDOMSVGGradientElement::SVG_SPREADMETHOD_REPEAT},
-  {nsnull, 0}
+  {nullptr, 0}
 };
 
 nsSVGElement::EnumInfo nsSVGGradientElement::sEnumInfo[2] =
@@ -71,7 +40,7 @@ nsSVGElement::EnumInfo nsSVGGradientElement::sEnumInfo[2] =
 
 nsSVGElement::StringInfo nsSVGGradientElement::sStringInfo[1] =
 {
-  { &nsGkAtoms::href, kNameSpaceID_XLink }
+  { &nsGkAtoms::href, kNameSpaceID_XLink, true }
 };
 
 //----------------------------------------------------------------------
@@ -93,68 +62,21 @@ nsSVGGradientElement::nsSVGGradientElement(already_AddRefed<nsINodeInfo> aNodeIn
 {
 }
 
-nsresult
-nsSVGGradientElement::CreateTransformList()
-{
-  nsresult rv;
-
-  // DOM property: transform, #IMPLIED attrib: transform
-  nsCOMPtr<nsIDOMSVGTransformList> transformList;
-  rv = nsSVGTransformList::Create(getter_AddRefs(transformList));
-  NS_ENSURE_SUCCESS(rv, rv);
-  rv = NS_NewSVGAnimatedTransformList(getter_AddRefs(mGradientTransform),
-                                      transformList);
-  NS_ENSURE_SUCCESS(rv, rv);
-  rv = AddMappedSVGValue(nsGkAtoms::gradientTransform, mGradientTransform);
-  if (NS_FAILED(rv)) {
-    mGradientTransform = nsnull;
-    return rv;
-  }
-
-  return NS_OK;
-}
-
-nsresult
-nsSVGGradientElement::BeforeSetAttr(PRInt32 aNamespaceID, nsIAtom* aName,
-                                    const nsAString* aValue, PRBool aNotify)
-{
-  if (aNamespaceID == kNameSpaceID_None &&
-      aName == nsGkAtoms::gradientTransform &&
-      !mGradientTransform &&
-      NS_FAILED(CreateTransformList()))
-    return NS_ERROR_OUT_OF_MEMORY;
-
-  return nsSVGGradientElementBase::BeforeSetAttr(aNamespaceID, aName,
-                                                 aValue, aNotify);
-}
-
 //----------------------------------------------------------------------
 // nsSVGElement methods
-
-void
-nsSVGGradientElement::DidAnimateTransform()
-{
-  nsIFrame* frame = GetPrimaryFrame();
-  
-  if (frame) {
-    frame->AttributeChanged(kNameSpaceID_None,
-                            nsGkAtoms::gradientTransform,
-                            nsIDOMMutationEvent::MODIFICATION);
-  }
-}
 
 nsSVGElement::EnumAttributesInfo
 nsSVGGradientElement::GetEnumInfo()
 {
   return EnumAttributesInfo(mEnumAttributes, sEnumInfo,
-                            NS_ARRAY_LENGTH(sEnumInfo));
+                            ArrayLength(sEnumInfo));
 }
 
 nsSVGElement::StringAttributesInfo
 nsSVGGradientElement::GetStringInfo()
 {
   return StringAttributesInfo(mStringAttributes, sStringInfo,
-                              NS_ARRAY_LENGTH(sStringInfo));
+                              ArrayLength(sStringInfo));
 }
 
 //----------------------------------------------------------------------
@@ -166,14 +88,13 @@ NS_IMETHODIMP nsSVGGradientElement::GetGradientUnits(nsIDOMSVGAnimatedEnumeratio
   return mEnumAttributes[GRADIENTUNITS].ToDOMAnimatedEnum(aGradientUnits, this);
 }
 
-/* readonly attribute nsIDOMSVGAnimatedTransformList gradientTransform; */
-NS_IMETHODIMP nsSVGGradientElement::GetGradientTransform(nsIDOMSVGAnimatedTransformList * *aGradientTransform)
+/* readonly attribute nsISupports gradientTransform; */
+NS_IMETHODIMP nsSVGGradientElement::GetGradientTransform(nsISupports * *aGradientTransform)
 {
-  if (!mGradientTransform && NS_FAILED(CreateTransformList()))
-    return NS_ERROR_OUT_OF_MEMORY;
-
-  *aGradientTransform = mGradientTransform;
-  NS_IF_ADDREF(*aGradientTransform);
+  // We're creating a DOM wrapper, so we must tell GetAnimatedTransformList
+  // to allocate the SVGAnimatedTransformList if it hasn't already done so:
+  *aGradientTransform = DOMSVGAnimatedTransformList::GetDOMWrapper(
+                          GetAnimatedTransformList(DO_ALLOCATE), this).get();
   return NS_OK;
 }
 
@@ -196,7 +117,7 @@ nsSVGGradientElement::GetHref(nsIDOMSVGAnimatedString * *aHref)
 //----------------------------------------------------------------------
 // nsIContent methods
 
-NS_IMETHODIMP_(PRBool)
+NS_IMETHODIMP_(bool)
 nsSVGGradientElement::IsAttributeMapped(const nsIAtom* name) const
 {
   static const MappedAttributeEntry* const map[] = {
@@ -204,7 +125,7 @@ nsSVGGradientElement::IsAttributeMapped(const nsIAtom* name) const
     sGradientStopMap
   };
   
-  return FindAttributeDependence(name, map, NS_ARRAY_LENGTH(map)) ||
+  return FindAttributeDependence(name, map) ||
     nsSVGGradientElementBase::IsAttributeMapped(name);
 }
 
@@ -212,10 +133,10 @@ nsSVGGradientElement::IsAttributeMapped(const nsIAtom* name) const
 
 nsSVGElement::LengthInfo nsSVGLinearGradientElement::sLengthInfo[4] =
 {
-  { &nsGkAtoms::x1, 0, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::X },
-  { &nsGkAtoms::y1, 0, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::Y },
-  { &nsGkAtoms::x2, 100, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::X },
-  { &nsGkAtoms::y2, 0, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::Y },
+  { &nsGkAtoms::x1, 0, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::X },
+  { &nsGkAtoms::y1, 0, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::Y },
+  { &nsGkAtoms::x2, 100, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::X },
+  { &nsGkAtoms::y2, 0, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::Y },
 };
 
 NS_IMPL_NS_NEW_SVG_ELEMENT(LinearGradient)
@@ -229,8 +150,9 @@ NS_IMPL_RELEASE_INHERITED(nsSVGLinearGradientElement,nsSVGLinearGradientElementB
 DOMCI_NODE_DATA(SVGLinearGradientElement, nsSVGLinearGradientElement)
 
 NS_INTERFACE_TABLE_HEAD(nsSVGLinearGradientElement)
-  NS_NODE_INTERFACE_TABLE5(nsSVGLinearGradientElement, nsIDOMNode,
+  NS_NODE_INTERFACE_TABLE6(nsSVGLinearGradientElement, nsIDOMNode,
                            nsIDOMElement, nsIDOMSVGElement,
+                           nsIDOMSVGTests,
                            nsIDOMSVGGradientElement,
                            nsIDOMSVGLinearGradientElement)
   NS_DOM_INTERFACE_MAP_ENTRY_CLASSINFO(SVGLinearGradientElement)
@@ -280,22 +202,31 @@ NS_IMETHODIMP nsSVGLinearGradientElement::GetY2(nsIDOMSVGAnimatedLength * *aY2)
 //----------------------------------------------------------------------
 // nsSVGElement methods
 
+SVGAnimatedTransformList*
+nsSVGGradientElement::GetAnimatedTransformList(uint32_t aFlags)
+{
+  if (!mGradientTransform && (aFlags & DO_ALLOCATE)) {
+    mGradientTransform = new SVGAnimatedTransformList();
+  }
+  return mGradientTransform;
+}
+
 nsSVGElement::LengthAttributesInfo
 nsSVGLinearGradientElement::GetLengthInfo()
 {
   return LengthAttributesInfo(mLengthAttributes, sLengthInfo,
-                              NS_ARRAY_LENGTH(sLengthInfo));
+                              ArrayLength(sLengthInfo));
 }
 
 //-------------------------- Radial Gradients ----------------------------
 
 nsSVGElement::LengthInfo nsSVGRadialGradientElement::sLengthInfo[5] =
 {
-  { &nsGkAtoms::cx, 50, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::X },
-  { &nsGkAtoms::cy, 50, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::Y },
-  { &nsGkAtoms::r, 50, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::XY },
-  { &nsGkAtoms::fx, 50, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::X },
-  { &nsGkAtoms::fy, 50, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::Y },
+  { &nsGkAtoms::cx, 50, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::X },
+  { &nsGkAtoms::cy, 50, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::Y },
+  { &nsGkAtoms::r, 50, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::XY },
+  { &nsGkAtoms::fx, 50, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::X },
+  { &nsGkAtoms::fy, 50, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::Y },
 };
 
 NS_IMPL_NS_NEW_SVG_ELEMENT(RadialGradient)
@@ -309,8 +240,9 @@ NS_IMPL_RELEASE_INHERITED(nsSVGRadialGradientElement,nsSVGRadialGradientElementB
 DOMCI_NODE_DATA(SVGRadialGradientElement, nsSVGRadialGradientElement)
 
 NS_INTERFACE_TABLE_HEAD(nsSVGRadialGradientElement)
-  NS_NODE_INTERFACE_TABLE5(nsSVGRadialGradientElement, nsIDOMNode,
+  NS_NODE_INTERFACE_TABLE6(nsSVGRadialGradientElement, nsIDOMNode,
                            nsIDOMElement, nsIDOMSVGElement,
+                           nsIDOMSVGTests,
                            nsIDOMSVGGradientElement,
                            nsIDOMSVGRadialGradientElement)
   NS_DOM_INTERFACE_MAP_ENTRY_CLASSINFO(SVGRadialGradientElement)
@@ -369,5 +301,5 @@ nsSVGElement::LengthAttributesInfo
 nsSVGRadialGradientElement::GetLengthInfo()
 {
   return LengthAttributesInfo(mLengthAttributes, sLengthInfo,
-                              NS_ARRAY_LENGTH(sLengthInfo));
+                              ArrayLength(sLengthInfo));
 }

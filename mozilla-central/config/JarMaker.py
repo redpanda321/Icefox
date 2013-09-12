@@ -1,39 +1,6 @@
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is Mozilla build system.
-#
-# The Initial Developer of the Original Code is
-# Mozilla Foundation.
-# Portions created by the Initial Developer are Copyright (C) 2008
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#  Axel Hecht <l10n@mozilla.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 '''jarmaker.py provides a python class to package up chrome content by
 processing jar.mn files.
@@ -44,6 +11,7 @@ See the documentation for jar.mn on MDC for further details on the format.
 import sys
 import os
 import os.path
+import errno
 import re
 import logging
 from time import localtime
@@ -55,6 +23,9 @@ from datetime import datetime
 from utils import pushback_iter, lockFile
 from Preprocessor import Preprocessor
 from buildlist import addEntriesToListFile
+if sys.platform == "win32":
+  from ctypes import windll, WinError
+  CreateHardLink = windll.kernel32.CreateHardLinkA
 
 __all__ = ['JarMaker']
 
@@ -93,9 +64,10 @@ class JarMaker(object):
 
   ignore = re.compile('\s*(\#.*)?$')
   jarline = re.compile('(?:(?P<jarfile>[\w\d.\-\_\\\/]+).jar\:)|(?:\s*(\#.*)?)\s*$')
+  relsrcline = re.compile('relativesrcdir\s+(?P<relativesrcdir>.+?):')
   regline = re.compile('\%\s+(.*)$')
   entryre = '(?P<optPreprocess>\*)?(?P<optOverwrite>\+?)\s+'
-  entryline = re.compile(entryre + '(?P<output>[\w\d.\-\_\\\/\+]+)\s*(\((?P<locale>\%?)(?P<source>[\w\d.\-\_\\\/]+)\))?\s*$')
+  entryline = re.compile(entryre + '(?P<output>[\w\d.\-\_\\\/\+\@]+)\s*(\((?P<locale>\%?)(?P<source>[\w\d.\-\_\\\/\@]+)\))?\s*$')
 
   def __init__(self, outputFormat = 'flat', useJarfileManifest = True,
                useChromeManifest = False):
@@ -103,6 +75,12 @@ class JarMaker(object):
     self.useJarfileManifest = useJarfileManifest
     self.useChromeManifest = useChromeManifest
     self.pp = Preprocessor()
+    self.topsourcedir = None
+    self.sourcedirs = []
+    self.localedirs = None
+    self.l10nbase = None
+    self.l10nmerge = None
+    self.relativesrcdir = None
 
   def getCommandLineParser(self):
     '''Get a optparse.OptionParser for jarmaker.
@@ -131,22 +109,14 @@ class JarMaker(object):
                  help="top source directory")
     p.add_option('-c', '--l10n-src', type="string", action="append",
                  help="localization directory")
-    p.add_option('--l10n-base', type="string", action="append", default=[],
-                 help="base directory to be used for localization (multiple)")
+    p.add_option('--l10n-base', type="string", action="store",
+                 help="base directory to be used for localization (requires relativesrcdir)")
+    p.add_option('--locale-mergedir', type="string", action="store",
+                 help="base directory to be used for l10n-merge (requires l10n-base and relativesrcdir)")
+    p.add_option('--relativesrcdir', type="string",
+                 help="relativesrcdir to be used for localization")
     p.add_option('-j', type="string",
                  help="jarfile directory")
-    # backwards compat, not needed
-    p.add_option('-a', action="store_false", default=True,
-                 help="NOT SUPPORTED, turn auto-registration of chrome off (installed-chrome.txt)")
-    p.add_option('-d', type="string",
-                 help="UNUSED, chrome directory")
-    p.add_option('-o', help="cross compile for auto-registration, ignored")
-    p.add_option('-l', action="store_true",
-                 help="ignored (used to switch off locks)")
-    p.add_option('-x', action="store_true",
-                 help="force Unix")
-    p.add_option('-z', help="backwards compat, ignored")
-    p.add_option('-p', help="backwards compat, ignored")
     return p
 
   def processIncludes(self, includes):
@@ -210,17 +180,24 @@ class JarMaker(object):
       mf.close()
     finally:
       lock = None
-  
-  def makeJar(self, infile=None,
-               jardir='',
-               sourcedirs=[], topsourcedir='', localedirs=None):
+
+  def makeJar(self, infile, jardir):
     '''makeJar is the main entry point to JarMaker.
 
     It takes the input file, the output directory, the source dirs and the
     top source dir as argument, and optionally the l10n dirs.
     '''
+    # making paths absolute, guess srcdir if file and add to sourcedirs
+    _normpath = lambda p: os.path.normpath(os.path.abspath(p))
+    self.topsourcedir = _normpath(self.topsourcedir)
+    self.sourcedirs = [_normpath(p) for p in self.sourcedirs]
+    if self.localedirs:
+      self.localedirs = [_normpath(p) for p in self.localedirs]
+    elif self.relativesrcdir:
+      self.localedirs = self.generateLocaleDirs(self.relativesrcdir)
     if isinstance(infile, basestring):
       logging.info("processing " + infile)
+      self.sourcedirs.append(_normpath(os.path.dirname(infile)))
     pp = self.pp.clone()
     pp.out = StringIO()
     pp.do_include(infile)
@@ -234,68 +211,30 @@ class JarMaker(object):
         if m.group('jarfile') is None:
           # comment
           continue
-        self.processJarSection(m.group('jarfile'), lines,
-                               jardir, sourcedirs, topsourcedir,
-                               localedirs)
+        self.processJarSection(m.group('jarfile'), lines, jardir)
     except StopIteration:
       # we read the file
       pass
     return
 
-  def makeJars(self, infiles, l10nbases,
-               jardir='',
-               sourcedirs=[], topsourcedir='', localedirs=None):
-    '''makeJars is the second main entry point to JarMaker.
+  def generateLocaleDirs(self, relativesrcdir):
+    if os.path.basename(relativesrcdir) == 'locales':
+      # strip locales
+      l10nrelsrcdir = os.path.dirname(relativesrcdir)
+    else:
+      l10nrelsrcdir = relativesrcdir
+    locdirs = []
+    # generate locales dirs, merge, l10nbase, en-US
+    if self.l10nmerge:
+      locdirs.append(os.path.join(self.l10nmerge, l10nrelsrcdir))
+    if self.l10nbase:
+      locdirs.append(os.path.join(self.l10nbase, l10nrelsrcdir))
+    if self.l10nmerge or not self.l10nbase:
+      # add en-US if we merge, or if it's not l10n
+      locdirs.append(os.path.join(self.topsourcedir, relativesrcdir, 'en-US'))
+    return locdirs
 
-    It takes an iterable sequence of input file names, the l10nbases,
-    the output directory, the source dirs and the
-    top source dir as argument, and optionally the l10n dirs.
-
-    It iterates over all inputs, guesses srcdir and l10ndir from the
-    path and topsourcedir and calls into makeJar.
-
-    The l10ndirs are created by guessing the relativesrcdir, and resolving
-    that against the l10nbases. l10nbases can either be path strings, or 
-    callables. In the latter case, that will be called with the 
-    relativesrcdir as argument, and is expected to return a path string.
-    This logic is disabled if the jar.mn path is not inside the topsrcdir.
-    '''
-    topsourcedir = os.path.normpath(os.path.abspath(topsourcedir))
-    def resolveL10nBase(relpath):
-      def _resolve(base):
-        if isinstance(base, basestring):
-          return os.path.join(base, relpath)
-        if callable(base):
-          return base(relpath)
-        return base
-      return _resolve
-    for infile in infiles:
-      srcdir = os.path.normpath(os.path.abspath(os.path.dirname(infile)))
-      l10ndir = srcdir
-      if os.path.basename(srcdir) == 'locales':
-        l10ndir = os.path.dirname(l10ndir)
-
-      l10ndirs = None
-      # srcdir may not be a child of topsourcedir, in which case
-      # we assume that the caller passed in suitable sourcedirs,
-      # and just skip passing in localedirs
-      if srcdir.startswith(topsourcedir):
-        rell10ndir = l10ndir[len(topsourcedir):].lstrip(os.sep)
-
-        l10ndirs = map(resolveL10nBase(rell10ndir), l10nbases)
-        if localedirs is not None:
-          l10ndirs += [os.path.normpath(os.path.abspath(s))
-                       for s in localedirs]
-      srcdirs = [os.path.normpath(os.path.abspath(s))
-                 for s in sourcedirs] + [srcdir]
-      self.makeJar(infile=infile,
-                   sourcedirs=srcdirs, topsourcedir=topsourcedir,
-                   localedirs=l10ndirs,
-                   jardir=jardir)
-
-
-  def processJarSection(self, jarfile, lines,
-                        jardir, sourcedirs, topsourcedir, localedirs):
+  def processJarSection(self, jarfile, lines, jardir):
     '''Internal method called by makeJar to actually process a section
     of a jar.mn file.
 
@@ -307,7 +246,7 @@ class JarMaker(object):
     # chromebasepath is used for chrome registration manifests
     # %s is getting replaced with chrome/ for chrome.manifest, and with
     # an empty string for jarfile.manifest
-    chromebasepath = '%s' + jarfile
+    chromebasepath = '%s' + os.path.basename(jarfile)
     if self.outputFormat == 'jar':
       chromebasepath = 'jar:' + chromebasepath + '.jar!'
     chromebasepath += '/'
@@ -319,8 +258,9 @@ class JarMaker(object):
       jarfilepath = jarfile + '.jar'
       try:
         os.makedirs(os.path.dirname(jarfilepath))
-      except OSError:
-        pass
+      except OSError, error:
+        if error.errno != errno.EEXIST:
+          raise
       jf = ZipFile(jarfilepath, 'a', lock = True)
       outHelper = self.OutputHelper_jar(jf)
     else:
@@ -343,6 +283,11 @@ class JarMaker(object):
           raise
         if self.ignore.match(l):
           continue
+        m = self.relsrcline.match(l)
+        if m:
+          relativesrcdir = m.group('relativesrcdir')
+          self.localedirs = self.generateLocaleDirs(relativesrcdir)
+          continue
         m = self.regline.match(l)
         if  m:
           rline = m.group(1)
@@ -356,30 +301,27 @@ class JarMaker(object):
             jf.close()
           lines.pushback(l)
           return
-        self._processEntryLine(m, sourcedirs, topsourcedir, localedirs,
-                              outHelper, jf)
+        self._processEntryLine(m, outHelper, jf)
     finally:
       if jf is not None:
         jf.close()
     return
 
-  def _processEntryLine(self, m, 
-                        sourcedirs, topsourcedir, localedirs,
-                        outHelper, jf):
+  def _processEntryLine(self, m, outHelper, jf):
       out = m.group('output')
       src = m.group('source') or os.path.basename(out)
       # pick the right sourcedir -- l10n, topsrc or src
       if m.group('locale'):
-        src_base = localedirs
+        src_base = self.localedirs
       elif src.startswith('/'):
         # path/in/jar/file_name.xul     (/path/in/sourcetree/file_name.xul)
         # refers to a path relative to topsourcedir, use that as base
         # and strip the leading '/'
-        src_base = [topsourcedir]
+        src_base = [self.topsourcedir]
         src = src[1:]
       else:
         # use srcdirs and the objdir (current working dir) for relative paths
-        src_base = sourcedirs + ['.']
+        src_base = self.sourcedirs + [os.getcwd()]
       # check if the source file exists
       realsrc = None
       for _srcdir in src_base:
@@ -398,6 +340,7 @@ class JarMaker(object):
           pp.setMarker('%')
         pp.out = outf
         pp.do_include(inf)
+        pp.warnUnused(realsrc)
         outf.close()
         inf.close()
         return
@@ -405,7 +348,7 @@ class JarMaker(object):
       if (m.group('optOverwrite')
           or (getModTime(realsrc) >
               outHelper.getDestModTime(m.group('output')))):
-        if self.outputFormat == 'symlink' and hasattr(os, 'symlink'):
+        if self.outputFormat == 'symlink':
           outHelper.symlink(realsrc, out)
           return
         outf = outHelper.getOutput(out)
@@ -414,7 +357,7 @@ class JarMaker(object):
         outf.write(inf.read())
         outf.close()
         inf.close()
-    
+
 
   class OutputHelper_jar(object):
     '''Provide getDestModTime and getOutput for a given jarfile.
@@ -445,14 +388,18 @@ class JarMaker(object):
       try:
         os.remove(out)
       except OSError, e:
-        if e.errno != 2:
+        if e.errno != errno.ENOENT:
           raise
       return open(out, 'wb')
     def ensureDirFor(self, name):
       out = os.path.join(self.basepath, name)
       outdir = os.path.dirname(out)
       if not os.path.isdir(outdir):
-        os.makedirs(outdir)
+        try:
+          os.makedirs(outdir)
+        except OSError, error:
+          if error.errno != errno.EEXIST:
+            raise
       return out
 
   class OutputHelper_symlink(OutputHelper_flat):
@@ -465,9 +412,15 @@ class JarMaker(object):
       try:
         os.remove(out)
       except OSError, e:
-        if e.errno != 2:
+        if e.errno != errno.ENOENT:
           raise
-      os.symlink(src, out)
+      if sys.platform != "win32":
+        os.symlink(src, out)
+      else:
+        # On Win32, use ctypes to create a hardlink
+        rv = CreateHardLink(out, src, None)
+        if rv == 0:
+          raise WinError()
 
 def main():
   jm = JarMaker()
@@ -475,12 +428,25 @@ def main():
   (options, args) = p.parse_args()
   jm.processIncludes(options.I)
   jm.outputFormat = options.f
+  jm.sourcedirs = options.s
+  jm.topsourcedir = options.t
   if options.e:
     jm.useChromeManifest = True
     jm.useJarfileManifest = False
   if options.bothManifests:
     jm.useChromeManifest = True
     jm.useJarfileManifest = True
+  if options.l10n_base:
+    if not options.relativesrcdir:
+      p.error('relativesrcdir required when using l10n-base')
+    if options.l10n_src:
+      p.error('both l10n-src and l10n-base are not supported')
+    jm.l10nbase = options.l10n_base
+    jm.relativesrcdir = options.relativesrcdir
+    jm.l10nmerge = options.locale_mergedir
+  elif options.locale_mergedir:
+    p.error('l10n-base required when using locale-mergedir')
+  jm.localedirs = options.l10n_src
   noise = logging.INFO
   if options.verbose is not None:
     noise = (options.verbose and logging.DEBUG) or logging.WARN
@@ -492,15 +458,10 @@ def main():
   topsrc = options.t
   topsrc = os.path.normpath(os.path.abspath(topsrc))
   if not args:
-    jm.makeJar(infile=sys.stdin,
-               sourcedirs=options.s, topsourcedir=topsrc,
-               localedirs=options.l10n_src,
-               jardir=options.j)
+    infile = sys.stdin
   else:
-    jm.makeJars(args, options.l10n_base,
-                jardir=options.j,
-                sourcedirs=options.s, topsourcedir=topsrc,
-                localedirs=options.l10n_src)
+    infile,  = args
+  jm.makeJar(infile, options.j)
 
 if __name__ == "__main__":
   main()

@@ -1,41 +1,9 @@
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is Mozilla Corporation code.
-#
-# The Initial Developer of the Original Code is Mozilla Foundation.
-# Portions created by the Initial Developer are Copyright (C) 2009
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Robert O'Callahan <robert@ocallahan.org>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either of the GNU General Public License Version 2 or later (the "GPL"),
-# or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH       = ../..
+DEPTH       = @DEPTH@
 topsrcdir   = @top_srcdir@
 srcdir      = @srcdir@
 VPATH       = \
@@ -43,13 +11,11 @@ VPATH       = \
   $(srcdir)/basic \
   $(srcdir)/opengl \
   $(srcdir)/d3d9 \
+  $(srcdir)/d3d10 \
+  $(srcdir)/ipc \
   $(NULL)
 
 include $(DEPTH)/config/autoconf.mk
-
-ifdef MOZ_IPC
-VPATH       += $(srcdir)/ipc
-endif
 
 MODULE         = thebes
 LIBRARY_NAME   = layers
@@ -63,16 +29,44 @@ endif
 
 EXPORTS = \
         BasicLayers.h \
+        BasicTiledThebesLayer.h \
+        BasicImplData.h \
+        Composer2D.h \
+        GonkIOSurfaceImage.h \
+        FrameMetrics.h \
+        CompositorChild.h \
+        CompositorParent.h \
+        ImageContainer.h \
         ImageLayers.h \
+        ImageTypes.h \
         Layers.h \
+        LayersTypes.h \
+        LayerManagerOGLShaders.h \
         LayerManagerOGL.h \
         LayerManagerOGLProgram.h \
+        LayerSorter.h \
+        LayerTreeInvalidation.h \
+        ReadbackLayer.h \
+        ShadowLayersManager.h \
+        SharedTextureImage.h \
+        TexturePoolOGL.h \
         $(NULL)
 
 CPPSRCS = \
-	Layers.cpp \
         BasicImages.cpp \
-        BasicLayers.cpp \
+        BasicLayerManager.cpp \
+        BasicCanvasLayer.cpp \
+        BasicColorLayer.cpp \
+        BasicContainerLayer.cpp \
+        BasicImageLayer.cpp \
+        BasicLayersImpl.cpp \
+        BasicThebesLayer.cpp \
+        BasicBuffers.cpp \
+        BasicTiledThebesLayer.cpp \
+        ImageContainer.cpp \
+        Layers.cpp \
+        RenderTrace.cpp \
+        ReadbackProcessor.cpp \
         ThebesLayerBuffer.cpp \
         CanvasLayerOGL.cpp \
         ColorLayerOGL.cpp \
@@ -80,6 +74,13 @@ CPPSRCS = \
         ImageLayerOGL.cpp \
         LayerManagerOGL.cpp \
         ThebesLayerOGL.cpp \
+        TiledThebesLayerOGL.cpp \
+        ReusableTileStoreOGL.cpp \
+        LayerManagerOGLProgram.cpp \
+        LayerSorter.cpp \
+        LayerTreeInvalidation.cpp \
+        ImageLayers.cpp \
+        TexturePoolOGL.cpp \
         $(NULL)
 
 ifeq ($(MOZ_WIDGET_TOOLKIT),windows)
@@ -96,44 +97,118 @@ CPPSRCS += \
         ImageLayerD3D9.cpp \
         ColorLayerD3D9.cpp \
         CanvasLayerD3D9.cpp \
+        ShadowBufferD3D9.cpp \
         DeviceManagerD3D9.cpp \
         Nv3DVUtils.cpp \
         $(NULL)
 endif
-endif
-
-ifdef MOZ_IPC #{
-EXPORTS_NAMESPACES = mozilla/layers
-EXPORTS_mozilla/layers =\
-        ShadowLayers.h \
+ifdef MOZ_ENABLE_D3D10_LAYER
+EXPORTS += \
+        LayerManagerD3D10.h \
+        ReadbackManagerD3D10.h \
         $(NULL)
 
 CPPSRCS += \
+        CanvasLayerD3D10.cpp \
+        ColorLayerD3D10.cpp \
+        ContainerLayerD3D10.cpp \
+        ImageLayerD3D10.cpp \
+        LayerManagerD3D10.cpp \
+        ReadbackManagerD3D10.cpp \
+	ShadowLayerUtilsD3D10.cpp \
+        ThebesLayerD3D10.cpp \
+        $(NULL)
+endif
+endif
+
+EXPORTS_NAMESPACES = gfxipc mozilla/layers
+EXPORTS_gfxipc = ShadowLayerUtils.h
+EXPORTS_mozilla/layers =\
+        AsyncPanZoomController.h \
+        Axis.h \
+        CompositorCocoaWidgetHelper.h \
+        CompositorChild.h \
+        CompositorParent.h \
+        GeckoContentController.h \
+        GestureEventListener.h \
+        ImageBridgeChild.h \
+        ImageBridgeParent.h \
+        ImageContainerChild.h \
+        ImageContainerParent.h \
+        ShadowLayers.h \
+        ShadowLayersChild.h \
+        ShadowLayersParent.h \
+        ShadowLayersManager.h \
+        RenderTrace.h \
+        SharedImageUtils.h \
+        SharedRGBImage.h \
+        ShmemYCbCrImage.h \
+        TaskThrottler.h \
+        $(NULL)
+
+CPPSRCS += \
+        AsyncPanZoomController.cpp \
+        Axis.cpp \
+        CompositorCocoaWidgetHelper.cpp \
+        CompositorChild.cpp \
+        CompositorParent.cpp \
+        GestureEventListener.cpp \
+        ImageBridgeChild.cpp \
+        ImageBridgeParent.cpp \
+        ImageContainerChild.cpp \
+        ImageContainerParent.cpp \
         ShadowLayers.cpp \
+        ShadowLayerChild.cpp \
+        ShadowLayersChild.cpp \
         ShadowLayerParent.cpp \
         ShadowLayersParent.cpp \
+        SharedRGBImage.cpp \
+        ShmemYCbCrImage.cpp \
+        TaskThrottler.cpp \
         $(NULL)
+
+ifdef MOZ_X11 #{
+EXPORTS_mozilla/layers += ShadowLayerUtilsX11.h
+CPPSRCS += ShadowLayerUtilsX11.cpp
 endif #}
 
-# Enable GLES2.0 under maemo
-ifdef MOZ_X11
-ifdef MOZ_PLATFORM_MAEMO
-DEFINES += -DUSE_GLES2
+ifdef MOZ_ENABLE_D3D10_LAYER
+EXPORTS_mozilla/layers += ShadowLayerUtilsD3D10.h
+DEFINES	+= -DMOZ_ENABLE_D3D10_LAYER
 endif
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),cocoa)
+CPPSRCS += ShadowLayerUtilsMac.cpp
+endif
+
+# NB: Gralloc is available on other platforms that use the android GL
+# libraries, but only Gonk is able to use it reliably because Gecko
+# has full system permissions there.
+ifeq ($(MOZ_WIDGET_TOOLKIT),gonk)
+EXPORTS_mozilla/layers += ShadowLayerUtilsGralloc.h
+CPPSRCS += \
+        ShadowLayerUtilsGralloc.cpp \
+        GrallocImages.cpp \
+        GonkIOSurfaceImage.cpp \
+        $(NULL)
 endif
 
 include $(topsrcdir)/config/rules.mk
 
-ifdef MOZ_IPC
 include $(topsrcdir)/ipc/chromium/chromium-config.mk
+
+LOCAL_INCLUDES += \
+        -I$(topsrcdir)/content/events/src \
+        -I$(ANDROID_SOURCE)/frameworks/base/include/media/stagefright \
+        -I$(ANDROID_SOURCE)/frameworks/base/include/media/stagefright/openmax \
+        $(NULL)
+
+CXXFLAGS += $(MOZ_CAIRO_CFLAGS) $(MOZ_PIXMAN_CFLAGS) $(TK_CFLAGS)
+
+ifdef _MSC_VER
+ifeq ($(CPU_ARCH),x86_64)
+# Workaround compiler bug (Bug 795594)
+LayerTreeInvalidation.$(OBJ_SUFFIX): CXXFLAGS += -GL-
+Layers.$(OBJ_SUFFIX): CXXFLAGS += -GL-
 endif
-
-CXXFLAGS += $(MOZ_CAIRO_CFLAGS)
-
-LayerManagerOGLShaders.h: LayerManagerOGLShaders.txt genshaders.py $(GLOBAL_DEPS)
-	$(PYTHON) $(srcdir)/opengl/genshaders.py $< $@
-
-LayerManagerOGL.$(OBJ_SUFFIX): LayerManagerOGLShaders.h
-
-GARBAGE += LayerManagerOGLShaders.h
-
+endif

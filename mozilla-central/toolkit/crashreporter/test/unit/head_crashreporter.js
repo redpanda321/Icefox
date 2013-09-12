@@ -22,7 +22,7 @@
  * @param canReturnZero
  *       If true, the subprocess may return with a zero exit code.
  *       Certain types of crashes may not cause the process to
- *       exit with an error. 
+ *       exit with an error.
  */
 function do_crash(setup, callback, canReturnZero)
 {
@@ -65,6 +65,11 @@ function do_crash(setup, callback, canReturnZero)
     do_check_neq(process.exitValue, 0);
   }
 
+  handleMinidump(callback);
+}
+
+function handleMinidump(callback)
+{
   // find minidump
   let minidump = null;
   let en = do_get_cwd().directoryEntries;
@@ -81,6 +86,14 @@ function do_crash(setup, callback, canReturnZero)
 
   let extrafile = minidump.clone();
   extrafile.leafName = extrafile.leafName.slice(0, -4) + ".extra";
+
+  // Just in case, don't let these files linger.
+  do_register_cleanup(function() {
+          if (minidump.exists())
+              minidump.remove(false);
+          if (extrafile.exists())
+              extrafile.remove(false);
+      });
   do_check_true(extrafile.exists());
   let extra = parseKeyValuePairsFromFile(extrafile);
 
@@ -93,39 +106,44 @@ function do_crash(setup, callback, canReturnZero)
     extrafile.remove(false);
 }
 
-// Utility functions for parsing .extra files
-function parseKeyValuePairs(text) {
-  var lines = text.split('\n');
-  var data = {};
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i] == '')
-      continue;
+function do_content_crash(setup, callback)
+{
+  do_load_child_test_harness();
+  do_test_pending();
 
-    // can't just .split() because the value might contain = characters
-    let eq = lines[i].indexOf('=');
-    if (eq != -1) {
-      let [key, value] = [lines[i].substring(0, eq),
-                          lines[i].substring(eq + 1)];
-      if (key && value)
-        data[key] = value.replace("\\n", "\n", "g").replace("\\\\", "\\", "g");
+  // Setting the minidump path won't work in the child, so we need to do
+  // that here.
+  let crashReporter =
+      Components.classes["@mozilla.org/toolkit/crash-reporter;1"]
+      .getService(Components.interfaces.nsICrashReporter);
+  crashReporter.minidumpPath = do_get_cwd();
+
+  let headfile = do_get_file("../unit/crasher_subprocess_head.js");
+  let tailfile = do_get_file("../unit/crasher_subprocess_tail.js");
+  if (setup) {
+    if (typeof(setup) == "function")
+      // funky, but convenient
+      setup = "("+setup.toSource()+")();";
+  }
+
+  let handleCrash = function() {
+    try {            
+      handleMinidump(callback);
+    } catch (x) {
+      do_report_unexpected_exception(x);
     }
-  }
-  return data;
+    do_test_finished();
+  };
+  
+  sendCommand("load(\"" + headfile.path.replace(/\\/g, "/") + "\");", function()
+    sendCommand(setup, function()
+      sendCommand("load(\"" + tailfile.path.replace(/\\/g, "/") + "\");",
+        function() do_execute_soon(handleCrash)
+      )
+    )
+  );
 }
 
-function parseKeyValuePairsFromFile(file) {
-  var fstream = Components.classes["@mozilla.org/network/file-input-stream;1"].
-                createInstance(Components.interfaces.nsIFileInputStream);
-  fstream.init(file, -1, 0, 0);
-  var is = Components.classes["@mozilla.org/intl/converter-input-stream;1"].
-           createInstance(Components.interfaces.nsIConverterInputStream);
-  is.init(fstream, "UTF-8", 1024, Components.interfaces.nsIConverterInputStream.DEFAULT_REPLACEMENT_CHARACTER);
-  var str = {};
-  var contents = '';
-  while (is.readString(4096, str) != 0) {
-    contents += str.value;
-  }
-  is.close();
-  fstream.close();
-  return parseKeyValuePairs(contents);
-}
+// Import binary APIs via js-ctypes.
+Components.utils.import("resource://test/CrashTestUtils.jsm");
+Components.utils.import("resource://gre/modules/KeyValueParser.jsm");

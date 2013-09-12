@@ -1,118 +1,203 @@
 <?xml version="1.0"?>
 <?xml-stylesheet href="chrome://global/skin" type="text/css"?>
 
-<!-- Firefox tabbrowser -->
-<?xml-stylesheet href="chrome://browser/content/browser.css"
-                 type="text/css"?>
-<!-- Seamonkey tabbrowser -->
-<?xml-stylesheet href="chrome://navigator/content/navigator.css"
-                 type="text/css"?>
-
 <?xml-stylesheet href="chrome://mochikit/content/tests/SimpleTest/test.css"
                  type="text/css"?>
 
 <window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         title="Accessible XUL tabbrowser hierarchy tests">
 
-  <script type="application/javascript" 
-          src="chrome://mochikit/content/MochiKit/packed.js" />
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js" />
+  <script type="application/javascript"
+          src="chrome://mochikit/content/tests/SimpleTest/EventUtils.js"></script>
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js" />
+          src="../common.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/role.js" />
+          src="../role.js" />
+  <script type="application/javascript"
+          src="../events.js" />
+  <script type="application/javascript"
+          src="../browser.js"></script>
 
   <script type="application/javascript">
   <![CDATA[
     ////////////////////////////////////////////////////////////////////////////
-    // Test
-
-    const Ci = Components.interfaces;
-
-    // Hack to make xul:tabbrowser work.
-    Components.utils.import("resource://gre/modules/Services.jsm");
-    var handleDroppedLink = null;
-    var XULBrowserWindow = {
-      isBusy: false,
-      setOverLink: function (link, b) {
-      }
-    };
-    var gFindBar = {
-      hidden: true
-    };
-
-    function doTest()
+    // invoker
+    function testTabHierarchy()
     {
-      var tabBrowser = document.getElementById("tabbrowser");
+      this.eventSeq = [
+        new asyncInvokerChecker(EVENT_DOCUMENT_LOAD_COMPLETE, tabDocumentAt, 0),
+        new asyncInvokerChecker(EVENT_DOCUMENT_LOAD_COMPLETE, tabDocumentAt, 1)
+      ];
 
-      var progressListener =
+      this.invoke = function testTabHierarchy_invoke()
       {
-        onStateChange: function onStateChange(aWebProgress,
-                                              aRequest,
-                                              aStateFlags,
-                                              aStatus)
-       {
-        if (aStateFlags & Ci.nsIWebProgressListener.STATE_STOP)
-          testAccTree();
-       }
-      };
+        var docURIs = ["about:", "about:mozilla"];
+        tabBrowser().loadTabs(docURIs, false, true);
+      }
 
-      tabBrowser.addProgressListener(progressListener,
-                                     Ci.nsIWebProgress.NOTIFY_STATE_WINDOW);
+      this.finalCheck = function testTabHierarchy_finalCheck(aEvent)
+      {
+        ////////////////////
+        // Tab bar
+        ////////////////////
+        var tabsAccTree = {
+          // xul:tabs
+          role: ROLE_PAGETABLIST,
+          children: [
+            // Children depend on application (UI): see below.
+          ]
+        };
 
-      tabBrowser.loadTabs(["about:", "about:mozilla"], false, true);
+        // SeaMonkey and Firefox tabbrowser UIs differ.
+        if (SEAMONKEY) {
+          SimpleTest.ok(true, "Testing SeaMonkey tabbrowser UI.");
+
+          tabsAccTree.children.splice(0, 0,
+            {
+              // xul:toolbarbutton ("Open a new tab")
+              role: ROLE_PUSHBUTTON,
+              children: []
+            },
+            {
+              // xul:tab ("about:")
+              role: ROLE_PAGETAB,
+              children: []
+            },
+            {
+              // tab ("about:mozilla")
+              role: ROLE_PAGETAB,
+              children: []
+            },
+            {
+              // xul:toolbarbutton ("List all tabs")
+              role: ROLE_PUSHBUTTON,
+              children: [
+                {
+                  // xul:menupopup
+                  role: ROLE_MENUPOPUP,
+                  children: []
+                }
+              ]
+            },
+            {
+              // xul:toolbarbutton ("Close current tab")
+              role: ROLE_PUSHBUTTON,
+              children: []
+            }
+            );
+        } else {
+          SimpleTest.ok(true, "Testing Firefox tabbrowser UI.");
+
+          // NB: The (3) buttons are not visible, unless manually hovered,
+          //     probably due to size reduction in this test.
+          tabsAccTree.children.splice(0, 0,
+            {
+              // xul:tab ("about:")
+              role: ROLE_PAGETAB,
+              children: [
+                {
+                  // xul:toolbarbutton ("Close Tab")
+                  role: ROLE_PUSHBUTTON,
+                  children: []
+                }
+              ]
+            },
+            {
+              // tab ("about:mozilla")
+              role: ROLE_PAGETAB,
+              children: [
+                {
+                  // xul:toolbarbutton ("Close Tab")
+                  role: ROLE_PUSHBUTTON,
+                  children: []
+                }
+              ]
+            },
+            {
+              // xul:toolbarbutton ("Open a new tab")
+              role: ROLE_PUSHBUTTON,
+              children: []
+            }
+            // "List all tabs" dropdown
+            // XXX: This child(?) is not present in this test.
+            //      I'm not sure why (though probably expected).
+            );
+        }
+
+        testAccessibleTree(tabBrowser().tabContainer, tabsAccTree);
+
+        ////////////////////
+        // Tab contents
+        ////////////////////
+        var tabboxAccTree = {
+          // xul:tabpanels
+          role: ROLE_PANE,
+          children: [
+            {
+              // xul:notificationbox
+              role: ROLE_PROPERTYPAGE,
+              children: [
+                {
+                  // xul:browser
+                  role: ROLE_INTERNAL_FRAME,
+                  children: [
+                    {
+                      // #document ("about:")
+                      role: ROLE_DOCUMENT
+                      // children: [ ... ] // Ignore document content.
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              // notificationbox
+              role: ROLE_PROPERTYPAGE,
+              children: [
+                {
+                  // browser
+                  role: ROLE_INTERNAL_FRAME,
+                  children: [
+                    {
+                      // #document ("about:mozilla")
+                      role: ROLE_DOCUMENT
+                      // children: [ ... ] // Ignore document content.
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        };
+
+        testAccessibleTree(tabBrowser().mTabBox.tabpanels, tabboxAccTree);
+      }
+
+      this.getID = function testTabHierarchy_getID()
+      {
+        return "hierarchy of tabs";
+      }
     }
 
-    function testAccTree()
+    ////////////////////////////////////////////////////////////////////////////
+    // Test
+    var gQueue = null;
+    function doTest()
     {
-      var tabsAccTree = {
-        role: ROLE_PAGETABLIST,
-        children: [
-          {
-            role: ROLE_PAGETAB,
-            children: [
-              {
-                role: ROLE_PUSHBUTTON
-              }
-            ]
-          },
-          {
-            role: ROLE_PAGETAB,
-            children: [
-              {
-                role: ROLE_PUSHBUTTON
-              }
-            ]
-          },
-          {
-            role: ROLE_PUSHBUTTON
-          }
-        ]
-      };
-      testAccessibleTree(getNode("tabbrowser").tabContainer, tabsAccTree);
+      // Load documents into tabs and wait for docLoadComplete events caused by these
+      // documents load before we start the test.
+      gQueue = new eventQueue();
 
-      var tabboxAccTree = {
-        role: ROLE_PANE,
-        children: [
-          {
-            role: ROLE_PROPERTYPAGE
-          },
-          {
-            role: ROLE_PROPERTYPAGE
-          }
-        ]
-      };
-
-      testAccessibleTree(getNode("tabbrowser").mTabBox.tabpanels,
-                         tabboxAccTree);
-
-      SimpleTest.finish()
+      gQueue.push(new testTabHierarchy());
+      gQueue.onFinish = function() { closeBrowserWindow(); }
+      gQueue.invoke(); // Will call SimpleTest.finish();
     }
 
     SimpleTest.waitForExplicitFinish();
-    addA11yLoadEvent(doTest);
+    openBrowserWindow(doTest);
   ]]>
   </script>
 
@@ -135,26 +220,7 @@
       </pre>
     </body>
 
-    <!-- Hack to make xul:tabbrowser work -->
-    <menubar>
-      <menu label="menu">
-        <menupopup>
-          <menuitem label="close window hook" id="menu_closeWindow"/>
-          <menuitem label="close hook" id="menu_close"/>
-        </menupopup>
-      </menu>
-    </menubar>
-
-    <tabs id="tabbrowser-tabs" class="tabbrowser-tabs"
-          tabbrowser="tabbrowser"
-          setfocus="false">
-      <tab class="tabbrowser-tab" selected="true" fadein="true"/>
-    </tabs>
-    <tabbrowser id="tabbrowser"
-                type="content-primary"
-                tabcontainer="tabbrowser-tabs"
-                flex="1"/>
+    <vbox id="eventdump"></vbox>
   </vbox>
 
 </window>
-

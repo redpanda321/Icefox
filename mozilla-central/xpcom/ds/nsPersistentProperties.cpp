@@ -1,42 +1,11 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include "nsArrayEnumerator.h"
 #include "nsID.h"
+#include "nsCOMArray.h"
 #include "nsCRT.h"
 #include "nsReadableUtils.h"
 #include "nsIInputStream.h"
@@ -50,7 +19,6 @@
 #define PL_ARENA_CONST_ALIGN_MASK 3
 #include "nsPersistentProperties.h"
 #include "nsIProperties.h"
-#include "nsISupportsArray.h"
 #include "nsProperties.h"
 
 struct PropertyTableEntry : public PLDHashEntryHdr
@@ -65,7 +33,7 @@ ArenaStrdup(const nsAFlatString& aString, PLArenaPool* aArena)
 {
   void *mem;
   // add one to include the null terminator
-  PRInt32 len = (aString.Length()+1) * sizeof(PRUnichar);
+  int32_t len = (aString.Length()+1) * sizeof(PRUnichar);
   PL_ARENA_ALLOCATE(mem, aArena, len);
   NS_ASSERTION(mem, "Couldn't allocate space!\n");
   if (mem) {
@@ -79,7 +47,7 @@ ArenaStrdup(const nsAFlatCString& aString, PLArenaPool* aArena)
 {
   void *mem;
   // add one to include the null terminator
-  PRInt32 len = (aString.Length()+1) * sizeof(char);
+  int32_t len = (aString.Length()+1) * sizeof(char);
   PL_ARENA_ALLOCATE(mem, aArena, len);
   NS_ASSERTION(mem, "Couldn't allocate space!\n");
   if (mem)
@@ -95,7 +63,7 @@ static const struct PLDHashTableOps property_HashTableOps = {
   PL_DHashMoveEntryStub,
   PL_DHashClearEntryStub,
   PL_DHashFinalizeStub,
-  nsnull,
+  nullptr,
 };
 
 //
@@ -119,22 +87,22 @@ class nsPropertiesParser
 {
 public:
   nsPropertiesParser(nsIPersistentProperties* aProps) :
-    mHaveMultiLine(PR_FALSE), mState(eParserState_AwaitingKey),
+    mHaveMultiLine(false), mState(eParserState_AwaitingKey),
     mProps(aProps) {}
 
   void FinishValueState(nsAString& aOldValue) {
     static const char trimThese[] = " \t";
-    mKey.Trim(trimThese, PR_FALSE, PR_TRUE);
+    mKey.Trim(trimThese, false, true);
 
     // This is really ugly hack but it should be fast
     PRUnichar backup_char;
-    PRUint32 minLength = mMinLength;
+    uint32_t minLength = mMinLength;
     if (minLength)
     {
       backup_char = mValue[minLength-1];
       mValue.SetCharAt('x', minLength-1);
     }
-    mValue.Trim(trimThese, PR_FALSE, PR_TRUE);
+    mValue.Trim(trimThese, false, true);
     if (minLength)
       mValue.SetCharAt(backup_char, minLength-1);
 
@@ -148,14 +116,14 @@ public:
   static NS_METHOD SegmentWriter(nsIUnicharInputStream* aStream,
                                  void* aClosure,
                                  const PRUnichar *aFromSegment,
-                                 PRUint32 aToOffset,
-                                 PRUint32 aCount,
-                                 PRUint32 *aWriteCount);
+                                 uint32_t aToOffset,
+                                 uint32_t aCount,
+                                 uint32_t *aWriteCount);
 
-  nsresult ParseBuffer(const PRUnichar* aBuffer, PRUint32 aBufferLength);
+  nsresult ParseBuffer(const PRUnichar* aBuffer, uint32_t aBufferLength);
 
 private:
-  PRBool ParseValueCharacter(
+  bool ParseValueCharacter(
     PRUnichar c,                  // character that is just being parsed
     const PRUnichar* cur,         // pointer to character c in the buffer
     const PRUnichar* &tokenStart, // string copying is done in blocks as big as
@@ -192,17 +160,17 @@ private:
   nsAutoString mKey;
   nsAutoString mValue;
 
-  PRUint32  mUnicodeValuesRead; // should be 4!
+  uint32_t  mUnicodeValuesRead; // should be 4!
   PRUnichar mUnicodeValue;      // currently parsed unicode value
-  PRBool    mHaveMultiLine;     // is TRUE when last processed characters form
+  bool      mHaveMultiLine;     // is TRUE when last processed characters form
                                 // any of following sequences:
                                 //  - "\\\r"
                                 //  - "\\\n"
                                 //  - "\\\r\n"
                                 //  - any sequence above followed by any
                                 //    combination of ' ' and '\t'
-  PRBool    mMultiLineCanSkipN; // TRUE if "\\\r" was detected
-  PRUint32  mMinLength;         // limit right trimming at the end to not trim
+  bool      mMultiLineCanSkipN; // TRUE if "\\\r" was detected
+  uint32_t  mMinLength;         // limit right trimming at the end to not trim
                                 // escaped whitespaces
   EParserState mState;
   // if we see a '\' then we enter this special state
@@ -210,19 +178,19 @@ private:
   nsIPersistentProperties* mProps;
 };
 
-inline PRBool IsWhiteSpace(PRUnichar aChar)
+inline bool IsWhiteSpace(PRUnichar aChar)
 {
   return (aChar == ' ') || (aChar == '\t') ||
          (aChar == '\r') || (aChar == '\n');
 }
 
-inline PRBool IsEOL(PRUnichar aChar)
+inline bool IsEOL(PRUnichar aChar)
 {
   return (aChar == '\r') || (aChar == '\n');
 }
 
 
-PRBool nsPropertiesParser::ParseValueCharacter(
+bool nsPropertiesParser::ParseValueCharacter(
     PRUnichar c, const PRUnichar* cur, const PRUnichar* &tokenStart,
     nsAString& oldValue)
 {
@@ -234,7 +202,7 @@ PRBool nsPropertiesParser::ParseValueCharacter(
     case '\\':
       if (mHaveMultiLine)
         // there is nothing to append to mValue yet
-        mHaveMultiLine = PR_FALSE;
+        mHaveMultiLine = false;
       else
         mValue += Substring(tokenStart, cur);
 
@@ -245,7 +213,7 @@ PRBool nsPropertiesParser::ParseValueCharacter(
       // if we detected multiline and got only "\\\r" ignore next "\n" if any
       if (mHaveMultiLine && mMultiLineCanSkipN) {
         // but don't allow another '\n' to be skipped
-        mMultiLineCanSkipN = PR_FALSE;
+        mMultiLineCanSkipN = false;
         // Now there is nothing to append to the mValue since we are skipping
         // whitespaces at the beginning of the new line of the multiline
         // property. Set tokenStart properly to ensure that nothing is appended
@@ -259,7 +227,7 @@ PRBool nsPropertiesParser::ParseValueCharacter(
       // we're done! We have a key and value
       mValue += Substring(tokenStart, cur);
       FinishValueState(oldValue);
-      mHaveMultiLine = PR_FALSE;
+      mHaveMultiLine = false;
       break;
 
     default:
@@ -268,7 +236,7 @@ PRBool nsPropertiesParser::ParseValueCharacter(
       if (mHaveMultiLine) {
         if (c == ' ' || c == '\t') {
           // don't allow another '\n' to be skipped
-          mMultiLineCanSkipN = PR_FALSE;
+          mMultiLineCanSkipN = false;
           // Now there is nothing to append to the mValue since we are skipping
           // whitespaces at the beginning of the new line of the multiline
           // property. Set tokenStart properly to ensure that nothing is appended
@@ -276,7 +244,7 @@ PRBool nsPropertiesParser::ParseValueCharacter(
           tokenStart = cur+1;
           break;
         }
-        mHaveMultiLine = PR_FALSE;
+        mHaveMultiLine = false;
         tokenStart = cur;
       }
       break; // from switch on (c)
@@ -320,7 +288,7 @@ PRBool nsPropertiesParser::ParseValueCharacter(
       // a \ immediately followed by a newline means we're going multiline
     case '\r':
     case '\n':
-      mHaveMultiLine = PR_TRUE;
+      mHaveMultiLine = true;
       mMultiLineCanSkipN = (c == '\r');
       mSpecialState = eParserSpecial_None;
       break;
@@ -355,7 +323,7 @@ PRBool nsPropertiesParser::ParseValueCharacter(
       tokenStart = cur;
 
       // ensure parsing this non-hex character again
-      return PR_FALSE;
+      return false;
     }
 
     if (++mUnicodeValuesRead >= 4) {
@@ -368,15 +336,15 @@ PRBool nsPropertiesParser::ParseValueCharacter(
     break;
   }
 
-  return PR_TRUE;
+  return true;
 }
 
 NS_METHOD nsPropertiesParser::SegmentWriter(nsIUnicharInputStream* aStream,
                                             void* aClosure,
                                             const PRUnichar *aFromSegment,
-                                            PRUint32 aToOffset,
-                                            PRUint32 aCount,
-                                            PRUint32 *aWriteCount)
+                                            uint32_t aToOffset,
+                                            uint32_t aCount,
+                                            uint32_t *aWriteCount)
 {
   nsPropertiesParser *parser = 
     static_cast<nsPropertiesParser *>(aClosure);
@@ -388,13 +356,13 @@ NS_METHOD nsPropertiesParser::SegmentWriter(nsIUnicharInputStream* aStream,
 }
 
 nsresult nsPropertiesParser::ParseBuffer(const PRUnichar* aBuffer,
-                                         PRUint32 aBufferLength)
+                                         uint32_t aBufferLength)
 {
   const PRUnichar* cur = aBuffer;
   const PRUnichar* end = aBuffer + aBufferLength;
 
   // points to the start/end of the current key or value
-  const PRUnichar* tokenStart = nsnull;
+  const PRUnichar* tokenStart = nullptr;
 
   // if we're in the middle of parsing a key or value, make sure
   // the current token points to the beginning of the current buffer
@@ -483,10 +451,10 @@ nsresult nsPropertiesParser::ParseBuffer(const PRUnichar* aBuffer,
 }
 
 nsPersistentProperties::nsPersistentProperties()
-: mIn(nsnull)
+: mIn(nullptr)
 {
   mSubclass = static_cast<nsIPersistentProperties*>(this);
-  mTable.ops = nsnull;
+  mTable.ops = nullptr;
   PL_INIT_ARENA_POOL(&mArena, "PersistentPropertyArena", 2048);
 }
 
@@ -500,9 +468,9 @@ nsPersistentProperties::~nsPersistentProperties()
 nsresult
 nsPersistentProperties::Init()
 {
-  if (!PL_DHashTableInit(&mTable, &property_HashTableOps, nsnull,
+  if (!PL_DHashTableInit(&mTable, &property_HashTableOps, nullptr,
                          sizeof(PropertyTableEntry), 20)) {
-    mTable.ops = nsnull;
+    mTable.ops = nullptr;
     return NS_ERROR_OUT_OF_MEMORY;
   }
   return NS_OK;
@@ -514,7 +482,7 @@ nsPersistentProperties::Create(nsISupports *aOuter, REFNSIID aIID, void **aResul
   if (aOuter)
     return NS_ERROR_NO_AGGREGATION;
   nsPersistentProperties* props = new nsPersistentProperties();
-  if (props == nsnull)
+  if (props == nullptr)
     return NS_ERROR_OUT_OF_MEMORY;
 
   NS_ADDREF(props);
@@ -541,12 +509,12 @@ nsPersistentProperties::Load(nsIInputStream *aIn)
 
   nsPropertiesParser parser(mSubclass);
 
-  PRUint32 nProcessed;
+  uint32_t nProcessed;
   // If this 4096 is changed to some other value, make sure to adjust
   // the bug121341.properties test file accordingly.
   while (NS_SUCCEEDED(rv = mIn->ReadSegments(nsPropertiesParser::SegmentWriter, &parser, 4096, &nProcessed)) &&
          nProcessed != 0);
-  mIn = nsnull;
+  mIn = nullptr;
   if (NS_FAILED(rv))
     return rv;
 
@@ -572,8 +540,7 @@ nsPersistentProperties::SetStringProperty(const nsACString& aKey,
 
   if (entry->mKey) {
     aOldValue = entry->mValue;
-    NS_WARNING(nsPrintfCString(aKey.Length() + 30,
-                               "the property %s already exists\n",
+    NS_WARNING(nsPrintfCString("the property %s already exists\n",
                                flatKey.get()).get());
   }
   else {
@@ -621,19 +588,18 @@ nsPersistentProperties::GetStringProperty(const nsACString& aKey,
 
 static PLDHashOperator
 AddElemToArray(PLDHashTable* table, PLDHashEntryHdr *hdr,
-               PRUint32 i, void *arg)
+               uint32_t i, void *arg)
 {
-  nsISupportsArray  *propArray = (nsISupportsArray *) arg;
+  nsCOMArray<nsIPropertyElement>* props =
+    static_cast<nsCOMArray<nsIPropertyElement>*>(arg);
   PropertyTableEntry* entry =
     static_cast<PropertyTableEntry*>(hdr);
 
   nsPropertyElement *element =
     new nsPropertyElement(nsDependentCString(entry->mKey),
                           nsDependentString(entry->mValue));
-  if (!element)
-     return PL_DHASH_STOP;
 
-  propArray->InsertElementAt(element, i);
+  props->AppendObject(element);
 
   return PL_DHASH_NEXT;
 }
@@ -642,22 +608,19 @@ AddElemToArray(PLDHashTable* table, PLDHashEntryHdr *hdr,
 NS_IMETHODIMP
 nsPersistentProperties::Enumerate(nsISimpleEnumerator** aResult)
 {
-  nsCOMPtr<nsISupportsArray> propArray;
-  nsresult rv = NS_NewISupportsArray(getter_AddRefs(propArray));
-  if (NS_FAILED(rv))
-    return rv;
+  nsCOMArray<nsIPropertyElement> props;
 
   // We know the necessary size; we can avoid growing it while adding elements
-  if (!propArray->SizeTo(mTable.entryCount))
+  if (!props.SetCapacity(mTable.entryCount))
     return NS_ERROR_OUT_OF_MEMORY;
 
   // Step through hash entries populating a transient array
-  PRUint32 n =
-    PL_DHashTableEnumerate(&mTable, AddElemToArray, (void *)propArray);
+  uint32_t n =
+    PL_DHashTableEnumerate(&mTable, AddElemToArray, (void *)&props);
   if (n < mTable.entryCount)
     return NS_ERROR_OUT_OF_MEMORY;
 
-  return NS_NewArrayEnumerator(aResult, propArray);
+  return NS_NewArrayEnumerator(aResult, props);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -682,7 +645,7 @@ nsPersistentProperties::Undefine(const char* prop)
 }
 
 NS_IMETHODIMP
-nsPersistentProperties::Has(const char* prop, PRBool *result)
+nsPersistentProperties::Has(const char* prop, bool *result)
 {
   PropertyTableEntry *entry =
     static_cast<PropertyTableEntry*>
@@ -694,7 +657,7 @@ nsPersistentProperties::Has(const char* prop, PRBool *result)
 }
 
 NS_IMETHODIMP
-nsPersistentProperties::GetKeys(PRUint32 *count, char ***keys)
+nsPersistentProperties::GetKeys(uint32_t *count, char ***keys)
 {
     return NS_ERROR_NOT_IMPLEMENTED;
 }
@@ -709,7 +672,7 @@ nsPropertyElement::Create(nsISupports *aOuter, REFNSIID aIID, void **aResult)
   if (aOuter)
     return NS_ERROR_NO_AGGREGATION;
   nsPropertyElement* propElem = new nsPropertyElement();
-  if (propElem == nsnull)
+  if (propElem == nullptr)
     return NS_ERROR_OUT_OF_MEMORY;
   NS_ADDREF(propElem);
   nsresult rv = propElem->QueryInterface(aIID, aResult);

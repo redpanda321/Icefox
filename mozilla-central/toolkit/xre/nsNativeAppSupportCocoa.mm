@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Steven Michaud <smichaud@pobox.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsString.h"
 
@@ -49,7 +16,7 @@
 #include "nsIAppStartup.h"
 #include "nsIBaseWindow.h"
 #include "nsICommandLineRunner.h"
-#include "nsIDOMWindowInternal.h"
+#include "nsIDOMWindow.h"
 #include "nsIDocShellTreeItem.h"
 #include "nsIDocShellTreeOwner.h"
 #include "nsIInterfaceRequestorUtils.h"
@@ -60,7 +27,7 @@
 #include "nsIWindowMediator.h"
 
 nsresult
-GetNativeWindowPointerFromDOMWindow(nsIDOMWindowInternal *a_window, NSWindow **a_nativeWindow)
+GetNativeWindowPointerFromDOMWindow(nsIDOMWindow *a_window, NSWindow **a_nativeWindow)
 {
   *a_nativeWindow = nil;
   if (!a_window)
@@ -69,12 +36,12 @@ GetNativeWindowPointerFromDOMWindow(nsIDOMWindowInternal *a_window, NSWindow **a
   nsCOMPtr<nsIWebNavigation> mruWebNav(do_GetInterface(a_window));
   if (mruWebNav) {
     nsCOMPtr<nsIDocShellTreeItem> mruTreeItem(do_QueryInterface(mruWebNav));
-    nsCOMPtr<nsIDocShellTreeOwner> mruTreeOwner = nsnull;
+    nsCOMPtr<nsIDocShellTreeOwner> mruTreeOwner = nullptr;
     mruTreeItem->GetTreeOwner(getter_AddRefs(mruTreeOwner));
     if(mruTreeOwner) {
       nsCOMPtr<nsIBaseWindow> mruBaseWindow(do_QueryInterface(mruTreeOwner));
       if (mruBaseWindow) {
-        nsCOMPtr<nsIWidget> mruWidget = nsnull;
+        nsCOMPtr<nsIWidget> mruWidget = nullptr;
         mruBaseWindow->GetMainWidget(getter_AddRefs(mruWidget));
         if (mruWidget) {
           *a_nativeWindow = (NSWindow*)mruWidget->GetNativeData(NS_NATIVE_WINDOW);
@@ -90,25 +57,25 @@ class nsNativeAppSupportCocoa : public nsNativeAppSupportBase
 {
 public:
   nsNativeAppSupportCocoa() :
-    mCanShowUI(PR_FALSE) { }
+    mCanShowUI(false) { }
 
-  NS_IMETHOD Start(PRBool* aRetVal);
+  NS_IMETHOD Start(bool* aRetVal);
   NS_IMETHOD ReOpen();
   NS_IMETHOD Enable();
 
 private:
-  PRBool mCanShowUI;
+  bool mCanShowUI;
 
 };
 
 NS_IMETHODIMP
 nsNativeAppSupportCocoa::Enable()
 {
-  mCanShowUI = PR_TRUE;
+  mCanShowUI = true;
   return NS_OK;
 }
 
-NS_IMETHODIMP nsNativeAppSupportCocoa::Start(PRBool *_retval)
+NS_IMETHODIMP nsNativeAppSupportCocoa::Start(bool *_retval)
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK_NSRESULT;
 
@@ -116,7 +83,7 @@ NS_IMETHODIMP nsNativeAppSupportCocoa::Start(PRBool *_retval)
   OSErr err = ::Gestalt (gestaltSystemVersion, &response);
   response &= 0xFFFF; // The system version is in the low order word
 
-  // Check that the OS version is supported, if not return PR_FALSE,
+  // Check that the OS version is supported, if not return false,
   // which will make the browser quit.  In principle we could display an
   // alert here.  But the alert's message and buttons would require custom
   // localization.  So (for now at least) we just log an English message
@@ -128,10 +95,10 @@ NS_IMETHODIMP nsNativeAppSupportCocoa::Start(PRBool *_retval)
 #endif
   if ((err != noErr) || response < minimumOS) {
     NSLog(@"Minimum OS version requirement not met!");
-    return PR_FALSE;
+    return NS_OK;
   }
 
-  *_retval = PR_TRUE;
+  *_retval = true;
   return NS_OK;
 
   NS_OBJC_END_TRY_ABORT_BLOCK_NSRESULT;
@@ -145,9 +112,9 @@ nsNativeAppSupportCocoa::ReOpen()
   if (!mCanShowUI)
     return NS_ERROR_FAILURE;
 
-  PRBool haveNonMiniaturized = PR_FALSE;
-  PRBool haveOpenWindows = PR_FALSE;
-  PRBool done = PR_FALSE;
+  bool haveNonMiniaturized = false;
+  bool haveOpenWindows = false;
+  bool done = false;
   
   nsCOMPtr<nsIWindowMediator> 
     wm(do_GetService(NS_WINDOWMEDIATOR_CONTRACTID));
@@ -156,11 +123,11 @@ nsNativeAppSupportCocoa::ReOpen()
   } 
   else {
     nsCOMPtr<nsISimpleEnumerator> windowList;
-    wm->GetXULWindowEnumerator(nsnull, getter_AddRefs(windowList));
-    PRBool more;
+    wm->GetXULWindowEnumerator(nullptr, getter_AddRefs(windowList));
+    bool more;
     windowList->HasMoreElements(&more);
     while (more) {
-      nsCOMPtr<nsISupports> nextWindow = nsnull;
+      nsCOMPtr<nsISupports> nextWindow = nullptr;
       windowList->GetNext(getter_AddRefs(nextWindow));
       nsCOMPtr<nsIBaseWindow> baseWindow(do_QueryInterface(nextWindow));
       if (!baseWindow) {
@@ -168,10 +135,10 @@ nsNativeAppSupportCocoa::ReOpen()
         continue;
       }
       else {
-        haveOpenWindows = PR_TRUE;
+        haveOpenWindows = true;
       }
 
-      nsCOMPtr<nsIWidget> widget = nsnull;
+      nsCOMPtr<nsIWidget> widget = nullptr;
       baseWindow->GetMainWidget(getter_AddRefs(widget));
       if (!widget) {
         windowList->HasMoreElements(&more);
@@ -179,7 +146,7 @@ nsNativeAppSupportCocoa::ReOpen()
       }
       NSWindow *cocoaWindow = (NSWindow*)widget->GetNativeData(NS_NATIVE_WINDOW);
       if (![cocoaWindow isMiniaturized]) {
-        haveNonMiniaturized = PR_TRUE;
+        haveNonMiniaturized = true;
         break;  //have un-minimized windows, nothing to do
       } 
       windowList->HasMoreElements(&more);
@@ -187,22 +154,22 @@ nsNativeAppSupportCocoa::ReOpen()
         
     if (!haveNonMiniaturized) {
       // Deminiaturize the most recenty used window
-      nsCOMPtr<nsIDOMWindowInternal> mru = nsnull;
-      wm->GetMostRecentWindow(nsnull, getter_AddRefs(mru));
+      nsCOMPtr<nsIDOMWindow> mru;
+      wm->GetMostRecentWindow(nullptr, getter_AddRefs(mru));
             
       if (mru) {        
         NSWindow *cocoaMru = nil;
         GetNativeWindowPointerFromDOMWindow(mru, &cocoaMru);
         if (cocoaMru) {
           [cocoaMru deminiaturize:nil];
-          done = PR_TRUE;
+          done = true;
         }
       }
       
     } // end if have non miniaturized
     
     if (!haveOpenWindows && !done) {
-      char* argv[] = { nsnull };
+      char* argv[] = { nullptr };
     
       // use an empty command line to make the right kind(s) of window open
       nsCOMPtr<nsICommandLineRunner> cmdLine
@@ -210,7 +177,7 @@ nsNativeAppSupportCocoa::ReOpen()
       NS_ENSURE_TRUE(cmdLine, NS_ERROR_FAILURE);
 
       nsresult rv;
-      rv = cmdLine->Init(0, argv, nsnull,
+      rv = cmdLine->Init(0, argv, nullptr,
                          nsICommandLine::STATE_REMOTE_EXPLICIT);
       NS_ENSURE_SUCCESS(rv, rv);
 

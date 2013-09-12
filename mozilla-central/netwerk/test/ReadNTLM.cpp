@@ -1,39 +1,7 @@
 /* vim: set ts=2 sw=2 et cindent: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.
- *
- * The Initial Developer of the Original Code is IBM Corporation.
- * Portions created by IBM Corporation are Copyright (C) 2003
- * IBM Corporation. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@meer.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -98,7 +66,7 @@ static const char NTLM_TYPE3_MARKER[] = { 0x03, 0x00, 0x00, 0x00 };
 #define NTLM_HASH_LEN 16
 #define NTLM_RESP_LEN 24
 
-static void PrintFlags(PRUint32 flags)
+static void PrintFlags(uint32_t flags)
 {
 #define TEST(_flag) \
   if (flags & k ## _flag) \
@@ -141,7 +109,7 @@ static void PrintFlags(PRUint32 flags)
 }
 
 static void
-PrintBuf(const char *tag, const PRUint8 *buf, PRUint32 bufLen)
+PrintBuf(const char *tag, const uint8_t *buf, uint32_t bufLen)
 {
   int i;
 
@@ -177,46 +145,46 @@ PrintBuf(const char *tag, const PRUint8 *buf, PRUint32 bufLen)
   }
 }
 
-static PRUint16
-ReadUint16(const PRUint8 *&buf)
+static uint16_t
+ReadUint16(const uint8_t *&buf)
 {
-  PRUint16 x;
+  uint16_t x;
 #ifdef IS_BIG_ENDIAN
-  x = ((PRUint16) buf[1]) | ((PRUint16) buf[0] << 8);
+  x = ((uint16_t) buf[1]) | ((uint16_t) buf[0] << 8);
 #else
-  x = ((PRUint16) buf[0]) | ((PRUint16) buf[1] << 8);
+  x = ((uint16_t) buf[0]) | ((uint16_t) buf[1] << 8);
 #endif
   buf += sizeof(x);
   return x;
 }
 
-static PRUint32
-ReadUint32(const PRUint8 *&buf)
+static uint32_t
+ReadUint32(const uint8_t *&buf)
 {
-  PRUint32 x;
+  uint32_t x;
 #ifdef IS_BIG_ENDIAN
-  x = ( (PRUint32) buf[3])        |
-      (((PRUint32) buf[2]) << 8)  |
-      (((PRUint32) buf[1]) << 16) |
-      (((PRUint32) buf[0]) << 24);
+  x = ( (uint32_t) buf[3])        |
+      (((uint32_t) buf[2]) << 8)  |
+      (((uint32_t) buf[1]) << 16) |
+      (((uint32_t) buf[0]) << 24);
 #else
-  x = ( (PRUint32) buf[0])        |
-      (((PRUint32) buf[1]) << 8)  |
-      (((PRUint32) buf[2]) << 16) |
-      (((PRUint32) buf[3]) << 24);
+  x = ( (uint32_t) buf[0])        |
+      (((uint32_t) buf[1]) << 8)  |
+      (((uint32_t) buf[2]) << 16) |
+      (((uint32_t) buf[3]) << 24);
 #endif
   buf += sizeof(x);
   return x;
 }
 
 typedef struct {
-  PRUint16 length;
-  PRUint16 capacity;
-  PRUint32 offset;
+  uint16_t length;
+  uint16_t capacity;
+  uint32_t offset;
 } SecBuf;
 
 static void
-ReadSecBuf(SecBuf *s, const PRUint8 *&buf)
+ReadSecBuf(SecBuf *s, const uint8_t *&buf)
 {
   s->length = ReadUint16(buf);
   s->capacity = ReadUint16(buf);
@@ -224,10 +192,10 @@ ReadSecBuf(SecBuf *s, const PRUint8 *&buf)
 }
 
 static void
-ReadType1MsgBody(const PRUint8 *inBuf, PRUint32 start)
+ReadType1MsgBody(const uint8_t *inBuf, uint32_t start)
 {
-  const PRUint8 *cursor = inBuf + start;
-  PRUint32 flags;
+  const uint8_t *cursor = inBuf + start;
+  uint32_t flags;
 
   PrintBuf("flags", cursor, 4);
   // read flags
@@ -248,12 +216,12 @@ ReadType1MsgBody(const PRUint8 *inBuf, PRUint32 start)
 }
 
 static void
-ReadType2MsgBody(const PRUint8 *inBuf, PRUint32 start)
+ReadType2MsgBody(const uint8_t *inBuf, uint32_t start)
 {
-  PRUint16 targetLen, offset;
-  PRUint32 flags;
-  const PRUint8 *target;
-  const PRUint8 *cursor = inBuf + start;
+  uint16_t targetLen, offset;
+  uint32_t flags;
+  const uint8_t *target;
+  const uint8_t *cursor = inBuf + start;
 
   // read target name security buffer
   targetLen = ReadUint16(cursor);
@@ -281,9 +249,9 @@ ReadType2MsgBody(const PRUint8 *inBuf, PRUint32 start)
 }
 
 static void
-ReadType3MsgBody(const PRUint8 *inBuf, PRUint32 start)
+ReadType3MsgBody(const uint8_t *inBuf, uint32_t start)
 {
-  const PRUint8 *cursor = inBuf + start;
+  const uint8_t *cursor = inBuf + start;
 
   SecBuf secbuf;
 
@@ -305,22 +273,22 @@ ReadType3MsgBody(const PRUint8 *inBuf, PRUint32 start)
   ReadSecBuf(&secbuf, cursor); // session key
   PrintBuf("session key", inBuf + secbuf.offset, secbuf.length);
 
-  PRUint32 flags = ReadUint32(cursor);
-  PrintBuf("flags", (const PRUint8 *) &flags, sizeof(flags));
+  uint32_t flags = ReadUint32(cursor);
+  PrintBuf("flags", (const uint8_t *) &flags, sizeof(flags));
   PrintFlags(flags);
 }
 
 static void
-ReadMsg(const char *base64buf, PRUint32 bufLen)
+ReadMsg(const char *base64buf, uint32_t bufLen)
 {
-  PRUint8 *inBuf = (PRUint8 *) PL_Base64Decode(base64buf, bufLen, NULL);
+  uint8_t *inBuf = (uint8_t *) PL_Base64Decode(base64buf, bufLen, NULL);
   if (!inBuf)
   {
     printf("PL_Base64Decode failed\n");
     return;
   }
 
-  const PRUint8 *cursor = inBuf;
+  const uint8_t *cursor = inBuf;
 
   PrintBuf("signature", cursor, 8);
 
@@ -352,6 +320,6 @@ int main(int argc, char **argv)
     printf("usage: ntlmread <msg>\n");
     return -1;
   }
-  ReadMsg(argv[1], (PRUint32) strlen(argv[1]));
+  ReadMsg(argv[1], (uint32_t) strlen(argv[1]));
   return 0;
 }

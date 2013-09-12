@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Joe Hewitt <hewitt@netscape.com> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "inCSSValueSearch.h"
 
@@ -41,8 +8,7 @@
 #include "nsIServiceManager.h"
 #include "nsVoidArray.h"
 #include "nsReadableUtils.h"
-#include "nsIDOMDocumentStyle.h"
-#include "nsIDOM3Node.h"
+#include "nsIDOMDocument.h"
 #include "nsIDOMStyleSheetList.h"
 #include "nsIDOMCSSStyleSheet.h"
 #include "nsIDOMCSSRuleList.h"
@@ -50,19 +16,21 @@
 #include "nsIDOMCSSStyleDeclaration.h"
 #include "nsIDOMCSSImportRule.h"
 #include "nsIDOMCSSMediaRule.h"
+#include "nsIDOMCSSSupportsRule.h"
 #include "nsIURI.h"
+#include "nsIDocument.h"
 #include "nsNetUtil.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 inCSSValueSearch::inCSSValueSearch()
-  : mResults(nsnull),
-    mProperties(nsnull),
+  : mResults(nullptr),
+    mProperties(nullptr),
     mResultCount(0),
     mPropertyCount(0),
-    mIsActive(PR_FALSE),
-    mHoldResults(PR_TRUE),
-    mReturnRelativeURLs(PR_TRUE),
-    mNormalizeChromeURLs(PR_FALSE)
+    mIsActive(false),
+    mHoldResults(true),
+    mReturnRelativeURLs(true),
+    mNormalizeChromeURLs(false)
 {
   nsCSSProps::AddRefTable();
   mProperties = new nsCSSProperty[100];
@@ -81,28 +49,28 @@ NS_IMPL_ISUPPORTS2(inCSSValueSearch, inISearchProcess, inICSSValueSearch)
 // inISearchProcess
 
 NS_IMETHODIMP 
-inCSSValueSearch::GetIsActive(PRBool *aIsActive)
+inCSSValueSearch::GetIsActive(bool *aIsActive)
 {
   *aIsActive = mIsActive;
   return NS_OK;
 }
 
 NS_IMETHODIMP 
-inCSSValueSearch::GetResultCount(PRInt32 *aResultCount)
+inCSSValueSearch::GetResultCount(int32_t *aResultCount)
 {
   *aResultCount = mResultCount;
   return NS_OK;
 }
 
 NS_IMETHODIMP 
-inCSSValueSearch::GetHoldResults(PRBool *aHoldResults)
+inCSSValueSearch::GetHoldResults(bool *aHoldResults)
 {
   *aHoldResults = mHoldResults;
   return NS_OK;
 }
 
 NS_IMETHODIMP 
-inCSSValueSearch::SetHoldResults(PRBool aHoldResults)
+inCSSValueSearch::SetHoldResults(bool aHoldResults)
 {
   mHoldResults = aHoldResults;
   return NS_OK;
@@ -113,29 +81,28 @@ inCSSValueSearch::SearchSync()
 {
   InitSearch();
 
-  nsCOMPtr<nsIURI> baseURL;
-  nsCOMPtr<nsIDOM3Node> dom3Node = do_QueryInterface(mDocument);
-  if (dom3Node) {
-    nsAutoString uri;
-    dom3Node->GetBaseURI(uri);
-    NS_NewURI(getter_AddRefs(baseURL), uri);
+  if (!mDocument) {
+    return NS_OK;
   }
-  
-  nsCOMPtr<nsIDOMDocumentStyle> doc = do_QueryInterface(mDocument);
-  if (doc) {
-    nsCOMPtr<nsIDOMStyleSheetList> sheets;
-    nsresult rv = doc->GetStyleSheets(getter_AddRefs(sheets));
-    NS_ENSURE_SUCCESS(rv, NS_OK);
 
-    PRUint32 length;
-    sheets->GetLength(&length);
-    for (PRUint32 i = 0; i < length; ++i) {
-      nsCOMPtr<nsIDOMStyleSheet> sheet;
-      sheets->Item(i, getter_AddRefs(sheet));
-      nsCOMPtr<nsIDOMCSSStyleSheet> cssSheet = do_QueryInterface(sheet);
-      if (cssSheet)
-        SearchStyleSheet(cssSheet, baseURL);
-    }
+  nsCOMPtr<nsIURI> baseURI;
+  nsCOMPtr<nsIDocument> idoc = do_QueryInterface(mDocument);
+  if (idoc) {
+    baseURI = idoc->GetBaseURI();
+  }
+
+  nsCOMPtr<nsIDOMStyleSheetList> sheets;
+  nsresult rv = mDocument->GetStyleSheets(getter_AddRefs(sheets));
+  NS_ENSURE_SUCCESS(rv, NS_OK);
+
+  uint32_t length;
+  sheets->GetLength(&length);
+  for (uint32_t i = 0; i < length; ++i) {
+    nsCOMPtr<nsIDOMStyleSheet> sheet;
+    sheets->Item(i, getter_AddRefs(sheet));
+    nsCOMPtr<nsIDOMCSSStyleSheet> cssSheet = do_QueryInterface(sheet);
+    if (cssSheet)
+      SearchStyleSheet(cssSheet, baseURI);
   }
 
   // XXX would be nice to search inline style as well.
@@ -161,7 +128,7 @@ inCSSValueSearch::SearchStop()
 }
 
 NS_IMETHODIMP
-inCSSValueSearch::SearchStep(PRBool* _retval)
+inCSSValueSearch::SearchStep(bool* _retval)
 {
 
   return NS_OK;
@@ -169,7 +136,7 @@ inCSSValueSearch::SearchStep(PRBool* _retval)
 
 
 NS_IMETHODIMP 
-inCSSValueSearch::GetStringResultAt(PRInt32 aIndex, nsAString& _retval)
+inCSSValueSearch::GetStringResultAt(int32_t aIndex, nsAString& _retval)
 {
   if (mHoldResults) {
     nsAutoString* result = mResults->ElementAt(aIndex);
@@ -183,13 +150,13 @@ inCSSValueSearch::GetStringResultAt(PRInt32 aIndex, nsAString& _retval)
 }
 
 NS_IMETHODIMP 
-inCSSValueSearch::GetIntResultAt(PRInt32 aIndex, PRInt32 *_retval)
+inCSSValueSearch::GetIntResultAt(int32_t aIndex, int32_t *_retval)
 {
   return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 NS_IMETHODIMP 
-inCSSValueSearch::GetUIntResultAt(PRInt32 aIndex, PRUint32 *_retval)
+inCSSValueSearch::GetUIntResultAt(int32_t aIndex, uint32_t *_retval)
 {
   return NS_ERROR_NOT_IMPLEMENTED;
 }
@@ -228,28 +195,28 @@ inCSSValueSearch::SetBaseURL(const PRUnichar* aBaseURL)
 }
 
 NS_IMETHODIMP 
-inCSSValueSearch::GetReturnRelativeURLs(PRBool* aReturnRelativeURLs)
+inCSSValueSearch::GetReturnRelativeURLs(bool* aReturnRelativeURLs)
 {
   *aReturnRelativeURLs = mReturnRelativeURLs;
   return NS_OK;
 }
 
 NS_IMETHODIMP 
-inCSSValueSearch::SetReturnRelativeURLs(PRBool aReturnRelativeURLs)
+inCSSValueSearch::SetReturnRelativeURLs(bool aReturnRelativeURLs)
 {
   mReturnRelativeURLs = aReturnRelativeURLs;
   return NS_OK;
 }
 
 NS_IMETHODIMP 
-inCSSValueSearch::GetNormalizeChromeURLs(PRBool *aNormalizeChromeURLs)
+inCSSValueSearch::GetNormalizeChromeURLs(bool *aNormalizeChromeURLs)
 {
   *aNormalizeChromeURLs = mNormalizeChromeURLs;
   return NS_OK;
 }
 
 NS_IMETHODIMP
-inCSSValueSearch::SetNormalizeChromeURLs(PRBool aNormalizeChromeURLs)
+inCSSValueSearch::SetNormalizeChromeURLs(bool aNormalizeChromeURLs)
 {
   mNormalizeChromeURLs = aNormalizeChromeURLs;
   return NS_OK;
@@ -259,7 +226,8 @@ NS_IMETHODIMP
 inCSSValueSearch::AddPropertyCriteria(const PRUnichar *aPropName)
 {
   nsCSSProperty prop =
-    nsCSSProps::LookupProperty(nsDependentString(aPropName));
+    nsCSSProps::LookupProperty(nsDependentString(aPropName),
+                               nsCSSProps::eAny);
   mProperties[mPropertyCount] = prop;
   mPropertyCount++;
   return NS_OK;
@@ -296,9 +264,9 @@ inCSSValueSearch::InitSearch()
 }
 
 nsresult
-inCSSValueSearch::KillSearch(PRInt16 aResult)
+inCSSValueSearch::KillSearch(int16_t aResult)
 {
-  mIsActive = PR_TRUE;
+  mIsActive = true;
   mObserver->OnSearchEnd(this, aResult);
 
   return NS_OK;
@@ -313,7 +281,7 @@ inCSSValueSearch::SearchStyleSheet(nsIDOMCSSStyleSheet* aStyleSheet, nsIURI* aBa
   if (href.IsEmpty())
     baseURL = aBaseURL;
   else
-    NS_NewURI(getter_AddRefs(baseURL), href, nsnull, aBaseURL);
+    NS_NewURI(getter_AddRefs(baseURL), href, nullptr, aBaseURL);
 
   nsCOMPtr<nsIDOMCSSRuleList> rules;
   nsresult rv = aStyleSheet->GetCssRules(getter_AddRefs(rules));
@@ -325,12 +293,12 @@ inCSSValueSearch::SearchStyleSheet(nsIDOMCSSStyleSheet* aStyleSheet, nsIURI* aBa
 nsresult
 inCSSValueSearch::SearchRuleList(nsIDOMCSSRuleList* aRuleList, nsIURI* aBaseURL)
 {
-  PRUint32 length;
+  uint32_t length;
   aRuleList->GetLength(&length);
-  for (PRUint32 i = 0; i < length; ++i) {
+  for (uint32_t i = 0; i < length; ++i) {
     nsCOMPtr<nsIDOMCSSRule> rule;
     aRuleList->Item(i, getter_AddRefs(rule));
-    PRUint16 type;
+    uint16_t type;
     rule->GetType(&type);
     switch (type) {
       case nsIDOMCSSRule::STYLE_RULE: {
@@ -350,6 +318,12 @@ inCSSValueSearch::SearchRuleList(nsIDOMCSSRuleList* aRuleList, nsIURI* aBaseURL)
         mediaRule->GetCssRules(getter_AddRefs(childRules));
         SearchRuleList(childRules, aBaseURL);
       } break;
+      case nsIDOMCSSRule::SUPPORTS_RULE: {
+        nsCOMPtr<nsIDOMCSSSupportsRule> supportsRule = do_QueryInterface(rule);
+        nsCOMPtr<nsIDOMCSSRuleList> childRules;
+        supportsRule->GetCssRules(getter_AddRefs(childRules));
+        SearchRuleList(childRules, aBaseURL);
+      } break;
       default:
         // XXX handle nsIDOMCSSRule::PAGE_RULE if we ever support it
         break;
@@ -365,10 +339,10 @@ inCSSValueSearch::SearchStyleRule(nsIDOMCSSStyleRule* aStyleRule, nsIURI* aBaseU
   nsresult rv = aStyleRule->GetStyle(getter_AddRefs(decl));
   NS_ENSURE_SUCCESS(rv, rv);
   
-  PRUint32 length;
+  uint32_t length;
   decl->GetLength(&length);
   nsAutoString property, value;
-  for (PRUint32 i = 0; i < length; ++i) {
+  for (uint32_t i = 0; i < length; ++i) {
     decl->Item(i, property);
     // XXX This probably ought to use GetPropertyCSSValue if it were
     // implemented.
@@ -387,9 +361,9 @@ inCSSValueSearch::SearchStyleValue(const nsAFlatString& aValue, nsIURI* aBaseURL
       Substring(aValue, 4, aValue.Length() - 5);
     // XXXldb Need to do more with |mReturnRelativeURLs|, perhaps?
     nsCOMPtr<nsIURI> uri;
-    nsresult rv = NS_NewURI(getter_AddRefs(uri), url, nsnull, aBaseURL);
+    nsresult rv = NS_NewURI(getter_AddRefs(uri), url, nullptr, aBaseURL);
     NS_ENSURE_SUCCESS(rv, rv);
-    nsCAutoString spec;
+    nsAutoCString spec;
     uri->GetSpec(spec);
     nsAutoString *result = new NS_ConvertUTF8toUTF16(spec);
     if (mReturnRelativeURLs)
@@ -405,13 +379,13 @@ nsresult
 inCSSValueSearch::EqualizeURL(nsAutoString* aURL)
 {
   if (mNormalizeChromeURLs) {
-    if (aURL->Find("chrome://", PR_FALSE, 0, 1) >= 0) {
-      PRUint32 len = aURL->Length();
+    if (aURL->Find("chrome://", false, 0, 1) >= 0) {
+      uint32_t len = aURL->Length();
       PRUnichar* result = new PRUnichar[len-8];
       const PRUnichar* src = aURL->get();
-      PRUint32 i = 9;
-      PRUint32 milestone = 0;
-      PRUint32 s = 0;
+      uint32_t i = 9;
+      uint32_t milestone = 0;
+      uint32_t s = 0;
       while (i < len) {
         if (src[i] == '/') {
           milestone += 1;

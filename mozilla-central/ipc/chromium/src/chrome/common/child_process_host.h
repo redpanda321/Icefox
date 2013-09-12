@@ -12,11 +12,6 @@
 #include "base/basictypes.h"
 #include "base/scoped_ptr.h"
 #include "base/waitable_event_watcher.h"
-#ifdef CHROMIUM_MOZILLA_BUILD
-class ResourceDispatcherHost;
-#else
-#include "chrome/browser/renderer_host/resource_dispatcher_host.h"
-#endif
 #include "chrome/common/child_process_info.h"
 #include "chrome/common/ipc_channel.h"
 
@@ -25,12 +20,8 @@ class NotificationType;
 // Plugins/workers and other child processes that live on the IO thread should
 // derive from this class.
 class ChildProcessHost :
-#ifdef CHROMIUM_MOZILLA_BUILD
                          public IPC::Message::Sender,
                          public ChildProcessInfo,
-#else
-                         public ResourceDispatcherHost::Receiver,
-#endif
                          public base::WaitableEventWatcher::Delegate,
                          public IPC::Channel::Listener {
  public:
@@ -60,8 +51,7 @@ class ChildProcessHost :
   };
 
  protected:
-  ChildProcessHost(ProcessType type,
-                   ResourceDispatcherHost* resource_dispatcher_host = 0);
+  explicit ChildProcessHost(ProcessType type);
 
   // Derived classes return true if it's ok to shut down the child process.
   virtual bool CanShutdown() = 0;
@@ -78,34 +68,26 @@ class ChildProcessHost :
 
   // IPC::Channel::Listener implementation:
   virtual void OnMessageReceived(const IPC::Message& msg) { }
-  virtual void OnChannelConnected(int32 peer_pid) { }
+  virtual void OnChannelConnected(int32_t peer_pid) { }
   virtual void OnChannelError() { }
 
   bool opening_channel() { return opening_channel_; }
   const std::wstring& channel_id() { return channel_id_; }
 
-#ifdef CHROMIUM_MOZILLA_BUILD
   base::WaitableEvent* GetProcessEvent() { return process_event_.get(); }
-#endif
 
   const IPC::Channel& channel() const { return *channel_; }
-#ifdef CHROMIUM_MOZILLA_BUILD
   IPC::Channel* channelp() const { return channel_.get(); }
-#endif
 
  private:
   // Sends the given notification to the notification service on the UI thread.
   void Notify(NotificationType type);
 
-#ifdef CHROMIUM_MOZILLA_BUILD
  protected:
-#endif
   // WaitableEventWatcher::Delegate implementation:
   virtual void OnWaitableEventSignaled(base::WaitableEvent *event);
-#ifdef CHROMIUM_MOZILLA_BUILD
- private:
-#endif
 
+ private:
   // By using an internal class as the IPC::Channel::Listener, we can intercept
   // OnMessageReceived/OnChannelConnected and do our own processing before
   // calling the subclass' implementation.
@@ -113,15 +95,14 @@ class ChildProcessHost :
    public:
     ListenerHook(ChildProcessHost* host);
     virtual void OnMessageReceived(const IPC::Message& msg);
-    virtual void OnChannelConnected(int32 peer_pid);
+    virtual void OnChannelConnected(int32_t peer_pid);
     virtual void OnChannelError();
+    virtual void GetQueuedMessages(std::queue<IPC::Message>& queue);
    private:
     ChildProcessHost* host_;
   };
 
   ListenerHook listener_;
-
-  ResourceDispatcherHost* resource_dispatcher_host_;
 
   // True while we're waiting the channel to be opened.
   bool opening_channel_;

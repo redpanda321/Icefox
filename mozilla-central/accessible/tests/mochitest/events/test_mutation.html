@@ -12,16 +12,14 @@
 </style>
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/EventUtils.js"></script>
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js"></script>
+          src="../common.js"></script>
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/events.js"></script>
+          src="../events.js"></script>
 
   <script type="application/javascript">
     /**
@@ -230,15 +228,111 @@
 
       this.invoke = function cloneAndReplaceInDOM_invoke()
       {
-        var newElm = this.DOMNode.cloneNode(true);
-        newElm.removeAttribute('id');
-        this.eventSeq[1][1] = newElm;
-        this.DOMNode.parentNode.replaceChild(newElm, this.DOMNode);
+        this.DOMNode.parentNode.replaceChild(this.newElm, this.DOMNode);
       }
 
       this.getID = function cloneAndReplaceInDOM_getID()
       {
         return aNodeOrID + " clone and replace in DOM.";
+      }
+
+      this.newElm = this.DOMNode.cloneNode(true);
+      this.newElm.removeAttribute('id');
+      this.setTarget(kShowEvent, this.newElm);
+    }
+
+    /**
+     * Trigger content insertion (flush layout), removal and insertion of
+     * the same element for the same parent.
+     */
+    function test1(aContainerID)
+    {
+      this.divNode = document.createElement("div");
+      this.divNode.setAttribute("id", "div-test1");
+      this.containerNode = getNode(aContainerID);
+
+      this.eventSeq = [
+        new invokerChecker(EVENT_SHOW, this.divNode),
+        new invokerChecker(EVENT_REORDER, this.containerNode)
+      ];
+
+      this.invoke = function test1_invoke()
+      {
+        this.containerNode.appendChild(this.divNode);
+        getComputedStyle(this.divNode, "").color;
+        this.containerNode.removeChild(this.divNode);
+        this.containerNode.appendChild(this.divNode);
+      }
+
+      this.getID = function test1_getID()
+      {
+        return "fuzzy test #1: content insertion (flush layout), removal and" +
+          "reinsertion";
+      }
+    }
+
+    /**
+     * Trigger content insertion (flush layout), removal and insertion of
+     * the same element for the different parents.
+     */
+    function test2(aContainerID, aTmpContainerID)
+    {
+      this.divNode = document.createElement("div");
+      this.divNode.setAttribute("id", "div-test2");
+      this.containerNode = getNode(aContainerID);
+      this.tmpContainerNode = getNode(aTmpContainerID);
+      this.container = getAccessible(this.containerNode);
+      this.tmpContainer = getAccessible(this.tmpContainerNode);
+
+      this.eventSeq = [
+        new invokerChecker(EVENT_SHOW, this.divNode),
+        new invokerChecker(EVENT_REORDER, this.containerNode)
+      ];
+
+      this.unexpectedEventSeq = [
+        new invokerChecker(EVENT_REORDER, this.tmpContainerNode)
+      ];
+
+      this.invoke = function test2_invoke()
+      {
+        this.tmpContainerNode.appendChild(this.divNode);
+        getComputedStyle(this.divNode, "").color;
+        this.tmpContainerNode.removeChild(this.divNode);
+        this.containerNode.appendChild(this.divNode);
+      }
+
+      this.getID = function test2_getID()
+      {
+        return "fuzzy test #2: content insertion (flush layout), removal and" +
+          "reinsertion under another container";
+      }
+    }
+
+    /**
+     * Content insertion (flush layout) and then removal (nothing was changed).
+     */
+    function test3(aContainerID)
+    {
+      this.divNode = document.createElement("div");
+      this.divNode.setAttribute("id", "div-test3");
+      this.containerNode = getNode(aContainerID);
+
+      this.unexpectedEventSeq = [
+        new invokerChecker(EVENT_SHOW, this.divNode),
+        new invokerChecker(EVENT_HIDE, this.divNode),
+        new invokerChecker(EVENT_REORDER, this.containerNode)
+      ];
+
+      this.invoke = function test3_invoke()
+      {
+        this.containerNode.appendChild(this.divNode);
+        getComputedStyle(this.divNode, "").color;
+        this.containerNode.removeChild(this.divNode);
+      }
+
+      this.getID = function test3_getID()
+      {
+        return "fuzzy test #3: content insertion (flush layout) and removal";
       }
     }
 
@@ -279,7 +373,7 @@
      * Do tests.
      */
     var gQueue = null;
-    // gA11yEventDumpID = "eventdump"; // debug stuff
+    //gA11yEventDumpToConsole = true; // debug stuff
 
     function doTests()
     {
@@ -347,16 +441,22 @@
 
       // Show/hide events by creating new accessible DOM node and replacing
       // old one.
-      // XXX: bug 472810
-      // gQueue.push(new cloneAndReplaceInDOM("link6"));
+      getAccessible("link6"); // ensure accessible is created
+      gQueue.push(new cloneAndReplaceInDOM("link6"));
 
       // Show/hide events by changing class name on the parent node.
       gQueue.push(new changeClass("container2", "link7", "", kShowEvents));
       gQueue.push(new changeClass("container2", "link7", "displayNone",
                                   kHideEvents));
+
       gQueue.push(new changeClass("container3", "link8", "", kShowEvents));
       gQueue.push(new changeClass("container3", "link8", "visibilityHidden",
                                   kHideEvents));
+
+      gQueue.push(new test1("testContainer"));
+      gQueue.push(new test2("testContainer", "testContainer2"));
+      gQueue.push(new test2("testContainer", "testNestedContainer"));
+      gQueue.push(new test3("testContainer"));
 
       gQueue.invoke(); // Will call SimpleTest.finish();
     }
@@ -371,13 +471,23 @@
   <a target="_blank"
      href="https://bugzilla.mozilla.org/show_bug.cgi?id=469985"
      title=" turn the test from bug 354745 into mochitest">
-    Mozilla Bug 469985
-  </a>
+    Mozilla Bug 469985</a>
   <a target="_blank"
      href="https://bugzilla.mozilla.org/show_bug.cgi?id=472662"
      title="no reorder event when html:link display property is changed from 'none' to 'inline'">
-    Mozilla Bug 472662
-  </a>
+    Mozilla Bug 472662</a>
+  <a target="_blank"
+     title="Rework accessible tree update code"
+     href="https://bugzilla.mozilla.org/show_bug.cgi?id=570275">
+    Mozilla Bug 570275</a>
+  <a target="_blank"
+     title="Develop a way to handle visibility style"
+     href="https://bugzilla.mozilla.org/show_bug.cgi?id=606125">
+    Mozilla Bug 606125</a>
+  <a target="_blank"
+     title="Update accessible tree on content insertion after layout"
+     href="https://bugzilla.mozilla.org/show_bug.cgi?id=498015">
+    Mozilla Bug 498015</a>
 
   <p id="display"></p>
   <div id="content" style="display: none"></div>
@@ -396,13 +506,15 @@
       <span id="child1"></span>
       <span id="child2" role="listitem"></span>
       <span id="child3"><span role="listitem"></span></span>
-      <span id="child4"><span role="listitem"></span><span role="listitem"></span></span>
+      <span id="child4"><span id="child4_1" role="listitem"></span><span id="child4_2" role="listitem"></span></span>
     </div>
 
     <a id="link6" href="http://www.google.com">Link #6</a>
 
     <div id="container2" class="displayNone"><a id="link7">Link #7</a></div>
     <div id="container3" class="visibilityHidden"><a id="link8">Link #8</a></div>
+    <div id="testNestedContainer"></div>
   </div>
+  <div id="testContainer2"></div>
 </body>
 </html>

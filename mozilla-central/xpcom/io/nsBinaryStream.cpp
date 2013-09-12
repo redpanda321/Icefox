@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code, released
- * March 31, 1998.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998-1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  * This file contains implementations of the nsIBinaryInputStream and
@@ -54,12 +21,12 @@
 #include "nsBinaryStream.h"
 #include "nsCRT.h"
 #include "nsIStreamBufferAccess.h"
-#include "nsMemory.h"
 #include "prlong.h"
 #include "nsString.h"
 #include "nsISerializable.h"
 #include "nsIClassInfo.h"
 #include "nsComponentManagerUtils.h"
+#include "nsIURI.h" // for NS_IURI_IID
 
 NS_IMPL_ISUPPORTS3(nsBinaryOutputStream, nsIObjectOutputStream, nsIBinaryOutputStream, nsIOutputStream)
 
@@ -78,40 +45,40 @@ nsBinaryOutputStream::Close()
 }
 
 NS_IMETHODIMP
-nsBinaryOutputStream::Write(const char *aBuf, PRUint32 aCount, PRUint32 *aActualBytes)
+nsBinaryOutputStream::Write(const char *aBuf, uint32_t aCount, uint32_t *aActualBytes)
 {
     NS_ENSURE_STATE(mOutputStream);
     return mOutputStream->Write(aBuf, aCount, aActualBytes);
 }
 
 NS_IMETHODIMP
-nsBinaryOutputStream::WriteFrom(nsIInputStream *inStr, PRUint32 count, PRUint32 *_retval)
+nsBinaryOutputStream::WriteFrom(nsIInputStream *inStr, uint32_t count, uint32_t *_retval)
 {
     NS_NOTREACHED("WriteFrom");
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 NS_IMETHODIMP
-nsBinaryOutputStream::WriteSegments(nsReadSegmentFun reader, void * closure, PRUint32 count, PRUint32 *_retval)
+nsBinaryOutputStream::WriteSegments(nsReadSegmentFun reader, void * closure, uint32_t count, uint32_t *_retval)
 {
     NS_NOTREACHED("WriteSegments");
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 NS_IMETHODIMP
-nsBinaryOutputStream::IsNonBlocking(PRBool *aNonBlocking)
+nsBinaryOutputStream::IsNonBlocking(bool *aNonBlocking)
 {
     NS_ENSURE_STATE(mOutputStream);
     return mOutputStream->IsNonBlocking(aNonBlocking);
 }
 
 nsresult
-nsBinaryOutputStream::WriteFully(const char *aBuf, PRUint32 aCount)
+nsBinaryOutputStream::WriteFully(const char *aBuf, uint32_t aCount)
 {
     NS_ENSURE_STATE(mOutputStream);
 
     nsresult rv;
-    PRUint32 bytesWritten;
+    uint32_t bytesWritten;
 
     rv = mOutputStream->Write(aBuf, aCount, &bytesWritten);
     if (NS_FAILED(rv)) return rv;
@@ -130,36 +97,36 @@ nsBinaryOutputStream::SetOutputStream(nsIOutputStream *aOutputStream)
 }
 
 NS_IMETHODIMP
-nsBinaryOutputStream::WriteBoolean(PRBool aBoolean)
+nsBinaryOutputStream::WriteBoolean(bool aBoolean)
 {
     return Write8(aBoolean);
 }
 
 NS_IMETHODIMP
-nsBinaryOutputStream::Write8(PRUint8 aByte)
+nsBinaryOutputStream::Write8(uint8_t aByte)
 {
     return WriteFully((const char*)&aByte, sizeof aByte);
 }
 
 NS_IMETHODIMP
-nsBinaryOutputStream::Write16(PRUint16 a16)
+nsBinaryOutputStream::Write16(uint16_t a16)
 {
     a16 = NS_SWAP16(a16);
     return WriteFully((const char*)&a16, sizeof a16);
 }
 
 NS_IMETHODIMP
-nsBinaryOutputStream::Write32(PRUint32 a32)
+nsBinaryOutputStream::Write32(uint32_t a32)
 {
     a32 = NS_SWAP32(a32);
     return WriteFully((const char*)&a32, sizeof a32);
 }
 
 NS_IMETHODIMP
-nsBinaryOutputStream::Write64(PRUint64 a64)
+nsBinaryOutputStream::Write64(uint64_t a64)
 {
     nsresult rv;
-    PRUint32 bytesWritten;
+    uint32_t bytesWritten;
 
     a64 = NS_SWAP64(a64);
     rv = Write(reinterpret_cast<char*>(&a64), sizeof a64, &bytesWritten);
@@ -172,23 +139,23 @@ nsBinaryOutputStream::Write64(PRUint64 a64)
 NS_IMETHODIMP
 nsBinaryOutputStream::WriteFloat(float aFloat)
 {
-    NS_ASSERTION(sizeof(float) == sizeof (PRUint32),
+    NS_ASSERTION(sizeof(float) == sizeof (uint32_t),
                  "False assumption about sizeof(float)");
-    return Write32(*reinterpret_cast<PRUint32*>(&aFloat));
+    return Write32(*reinterpret_cast<uint32_t*>(&aFloat));
 }
 
 NS_IMETHODIMP
 nsBinaryOutputStream::WriteDouble(double aDouble)
 {
-    NS_ASSERTION(sizeof(double) == sizeof(PRUint64),
+    NS_ASSERTION(sizeof(double) == sizeof(uint64_t),
                  "False assumption about sizeof(double)");
-    return Write64(*reinterpret_cast<PRUint64*>(&aDouble));
+    return Write64(*reinterpret_cast<uint64_t*>(&aDouble));
 }
 
 NS_IMETHODIMP
 nsBinaryOutputStream::WriteStringZ(const char *aString)
 {
-    PRUint32 length;
+    uint32_t length;
     nsresult rv;
 
     length = strlen(aString);
@@ -200,10 +167,10 @@ nsBinaryOutputStream::WriteStringZ(const char *aString)
 NS_IMETHODIMP
 nsBinaryOutputStream::WriteWStringZ(const PRUnichar* aString)
 {
-    PRUint32 length, byteCount;
+    uint32_t length, byteCount;
     nsresult rv;
 
-    length = nsCRT::strlen(aString);
+    length = NS_strlen(aString);
     rv = Write32(length);
     if (NS_FAILED(rv)) return rv;
 
@@ -219,16 +186,16 @@ nsBinaryOutputStream::WriteWStringZ(const PRUnichar* aString)
     if (length <= 64) {
         copy = temp;
     } else {
-        copy = reinterpret_cast<PRUnichar*>(nsMemory::Alloc(byteCount));
+        copy = reinterpret_cast<PRUnichar*>(moz_malloc(byteCount));
         if (!copy)
             return NS_ERROR_OUT_OF_MEMORY;
     }
-    NS_ASSERTION((PRUptrdiff(aString) & 0x1) == 0, "aString not properly aligned");
-    for (PRUint32 i = 0; i < length; i++)
+    NS_ASSERTION((uintptr_t(aString) & 0x1) == 0, "aString not properly aligned");
+    for (uint32_t i = 0; i < length; i++)
         copy[i] = NS_SWAP16(aString[i]);
     rv = WriteBytes(reinterpret_cast<const char*>(copy), byteCount);
     if (copy != temp)
-        nsMemory::Free(copy);
+        moz_free(copy);
 #endif
 
     return rv;
@@ -241,10 +208,10 @@ nsBinaryOutputStream::WriteUtf8Z(const PRUnichar* aString)
 }
 
 NS_IMETHODIMP
-nsBinaryOutputStream::WriteBytes(const char *aString, PRUint32 aLength)
+nsBinaryOutputStream::WriteBytes(const char *aString, uint32_t aLength)
 {
     nsresult rv;
-    PRUint32 bytesWritten;
+    uint32_t bytesWritten;
 
     rv = Write(aString, aLength, &bytesWritten);
     if (NS_FAILED(rv)) return rv;
@@ -254,13 +221,13 @@ nsBinaryOutputStream::WriteBytes(const char *aString, PRUint32 aLength)
 }
 
 NS_IMETHODIMP
-nsBinaryOutputStream::WriteByteArray(PRUint8 *aBytes, PRUint32 aLength)
+nsBinaryOutputStream::WriteByteArray(uint8_t *aBytes, uint32_t aLength)
 {
     return WriteBytes(reinterpret_cast<char *>(aBytes), aLength);
 }
 
 NS_IMETHODIMP
-nsBinaryOutputStream::WriteObject(nsISupports* aObject, PRBool aIsStrongRef)
+nsBinaryOutputStream::WriteObject(nsISupports* aObject, bool aIsStrongRef)
 {
     return WriteCompoundObject(aObject, NS_GET_IID(nsISupports),
                                aIsStrongRef);
@@ -270,13 +237,13 @@ NS_IMETHODIMP
 nsBinaryOutputStream::WriteSingleRefObject(nsISupports* aObject)
 {
     return WriteCompoundObject(aObject, NS_GET_IID(nsISupports),
-                               PR_TRUE);
+                               true);
 }
 
 NS_IMETHODIMP
 nsBinaryOutputStream::WriteCompoundObject(nsISupports* aObject,
                                           const nsIID& aIID,
-                                          PRBool aIsStrongRef)
+                                          bool aIsStrongRef)
 {
     // Can't deal with weak refs
     NS_ENSURE_TRUE(aIsStrongRef, NS_ERROR_UNEXPECTED);
@@ -320,15 +287,15 @@ nsBinaryOutputStream::WriteID(const nsIID& aIID)
 }
 
 NS_IMETHODIMP_(char*)
-nsBinaryOutputStream::GetBuffer(PRUint32 aLength, PRUint32 aAlignMask)
+nsBinaryOutputStream::GetBuffer(uint32_t aLength, uint32_t aAlignMask)
 {
     if (mBufferAccess)
         return mBufferAccess->GetBuffer(aLength, aAlignMask);
-    return nsnull;
+    return nullptr;
 }
 
 NS_IMETHODIMP_(void)
-nsBinaryOutputStream::PutBuffer(char* aBuffer, PRUint32 aLength)
+nsBinaryOutputStream::PutBuffer(char* aBuffer, uint32_t aLength)
 {
     if (mBufferAccess)
         mBufferAccess->PutBuffer(aBuffer, aLength);
@@ -337,21 +304,21 @@ nsBinaryOutputStream::PutBuffer(char* aBuffer, PRUint32 aLength)
 NS_IMPL_ISUPPORTS3(nsBinaryInputStream, nsIObjectInputStream, nsIBinaryInputStream, nsIInputStream)
 
 NS_IMETHODIMP
-nsBinaryInputStream::Available(PRUint32* aResult)
+nsBinaryInputStream::Available(uint64_t* aResult)
 {
     NS_ENSURE_STATE(mInputStream);
     return mInputStream->Available(aResult);
 }
 
 NS_IMETHODIMP
-nsBinaryInputStream::Read(char* aBuffer, PRUint32 aCount, PRUint32 *aNumRead)
+nsBinaryInputStream::Read(char* aBuffer, uint32_t aCount, uint32_t *aNumRead)
 {
     NS_ENSURE_STATE(mInputStream);
 
     // mInputStream might give us short reads, so deal with that.
-    PRUint32 totalRead = 0;
+    uint32_t totalRead = 0;
 
-    PRUint32 bytesRead;
+    uint32_t bytesRead;
     do {
         nsresult rv = mInputStream->Read(aBuffer, aCount, &bytesRead);
         if (rv == NS_BASE_STREAM_WOULD_BLOCK && totalRead != 0) {
@@ -384,7 +351,7 @@ struct ReadSegmentsClosure {
     void* mRealClosure;
     nsWriteSegmentFun mRealWriter;
     nsresult mRealResult;
-    PRUint32 mBytesRead;  // to properly implement aToOffset
+    uint32_t mBytesRead;  // to properly implement aToOffset
 };
 
 // the thunking function
@@ -392,9 +359,9 @@ static NS_METHOD
 ReadSegmentForwardingThunk(nsIInputStream* aStream,
                            void *aClosure,
                            const char* aFromSegment,
-                           PRUint32 aToOffset,
-                           PRUint32 aCount,
-                           PRUint32 *aWriteCount)
+                           uint32_t aToOffset,
+                           uint32_t aCount,
+                           uint32_t *aWriteCount)
 {
     ReadSegmentsClosure* thunkClosure =
         reinterpret_cast<ReadSegmentsClosure*>(aClosure);
@@ -414,14 +381,14 @@ ReadSegmentForwardingThunk(nsIInputStream* aStream,
 
 
 NS_IMETHODIMP
-nsBinaryInputStream::ReadSegments(nsWriteSegmentFun writer, void * closure, PRUint32 count, PRUint32 *_retval)
+nsBinaryInputStream::ReadSegments(nsWriteSegmentFun writer, void * closure, uint32_t count, uint32_t *_retval)
 {
     NS_ENSURE_STATE(mInputStream);
 
     ReadSegmentsClosure thunkClosure = { this, closure, writer, NS_OK, 0 };
     
     // mInputStream might give us short reads, so deal with that.
-    PRUint32 bytesRead;
+    uint32_t bytesRead;
     do {
         nsresult rv = mInputStream->ReadSegments(ReadSegmentForwardingThunk,
                                                  &thunkClosure,
@@ -447,7 +414,7 @@ nsBinaryInputStream::ReadSegments(nsWriteSegmentFun writer, void * closure, PRUi
 }
 
 NS_IMETHODIMP
-nsBinaryInputStream::IsNonBlocking(PRBool *aNonBlocking)
+nsBinaryInputStream::IsNonBlocking(bool *aNonBlocking)
 {
     NS_ENSURE_STATE(mInputStream);
     return mInputStream->IsNonBlocking(aNonBlocking);
@@ -470,9 +437,9 @@ nsBinaryInputStream::SetInputStream(nsIInputStream *aInputStream)
 }
 
 NS_IMETHODIMP
-nsBinaryInputStream::ReadBoolean(PRBool* aBoolean)
+nsBinaryInputStream::ReadBoolean(bool* aBoolean)
 {
-    PRUint8 byteResult;
+    uint8_t byteResult;
     nsresult rv = Read8(&byteResult);
     if (NS_FAILED(rv)) return rv;
     *aBoolean = !!byteResult;
@@ -480,10 +447,10 @@ nsBinaryInputStream::ReadBoolean(PRBool* aBoolean)
 }
 
 NS_IMETHODIMP
-nsBinaryInputStream::Read8(PRUint8* aByte)
+nsBinaryInputStream::Read8(uint8_t* aByte)
 {
     nsresult rv;
-    PRUint32 bytesRead;
+    uint32_t bytesRead;
 
     rv = Read(reinterpret_cast<char*>(aByte), sizeof(*aByte), &bytesRead);
     if (NS_FAILED(rv)) return rv;
@@ -493,10 +460,10 @@ nsBinaryInputStream::Read8(PRUint8* aByte)
 }
 
 NS_IMETHODIMP
-nsBinaryInputStream::Read16(PRUint16* a16)
+nsBinaryInputStream::Read16(uint16_t* a16)
 {
     nsresult rv;
-    PRUint32 bytesRead;
+    uint32_t bytesRead;
 
     rv = Read(reinterpret_cast<char*>(a16), sizeof *a16, &bytesRead);
     if (NS_FAILED(rv)) return rv;
@@ -507,10 +474,10 @@ nsBinaryInputStream::Read16(PRUint16* a16)
 }
 
 NS_IMETHODIMP
-nsBinaryInputStream::Read32(PRUint32* a32)
+nsBinaryInputStream::Read32(uint32_t* a32)
 {
     nsresult rv;
-    PRUint32 bytesRead;
+    uint32_t bytesRead;
 
     rv = Read(reinterpret_cast<char*>(a32), sizeof *a32, &bytesRead);
     if (NS_FAILED(rv)) return rv;
@@ -521,10 +488,10 @@ nsBinaryInputStream::Read32(PRUint32* a32)
 }
 
 NS_IMETHODIMP
-nsBinaryInputStream::Read64(PRUint64* a64)
+nsBinaryInputStream::Read64(uint64_t* a64)
 {
     nsresult rv;
-    PRUint32 bytesRead;
+    uint32_t bytesRead;
 
     rv = Read(reinterpret_cast<char*>(a64), sizeof *a64, &bytesRead);
     if (NS_FAILED(rv)) return rv;
@@ -537,26 +504,26 @@ nsBinaryInputStream::Read64(PRUint64* a64)
 NS_IMETHODIMP
 nsBinaryInputStream::ReadFloat(float* aFloat)
 {
-    NS_ASSERTION(sizeof(float) == sizeof (PRUint32),
+    NS_ASSERTION(sizeof(float) == sizeof (uint32_t),
                  "False assumption about sizeof(float)");
-    return Read32(reinterpret_cast<PRUint32*>(aFloat));
+    return Read32(reinterpret_cast<uint32_t*>(aFloat));
 }
 
 NS_IMETHODIMP
 nsBinaryInputStream::ReadDouble(double* aDouble)
 {
-    NS_ASSERTION(sizeof(double) == sizeof(PRUint64),
+    NS_ASSERTION(sizeof(double) == sizeof(uint64_t),
                  "False assumption about sizeof(double)");
-    return Read64(reinterpret_cast<PRUint64*>(aDouble));
+    return Read64(reinterpret_cast<uint64_t*>(aDouble));
 }
 
 static NS_METHOD
 WriteSegmentToCString(nsIInputStream* aStream,
                       void *aClosure,
                       const char* aFromSegment,
-                      PRUint32 aToOffset,
-                      PRUint32 aCount,
-                      PRUint32 *aWriteCount)
+                      uint32_t aToOffset,
+                      uint32_t aCount,
+                      uint32_t *aWriteCount)
 {
     nsACString* outString = static_cast<nsACString*>(aClosure);
 
@@ -571,7 +538,7 @@ NS_IMETHODIMP
 nsBinaryInputStream::ReadCString(nsACString& aString)
 {
     nsresult rv;
-    PRUint32 length, bytesRead;
+    uint32_t length, bytesRead;
 
     rv = Read32(&length);
     if (NS_FAILED(rv)) return rv;
@@ -591,7 +558,7 @@ nsBinaryInputStream::ReadCString(nsACString& aString)
 // bytes, which means we only have half of the last PRUnichar
 struct WriteStringClosure {
     PRUnichar *mWriteCursor;
-    PRPackedBool mHasCarryoverByte;
+    bool mHasCarryoverByte;
     char mCarryoverByte;
 };
 
@@ -615,9 +582,9 @@ static NS_METHOD
 WriteSegmentToString(nsIInputStream* aStream,
                      void *aClosure,
                      const char* aFromSegment,
-                     PRUint32 aToOffset,
-                     PRUint32 aCount,
-                     PRUint32 *aWriteCount)
+                     uint32_t aToOffset,
+                     uint32_t aCount,
+                     uint32_t *aWriteCount)
 {
     NS_PRECONDITION(aCount > 0, "Why are we being told to write 0 bytes?");
     NS_PRECONDITION(sizeof(PRUnichar) == 2, "We can't handle other sizes!");
@@ -647,7 +614,7 @@ WriteSegmentToString(nsIInputStream* aStream,
         ++aFromSegment;
         --aCount;
 
-        closure->mHasCarryoverByte = PR_FALSE;
+        closure->mHasCarryoverByte = false;
     }
     
     // this array is possibly unaligned... be careful how we access it!
@@ -655,7 +622,7 @@ WriteSegmentToString(nsIInputStream* aStream,
         reinterpret_cast<const PRUnichar*>(aFromSegment);
 
     // calculate number of full characters in segment (aCount could be odd!)
-    PRUint32 segmentLength = aCount / sizeof(PRUnichar);
+    uint32_t segmentLength = aCount / sizeof(PRUnichar);
 
     // copy all data into our aligned buffer.  byte swap if necessary.
     memcpy(cursor, unicodeSegment, segmentLength * sizeof(PRUnichar));
@@ -673,7 +640,7 @@ WriteSegmentToString(nsIInputStream* aStream,
         // we must have had a carryover byte, that we'll need the next
         // time around
         closure->mCarryoverByte = aFromSegment[aCount - 1];
-        closure->mHasCarryoverByte = PR_TRUE;
+        closure->mHasCarryoverByte = true;
     }
     
     return NS_OK;
@@ -684,7 +651,7 @@ NS_IMETHODIMP
 nsBinaryInputStream::ReadString(nsAString& aString)
 {
     nsresult rv;
-    PRUint32 length, bytesRead;
+    uint32_t length, bytesRead;
 
     rv = Read32(&length);
     if (NS_FAILED(rv)) return rv;
@@ -703,7 +670,7 @@ nsBinaryInputStream::ReadString(nsAString& aString)
     
     WriteStringClosure closure;
     closure.mWriteCursor = start.get();
-    closure.mHasCarryoverByte = PR_FALSE;
+    closure.mHasCarryoverByte = false;
     
     rv = ReadSegments(WriteSegmentToString, &closure,
                       length*sizeof(PRUnichar), &bytesRead);
@@ -718,23 +685,23 @@ nsBinaryInputStream::ReadString(nsAString& aString)
 }
 
 NS_IMETHODIMP
-nsBinaryInputStream::ReadBytes(PRUint32 aLength, char* *_rval)
+nsBinaryInputStream::ReadBytes(uint32_t aLength, char* *_rval)
 {
     nsresult rv;
-    PRUint32 bytesRead;
+    uint32_t bytesRead;
     char* s;
 
-    s = reinterpret_cast<char*>(nsMemory::Alloc(aLength));
+    s = reinterpret_cast<char*>(moz_malloc(aLength));
     if (!s)
         return NS_ERROR_OUT_OF_MEMORY;
 
     rv = Read(s, aLength, &bytesRead);
     if (NS_FAILED(rv)) {
-        nsMemory::Free(s);
+        moz_free(s);
         return rv;
     }
     if (bytesRead != aLength) {
-        nsMemory::Free(s);
+        moz_free(s);
         return NS_ERROR_FAILURE;
     }
 
@@ -743,13 +710,13 @@ nsBinaryInputStream::ReadBytes(PRUint32 aLength, char* *_rval)
 }
 
 NS_IMETHODIMP
-nsBinaryInputStream::ReadByteArray(PRUint32 aLength, PRUint8* *_rval)
+nsBinaryInputStream::ReadByteArray(uint32_t aLength, uint8_t* *_rval)
 {
     return ReadBytes(aLength, reinterpret_cast<char **>(_rval));
 }
 
 NS_IMETHODIMP
-nsBinaryInputStream::ReadObject(PRBool aIsStrongRef, nsISupports* *aObject)
+nsBinaryInputStream::ReadObject(bool aIsStrongRef, nsISupports* *aObject)
 {
     nsCID cid;
     nsIID iid;
@@ -758,6 +725,32 @@ nsBinaryInputStream::ReadObject(PRBool aIsStrongRef, nsISupports* *aObject)
 
     rv = ReadID(&iid);
     NS_ENSURE_SUCCESS(rv, rv);
+
+    // HACK: Intercept old (pre-gecko6) nsIURI IID, and replace with
+    // the updated IID, so that we're QI'ing to an actual interface.
+    // (As soon as we drop support for upgrading from pre-gecko6, we can
+    // remove this chunk.)
+    static const nsIID oldURIiid =
+        { 0x7a22cc0, 0xce5, 0x11d3,
+          { 0x93, 0x31, 0x0, 0x10, 0x4b, 0xa0, 0xfd, 0x40 }};
+
+    // hackaround for bug 670542
+    static const nsIID oldURIiid2 =
+        { 0xd6d04c36, 0x0fa4, 0x4db3,
+          { 0xbe, 0x05, 0x4a, 0x18, 0x39, 0x71, 0x03, 0xe2 }};
+
+    // hackaround for bug 682031
+    static const nsIID oldURIiid3 =
+        { 0x12120b20, 0x0929, 0x40e9,
+          { 0x88, 0xcf, 0x6e, 0x08, 0x76, 0x6e, 0x8b, 0x23 }};
+
+    if (iid.Equals(oldURIiid) ||
+        iid.Equals(oldURIiid2) ||
+        iid.Equals(oldURIiid3)) {
+        const nsIID newURIiid = NS_IURI_IID;
+        iid = newURIiid;
+    }
+    // END HACK
 
     nsCOMPtr<nsISupports> object = do_CreateInstance(cid, &rv);
     NS_ENSURE_SUCCESS(rv, rv);
@@ -792,15 +785,15 @@ nsBinaryInputStream::ReadID(nsID *aResult)
 }
 
 NS_IMETHODIMP_(char*)
-nsBinaryInputStream::GetBuffer(PRUint32 aLength, PRUint32 aAlignMask)
+nsBinaryInputStream::GetBuffer(uint32_t aLength, uint32_t aAlignMask)
 {
     if (mBufferAccess)
         return mBufferAccess->GetBuffer(aLength, aAlignMask);
-    return nsnull;
+    return nullptr;
 }
 
 NS_IMETHODIMP_(void)
-nsBinaryInputStream::PutBuffer(char* aBuffer, PRUint32 aLength)
+nsBinaryInputStream::PutBuffer(char* aBuffer, uint32_t aLength)
 {
     if (mBufferAccess)
         mBufferAccess->PutBuffer(aBuffer, aLength);

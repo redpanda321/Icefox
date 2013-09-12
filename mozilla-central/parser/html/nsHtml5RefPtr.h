@@ -1,42 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Scott Collins <scc@mozilla.org> (original author of nsCOMPtr)
- *   L. David Baron <dbaron@dbaron.org>
- *   Henri Sivonen <hsivonen@iki.fi>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsHtml5RefPtr_h___
 #define nsHtml5RefPtr_h___
@@ -245,19 +210,6 @@ class nsHtml5RefPtr
           return get();
         }
 
-#ifdef CANT_RESOLVE_CPP_CONST_AMBIGUITY
-  // broken version for IRIX
-
-      nsHtml5RefPtr<T>*
-      get_address() const
-          // This is not intended to be used by clients.  See |address_of|
-          // below.
-        {
-          return const_cast<nsHtml5RefPtr<T>*>(this);
-        }
-
-#else // CANT_RESOLVE_CPP_CONST_AMBIGUITY
-
       nsHtml5RefPtr<T>*
       get_address()
           // This is not intended to be used by clients.  See |address_of|
@@ -273,8 +225,6 @@ class nsHtml5RefPtr
         {
           return this;
         }
-
-#endif // CANT_RESOLVE_CPP_CONST_AMBIGUITY
 
     public:
       T&
@@ -296,20 +246,6 @@ class nsHtml5RefPtr
         }
   };
 
-#ifdef CANT_RESOLVE_CPP_CONST_AMBIGUITY
-
-// This is the broken version for IRIX, which can't handle the version below.
-
-template <class T>
-inline
-nsHtml5RefPtr<T>*
-address_of( const nsHtml5RefPtr<T>& aPtr )
-  {
-    return aPtr.get_address();
-  }
-
-#else // CANT_RESOLVE_CPP_CONST_AMBIGUITY
-
 template <class T>
 inline
 nsHtml5RefPtr<T>*
@@ -325,8 +261,6 @@ address_of( const nsHtml5RefPtr<T>& aPtr )
   {
     return aPtr.get_address();
   }
-
-#endif // CANT_RESOLVE_CPP_CONST_AMBIGUITY
 
 template <class T>
 class nsHtml5RefPtrGetterAddRefs
@@ -394,7 +328,7 @@ getter_AddRefs( nsHtml5RefPtr<T>& aSmartPtr )
 
 template <class T, class U>
 inline
-NSCAP_BOOL
+bool
 operator==( const nsHtml5RefPtr<T>& lhs, const nsHtml5RefPtr<U>& rhs )
   {
     return static_cast<const T*>(lhs.get()) == static_cast<const U*>(rhs.get());
@@ -403,7 +337,7 @@ operator==( const nsHtml5RefPtr<T>& lhs, const nsHtml5RefPtr<U>& rhs )
 
 template <class T, class U>
 inline
-NSCAP_BOOL
+bool
 operator!=( const nsHtml5RefPtr<T>& lhs, const nsHtml5RefPtr<U>& rhs )
   {
     return static_cast<const T*>(lhs.get()) != static_cast<const U*>(rhs.get());
@@ -414,7 +348,7 @@ operator!=( const nsHtml5RefPtr<T>& lhs, const nsHtml5RefPtr<U>& rhs )
 
 template <class T, class U>
 inline
-NSCAP_BOOL
+bool
 operator==( const nsHtml5RefPtr<T>& lhs, const U* rhs )
   {
     return static_cast<const T*>(lhs.get()) == static_cast<const U*>(rhs);
@@ -422,7 +356,7 @@ operator==( const nsHtml5RefPtr<T>& lhs, const U* rhs )
 
 template <class T, class U>
 inline
-NSCAP_BOOL
+bool
 operator==( const U* lhs, const nsHtml5RefPtr<T>& rhs )
   {
     return static_cast<const U*>(lhs) == static_cast<const T*>(rhs.get());
@@ -430,7 +364,7 @@ operator==( const U* lhs, const nsHtml5RefPtr<T>& rhs )
 
 template <class T, class U>
 inline
-NSCAP_BOOL
+bool
 operator!=( const nsHtml5RefPtr<T>& lhs, const U* rhs )
   {
     return static_cast<const T*>(lhs.get()) != static_cast<const U*>(rhs);
@@ -438,7 +372,7 @@ operator!=( const nsHtml5RefPtr<T>& lhs, const U* rhs )
 
 template <class T, class U>
 inline
-NSCAP_BOOL
+bool
 operator!=( const U* lhs, const nsHtml5RefPtr<T>& rhs )
   {
     return static_cast<const U*>(lhs) != static_cast<const T*>(rhs.get());
@@ -454,7 +388,7 @@ operator!=( const U* lhs, const nsHtml5RefPtr<T>& rhs )
 #ifndef NSCAP_DONT_PROVIDE_NONCONST_OPEQ
 template <class T, class U>
 inline
-NSCAP_BOOL
+bool
 operator==( const nsHtml5RefPtr<T>& lhs, U* rhs )
   {
     return static_cast<const T*>(lhs.get()) == const_cast<const U*>(rhs);
@@ -462,7 +396,7 @@ operator==( const nsHtml5RefPtr<T>& lhs, U* rhs )
 
 template <class T, class U>
 inline
-NSCAP_BOOL
+bool
 operator==( U* lhs, const nsHtml5RefPtr<T>& rhs )
   {
     return const_cast<const U*>(lhs) == static_cast<const T*>(rhs.get());
@@ -470,7 +404,7 @@ operator==( U* lhs, const nsHtml5RefPtr<T>& rhs )
 
 template <class T, class U>
 inline
-NSCAP_BOOL
+bool
 operator!=( const nsHtml5RefPtr<T>& lhs, U* rhs )
   {
     return static_cast<const T*>(lhs.get()) != const_cast<const U*>(rhs);
@@ -478,7 +412,7 @@ operator!=( const nsHtml5RefPtr<T>& lhs, U* rhs )
 
 template <class T, class U>
 inline
-NSCAP_BOOL
+bool
 operator!=( U* lhs, const nsHtml5RefPtr<T>& rhs )
   {
     return const_cast<const U*>(lhs) != static_cast<const T*>(rhs.get());
@@ -491,7 +425,7 @@ operator!=( U* lhs, const nsHtml5RefPtr<T>& rhs )
 
 template <class T>
 inline
-NSCAP_BOOL
+bool
 operator==( const nsHtml5RefPtr<T>& lhs, NSCAP_Zero* rhs )
     // specifically to allow |smartPtr == 0|
   {
@@ -500,7 +434,7 @@ operator==( const nsHtml5RefPtr<T>& lhs, NSCAP_Zero* rhs )
 
 template <class T>
 inline
-NSCAP_BOOL
+bool
 operator==( NSCAP_Zero* lhs, const nsHtml5RefPtr<T>& rhs )
     // specifically to allow |0 == smartPtr|
   {
@@ -509,7 +443,7 @@ operator==( NSCAP_Zero* lhs, const nsHtml5RefPtr<T>& rhs )
 
 template <class T>
 inline
-NSCAP_BOOL
+bool
 operator!=( const nsHtml5RefPtr<T>& lhs, NSCAP_Zero* rhs )
     // specifically to allow |smartPtr != 0|
   {
@@ -518,7 +452,7 @@ operator!=( const nsHtml5RefPtr<T>& lhs, NSCAP_Zero* rhs )
 
 template <class T>
 inline
-NSCAP_BOOL
+bool
 operator!=( NSCAP_Zero* lhs, const nsHtml5RefPtr<T>& rhs )
     // specifically to allow |0 != smartPtr|
   {
@@ -533,7 +467,7 @@ operator!=( NSCAP_Zero* lhs, const nsHtml5RefPtr<T>& rhs )
 
 template <class T>
 inline
-NSCAP_BOOL
+bool
 operator==( const nsHtml5RefPtr<T>& lhs, int rhs )
     // specifically to allow |smartPtr == 0|
   {
@@ -542,7 +476,7 @@ operator==( const nsHtml5RefPtr<T>& lhs, int rhs )
 
 template <class T>
 inline
-NSCAP_BOOL
+bool
 operator==( int lhs, const nsHtml5RefPtr<T>& rhs )
     // specifically to allow |0 == smartPtr|
   {

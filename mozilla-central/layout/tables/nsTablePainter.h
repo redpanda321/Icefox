@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is TableBackgroundPainter interface.
- *
- * The Initial Developer of the Original Code is
- * Elika J. Etemad ("fantasai") <fantasai@inkedblade.net>.
- * Portions created by the Initial Developer are Copyright (C) 2004
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsTablePainter_h__
 #define nsTablePainter_h__
@@ -46,7 +14,7 @@
 //Cells should paint their backgrounds only, no children
 #define NS_PAINT_FLAG_TABLE_CELL_BG_PASS  0x00000002
 
-#include "nsIFrame.h"
+class nsIFrame;
 class nsTableFrame;
 class nsTableRowGroupFrame;
 class nsTableRowFrame;
@@ -77,10 +45,10 @@ class TableBackgroundPainter
     TableBackgroundPainter(nsTableFrame*        aTableFrame,
                            Origin               aOrigin,
                            nsPresContext*       aPresContext,
-                           nsIRenderingContext& aRenderingContext,
+                           nsRenderingContext& aRenderingContext,
                            const nsRect&        aDirtyRect,
                            const nsPoint&       aPt,
-                           PRUint32             aBGPaintFlags);
+                           uint32_t             aBGPaintFlags);
 
     /** Destructor */
     ~TableBackgroundPainter();
@@ -114,7 +82,7 @@ class TableBackgroundPainter
       * is included, otherwise it isn't
       */
     nsresult PaintTable(nsTableFrame* aTableFrame, const nsMargin& aDeflate,
-                        PRBool aPaintTableBackground);
+                        bool aPaintTableBackground);
 
     /** Paint background for the row group and its children down through cells
       * (Cells themselves will only be painted in border collapse)
@@ -124,7 +92,7 @@ class TableBackgroundPainter
       * @param aFrame - the table row group frame
       */
     nsresult PaintRowGroup(nsTableRowGroupFrame* aFrame)
-    { return PaintRowGroup(aFrame, PR_FALSE); }
+    { return PaintRowGroup(aFrame, false); }
 
     /** Paint background for the row and its children down through cells
       * (Cells themselves will only be painted in border collapse)
@@ -134,7 +102,7 @@ class TableBackgroundPainter
       * @param aFrame - the table row frame
       */
     nsresult PaintRow(nsTableRowFrame* aFrame)
-    { return PaintRow(aFrame, PR_FALSE); }
+    { return PaintRow(aFrame, false); }
 
   private:
 
@@ -157,9 +125,9 @@ class TableBackgroundPainter
      * See Public versions for function descriptions
      */
     nsresult PaintRowGroup(nsTableRowGroupFrame* aFrame,
-                           PRBool                aPassThrough);
+                           bool                  aPassThrough);
     nsresult PaintRow(nsTableRowFrame* aFrame,
-                      PRBool           aPassThrough);
+                      bool             aPassThrough);
 
     /** Paint table background layers for this cell space
       * Also paints cell's own background in border-collapse mode
@@ -167,7 +135,7 @@ class TableBackgroundPainter
       * @param aPassSelf   - pass this cell; i.e. paint only underlying layers
       */
     nsresult PaintCell(nsTableCellFrame* aFrame,
-                       PRBool            aPassSelf);
+                       bool              aPassSelf);
 
     /** Translate mRenderingContext, mDirtyRect, and mCols' column and
       * colgroup coords
@@ -183,11 +151,11 @@ class TableBackgroundPainter
       nsIFrame*                 mFrame;
       /** mRect is the rect of mFrame in the current coordinate system */
       nsRect                    mRect;
-      PRBool                    mVisible;
+      bool                      mVisible;
       const nsStyleBorder*      mBorder;
 
       /** Data is valid & frame is visible */
-      PRBool IsVisible() const { return mVisible; }
+      bool IsVisible() const { return mVisible; }
 
       /** Constructor */
       TableBackgroundData();
@@ -212,7 +180,7 @@ class TableBackgroundPainter
       void SetData();
 
       /** True if need to set border-collapse border; must call SetFull beforehand */
-      PRBool ShouldSetBCBorder();
+      bool ShouldSetBCBorder();
 
       /** Set border-collapse border with aBorderWidth as widths */
       nsresult SetBCBorder(nsMargin&               aBorderWidth,
@@ -228,28 +196,28 @@ class TableBackgroundPainter
       TableBackgroundData  mCol;
       TableBackgroundData* mColGroup; //link to col's parent colgroup's data (owned by painter)
       ColData() {
-        mColGroup = nsnull;
+        mColGroup = nullptr;
       }
     };
 
     nsPresContext*      mPresContext;
-    nsIRenderingContext& mRenderingContext;
+    nsRenderingContext& mRenderingContext;
     nsPoint              mRenderPt;
     nsRect               mDirtyRect;
 #ifdef DEBUG
     nsCompatibility      mCompatMode;
 #endif
-    PRBool               mIsBorderCollapse;
+    bool                 mIsBorderCollapse;
     Origin               mOrigin; //user's table frame type
 
     ColData*             mCols;  //array of columns' ColData
-    PRUint32             mNumCols;
+    uint32_t             mNumCols;
     TableBackgroundData  mRowGroup; //current row group
     TableBackgroundData  mRow;      //current row
     nsRect               mCellRect; //current cell's rect
 
     nsStyleBorder        mZeroBorder;  //cached zero-width border
-    PRUint32             mBGPaintFlags;
+    uint32_t             mBGPaintFlags;
 };
 
 #endif

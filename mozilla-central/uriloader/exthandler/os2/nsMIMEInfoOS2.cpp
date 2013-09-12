@@ -1,45 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set sw=2 sts=2 et cin: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla browser.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications, Inc.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Scott MacGregor <mscott@netscape.com>
- *   Boris Zbarsky <bzbarsky@mit.edu>  (Added mailcap and mime.types support)
- *   Christian Biesinger <cbiesinger@web.de>
- *   Rich Walsh <dragtext@e-vertise.com>
- *   Peter Weilbacher <mozilla@Weilbacher.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifdef MOZ_OS2_HIGH_MEMORY
 // os2safe.h has to be included before os2.h, needed for high mem
@@ -58,6 +21,9 @@
 #include "nsArrayEnumerator.h"
 #include "nsIRwsService.h"
 #include <stdlib.h>
+#include "mozilla/Preferences.h"
+
+using namespace mozilla;
 
 //------------------------------------------------------------------------
 
@@ -70,7 +36,7 @@ static const PRUnichar table[] =
     '4','5','6','7','8','9'};
 
 // reduces overhead by preventing calls to nsRwsService when it isn't present
-static PRBool sUseRws = PR_TRUE;
+static bool sUseRws = true;
 
 //------------------------------------------------------------------------
 
@@ -84,7 +50,7 @@ nsMIMEInfoOS2::~nsMIMEInfoOS2()
 // if the helper application is a DOS app, create an 8.3 filename
 static nsresult Make8Dot3Name(nsIFile *aFile, nsACString& aPath)
 {
-  nsCAutoString leafName;
+  nsAutoCString leafName;
   aFile->GetNativeLeafName(leafName);
   const char *lastDot = strrchr(leafName.get(), '.');
 
@@ -104,11 +70,10 @@ static nsresult Make8Dot3Name(nsIFile *aFile, nsACString& aPath)
 
     // this salting code was ripped directly from the profile manager.
     // turn PR_Now() into milliseconds since epoch 1058 & salt rand with that
-    double fpTime;
-    LL_L2D(fpTime, PR_Now());
+    double fpTime = double(PR_Now());
     srand((uint)(fpTime * 1e-6 + 0.5));
 
-    for (PRInt32 i=0; i < SALT_SIZE; i++)
+    for (int32_t i=0; i < SALT_SIZE; i++)
       saltedTempLeafName.Append(table[(rand()%TABLE_SIZE)]);
 
     AppendASCIItoUTF16(suffix, saltedTempLeafName);
@@ -149,7 +114,7 @@ NS_IMETHODIMP nsMIMEInfoOS2::LaunchWithFile(nsIFile *aFile)
     return NS_ERROR_INVALID_ARG;
   }
 
-  nsCAutoString filePath;
+  nsAutoCString filePath;
   aFile->GetNativePath(filePath);
 
   // if there's no program, use the WPS to open the file
@@ -159,12 +124,12 @@ NS_IMETHODIMP nsMIMEInfoOS2::LaunchWithFile(nsIFile *aFile)
     // if RWS is enabled, see if nsOSHelperAppService provided a handle for
     // the app associated with this file;  if so, use it to open the file;
     if (sUseRws) {
-      PRUint32 appHandle;
+      uint32_t appHandle;
       GetDefaultAppHandle(&appHandle);
       if (appHandle) {
         nsCOMPtr<nsIRwsService> rwsSvc(do_GetService("@mozilla.org/rwsos2;1"));
         if (!rwsSvc) {
-          sUseRws = PR_FALSE;
+          sUseRws = false;
         } else {
           // this call is identical to dropping the file on a program's icon;
           // it ensures filenames with multiple dots are handled correctly
@@ -183,7 +148,7 @@ NS_IMETHODIMP nsMIMEInfoOS2::LaunchWithFile(nsIFile *aFile)
   }
 
   // open the data file using the specified program file
-  nsCAutoString appPath;
+  nsAutoCString appPath;
   if (application) {
     application->GetNativePath(appPath);
   }
@@ -207,7 +172,7 @@ NS_IMETHODIMP nsMIMEInfoOS2::LaunchWithFile(nsIFile *aFile)
   if (sUseRws) {
     nsCOMPtr<nsIRwsService> rwsSvc(do_GetService("@mozilla.org/rwsos2;1"));
     if (!rwsSvc) {
-      sUseRws = PR_FALSE;
+      sUseRws = false;
     } else {
       rv = rwsSvc->OpenWithAppPath(filePath.get(), appPath.get());
     }
@@ -219,7 +184,7 @@ NS_IMETHODIMP nsMIMEInfoOS2::LaunchWithFile(nsIFile *aFile)
     if (NS_FAILED(rv = process->Init(application)))
       return rv;
     const char *strPath = filePath.get();
-    return process->Run(PR_FALSE, &strPath, 1);
+    return process->Run(false, &strPath, 1);
   }
 
   return rv;
@@ -229,7 +194,7 @@ NS_IMETHODIMP nsMIMEInfoOS2::LaunchWithFile(nsIFile *aFile)
 
 // if there's a description, there's a handler (which may be the WPS)
 
-NS_IMETHODIMP nsMIMEInfoOS2::GetHasDefaultHandler(PRBool *_retval)
+NS_IMETHODIMP nsMIMEInfoOS2::GetHasDefaultHandler(bool *_retval)
 {
   *_retval = !mDefaultAppDescription.IsEmpty();
   return NS_OK;
@@ -272,7 +237,7 @@ void nsMIMEInfoOS2::SetDefaultApplication(nsIFile *aDefaultApplication)
 
 // gets/sets the handle of the WPS object associated with this mimetype
 
-void nsMIMEInfoOS2::GetDefaultAppHandle(PRUint32 *aHandle)
+void nsMIMEInfoOS2::GetDefaultAppHandle(uint32_t *aHandle)
 {
   if (aHandle) {
     if (mDefaultAppHandle <= 0x10000 || mDefaultAppHandle >= 0x40000)
@@ -282,7 +247,7 @@ void nsMIMEInfoOS2::GetDefaultAppHandle(PRUint32 *aHandle)
   return;
 }
 
-void nsMIMEInfoOS2::SetDefaultAppHandle(PRUint32 aHandle)
+void nsMIMEInfoOS2::SetDefaultAppHandle(uint32_t aHandle)
 {
   if (aHandle <= 0x10000 || aHandle >= 0x40000)
     mDefaultAppHandle = 0;
@@ -296,38 +261,29 @@ void nsMIMEInfoOS2::SetDefaultAppHandle(PRUint32 aHandle)
 nsresult nsMIMEInfoOS2::LoadUriInternal(nsIURI *aURL)
 {
   nsresult rv;
-  nsCOMPtr<nsIPrefService> thePrefsService(do_GetService(NS_PREFSERVICE_CONTRACTID, &rv));
-  if (!thePrefsService) {
-    return NS_ERROR_FAILURE;
-  }
+  NS_ENSURE_TRUE(Preferences::GetRootBranch(), NS_ERROR_FAILURE);
 
   /* Convert SimpleURI to StandardURL */
   nsCOMPtr<nsIURI> uri = do_CreateInstance(NS_STANDARDURL_CONTRACTID, &rv);
   if (NS_FAILED(rv)) {
     return NS_ERROR_FAILURE;
   }
-  nsCAutoString urlSpec;
+  nsAutoCString urlSpec;
   aURL->GetSpec(urlSpec);
   uri->SetSpec(urlSpec);
 
   /* Get the protocol so we can look up the preferences */
-  nsCAutoString uProtocol;
+  nsAutoCString uProtocol;
   uri->GetScheme(uProtocol);
 
-  nsCAutoString prefName;
-  prefName = NS_LITERAL_CSTRING("applications.") + uProtocol;
+  nsAutoCString branchName = NS_LITERAL_CSTRING("applications.") + uProtocol;
+  nsAutoCString prefName = branchName + branchName;
+  nsAdoptingCString prefString = Preferences::GetCString(prefName.get());
 
-  nsCOMPtr<nsIPrefBranch> prefBranch;
-  rv = thePrefsService->GetBranch(prefName.get(), getter_AddRefs(prefBranch));
-  nsXPIDLCString prefString;
-  if (NS_SUCCEEDED(rv)) {
-    rv = prefBranch->GetCharPref(prefName.get(), getter_Copies(prefString));
-  }
+  nsAutoCString applicationName;
+  nsAutoCString parameters;
 
-  nsCAutoString applicationName;
-  nsCAutoString parameters;
-
-  if (NS_FAILED(rv) || prefString.IsEmpty()) {
+  if (prefString.IsEmpty()) {
     char szAppFromINI[CCHMAXPATH];
     char szParamsFromINI[MAXINIPARAMLENGTH];
     /* did OS2.INI contain application? */
@@ -343,9 +299,9 @@ nsresult nsMIMEInfoOS2::LoadUriInternal(nsIURI *aURL)
   }
 
   // Dissect the URI
-  nsCAutoString uURL, uUsername, uPassword, uHost, uPort, uPath;
-  nsCAutoString uEmail, uGroup;
-  PRInt32 iPort;
+  nsAutoCString uURL, uUsername, uPassword, uHost, uPort, uPath;
+  nsAutoCString uEmail, uGroup;
+  int32_t iPort;
 
   // when passing to OS/2 apps later, we need ASCII URLs,
   // UTF-8 would probably not get handled correctly
@@ -380,62 +336,63 @@ nsresult nsMIMEInfoOS2::LoadUriInternal(nsIURI *aURL)
   NS_NAMED_LITERAL_CSTRING(msgid, "%msgid%");
   NS_NAMED_LITERAL_CSTRING(channel, "%channel%");
 
-  PRBool replaced = PR_FALSE;
+  bool replaced = false;
   if (applicationName.IsEmpty() && parameters.IsEmpty()) {
     /* Put application name in parameters */
     applicationName.Append(prefString);
 
-    prefName.Append(".");
-    nsCOMPtr<nsIPrefBranch> prefBranch;
-    rv = thePrefsService->GetBranch(prefName.get(), getter_AddRefs(prefBranch));
-    if (NS_SUCCEEDED(rv) && prefBranch) {
-      rv = prefBranch->GetCharPref("parameters", getter_Copies(prefString));
-      /* If parameters have been specified, use them instead of the separate entities */
-      if (NS_SUCCEEDED(rv) && !prefString.IsEmpty()) {
-        parameters.Append(" ");
-        parameters.Append(prefString);
+    branchName.Append(".");
+    prefName = branchName + NS_LITERAL_CSTRING("parameters");
+    prefString = Preferences::GetCString(prefName.get());
+    /* If parameters have been specified, use them instead of the separate entities */
+    if (!prefString.IsEmpty()) {
+      parameters.Append(" ");
+      parameters.Append(prefString);
 
-        PRInt32 pos = parameters.Find(url.get());
-        if (pos != kNotFound) {
-          nsCAutoString uURL;
-          aURL->GetSpec(uURL);
-          NS_UnescapeURL(uURL);
-          uURL.Cut(0, uProtocol.Length()+1);
-          parameters.Replace(pos, url.Length(), uURL);
-          replaced = PR_TRUE;
+      int32_t pos = parameters.Find(url.get());
+      if (pos != kNotFound) {
+        nsAutoCString uURL;
+        aURL->GetSpec(uURL);
+        NS_UnescapeURL(uURL);
+        uURL.Cut(0, uProtocol.Length()+1);
+        parameters.Replace(pos, url.Length(), uURL);
+        replaced = true;
+      }
+    } else {
+      /* port */
+      if (!uPort.IsEmpty()) {
+        prefName = branchName + NS_LITERAL_CSTRING("port");
+        prefString = Preferences::GetCString(prefName.get());
+        if (!prefString.IsEmpty()) {
+          parameters.Append(" ");
+          parameters.Append(prefString);
         }
-      } else {
-        /* port */
-        if (!uPort.IsEmpty()) {
-          rv = prefBranch->GetCharPref("port", getter_Copies(prefString));
-          if (NS_SUCCEEDED(rv) && !prefString.IsEmpty()) {
-            parameters.Append(" ");
-            parameters.Append(prefString);
-          }
+      }
+      /* username */
+      if (!uUsername.IsEmpty()) {
+        prefName = branchName + NS_LITERAL_CSTRING("username");
+        prefString = Preferences::GetCString(prefName.get());
+        if (!prefString.IsEmpty()) {
+          parameters.Append(" ");
+          parameters.Append(prefString);
         }
-        /* username */
-        if (!uUsername.IsEmpty()) {
-          rv = prefBranch->GetCharPref("username", getter_Copies(prefString));
-          if (NS_SUCCEEDED(rv) && !prefString.IsEmpty()) {
-            parameters.Append(" ");
-            parameters.Append(prefString);
-          }
+      }
+      /* password */
+      if (!uPassword.IsEmpty()) {
+        prefName = branchName + NS_LITERAL_CSTRING("password");
+        prefString = Preferences::GetCString(prefName.get());
+        if (!prefString.IsEmpty()) {
+          parameters.Append(" ");
+          parameters.Append(prefString);
         }
-        /* password */
-        if (!uPassword.IsEmpty()) {
-          rv = prefBranch->GetCharPref("password", getter_Copies(prefString));
-          if (NS_SUCCEEDED(rv) && !prefString.IsEmpty()) {
-            parameters.Append(" ");
-            parameters.Append(prefString);
-          }
-        }
-        /* host */
-        if (!uHost.IsEmpty()) {
-          rv = prefBranch->GetCharPref("host", getter_Copies(prefString));
-          if (NS_SUCCEEDED(rv) && !prefString.IsEmpty()) {
-            parameters.Append(" ");
-            parameters.Append(prefString);
-          }
+      }
+      /* host */
+      if (!uHost.IsEmpty()) {
+        prefName = branchName + NS_LITERAL_CSTRING("host");
+        prefString = Preferences::GetCString(prefName.get());
+        if (!prefString.IsEmpty()) {
+          parameters.Append(" ");
+          parameters.Append(prefString);
         }
       }
     }
@@ -452,50 +409,50 @@ nsresult nsMIMEInfoOS2::LoadUriInternal(nsIURI *aURL)
   printf("uGroup=%s\n", uGroup.get());
 #endif
 
-  PRInt32 pos;
+  int32_t pos;
   pos = parameters.Find(url.get());
   if (pos != kNotFound) {
-    replaced = PR_TRUE;
+    replaced = true;
     parameters.Replace(pos, url.Length(), uURL);
   }
   pos = parameters.Find(username.get());
   if (pos != kNotFound) {
-    replaced = PR_TRUE;
+    replaced = true;
     parameters.Replace(pos, username.Length(), uUsername);
   }
   pos = parameters.Find(password.get());
   if (pos != kNotFound) {
-    replaced = PR_TRUE;
+    replaced = true;
     parameters.Replace(pos, password.Length(), uPassword);
   }
   pos = parameters.Find(host.get());
   if (pos != kNotFound) {
-    replaced = PR_TRUE;
+    replaced = true;
     parameters.Replace(pos, host.Length(), uHost);
   }
   pos = parameters.Find(port.get());
   if (pos != kNotFound) {
-    replaced = PR_TRUE;
+    replaced = true;
     parameters.Replace(pos, port.Length(), uPort);
   }
   pos = parameters.Find(email.get());
   if (pos != kNotFound) {
-    replaced = PR_TRUE;
+    replaced = true;
     parameters.Replace(pos, email.Length(), uEmail);
   }
   pos = parameters.Find(group.get());
   if (pos != kNotFound) {
-    replaced = PR_TRUE;
+    replaced = true;
     parameters.Replace(pos, group.Length(), uGroup);
   }
   pos = parameters.Find(msgid.get());
   if (pos != kNotFound) {
-    replaced = PR_TRUE;
+    replaced = true;
     parameters.Replace(pos, msgid.Length(), uEmail);
   }
   pos = parameters.Find(channel.get());
   if (pos != kNotFound) {
-    replaced = PR_TRUE;
+    replaced = true;
     parameters.Replace(pos, channel.Length(), uGroup);
   }
   // If no replacement variable was used, the user most likely uses the WPS URL
@@ -511,10 +468,10 @@ nsresult nsMIMEInfoOS2::LoadUriInternal(nsIURI *aURL)
 #ifdef DEBUG_peter
   printf("params[0]=%s\n", params[0]);
 #endif
-  PRInt32 numParams = 1;
+  int32_t numParams = 1;
 
-  nsCOMPtr<nsILocalFile> application;
-  rv = NS_NewNativeLocalFile(nsDependentCString(applicationName.get()), PR_FALSE, getter_AddRefs(application));
+  nsCOMPtr<nsIFile> application;
+  rv = NS_NewNativeLocalFile(nsDependentCString(applicationName.get()), false, getter_AddRefs(application));
   if (NS_FAILED(rv)) {
      /* Maybe they didn't qualify the name - search path */
      char szAppPath[CCHMAXPATH];
@@ -522,11 +479,11 @@ nsresult nsMIMEInfoOS2::LoadUriInternal(nsIURI *aURL)
                                "PATH", applicationName.get(),
                                szAppPath, sizeof(szAppPath));
      if (rc == NO_ERROR) {
-       rv = NS_NewNativeLocalFile(nsDependentCString(szAppPath), PR_FALSE, getter_AddRefs(application));
+       rv = NS_NewNativeLocalFile(nsDependentCString(szAppPath), false, getter_AddRefs(application));
      }
      if (NS_FAILED(rv) || (rc != NO_ERROR)) {
        /* Try just launching it with COMSPEC */
-       rv = NS_NewNativeLocalFile(nsDependentCString(getenv("COMSPEC")), PR_FALSE, getter_AddRefs(application));
+       rv = NS_NewNativeLocalFile(nsDependentCString(getenv("COMSPEC")), false, getter_AddRefs(application));
        if (NS_FAILED(rv)) {
          return rv;
        }
@@ -543,7 +500,7 @@ nsresult nsMIMEInfoOS2::LoadUriInternal(nsIURI *aURL)
   if (NS_FAILED(rv = process->Init(application)))
      return rv;
 
-  if (NS_FAILED(rv = process->Run(PR_FALSE, params, numParams)))
+  if (NS_FAILED(rv = process->Run(false, params, numParams)))
     return rv;
 
   return NS_OK;
@@ -605,7 +562,7 @@ nsMIMEInfoOS2::GetIconURLVariant(nsIFile *aApplication, nsIVariant **_retval)
   nsresult rv = CallCreateInstance("@mozilla.org/variant;1", _retval);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  nsCAutoString fileURLSpec;
+  nsAutoCString fileURLSpec;
   if (aApplication)
     NS_GetURLSpecFromFile(aApplication, fileURLSpec);
   else {
@@ -613,7 +570,7 @@ nsMIMEInfoOS2::GetIconURLVariant(nsIFile *aApplication, nsIVariant **_retval)
     fileURLSpec.Insert(NS_LITERAL_CSTRING("moztmp."), 0);
   }
 
-  nsCAutoString iconURLSpec(NS_LITERAL_CSTRING("moz-icon://"));
+  nsAutoCString iconURLSpec(NS_LITERAL_CSTRING("moz-icon://"));
   iconURLSpec += fileURLSpec;
   nsCOMPtr<nsIWritableVariant> writable(do_QueryInterface(*_retval));
   writable->SetAsAUTF8String(iconURLSpec);

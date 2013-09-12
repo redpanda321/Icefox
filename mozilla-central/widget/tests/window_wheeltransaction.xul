@@ -109,12 +109,15 @@ var gLitesnEvents = kListenEvent_None;
 var gTimer;
 
 var gPrefSvc = Components.classes["@mozilla.org/preferences-service;1"].
-               getService(Components.interfaces.nsIPrefBranch2);
+               getService(Components.interfaces.nsIPrefBranch);
+const kPrefSmoothScroll = "general.smoothScroll";
 const kPrefNameTimeout = "mousewheel.transaction.timeout";
 const kPrefNameIgnoreMoveDelay = "mousewheel.transaction.ignoremovedelay";
 
 const kDefaultTimeout = gPrefSvc.getIntPref(kPrefNameTimeout);
-const kDefaultIgnoreMoveDelay = gPrefSvc.getIntPref(kPrefNameIgnoreMoveDelay)
+const kDefaultIgnoreMoveDelay = gPrefSvc.getIntPref(kPrefNameIgnoreMoveDelay);
+
+gPrefSvc.setBoolPref(kPrefSmoothScroll, false);
 
 var gTimeout, gIgnoreMoveDelay;
 var gEnoughForTimeout, gEnoughForIgnoreMoveDelay;
@@ -171,6 +174,7 @@ function onload()
 function onunload()
 {
   resetTimeoutPrefs();
+  gPrefSvc.clearUserPref(kPrefSmoothScroll);
   disableNonTestMouseEvents(false);
   window.opener.wrappedJSObject.SimpleTest.finish();
 }
@@ -1085,9 +1089,13 @@ function _fireMouseMoveEvent(aOffset)
 
 function _fireWheelScrollEvent(aOffset, aIsVertical, aForward, aDelta)
 {
-  var event = { axis: aIsVertical ? "vertical" : "horizontal",
-                delta: aForward ? aDelta : -aDelta, type: "DOMMouseScroll" };
-  synthesizeMouseScroll(gRootView, aOffset.x, aOffset.y, event, window);
+  var event = { deltaMode: WheelEvent.DOM_DELTA_LINE };
+  if (aIsVertical) {
+    event.deltaY = aForward ? aDelta : -aDelta;
+  } else {
+    event.deltaX = aForward ? aDelta : -aDelta;
+  }
+  synthesizeWheel(gRootView, aOffset.x, aOffset.y, event, window);
 }
 
 function _canScroll(aElement, aIsVertical, aForward)

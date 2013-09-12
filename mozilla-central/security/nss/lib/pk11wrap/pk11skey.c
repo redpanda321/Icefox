@@ -1,40 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Vipul Gupta <vipul.gupta@sun.com> and
- *   Douglas Stebila <douglas@stebila.ca>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * This file implements the Symkey wrapper and the PKCS context
  * Interfaces.
@@ -51,12 +17,6 @@
 #include "secoid.h"
 #include "secerr.h"
 #include "hasht.h"
-
-/* forward static declarations. */
-static PK11SymKey *pk11_DeriveWithTemplate(PK11SymKey *baseKey, 
-	CK_MECHANISM_TYPE derive, SECItem *param, CK_MECHANISM_TYPE target, 
-	CK_ATTRIBUTE_TYPE operation, int keySize, CK_ATTRIBUTE *userAttr, 
-	unsigned int numAttrs, PRBool isPerm);
 
 static void
 pk11_EnterKeyMonitor(PK11SymKey *symKey) {
@@ -853,25 +813,50 @@ pk11_CopyToSlot(PK11SlotInfo *slot,CK_MECHANISM_TYPE type,
 }
 
 /*
- * Make sure the slot we are in the correct slot for the operation
+ * Make sure the slot we are in is the correct slot for the operation
+ * by verifying that it supports all of the specified mechanism types.
+ */
+PK11SymKey *
+pk11_ForceSlotMultiple(PK11SymKey *symKey, CK_MECHANISM_TYPE *type,
+			int mechCount, CK_ATTRIBUTE_TYPE operation)
+{
+    PK11SlotInfo *slot = symKey->slot;
+    PK11SymKey *newKey = NULL;
+    PRBool needToCopy = PR_FALSE;
+    int i;
+
+    if (slot == NULL) {
+	needToCopy = PR_TRUE;
+    } else {
+	i = 0;
+	while ((i < mechCount) && (needToCopy == PR_FALSE)) {
+	    if (!PK11_DoesMechanism(slot,type[i])) {
+		needToCopy = PR_TRUE;
+	    }
+	    i++;
+	}
+    }
+
+    if (needToCopy == PR_TRUE) {
+	slot = PK11_GetBestSlotMultiple(type,mechCount,symKey->cx);
+	if (slot == NULL) {
+	    PORT_SetError( SEC_ERROR_NO_MODULE );
+	    return NULL;
+	}
+	newKey = pk11_CopyToSlot(slot, type[0], operation, symKey);
+	PK11_FreeSlot(slot);
+    }
+    return newKey;
+}
+
+/*
+ * Make sure the slot we are in is the correct slot for the operation
  */
 PK11SymKey *
 pk11_ForceSlot(PK11SymKey *symKey,CK_MECHANISM_TYPE type,
 						CK_ATTRIBUTE_TYPE operation)
 {
-    PK11SlotInfo *slot = symKey->slot;
-    PK11SymKey *newKey = NULL;
-
-    if ((slot== NULL) || !PK11_DoesMechanism(slot,type)) {
-	slot = PK11_GetBestSlot(type,symKey->cx);
-	if (slot == NULL) {
-	    PORT_SetError( SEC_ERROR_NO_MODULE );
-	    return NULL;
-	}
-	newKey = pk11_CopyToSlot(slot, type, operation, symKey);
-	PK11_FreeSlot(slot);
-    }
-    return newKey;
+    return pk11_ForceSlotMultiple(symKey, &type, 1, operation);
 }
 
 PK11SymKey *
@@ -898,11 +883,11 @@ PK11_MoveSymKey(PK11SlotInfo *slot, CK_ATTRIBUTE_TYPE operation,
  *  for the key. Most PKCS #11 modules fail if you specify the CKA_VALUE_LEN 
  *  attribute for keys with fixed length. The exception is DES2. If you
  *  select a CKM_DES3_CBC mechanism, this code will not add the CKA_VALUE_LEN
- *  paramter and use the key size to determine which underlying DES keygen
+ *  parameter and use the key size to determine which underlying DES keygen
  *  function to use (CKM_DES2_KEY_GEN or CKM_DES3_KEY_GEN).
  *
  * keyType must be -1 for most algorithms. Some PBE algorthims cannot 
- *  determine the correct key type from the mechanism or the paramters,
+ *  determine the correct key type from the mechanism or the parameters,
  *  so key type must be specified. Other PKCS #11 mechanisms may do so in
  *  the future. Currently there is no need to export this publically.
  *  Keep it private until there is a need in case we need to expand the
@@ -920,13 +905,10 @@ pk11_TokenKeyGenWithFlagsAndKeyType(PK11SlotInfo *slot, CK_MECHANISM_TYPE type,
     CK_ATTRIBUTE genTemplate[MAX_TEMPL_ATTRS];
     CK_ATTRIBUTE *attrs = genTemplate;
     int count = sizeof(genTemplate)/sizeof(genTemplate[0]);
-    CK_SESSION_HANDLE session;
-    CK_MECHANISM mechanism;
-    CK_RV crv;
+    CK_MECHANISM_TYPE keyGenType;
     CK_BBOOL cktrue = CK_TRUE;
     CK_BBOOL ckfalse = CK_FALSE;
     CK_ULONG ck_key_size;       /* only used for variable-length keys */
-    PRBool isToken = ((attrFlags & PK11_ATTR_TOKEN) != 0);
 
     if (pk11_BadAttrFlags(attrFlags)) {
 	PORT_SetError( SEC_ERROR_INVALID_ARGS );
@@ -957,76 +939,16 @@ pk11_TokenKeyGenWithFlagsAndKeyType(PK11SlotInfo *slot, CK_MECHANISM_TYPE type,
     count = attrs - genTemplate;
     PR_ASSERT(count <= sizeof(genTemplate)/sizeof(CK_ATTRIBUTE));
 
-    /* Initialize the Key Gen Mechanism */
-    mechanism.mechanism = PK11_GetKeyGenWithSize(type, keySize);
-    if (mechanism.mechanism == CKM_FAKE_RANDOM) {
-	PORT_SetError( SEC_ERROR_NO_MODULE );
-	return NULL;
+    keyGenType = PK11_GetKeyGenWithSize(type, keySize);
+    if (keyGenType == CKM_FAKE_RANDOM) {
+        PORT_SetError( SEC_ERROR_NO_MODULE );
+        return NULL;
     }
-
-    /* find a slot to generate the key into */
-    /* Only do slot management if this is not a token key */
-    if (!isToken && (slot == NULL || !PK11_DoesMechanism(slot,type))) {
-        PK11SlotInfo *bestSlot;
-
-        bestSlot = PK11_GetBestSlot(type,wincx);
-        if (bestSlot == NULL) {
-	    PORT_SetError( SEC_ERROR_NO_MODULE );
-	    return NULL;
-	}
-
-        symKey = pk11_CreateSymKey(bestSlot, type, !isToken, PR_TRUE, wincx);
-
-        PK11_FreeSlot(bestSlot);
-    } else {
-	symKey = pk11_CreateSymKey(slot, type, !isToken, PR_TRUE, wincx);
+    symKey = PK11_KeyGenWithTemplate(slot, type, keyGenType,
+                                     param, genTemplate, count, wincx);
+    if (symKey != NULL) {
+        symKey->size = keySize;
     }
-    if (symKey == NULL) return NULL;
-
-    symKey->size = keySize;
-    symKey->origin = PK11_OriginGenerated;
-
-    /* Set the parameters for the key gen if provided */
-    mechanism.pParameter = NULL;
-    mechanism.ulParameterLen = 0;
-    if (param) {
-	mechanism.pParameter = param->data;
-	mechanism.ulParameterLen = param->len;
-    }
-
-    /* Get session and perform locking */
-    if (isToken) {
-	PK11_Authenticate(symKey->slot,PR_TRUE,wincx);
-	/* Should always be original slot */
-        session = PK11_GetRWSession(symKey->slot);  
-	symKey->owner = PR_FALSE;
-    } else {
-        session = symKey->session;
-	if (session != CK_INVALID_SESSION) 
-	    pk11_EnterKeyMonitor(symKey);
-    }
-    if (session == CK_INVALID_SESSION) {
-	PK11_FreeSymKey(symKey);
-	PORT_SetError(SEC_ERROR_BAD_DATA);
-	return NULL;
-    }
-
-    crv = PK11_GETTAB(symKey->slot)->C_GenerateKey(session,
-			 &mechanism, genTemplate, count, &symKey->objectID);
-
-    /* Release lock and session */
-    if (isToken) {
-        PK11_RestoreROSession(symKey->slot, session);
-    } else {
-        pk11_ExitKeyMonitor(symKey);
-    }
-
-    if (crv != CKR_OK) {
-	PK11_FreeSymKey(symKey);
-	PORT_SetError( PK11_MapError(crv) );
-	return NULL;
-    }
-
     return symKey;
 }
 
@@ -1038,7 +960,7 @@ pk11_TokenKeyGenWithFlagsAndKeyType(PK11SlotInfo *slot, CK_MECHANISM_TYPE type,
  *  for the key. Most PKCS #11 modules fail if you specify the CKA_VALUE_LEN 
  *  attribute for keys with fixed length. The exception is DES2. If you
  *  select a CKM_DES3_CBC mechanism, this code will not add the CKA_VALUE_LEN
- *  paramter and use the key size to determine which underlying DES keygen
+ *  parameter and use the key size to determine which underlying DES keygen
  *  function to use (CKM_DES2_KEY_GEN or CKM_DES3_KEY_GEN).
  *
  * CK_FLAGS flags: key operation flags
@@ -1097,6 +1019,107 @@ PK11_KeyGen(PK11SlotInfo *slot, CK_MECHANISM_TYPE type, SECItem *param,
 {
     return PK11_TokenKeyGen(slot, type, param, keySize, 0, PR_FALSE, wincx);
 }
+
+PK11SymKey *
+PK11_KeyGenWithTemplate(PK11SlotInfo *slot, CK_MECHANISM_TYPE type,
+                        CK_MECHANISM_TYPE keyGenType,
+                        SECItem *param, CK_ATTRIBUTE * attrs,
+                        unsigned int attrsCount, void *wincx)
+{
+    PK11SymKey *symKey;
+    CK_SESSION_HANDLE session;
+    CK_MECHANISM mechanism;
+    CK_RV crv;
+    PRBool isToken = CK_FALSE;
+    CK_ULONG keySize = 0;
+    unsigned i;
+
+    /* Extract the template's CKA_VALUE_LEN into keySize and CKA_TOKEN into
+       isToken. */
+    for (i = 0; i < attrsCount; ++i) {
+        switch (attrs[i].type) {
+            case CKA_VALUE_LEN:
+                if (attrs[i].pValue == NULL ||
+                    attrs[i].ulValueLen != sizeof(CK_ULONG)) {
+                    PORT_SetError(PK11_MapError(CKR_TEMPLATE_INCONSISTENT));
+                    return NULL;
+                }
+                keySize = * (CK_ULONG *) attrs[i].pValue;
+                break;
+            case CKA_TOKEN:
+                if (attrs[i].pValue == NULL || 
+                    attrs[i].ulValueLen != sizeof(CK_BBOOL)) {
+                    PORT_SetError(PK11_MapError(CKR_TEMPLATE_INCONSISTENT));
+                    return NULL;
+                }
+                isToken = (*(CK_BBOOL*)attrs[i].pValue) ? PR_TRUE : PR_FALSE;
+                break;
+        }
+    }
+
+    /* find a slot to generate the key into */
+    /* Only do slot management if this is not a token key */
+    if (!isToken && (slot == NULL || !PK11_DoesMechanism(slot,type))) {
+        PK11SlotInfo *bestSlot = PK11_GetBestSlot(type,wincx);
+        if (bestSlot == NULL) {
+            PORT_SetError( SEC_ERROR_NO_MODULE );
+            return NULL;
+        }
+        symKey = pk11_CreateSymKey(bestSlot, type, !isToken, PR_TRUE, wincx);
+        PK11_FreeSlot(bestSlot);
+    } else {
+        symKey = pk11_CreateSymKey(slot, type, !isToken, PR_TRUE, wincx);
+    }
+    if (symKey == NULL) return NULL;
+
+    symKey->size = keySize;
+    symKey->origin = PK11_OriginGenerated;
+
+    /* Set the parameters for the key gen if provided */
+    mechanism.mechanism = keyGenType;
+    mechanism.pParameter = NULL;
+    mechanism.ulParameterLen = 0;
+    if (param) {
+        mechanism.pParameter = param->data;
+        mechanism.ulParameterLen = param->len;
+    }
+
+    /* Get session and perform locking */
+    if (isToken) {
+        PK11_Authenticate(symKey->slot,PR_TRUE,wincx);
+        /* Should always be original slot */
+        session = PK11_GetRWSession(symKey->slot);  
+        symKey->owner = PR_FALSE;
+    } else {
+        session = symKey->session;
+        if (session != CK_INVALID_SESSION) 
+            pk11_EnterKeyMonitor(symKey);
+    }
+    if (session == CK_INVALID_SESSION) {
+        PK11_FreeSymKey(symKey);
+        PORT_SetError(SEC_ERROR_BAD_DATA);
+        return NULL;
+    }
+
+    crv = PK11_GETTAB(symKey->slot)->C_GenerateKey(session,
+			 &mechanism, attrs, attrsCount, &symKey->objectID);
+
+    /* Release lock and session */
+    if (isToken) {
+        PK11_RestoreROSession(symKey->slot, session);
+    } else {
+        pk11_ExitKeyMonitor(symKey);
+    }
+
+    if (crv != CKR_OK) {
+        PK11_FreeSymKey(symKey);
+        PORT_SetError( PK11_MapError(crv) );
+        return NULL;
+    }
+
+    return symKey;
+}
+
 
 /* --- */
 PK11SymKey *
@@ -1368,7 +1391,7 @@ PK11_Derive( PK11SymKey *baseKey, CK_MECHANISM_TYPE derive, SECItem *param,
              CK_MECHANISM_TYPE target, CK_ATTRIBUTE_TYPE operation,
 	     int keySize)
 {
-    return pk11_DeriveWithTemplate(baseKey, derive, param, target, operation, 
+    return PK11_DeriveWithTemplate(baseKey, derive, param, target, operation, 
 				   keySize, NULL, 0, PR_FALSE);
 }
 
@@ -1383,7 +1406,7 @@ PK11_DeriveWithFlags( PK11SymKey *baseKey, CK_MECHANISM_TYPE derive,
     unsigned int    templateCount;
 
     templateCount = pk11_OpFlagsToAttributes(flags, keyTemplate, &ckTrue);
-    return pk11_DeriveWithTemplate(baseKey, derive, param, target, operation, 
+    return PK11_DeriveWithTemplate(baseKey, derive, param, target, operation, 
 		  keySize, keyTemplate, templateCount, PR_FALSE);
 }
 
@@ -1403,12 +1426,12 @@ PK11_DeriveWithFlagsPerm( PK11SymKey *baseKey, CK_MECHANISM_TYPE derive,
     }
     templateCount = attrs - keyTemplate;
     templateCount += pk11_OpFlagsToAttributes(flags, attrs, &cktrue);
-    return pk11_DeriveWithTemplate(baseKey, derive, param, target, operation, 
+    return PK11_DeriveWithTemplate(baseKey, derive, param, target, operation, 
 				   keySize, keyTemplate, templateCount, isPerm);
 }
 
-static PK11SymKey *
-pk11_DeriveWithTemplate( PK11SymKey *baseKey, CK_MECHANISM_TYPE derive, 
+PK11SymKey *
+PK11_DeriveWithTemplate( PK11SymKey *baseKey, CK_MECHANISM_TYPE derive, 
 	SECItem *param, CK_MECHANISM_TYPE target, CK_ATTRIBUTE_TYPE operation, 
 	int keySize, CK_ATTRIBUTE *userAttr, unsigned int numAttrs,
 							 PRBool isPerm)
@@ -1422,7 +1445,9 @@ pk11_DeriveWithTemplate( PK11SymKey *baseKey, CK_MECHANISM_TYPE derive,
     CK_ULONG        valueLen	= 0;
     CK_MECHANISM    mechanism; 
     CK_RV           crv;
-    CK_ATTRIBUTE    keyTemplate[MAX_TEMPL_ATTRS];
+#define MAX_ADD_ATTRS 4
+    CK_ATTRIBUTE    keyTemplate[MAX_TEMPL_ATTRS + MAX_ADD_ATTRS];
+#undef MAX_ADD_ATTRS
     CK_ATTRIBUTE *  attrs	= keyTemplate;
     CK_SESSION_HANDLE session;
     unsigned int    templateCount;
@@ -1431,6 +1456,7 @@ pk11_DeriveWithTemplate( PK11SymKey *baseKey, CK_MECHANISM_TYPE derive,
     	PORT_SetError(SEC_ERROR_INVALID_ARGS);
 	return NULL;
     }
+
     /* first copy caller attributes in. */
     for (templateCount = 0; templateCount < numAttrs; ++templateCount) {
     	*attrs++ = *userAttr++;
@@ -1460,7 +1486,7 @@ pk11_DeriveWithTemplate( PK11SymKey *baseKey, CK_MECHANISM_TYPE derive,
     }
 
     templateCount = attrs - keyTemplate;
-    PR_ASSERT(templateCount <= MAX_TEMPL_ATTRS);
+    PR_ASSERT(templateCount <= sizeof(keyTemplate)/sizeof(CK_ATTRIBUTE));
 
     /* move the key to a slot that can do the function */
     if (!PK11_DoesMechanism(slot,derive)) {
@@ -1523,6 +1549,239 @@ pk11_DeriveWithTemplate( PK11SymKey *baseKey, CK_MECHANISM_TYPE derive,
 	return NULL;
     }
     return symKey;
+}
+
+/* Create a new key by concatenating base and data
+ */
+static PK11SymKey *pk11_ConcatenateBaseAndData(PK11SymKey *base,
+	CK_BYTE *data, CK_ULONG dataLen, CK_MECHANISM_TYPE target,
+	CK_ATTRIBUTE_TYPE operation)
+{
+    CK_KEY_DERIVATION_STRING_DATA mechParams;
+    SECItem param;
+
+    if (base == NULL) {
+	PORT_SetError( SEC_ERROR_INVALID_ARGS );
+	return NULL;
+    }
+
+    mechParams.pData = data;
+    mechParams.ulLen = dataLen;
+    param.data = (unsigned char *)&mechParams;
+    param.len = sizeof(CK_KEY_DERIVATION_STRING_DATA);
+
+    return PK11_Derive(base, CKM_CONCATENATE_BASE_AND_DATA,
+				&param, target, operation, 0);
+}
+
+/* Create a new key by concatenating base and key
+ */
+static PK11SymKey *pk11_ConcatenateBaseAndKey(PK11SymKey *base,
+			PK11SymKey *key, CK_MECHANISM_TYPE target,
+			CK_ATTRIBUTE_TYPE operation, CK_ULONG keySize)
+{
+    SECItem param;
+
+    if ((base == NULL) || (key == NULL)) {
+	PORT_SetError( SEC_ERROR_INVALID_ARGS );
+	return NULL;
+    }
+
+    param.data = (unsigned char *)&(key->objectID);
+    param.len = sizeof(CK_OBJECT_HANDLE);
+
+    return PK11_Derive(base, CKM_CONCATENATE_BASE_AND_KEY,
+				&param, target, operation, keySize);
+}
+
+/* Create a new key whose value is the hash of tobehashed.
+ * type is the mechanism for the derived key.
+ */
+static PK11SymKey *pk11_HashKeyDerivation(PK11SymKey *toBeHashed,
+	CK_MECHANISM_TYPE hashMechanism, CK_MECHANISM_TYPE target,
+	CK_ATTRIBUTE_TYPE operation, CK_ULONG keySize)
+{
+    return PK11_Derive(toBeHashed, hashMechanism, NULL, target, operation, keySize);
+}
+
+/* This function implements the ANSI X9.63 key derivation function
+ */
+static PK11SymKey *pk11_ANSIX963Derive(PK11SymKey *sharedSecret,
+		CK_EC_KDF_TYPE kdf, SECItem *sharedData,
+		CK_MECHANISM_TYPE target, CK_ATTRIBUTE_TYPE operation,
+		CK_ULONG keySize)
+{
+    CK_KEY_TYPE keyType;
+    CK_MECHANISM_TYPE hashMechanism, mechanismArray[4];
+    CK_ULONG derivedKeySize, HashLen, counter, maxCounter, bufferLen;
+    CK_ULONG SharedInfoLen;
+    CK_BYTE *buffer = NULL;
+    PK11SymKey *toBeHashed, *hashOutput;
+    PK11SymKey *newSharedSecret = NULL;
+    PK11SymKey *oldIntermediateResult, *intermediateResult = NULL;
+
+    if (sharedSecret == NULL) {
+	PORT_SetError( SEC_ERROR_INVALID_ARGS );
+	return NULL;
+    }
+
+    switch (kdf) {
+    case CKD_SHA1_KDF:
+	HashLen = SHA1_LENGTH;
+	hashMechanism = CKM_SHA1_KEY_DERIVATION;
+	break;
+    case CKD_SHA224_KDF:
+	HashLen = SHA224_LENGTH;
+	hashMechanism = CKM_SHA224_KEY_DERIVATION;
+	break;
+    case CKD_SHA256_KDF:
+	HashLen = SHA256_LENGTH;
+	hashMechanism = CKM_SHA256_KEY_DERIVATION;
+	break;
+    case CKD_SHA384_KDF:
+	HashLen = SHA384_LENGTH;
+	hashMechanism = CKM_SHA384_KEY_DERIVATION;
+	break;
+    case CKD_SHA512_KDF:
+	HashLen = SHA512_LENGTH;
+	hashMechanism = CKM_SHA512_KEY_DERIVATION;
+	break;
+    default:
+	PORT_SetError( SEC_ERROR_INVALID_ARGS );
+	return NULL;
+    }
+
+    derivedKeySize = keySize;
+    if (derivedKeySize == 0) {
+	keyType = PK11_GetKeyType(target,keySize);
+	derivedKeySize = pk11_GetPredefinedKeyLength(keyType);
+	if (derivedKeySize == 0) {
+	    derivedKeySize = HashLen;
+	}
+    }
+
+    /* Check that key_len isn't too long.  The maximum key length could be
+     * greatly increased if the code below did not limit the 4-byte counter
+     * to a maximum value of 255. */
+    if (derivedKeySize > 254 * HashLen) {
+	PORT_SetError( SEC_ERROR_INVALID_ARGS );
+	return NULL;
+    }
+
+    maxCounter = derivedKeySize / HashLen;
+    if (derivedKeySize > maxCounter * HashLen)
+	maxCounter++;
+
+    if ((sharedData == NULL) || (sharedData->data == NULL))
+	SharedInfoLen = 0;
+    else
+	SharedInfoLen = sharedData->len;
+
+    bufferLen = SharedInfoLen + 4;
+    
+    /* Populate buffer with Counter || sharedData
+     * where Counter is 0x00000001. */
+    buffer = (unsigned char *)PORT_Alloc(bufferLen);
+    if (buffer == NULL) {
+	PORT_SetError(SEC_ERROR_NO_MEMORY);
+	return NULL;
+    }
+
+    buffer[0] = 0;
+    buffer[1] = 0;
+    buffer[2] = 0;
+    buffer[3] = 1;
+    if (SharedInfoLen > 0) {
+	PORT_Memcpy(&buffer[4], sharedData->data, SharedInfoLen);
+    }
+
+    /* Look for a slot that supports the mechanisms needed
+     * to implement the ANSI X9.63 KDF as well as the
+     * target mechanism.
+     */
+    mechanismArray[0] = CKM_CONCATENATE_BASE_AND_DATA;
+    mechanismArray[1] = hashMechanism;
+    mechanismArray[2] = CKM_CONCATENATE_BASE_AND_KEY;
+    mechanismArray[3] = target;
+
+    newSharedSecret = pk11_ForceSlotMultiple(sharedSecret,
+					 mechanismArray, 4, operation);
+    if (newSharedSecret != NULL) {
+	sharedSecret = newSharedSecret;
+    }
+
+    for(counter=1; counter <= maxCounter; counter++) {
+	/* Concatenate shared_secret and buffer */
+	toBeHashed = pk11_ConcatenateBaseAndData(sharedSecret, buffer,
+					bufferLen, hashMechanism, operation);
+	if (toBeHashed == NULL) {
+	    goto loser;
+	}
+
+	/* Hash value */
+	if (maxCounter == 1) {
+	    /* In this case the length of the key to be derived is
+	     * less than or equal to the length of the hash output.
+	     * So, the output of the hash operation will be the
+	     * dervied key. */
+	    hashOutput = pk11_HashKeyDerivation(toBeHashed, hashMechanism,
+						target, operation, keySize);
+	} else {
+	    /* In this case, the output of the hash operation will be
+	     * concatenated with other data to create the derived key. */
+	    hashOutput = pk11_HashKeyDerivation(toBeHashed, hashMechanism,
+				CKM_CONCATENATE_BASE_AND_KEY, operation, 0);
+	}
+	PK11_FreeSymKey(toBeHashed);
+	if (hashOutput == NULL) {
+	    goto loser;
+	}
+
+	/* Append result to intermediate result, if necessary */
+	oldIntermediateResult = intermediateResult;
+
+	if (oldIntermediateResult == NULL) {
+	    intermediateResult = hashOutput;
+	} else {
+	    if (counter == maxCounter) {
+		/* This is the final concatenation, and so the output
+		 * will be the derived key. */
+		intermediateResult =
+		    pk11_ConcatenateBaseAndKey(oldIntermediateResult,
+				hashOutput, target, operation, keySize);
+	    } else {
+		/* The output of this concatenation will be concatenated
+		 * with other data to create the derived key. */
+		intermediateResult =
+		    pk11_ConcatenateBaseAndKey(oldIntermediateResult,
+				hashOutput, CKM_CONCATENATE_BASE_AND_KEY,
+				operation, 0);
+	    }
+
+	    PK11_FreeSymKey(hashOutput);
+	    PK11_FreeSymKey(oldIntermediateResult);
+	    if (intermediateResult == NULL) {
+		goto loser;
+	    }
+	}
+
+	/* Increment counter (assumes maxCounter < 255) */
+	buffer[3]++;
+    }
+
+    PORT_ZFree(buffer, bufferLen);
+    if (newSharedSecret != NULL)
+	PK11_FreeSymKey(newSharedSecret);
+    return intermediateResult;
+
+loser:
+    if (buffer != NULL)
+	PORT_ZFree(buffer, bufferLen);
+    if (newSharedSecret != NULL)
+	PK11_FreeSymKey(newSharedSecret);
+    if (intermediateResult != NULL)
+	PK11_FreeSymKey(intermediateResult);
+    return NULL;
 }
 
 /*
@@ -1673,7 +1932,7 @@ PK11_PubDerive(SECKEYPrivateKey *privKey, SECKEYPublicKey *pubKey,
 	    keyType = PK11_GetKeyType(target,keySize);
 	    key_size = keySize;
 	    if (key_size == 0) {
-		if (pk11_GetPredefinedKeyLength(keyType)) {
+		if ((key_size = pk11_GetPredefinedKeyLength(keyType))) {
 		    templateCount --;
 		} else {
 		    /* sigh, some tokens can't figure this out and require
@@ -1733,6 +1992,23 @@ PK11_PubDerive(SECKEYPrivateKey *privKey, SECKEYPublicKey *pubKey,
    return NULL;
 }
 
+/* Returns the size of the public key, or 0 if there
+ * is an error. */
+static CK_ULONG
+pk11_ECPubKeySize(SECItem *publicValue)
+{
+    if (publicValue->data[0] == 0x04) {
+	/* key encoded in uncompressed form */
+	return((publicValue->len - 1)/2);
+    } else if ( (publicValue->data[0] == 0x02) ||
+		(publicValue->data[0] == 0x03)) {
+	/* key encoded in compressed form */
+	return(publicValue->len - 1);
+    }
+    /* key encoding not recognized */
+    return(0);
+}
+
 static PK11SymKey *
 pk11_PubDeriveECKeyWithKDF(
 		    SECKEYPrivateKey *privKey, SECKEYPublicKey *pubKey,
@@ -1743,6 +2019,7 @@ pk11_PubDeriveECKeyWithKDF(
 {
     PK11SlotInfo           *slot            = privKey->pkcs11Slot;
     PK11SymKey             *symKey;
+    PK11SymKey             *SharedSecret;
     CK_MECHANISM            mechanism;
     CK_RV                   crv;
     CK_BBOOL                cktrue          = CK_TRUE;
@@ -1758,7 +2035,9 @@ pk11_PubDeriveECKeyWithKDF(
 	PORT_SetError(SEC_ERROR_BAD_KEY);
 	return NULL;
     }
-    if ((kdf < CKD_NULL) || (kdf > CKD_SHA1_KDF)) {
+    if ((kdf != CKD_NULL) && (kdf != CKD_SHA1_KDF) &&
+	(kdf != CKD_SHA224_KDF) && (kdf != CKD_SHA256_KDF) &&
+	(kdf != CKD_SHA384_KDF) && (kdf != CKD_SHA512_KDF)) {
 	PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
 	return NULL;
     }
@@ -1781,17 +2060,33 @@ pk11_PubDeriveECKeyWithKDF(
     keyType = PK11_GetKeyType(target,keySize);
     key_size = keySize;
     if (key_size == 0) {
-	if (pk11_GetPredefinedKeyLength(keyType)) {
+	if ((key_size = pk11_GetPredefinedKeyLength(keyType))) {
 	    templateCount --;
 	} else {
 	    /* sigh, some tokens can't figure this out and require
 	     * CKA_VALUE_LEN to be set */
 	    switch (kdf) {
 	    case CKD_NULL:
-		key_size = (pubKey->u.ec.publicValue.len-1)/2;
+		key_size = pk11_ECPubKeySize(&pubKey->u.ec.publicValue);
+		if (key_size == 0) {
+		    PK11_FreeSymKey(symKey);
+		    return NULL;
+		}
 		break;
 	    case CKD_SHA1_KDF:
 		key_size = SHA1_LENGTH;
+		break;
+	    case CKD_SHA224_KDF:
+		key_size = SHA224_LENGTH;
+		break;
+	    case CKD_SHA256_KDF:
+		key_size = SHA256_LENGTH;
+		break;
+	    case CKD_SHA384_KDF:
+		key_size = SHA384_LENGTH;
+		break;
+	    case CKD_SHA512_KDF:
+		key_size = SHA512_LENGTH;
 		break;
 	    default:
 		PORT_Assert(!"Invalid CKD");
@@ -1828,7 +2123,7 @@ pk11_PubDeriveECKeyWithKDF(
     pk11_ExitKeyMonitor(symKey);
 
     /* old PKCS #11 spec was ambiguous on what needed to be passed,
-     * try this again with and encoded public key */
+     * try this again with an encoded public key */
     if (crv != CKR_OK) {
 	SECItem *pubValue = SEC_ASN1EncodeItem(NULL, NULL,
 		&pubKey->u.ec.publicValue,
@@ -1845,6 +2140,60 @@ pk11_PubDeriveECKeyWithKDF(
 	    templateCount, &symKey->objectID);
 	pk11_ExitKeyMonitor(symKey);
 
+	if ((crv != CKR_OK) && (kdf != CKD_NULL)) {
+	    /* Some PKCS #11 libraries cannot perform the key derivation
+	     * function. So, try calling C_DeriveKey with CKD_NULL and then
+	     * performing the KDF separately.
+	     */
+	    CK_ULONG derivedKeySize = key_size;
+
+	    keyType = CKK_GENERIC_SECRET;
+	    key_size = pk11_ECPubKeySize(&pubKey->u.ec.publicValue);
+	    if (key_size == 0) {
+		SECITEM_FreeItem(pubValue,PR_TRUE);
+		goto loser;
+	    }
+	    SharedSecret = symKey;
+	    SharedSecret->size = key_size;
+
+	    mechParams->kdf             = CKD_NULL;
+	    mechParams->ulSharedDataLen = 0;
+	    mechParams->pSharedData     = NULL;
+	    mechParams->ulPublicDataLen = pubKey->u.ec.publicValue.len;
+	    mechParams->pPublicData     = pubKey->u.ec.publicValue.data;
+
+	    pk11_EnterKeyMonitor(SharedSecret);
+	    crv = PK11_GETTAB(slot)->C_DeriveKey(SharedSecret->session,
+			    &mechanism, privKey->pkcs11ID, keyTemplate,
+			    templateCount, &SharedSecret->objectID);
+	    pk11_ExitKeyMonitor(SharedSecret);
+
+	    if (crv != CKR_OK) {
+		/* old PKCS #11 spec was ambiguous on what needed to be passed,
+		 * try this one final time with an encoded public key */
+		mechParams->ulPublicDataLen =  pubValue->len;
+		mechParams->pPublicData     =  pubValue->data;
+
+		pk11_EnterKeyMonitor(SharedSecret);
+		crv = PK11_GETTAB(slot)->C_DeriveKey(SharedSecret->session,
+				&mechanism, privKey->pkcs11ID, keyTemplate,
+				templateCount, &SharedSecret->objectID);
+		pk11_ExitKeyMonitor(SharedSecret);
+	    }
+
+	    /* Perform KDF. */
+	    if (crv == CKR_OK) {
+		    symKey = pk11_ANSIX963Derive(SharedSecret, kdf,
+					sharedData, target, operation,
+					derivedKeySize);
+		    PK11_FreeSymKey(SharedSecret);
+		    if (symKey == NULL) {
+			SECITEM_FreeItem(pubValue,PR_TRUE);
+			PORT_ZFree(mechParams, sizeof(CK_ECDH1_DERIVE_PARAMS));
+			return NULL;
+		    }
+	    }
+	}
 	SECITEM_FreeItem(pubValue,PR_TRUE);
     }
 
@@ -1989,7 +2338,9 @@ pk11_AnyUnwrapKey(PK11SlotInfo *slot, CK_OBJECT_HANDLE wrappingKey,
     CK_SESSION_HANDLE rwsession;
     CK_RV           crv;
     CK_MECHANISM_INFO mechanism_info;
-    CK_ATTRIBUTE    keyTemplate[MAX_TEMPL_ATTRS];
+#define MAX_ADD_ATTRS 4
+    CK_ATTRIBUTE    keyTemplate[MAX_TEMPL_ATTRS + MAX_ADD_ATTRS];
+#undef MAX_ADD_ATTRS
     CK_ATTRIBUTE *  attrs	= keyTemplate;
     unsigned int    templateCount;
 
@@ -1997,6 +2348,7 @@ pk11_AnyUnwrapKey(PK11SlotInfo *slot, CK_OBJECT_HANDLE wrappingKey,
     	PORT_SetError(SEC_ERROR_INVALID_ARGS);
 	return NULL;
     }
+
     /* first copy caller attributes in. */
     for (templateCount = 0; templateCount < numAttrs; ++templateCount) {
     	*attrs++ = *userAttr++;

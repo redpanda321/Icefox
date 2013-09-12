@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org Code.
- *
- * The Initial Developer of the Original Code is
- * Cyrus Patel <cyp@fb14.uni-mainz.de>.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Doug Turner <dougt@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include <stdlib.h>
 #include <string.h>
@@ -64,11 +31,6 @@ int ParseFTPList(const char *line, struct list_state *state,
     return 0;
 
   memset( result, 0, sizeof(*result) );
-  if (state->magic != ((void *)ParseFTPList))
-  {
-    memset( state, 0, sizeof(*state) );
-    state->magic = ((void *)ParseFTPList);
-  }
   state->numlines++;
 
   /* carry buffer is only valid from one line to the next */
@@ -170,7 +132,7 @@ int ParseFTPList(const char *line, struct list_state *state,
                 PRTime t;
                 PRTime seconds;
                 PR_sscanf(p+1, "%llu", &seconds);
-                LL_MUL(t, seconds, PR_USEC_PER_SEC);
+                t = seconds * PR_USEC_PER_SEC;
                 PR_ExplodeTime(t, PR_LocalTimeParameters, &(result->fe_time) );
               }
             }
@@ -524,10 +486,7 @@ int ParseFTPList(const char *line, struct list_state *state,
                * So its rounded up to the next block, so what, its better
                * than not showing the size at all.
               */
-              PRUint64 fsz, factor;
-              LL_UI2L(fsz, strtoul(tokens[1], (char **)0, 10));
-              LL_UI2L(factor, 512);
-              LL_MUL(fsz, fsz, factor);
+              uint64_t fsz = uint64_t(strtoul(tokens[1], (char **)0, 10) * 512);
               PR_snprintf(result->fe_size, sizeof(result->fe_size), 
                           "%lld", fsz);
             } 
@@ -1022,7 +981,7 @@ int ParseFTPList(const char *line, struct list_state *state,
        * "drwxr-xr-x  2 0  0  512 May 28 22:17 etc"
       */
     
-      PRBool is_old_Hellsoft = PR_FALSE;
+      bool is_old_Hellsoft = false;
     
       if (numtoks >= 6)
       {
@@ -1050,7 +1009,7 @@ int ParseFTPList(const char *line, struct list_state *state,
               /* rest is FMA[S] or AFM[S] */
               lstyle = 'U'; /* very likely one of the NetWare servers */
               if (toklen[0] == 10)
-                is_old_Hellsoft = PR_TRUE;
+                is_old_Hellsoft = true;
             }
           }
         }
@@ -1199,12 +1158,21 @@ int ParseFTPList(const char *line, struct list_state *state,
        
         } /* time/year */
         
-        // there is exacly 1 space between filename and previous token in all
-        // outputs except old Hellsoft
-        if (!is_old_Hellsoft)
-          result->fe_fname = tokens[tokmarker+3] + toklen[tokmarker+3] + 1;
-        else
-          result->fe_fname = tokens[tokmarker+4];
+        // The length of the whole date string should be 12. On AIX the length
+        // is only 11 when the year is present in the date string and there is
+        // 1 padding space at the end of the string. In both cases the filename
+        // starts at offset 13 from the start of the date string.
+        // Don't care about leading spaces when the date string has different
+        // format or when old Hellsoft output was detected.
+        {
+          const char *date_start = tokens[tokmarker+1];
+          const char *date_end = tokens[tokmarker+3] + toklen[tokmarker+3];
+          if (!is_old_Hellsoft && ((date_end - date_start) == 12 ||
+              ((date_end - date_start) == 11 && date_end[1] == ' ')))
+            result->fe_fname = date_start + 13;
+          else
+            result->fe_fname = tokens[tokmarker+4];
+        }
 
         result->fe_fnlen = (&(line[linelen]))
                            - (result->fe_fname);
@@ -1213,7 +1181,7 @@ int ParseFTPList(const char *line, struct list_state *state,
         {
           /* First try to use result->fe_size to find " -> " sequence.
              This can give proper result for cases like "aaa -> bbb -> ccc". */
-          PRUint32 fe_size = atoi(result->fe_size);
+          uint32_t fe_size = atoi(result->fe_size);
 
           if (result->fe_fnlen > (fe_size + 4) &&
               PL_strncmp(result->fe_fname + result->fe_fnlen - fe_size - 4 , " -> ", 4) == 0)

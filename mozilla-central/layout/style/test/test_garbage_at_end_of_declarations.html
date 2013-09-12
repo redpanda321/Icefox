@@ -4,7 +4,6 @@
 -->
 <head>
   <title>Test handling of garbage at the end of CSS declarations</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="text/javascript" src="property_database.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
@@ -41,7 +40,7 @@ var gDeclaration = gElement.style;
 /*
  * This lists properties where garbage identifiers are allowed at the
  * end, with values in property_database.js that are exceptions that
- * should be tested anyway.  "inherit" and "-moz-initial" are always
+ * should be tested anyway.  "inherit" and "initial" are always
  * tested
  */
 var gAllowsExtra = {
@@ -56,13 +55,26 @@ var gAllowsExtra = {
 /* These are the reverse of the above list; they're the unusual values
    that do allow extra keywords afterwards */
 var gAllowsExtraUnusual = {
-  "-moz-transition": { "1s 2s linear": true, "1s linear 2s": true,
-                       "linear 1s 2s": true, "linear 1s": true,
-                       "1s linear": true, "1s 2s": true, "2s 1s": true,
-                       "linear": true, "1s": true, "2s": true,
-                       "ease-in-out": true, "2s ease-in": true,
-                       "ease-out 2s": true },
+  "transition": { "all": true, "0s": true, "0s 0s": true, "ease": true,
+                  "1s 2s linear": true, "1s linear 2s": true,
+                  "linear 1s 2s": true, "linear 1s": true,
+                  "1s linear": true, "1s 2s": true, "2s 1s": true,
+                  "linear": true, "1s": true, "2s": true,
+                  "ease-in-out": true, "2s ease-in": true,
+                  "ease-out 2s": true },
+  "animation": { "none": true, "0s": true, "ease": true,
+                 "normal": true, "running": true, "1.0": true,
+                 "1s 2s linear": true, "1s linear 2s": true,
+                 "linear 1s 2s": true, "linear 1s": true,
+                 "1s linear": true, "1s 2s": true, "2s 1s": true,
+                 "linear": true, "1s": true, "2s": true,
+                 "ease-in-out": true, "2s ease-in": true,
+                 "ease-out 2s": true, "1s bounce, 2s": true,
+                 "1s bounce, 2s none": true },
 };
+
+gAllowsExtraUnusual["-moz-transition"] = gAllowsExtraUnusual["transition"];
+gAllowsExtraUnusual["-moz-animation"] = gAllowsExtraUnusual["animation"];
 
 function test_property(property)
 {
@@ -70,7 +82,7 @@ function test_property(property)
 
   function test_value(value) {
     if (property in gAllowsExtra &&
-        value != "inherit" && value != "-moz-initial" &&
+        value != "inherit" && value != "initial" &&
         !(value in gAllowsExtra[property])) {
       return;
     }
@@ -96,7 +108,7 @@ function test_property(property)
 
   var idx;
   test_value("inherit");
-  test_value("-moz-initial");
+  test_value("initial");
   for (idx in info.initial_values)
     test_value(info.initial_values[idx]);
   for (idx in info.other_values)

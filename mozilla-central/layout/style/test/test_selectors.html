@@ -2,7 +2,6 @@
 <html>
 <head>
   <title>Test for CSS Selectors</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -233,6 +232,20 @@ function run() {
         });
     }
 
+    function test_unparseable_via_api(selector)
+    {
+        try {
+          // Test that it is also unparseable when followed by EOF.
+          ifdoc.body.mozMatchesSelector(selector);
+          ok(false, "selector '" + selector + "' plus EOF is parse error");
+        } catch(ex) {
+          is(ex.name, "SyntaxError",
+             "selector '" + selector + "' plus EOF is parse error");
+          is(ex.code, DOMException.SYNTAX_ERR,
+             "selector '" + selector + "' plus EOF is parse error");
+        }
+    }
+
     function test_balanced_unparseable(selector)
     {
         var zi1 = ++gCounter;
@@ -248,6 +261,7 @@ function run() {
            "selector " + selector + " error was recovered from");
         ifdoc.body.innerHTML = "";
         style_text.data = "";
+        test_unparseable_via_api(selector);
     }
 
     function test_unbalanced_unparseable(selector)
@@ -263,6 +277,7 @@ function run() {
            "sheet should have no rules since " + selector + " is parse error");
         ifdoc.body.innerHTML = "";
         style_text.data = "";
+        test_unparseable_via_api(selector);
     }
 
 
@@ -521,7 +536,7 @@ function run() {
     function idset(ids) { // takes an array of ids
         return function idset_filter(doc) {
             var result = [];
-            for each (var id in ids)
+            for (var id of ids)
                 result.push(doc.getElementById(id));
             return result;
         }
@@ -706,6 +721,27 @@ function run() {
     // Test -moz-locale-dir
     test_parseable(":-moz-locale-dir(ltr)");
     test_parseable(":-moz-locale-dir(rtl)");
+    test_parseable(":-moz-locale-dir(rTl)");
+    test_parseable(":-moz-locale-dir(LTR)");
+    if (document.body.mozMatchesSelector(":-moz-locale-dir(ltr)")) {
+        test_selector_in_html("a:-moz-locale-dir(LTr)", single_a,
+                              set_single, empty_set);
+        test_selector_in_html("a:-moz-locale-dir(ltR)", single_a,
+                              set_single, empty_set);
+        test_selector_in_html("a:-moz-locale-dir(LTR)", single_a,
+                              set_single, empty_set);
+        test_selector_in_html("a:-moz-locale-dir(RTl)", single_a,
+                              empty_set, set_single);
+    } else {
+        test_selector_in_html("a:-moz-locale-dir(RTl)", single_a,
+                              set_single, empty_set);
+        test_selector_in_html("a:-moz-locale-dir(rtL)", single_a,
+                              set_single, empty_set);
+        test_selector_in_html("a:-moz-locale-dir(RTL)", single_a,
+                              set_single, empty_set);
+        test_selector_in_html("a:-moz-locale-dir(LTr)", single_a,
+                              empty_set, set_single);
+    }
 
     test_balanced_unparseable(":-moz-locale-dir(other)");
     test_balanced_unparseable(":-moz-locale-dir()");
@@ -715,6 +751,40 @@ function run() {
     test_balanced_unparseable(":-moz-locale-dir('ltr')");
     test_balanced_unparseable(":-moz-locale-dir(ltr, other)");
     test_balanced_unparseable(":-moz-locale-dir");
+
+    // Test :-moz-dir()
+    test_parseable(":-moz-dir(ltr)");
+    test_parseable(":-moz-dir(rtl)");
+    test_parseable(":-moz-dir(rTl)");
+    test_parseable(":-moz-dir(LTR)");
+    if (document.body.mozMatchesSelector(":-moz-dir(ltr)")) {
+        test_selector_in_html("a:-moz-dir(LTr)", single_a,
+                              set_single, empty_set);
+        test_selector_in_html("a:-moz-dir(ltR)", single_a,
+                              set_single, empty_set);
+        test_selector_in_html("a:-moz-dir(LTR)", single_a,
+                              set_single, empty_set);
+        test_selector_in_html("a:-moz-dir(RTl)", single_a,
+                              empty_set, set_single);
+    } else {
+        test_selector_in_html("a:-moz-dir(RTl)", single_a,
+                              set_single, empty_set);
+        test_selector_in_html("a:-moz-dir(rtL)", single_a,
+                              set_single, empty_set);
+        test_selector_in_html("a:-moz-dir(RTL)", single_a,
+                              set_single, empty_set);
+        test_selector_in_html("a:-moz-dir(LTr)", single_a,
+                              empty_set, set_single);
+    }
+
+    test_balanced_unparseable(":-moz-dir(other)");
+    test_balanced_unparseable(":-moz-dir()");
+    test_balanced_unparseable(":-moz-dir(())");
+    test_balanced_unparseable(":-moz-dir(3())");
+    test_balanced_unparseable(":-moz-dir(f{})");
+    test_balanced_unparseable(":-moz-dir('ltr')");
+    test_balanced_unparseable(":-moz-dir(ltr, other)");
+    test_balanced_unparseable(":-moz-dir");
 
     // Test -moz-lwtheme and -moz-lwtheme-[darktext|brighttext]
     test_parseable(":-moz-lwtheme");
@@ -743,7 +813,6 @@ function run() {
     test_parseable(":-moz-handler-disabled");
     test_parseable(":-moz-handler-blocked");
     test_parseable(":-moz-handler-crashed");
-    test_parseable(":-moz-has-handlerref");
 
     // Case sensitivity of tag selectors
     function setup_cased_spans(body) {
@@ -877,6 +946,39 @@ function run() {
     test_selector_in_html(":-moz-any(div,a):-moz-any([type],[href],[name])",
                           any_elts,
                           bodychildset([1, 3]), bodychildset([0, 2]));
+
+    test_selector_in_html(":-moz-table-border-nonzero",
+                          "<p></p>" +
+                          "<p border='2'></p>" +
+                          "<table border='2'></table>" +
+                          "<table border></table>" +
+                          "<table></table>" +
+                          "<table frame='border'></table>" +
+                          "<table border='0'></table>" +
+                          "<table border='0pt'></table>" +
+                          "<table border='3pt'></table>",
+                          bodychildset([2, 3, 8]),
+                          bodychildset([0, 1, 4, 5, 6, 7]));
+
+    // Test that we don't tokenize an empty HASH.
+    test_balanced_unparseable("#");
+    test_balanced_unparseable("# ");
+    test_balanced_unparseable("#, p");
+    test_balanced_unparseable("# , p");
+    test_balanced_unparseable("p #");
+    test_balanced_unparseable("p # ");
+    test_balanced_unparseable("p #, p");
+    test_balanced_unparseable("p # , p");
+
+    // Test that a backslash alone is not treated as an escape.
+    test_unparseable_via_api("#\\");
+
+    // Test that newline escapes are only supported in strings.
+    test_balanced_unparseable("di\\\nv");
+    test_balanced_unparseable("div \\\n p");
+    test_balanced_unparseable("div\\\n p");
+    test_balanced_unparseable("div \\\np");
+    test_balanced_unparseable("div\\\np");
 
     run_deferred_tests();
 }

@@ -35,7 +35,7 @@ load 409811-1.html
 load 410659-1.svg
 load 410659-2.svg
 load 410659-3.svg
-load 412104-1.svg
+asserts(0-5) load 412104-1.svg
 load 413174-1.svg
 load 414188-1.svg
 load 427325-1.svg
@@ -45,8 +45,19 @@ load 435209-1.svg
 load 436418-mpathRoot-1.svg
 load 448244-1.svg
 load 466576-1.xhtml
-asserts(0-2) load 535691-1.svg # Bug 535691
+load 499879-1.svg
+load 535691-1.svg
 load 539167-1.svg
 load 573316-1.svg
 load 579356-1.svg
 load 579356-2.svg
+load 595608-1.svg
+load 601251-1.html
+load 601406-1.svg
+load 603145-1.svg
+load 613899-1.svg
+load 613899-2.svg
+load zero-size-image.svg
+load 723441-1.html
+load 751515-1.svg
+load 761507-1.svg

@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Chris Waterson <waterson@netscape.com>
- *   Neil Deakin <enndeakin@sympatico.ca>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 
@@ -66,11 +32,9 @@
 #include "nsCOMArray.h"
 #include "nsFixedSizeAllocator.h"
 #include "nsIAtom.h"
-#include "nsIContent.h"
 #include "nsIDOMNode.h"
 #include "plhash.h"
 #include "pldhash.h"
-#include "nsCRT.h"
 #include "nsIRDFNode.h"
 
 class nsIRDFResource;
@@ -93,21 +57,21 @@ protected:
     virtual ~MemoryElement() { MOZ_COUNT_DTOR(MemoryElement); }
 public:
 
-    static PRBool Init();
+    static bool Init();
 
-    static PRBool gPoolInited;
+    static bool gPoolInited;
     static nsFixedSizeAllocator gPool;
 
     virtual void Destroy() = 0;
     virtual const char* Type() const = 0;
     virtual PLHashNumber Hash() const = 0;
-    virtual PRBool Equals(const MemoryElement& aElement) const = 0;
+    virtual bool Equals(const MemoryElement& aElement) const = 0;
 
-    PRBool operator==(const MemoryElement& aMemoryElement) const {
+    bool operator==(const MemoryElement& aMemoryElement) const {
         return Equals(aMemoryElement);
     }
 
-    PRBool operator!=(const MemoryElement& aMemoryElement) const {
+    bool operator!=(const MemoryElement& aMemoryElement) const {
         return !Equals(aMemoryElement);
     }
 };
@@ -132,22 +96,22 @@ protected:
             mElement->Destroy();
             NS_IF_RELEASE(mNext); }
 
-        PRInt32 AddRef() { return ++mRefCnt; }
+        int32_t AddRef() { return ++mRefCnt; }
 
-        PRInt32 Release() {
-            PRInt32 refcnt = --mRefCnt;
+        int32_t Release() {
+            int32_t refcnt = --mRefCnt;
             if (refcnt == 0) delete this;
             return refcnt; }
 
         MemoryElement* mElement;
-        PRInt32        mRefCnt;
+        int32_t        mRefCnt;
         List*          mNext;
     };
 
     List* mElements;
 
 public:
-    MemoryElementSet() : mElements(nsnull) {
+    MemoryElementSet() : mElements(nullptr) {
         MOZ_COUNT_CTOR(MemoryElementSet); }
 
     MemoryElementSet(const MemoryElementSet& aSet) : mElements(aSet.mElements) {
@@ -203,10 +167,10 @@ public:
         const MemoryElement* operator->() const {
             return mCurrent->mElement; }
 
-        PRBool operator==(const ConstIterator& aConstIterator) const {
+        bool operator==(const ConstIterator& aConstIterator) const {
             return mCurrent == aConstIterator.mCurrent; }
 
-        PRBool operator!=(const ConstIterator& aConstIterator) const {
+        bool operator!=(const ConstIterator& aConstIterator) const {
             return mCurrent != aConstIterator.mCurrent; }
 
     protected:
@@ -214,7 +178,7 @@ public:
     };
 
     ConstIterator First() const { return ConstIterator(mElements); }
-    ConstIterator Last() const { return ConstIterator(nsnull); }
+    ConstIterator Last() const { return ConstIterator(nullptr); }
 
     // N.B. that the set assumes ownership of the element
     nsresult Add(MemoryElement* aElement);
@@ -242,10 +206,10 @@ public:
 
     ~nsAssignment() { MOZ_COUNT_DTOR(nsAssignment); }
 
-    PRBool operator==(const nsAssignment& aAssignment) const {
+    bool operator==(const nsAssignment& aAssignment) const {
         return mVariable == aAssignment.mVariable && mValue == aAssignment.mValue; }
 
-    PRBool operator!=(const nsAssignment& aAssignment) const {
+    bool operator!=(const nsAssignment& aAssignment) const {
         return mVariable != aAssignment.mVariable || mValue != aAssignment.mValue; }
 
     PLHashNumber Hash() const {
@@ -276,15 +240,15 @@ protected:
             MOZ_COUNT_DTOR(nsAssignmentSet::List);
             NS_IF_RELEASE(mNext); }
 
-        PRInt32 AddRef() { return ++mRefCnt; }
+        int32_t AddRef() { return ++mRefCnt; }
 
-        PRInt32 Release() {
-            PRInt32 refcnt = --mRefCnt;
+        int32_t Release() {
+            int32_t refcnt = --mRefCnt;
             if (refcnt == 0) delete this;
             return refcnt; }
 
         nsAssignment mAssignment;
-        PRInt32 mRefCnt;
+        int32_t mRefCnt;
         List*   mNext;
     };
 
@@ -292,7 +256,7 @@ protected:
 
 public:
     nsAssignmentSet()
-        : mAssignments(nsnull)
+        : mAssignments(nullptr)
         { MOZ_COUNT_CTOR(nsAssignmentSet); }
 
     nsAssignmentSet(const nsAssignmentSet& aSet)
@@ -349,10 +313,10 @@ public:
         const nsAssignment* operator->() const {
             return &mCurrent->mAssignment; }
 
-        PRBool operator==(const ConstIterator& aConstIterator) const {
+        bool operator==(const ConstIterator& aConstIterator) const {
             return mCurrent == aConstIterator.mCurrent; }
 
-        PRBool operator!=(const ConstIterator& aConstIterator) const {
+        bool operator!=(const ConstIterator& aConstIterator) const {
             return mCurrent != aConstIterator.mCurrent; }
 
     protected:
@@ -360,7 +324,7 @@ public:
     };
 
     ConstIterator First() const { return ConstIterator(mAssignments); }
-    ConstIterator Last() const { return ConstIterator(nsnull); }
+    ConstIterator Last() const { return ConstIterator(nullptr); }
 
 public:
     /**
@@ -376,52 +340,52 @@ public:
      * to value assignment.
      * @param aVariable the variable for which to lookup the binding
      * @param aValue the value to query
-     * @return PR_TRUE if aVariable is bound to aValue; PR_FALSE otherwise.
+     * @return true if aVariable is bound to aValue; false otherwise.
      */
-    PRBool HasAssignment(nsIAtom* aVariable, nsIRDFNode* aValue) const;
+    bool HasAssignment(nsIAtom* aVariable, nsIRDFNode* aValue) const;
 
     /**
      * Determine if the assignment set contains the specified assignment
      * @param aAssignment the assignment to search for
-     * @return PR_TRUE if the set contains the assignment, PR_FALSE otherwise.
+     * @return true if the set contains the assignment, false otherwise.
      */
-    PRBool HasAssignment(const nsAssignment& aAssignment) const {
+    bool HasAssignment(const nsAssignment& aAssignment) const {
         return HasAssignment(aAssignment.mVariable, aAssignment.mValue); }
 
     /**
      * Determine whether the assignment set has an assignment for the
      * specified variable.
      * @param aVariable the variable to query
-     * @return PR_TRUE if the assignment set has an assignment for the variable,
-     *   PR_FALSE otherwise.
+     * @return true if the assignment set has an assignment for the variable,
+     *   false otherwise.
      */
-    PRBool HasAssignmentFor(nsIAtom* aVariable) const;
+    bool HasAssignmentFor(nsIAtom* aVariable) const;
 
     /**
      * Retrieve the assignment for the specified variable
      * @param aVariable the variable to query
      * @param aValue an out parameter that will receive the value assigned
      *   to the variable, if any.
-     * @return PR_TRUE if the variable has an assignment, PR_FALSE
+     * @return true if the variable has an assignment, false
      *   if there was no assignment for the variable.
      */
-    PRBool GetAssignmentFor(nsIAtom* aVariable, nsIRDFNode** aValue) const;
+    bool GetAssignmentFor(nsIAtom* aVariable, nsIRDFNode** aValue) const;
 
     /**
      * Count the number of assignments in the set
      * @return the number of assignments in the set
      */
-    PRInt32 Count() const;
+    int32_t Count() const;
 
     /**
      * Determine if the set is empty
-     * @return PR_TRUE if the assignment set is empty, PR_FALSE otherwise.
+     * @return true if the assignment set is empty, false otherwise.
      */
-    PRBool IsEmpty() const { return mAssignments == nsnull; }
+    bool IsEmpty() const { return mAssignments == nullptr; }
 
-    PRBool Equals(const nsAssignmentSet& aSet) const;
-    PRBool operator==(const nsAssignmentSet& aSet) const { return Equals(aSet); }
-    PRBool operator!=(const nsAssignmentSet& aSet) const { return !Equals(aSet); }
+    bool Equals(const nsAssignmentSet& aSet) const;
+    bool operator==(const nsAssignmentSet& aSet) const { return Equals(aSet); }
+    bool operator!=(const nsAssignmentSet& aSet) const { return !Equals(aSet); }
 };
 
 
@@ -492,17 +456,17 @@ public:
         mSupport.Add(aMemoryElement);
         return NS_OK; }
 
-    PRBool Equals(const Instantiation& aInstantiation) const {
+    bool Equals(const Instantiation& aInstantiation) const {
         return mAssignments == aInstantiation.mAssignments; }
 
-    PRBool operator==(const Instantiation& aInstantiation) const {
+    bool operator==(const Instantiation& aInstantiation) const {
         return Equals(aInstantiation); }
 
-    PRBool operator!=(const Instantiation& aInstantiation) const {
+    bool operator!=(const Instantiation& aInstantiation) const {
         return !Equals(aInstantiation); }
 
     static PLHashNumber Hash(const void* aKey);
-    static PRIntn Compare(const void* aLeft, const void* aRight);
+    static int Compare(const void* aLeft, const void* aRight);
 };
 
 
@@ -583,10 +547,10 @@ public:
         const Instantiation* operator->() const {
             return &mCurrent->mInstantiation; }
 
-        PRBool operator==(const ConstIterator& aConstIterator) const {
+        bool operator==(const ConstIterator& aConstIterator) const {
             return mCurrent == aConstIterator.mCurrent; }
 
-        PRBool operator!=(const ConstIterator& aConstIterator) const {
+        bool operator!=(const ConstIterator& aConstIterator) const {
             return mCurrent != aConstIterator.mCurrent; }
     };
 
@@ -621,10 +585,10 @@ public:
         Instantiation* operator->() const {
             return &mCurrent->mInstantiation; }
 
-        PRBool operator==(const ConstIterator& aConstIterator) const {
+        bool operator==(const ConstIterator& aConstIterator) const {
             return mCurrent == aConstIterator.mCurrent; }
 
-        PRBool operator!=(const ConstIterator& aConstIterator) const {
+        bool operator!=(const ConstIterator& aConstIterator) const {
             return mCurrent != aConstIterator.mCurrent; }
 
         friend class InstantiationSet;
@@ -633,7 +597,7 @@ public:
     Iterator First() { return Iterator(mHead.mNext); }
     Iterator Last() { return Iterator(&mHead); }
 
-    PRBool Empty() const { return First() == Last(); }
+    bool Empty() const { return First() == Last(); }
 
     Iterator Append(const Instantiation& aInstantiation) {
         return Insert(Last(), aInstantiation); }
@@ -644,7 +608,7 @@ public:
 
     void Clear();
 
-    PRBool HasAssignmentFor(nsIAtom* aVariable) const;
+    bool HasAssignmentFor(nsIAtom* aVariable) const;
 };
 
 //----------------------------------------------------------------------
@@ -685,7 +649,7 @@ public:
      * @return NS_OK if no errors occurred.
      */
     virtual nsresult Propagate(InstantiationSet& aInstantiations,
-                               PRBool aIsUpdate, PRBool& aTakenInstantiations) = 0;
+                               bool aIsUpdate, bool& aTakenInstantiations) = 0;
 };
 
 //----------------------------------------------------------------------
@@ -730,10 +694,10 @@ public:
         const ReteNode* operator->() const {
             return *mCurrent; }
 
-        PRBool operator==(const ConstIterator& aConstIterator) const {
+        bool operator==(const ConstIterator& aConstIterator) const {
             return mCurrent == aConstIterator.mCurrent; }
 
-        PRBool operator!=(const ConstIterator& aConstIterator) const {
+        bool operator!=(const ConstIterator& aConstIterator) const {
             return mCurrent != aConstIterator.mCurrent; }
 
     protected:
@@ -763,22 +727,22 @@ public:
         ReteNode* operator->() const {
             return *mCurrent; }
 
-        PRBool operator==(const ConstIterator& aConstIterator) const {
+        bool operator==(const ConstIterator& aConstIterator) const {
             return mCurrent == aConstIterator.mCurrent; }
 
-        PRBool operator!=(const ConstIterator& aConstIterator) const {
+        bool operator!=(const ConstIterator& aConstIterator) const {
             return mCurrent != aConstIterator.mCurrent; }
     };
 
     Iterator First() { return Iterator(mNodes); }
     Iterator Last() { return Iterator(mNodes + mCount); }
 
-    PRInt32 Count() const { return mCount; }
+    int32_t Count() const { return mCount; }
 
 protected:
     ReteNode** mNodes;
-    PRInt32 mCount;
-    PRInt32 mCapacity;
+    int32_t mCount;
+    int32_t mCapacity;
 };
 
 //----------------------------------------------------------------------
@@ -839,7 +803,7 @@ public:
      * aTakenInstantiations will be set properly even if an error occurs.
      */
     virtual nsresult Propagate(InstantiationSet& aInstantiations,
-                               PRBool aIsUpdate, PRBool& aTakenInstantiations);
+                               bool aIsUpdate, bool& aTakenInstantiations);
 
     /**
      * This is called by a child node on its parent to allow the
@@ -875,16 +839,8 @@ public:
      * @return NS_OK if no errors occurred.
      */
     virtual nsresult FilterInstantiations(InstantiationSet& aInstantiations,
-                                          PRBool* aCantHandleYet) const = 0;
+                                          bool* aCantHandleYet) const = 0;
     //XXX probably better named "ApplyConstraints" or "Discrminiate" or something
-
-    /**
-     * Determine if this node has another node as its direct ancestor.
-     * @param aNode the node to look for.
-     * @return PR_TRUE if aNode is a direct ancestor of this node, PR_FALSE
-     *   otherwise.
-     */
-    PRBool HasAncestor(const ReteNode* aNode) const;
 
     /**
      * Add another node as a child of this node.

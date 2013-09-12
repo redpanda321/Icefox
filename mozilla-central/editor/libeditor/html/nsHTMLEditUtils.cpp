@@ -1,71 +1,57 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include "./../../mozilla-config.h"     // for MOZ_MEDIA
+#include "mozilla/Assertions.h"         // for MOZ_ASSERT, etc
+#include "mozilla/Util.h"               // for ArrayLength
+#include "mozilla/dom/Element.h"        // for Element, nsINode
+#include "nsAString.h"                  // for nsAString_internal::IsEmpty
+#include "nsCOMPtr.h"                   // for nsCOMPtr, operator==, etc
+#include "nsCaseTreatment.h"
+#include "nsDebug.h"                    // for NS_PRECONDITION, etc
+#include "nsEditProperty.h"             // for nsEditProperty, etc
+#include "nsEditor.h"                   // for nsEditor
+#include "nsError.h"                    // for NS_SUCCEEDED
+#include "nsGkAtoms.h"                  // for nsGkAtoms, nsGkAtoms::a, etc
 #include "nsHTMLEditUtils.h"
-#include "nsTextEditUtils.h"
-
-#include "nsString.h"
-#include "nsUnicharUtils.h"
-#include "nsEditor.h"
-#include "nsEditProperty.h"
-#include "nsIAtom.h"
-#include "nsIDOMNode.h"
-#include "nsIContent.h"
-#include "nsIDOMNodeList.h"
-#include "nsIDOMHTMLAnchorElement.h"
 #include "nsHTMLTags.h"
+#include "nsIAtom.h"                    // for nsIAtom
+#include "nsIDOMHTMLAnchorElement.h"    // for nsIDOMHTMLAnchorElement
+#include "nsIDOMNode.h"                 // for nsIDOMNode
+#include "nsINameSpaceManager.h"        // for kNameSpaceID_None
+#include "nsLiteralString.h"            // for NS_LITERAL_STRING
+#include "nsString.h"                   // for nsAutoString
+#include "nsTextEditUtils.h"            // for nsTextEditUtils
+
+using namespace mozilla;
 
 ///////////////////////////////////////////////////////////////////////////
 //                  
-PRBool 
-nsHTMLEditUtils::IsBig(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsBig(nsIDOMNode* aNode)
 {
-  return nsEditor::NodeIsType(node, nsEditProperty::big);
+  return nsEditor::NodeIsType(aNode, nsEditProperty::big);
 }
 
 
 ///////////////////////////////////////////////////////////////////////////
 // IsInlineStyle true if node is an inline style
 //                  
-PRBool 
-nsHTMLEditUtils::IsInlineStyle(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsInlineStyle(nsIDOMNode* aNode)
 {
-  NS_PRECONDITION(node, "null parent passed to nsHTMLEditUtils::IsInlineStyle");
-  nsCOMPtr<nsIAtom> nodeAtom = nsEditor::GetTag(node);
+  NS_PRECONDITION(aNode, "null parent passed to nsHTMLEditUtils::IsInlineStyle");
+  nsCOMPtr<nsINode> node = do_QueryInterface(aNode);
+  return node && IsInlineStyle(node);
+}
+
+bool
+nsHTMLEditUtils::IsInlineStyle(nsINode* aNode)
+{
+  MOZ_ASSERT(aNode);
+  nsIAtom* nodeAtom = aNode->Tag();
   return (nodeAtom == nsEditProperty::b)
       || (nodeAtom == nsEditProperty::i)
       || (nodeAtom == nsEditProperty::u)
@@ -83,11 +69,19 @@ nsHTMLEditUtils::IsInlineStyle(nsIDOMNode *node)
 ///////////////////////////////////////////////////////////////////////////
 // IsFormatNode true if node is a format node
 // 
-PRBool
-nsHTMLEditUtils::IsFormatNode(nsIDOMNode *node)
+bool
+nsHTMLEditUtils::IsFormatNode(nsIDOMNode* aNode)
 {
-  NS_PRECONDITION(node, "null parent passed to nsHTMLEditUtils::IsFormatNode");
-  nsCOMPtr<nsIAtom> nodeAtom = nsEditor::GetTag(node);
+  NS_PRECONDITION(aNode, "null parent passed to nsHTMLEditUtils::IsFormatNode");
+  nsCOMPtr<nsINode> node = do_QueryInterface(aNode);
+  return node && IsFormatNode(node);
+}
+
+bool
+nsHTMLEditUtils::IsFormatNode(nsINode* aNode)
+{
+  MOZ_ASSERT(aNode);
+  nsIAtom* nodeAtom = aNode->Tag();
   return (nodeAtom == nsEditProperty::p)
       || (nodeAtom == nsEditProperty::pre)
       || (nodeAtom == nsEditProperty::h1)
@@ -102,11 +96,11 @@ nsHTMLEditUtils::IsFormatNode(nsIDOMNode *node)
 ///////////////////////////////////////////////////////////////////////////
 // IsNodeThatCanOutdent true if node is a list, list item, or blockquote      
 //
-PRBool
-nsHTMLEditUtils::IsNodeThatCanOutdent(nsIDOMNode *node)
+bool
+nsHTMLEditUtils::IsNodeThatCanOutdent(nsIDOMNode* aNode)
 {
-  NS_PRECONDITION(node, "null parent passed to nsHTMLEditUtils::IsNodeThatCanOutdent");
-  nsCOMPtr<nsIAtom> nodeAtom = nsEditor::GetTag(node);
+  NS_PRECONDITION(aNode, "null parent passed to nsHTMLEditUtils::IsNodeThatCanOutdent");
+  nsCOMPtr<nsIAtom> nodeAtom = nsEditor::GetTag(aNode);
   return (nodeAtom == nsEditProperty::ul)
       || (nodeAtom == nsEditProperty::ol)
       || (nodeAtom == nsEditProperty::dl)
@@ -118,10 +112,10 @@ nsHTMLEditUtils::IsNodeThatCanOutdent(nsIDOMNode *node)
 
 ///////////////////////////////////////////////////////////////////////////
 //                  
-PRBool 
-nsHTMLEditUtils::IsSmall(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsSmall(nsIDOMNode* aNode)
 {
-  return nsEditor::NodeIsType(node, nsEditProperty::small);
+  return nsEditor::NodeIsType(aNode, nsEditProperty::small);
 }
 
 
@@ -132,11 +126,11 @@ nsHTMLEditUtils::IsSmall(nsIDOMNode *node)
 ///////////////////////////////////////////////////////////////////////////
 // IsHeader: true if node an html header
 //                  
-PRBool 
-nsHTMLEditUtils::IsHeader(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsHeader(nsIDOMNode* aNode)
 {
-  NS_PRECONDITION(node, "null parent passed to nsHTMLEditUtils::IsHeader");
-  nsCOMPtr<nsIAtom> nodeAtom = nsEditor::GetTag(node);
+  NS_PRECONDITION(aNode, "null parent passed to nsHTMLEditUtils::IsHeader");
+  nsCOMPtr<nsIAtom> nodeAtom = nsEditor::GetTag(aNode);
   return (nodeAtom == nsEditProperty::h1)
       || (nodeAtom == nsEditProperty::h2)
       || (nodeAtom == nsEditProperty::h3)
@@ -149,31 +143,39 @@ nsHTMLEditUtils::IsHeader(nsIDOMNode *node)
 ///////////////////////////////////////////////////////////////////////////
 // IsParagraph: true if node an html paragraph
 //                  
-PRBool 
-nsHTMLEditUtils::IsParagraph(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsParagraph(nsIDOMNode* aNode)
 {
-  return nsEditor::NodeIsType(node, nsEditProperty::p);
+  return nsEditor::NodeIsType(aNode, nsEditProperty::p);
 }
 
 
 ///////////////////////////////////////////////////////////////////////////
 // IsHR: true if node an horizontal rule
 //                  
-PRBool 
-nsHTMLEditUtils::IsHR(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsHR(nsIDOMNode* aNode)
 {
-  return nsEditor::NodeIsType(node, nsEditProperty::hr);
+  return nsEditor::NodeIsType(aNode, nsEditProperty::hr);
 }
 
 
 ///////////////////////////////////////////////////////////////////////////
 // IsListItem: true if node an html list item
 //                  
-PRBool 
-nsHTMLEditUtils::IsListItem(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsListItem(nsIDOMNode* aNode)
 {
-  NS_PRECONDITION(node, "null parent passed to nsHTMLEditUtils::IsListItem");
-  nsCOMPtr<nsIAtom> nodeAtom = nsEditor::GetTag(node);
+  NS_PRECONDITION(aNode, "null parent passed to nsHTMLEditUtils::IsListItem");
+  nsCOMPtr<nsINode> node = do_QueryInterface(aNode);
+  return node && IsListItem(node);
+}
+
+bool
+nsHTMLEditUtils::IsListItem(nsINode* node)
+{
+  MOZ_ASSERT(node);
+  nsCOMPtr<nsIAtom> nodeAtom = node->Tag();
   return (nodeAtom == nsEditProperty::li)
       || (nodeAtom == nsEditProperty::dd)
       || (nodeAtom == nsEditProperty::dt);
@@ -183,11 +185,19 @@ nsHTMLEditUtils::IsListItem(nsIDOMNode *node)
 ///////////////////////////////////////////////////////////////////////////
 // IsTableElement: true if node an html table, td, tr, ...
 //                  
-PRBool 
-nsHTMLEditUtils::IsTableElement(nsIDOMNode *node)
+bool
+nsHTMLEditUtils::IsTableElement(nsIDOMNode* aNode)
 {
-  NS_PRECONDITION(node, "null node passed to nsHTMLEditor::IsTableElement");
-  nsCOMPtr<nsIAtom> nodeAtom = nsEditor::GetTag(node);
+  NS_PRECONDITION(aNode, "null node passed to nsHTMLEditor::IsTableElement");
+  nsCOMPtr<nsINode> node = do_QueryInterface(aNode);
+  return node && IsTableElement(node);
+}
+
+bool
+nsHTMLEditUtils::IsTableElement(nsINode* node)
+{
+  MOZ_ASSERT(node);
+  nsCOMPtr<nsIAtom> nodeAtom = node->Tag();
   return (nodeAtom == nsEditProperty::table)
       || (nodeAtom == nsEditProperty::tr)
       || (nodeAtom == nsEditProperty::td)
@@ -201,11 +211,19 @@ nsHTMLEditUtils::IsTableElement(nsIDOMNode *node)
 ///////////////////////////////////////////////////////////////////////////
 // IsTableElementButNotTable: true if node an html td, tr, ... (doesn't include table)
 //                  
-PRBool 
-nsHTMLEditUtils::IsTableElementButNotTable(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsTableElementButNotTable(nsIDOMNode* aNode)
 {
-  NS_PRECONDITION(node, "null node passed to nsHTMLEditor::IsTableElementButNotTable");
-  nsCOMPtr<nsIAtom> nodeAtom = nsEditor::GetTag(node);
+  NS_PRECONDITION(aNode, "null node passed to nsHTMLEditor::IsTableElementButNotTable");
+  nsCOMPtr<nsINode> node = do_QueryInterface(aNode);
+  return node && IsTableElementButNotTable(node);
+}
+
+bool
+nsHTMLEditUtils::IsTableElementButNotTable(nsINode* aNode)
+{
+  MOZ_ASSERT(aNode);
+  nsCOMPtr<nsIAtom> nodeAtom = aNode->Tag();
   return (nodeAtom == nsEditProperty::tr)
       || (nodeAtom == nsEditProperty::td)
       || (nodeAtom == nsEditProperty::th)
@@ -218,30 +236,38 @@ nsHTMLEditUtils::IsTableElementButNotTable(nsIDOMNode *node)
 ///////////////////////////////////////////////////////////////////////////
 // IsTable: true if node an html table
 //                  
-PRBool 
-nsHTMLEditUtils::IsTable(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsTable(nsIDOMNode* aNode)
 {
-  return nsEditor::NodeIsType(node, nsEditProperty::table);
+  return nsEditor::NodeIsType(aNode, nsEditProperty::table);
 }
 
 ///////////////////////////////////////////////////////////////////////////
 // IsTableRow: true if node an html tr
 //                  
-PRBool 
-nsHTMLEditUtils::IsTableRow(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsTableRow(nsIDOMNode* aNode)
 {
-  return nsEditor::NodeIsType(node, nsEditProperty::tr);
+  return nsEditor::NodeIsType(aNode, nsEditProperty::tr);
 }
 
 
 ///////////////////////////////////////////////////////////////////////////
 // IsTableCell: true if node an html td or th
 //                  
-PRBool 
-nsHTMLEditUtils::IsTableCell(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsTableCell(nsIDOMNode* aNode)
 {
-  NS_PRECONDITION(node, "null parent passed to nsHTMLEditUtils::IsTableCell");
-  nsCOMPtr<nsIAtom> nodeAtom = nsEditor::GetTag(node);
+  NS_PRECONDITION(aNode, "null parent passed to nsHTMLEditUtils::IsTableCell");
+  nsCOMPtr<nsINode> node = do_QueryInterface(aNode);
+  return node && IsTableCell(node);
+}
+
+bool
+nsHTMLEditUtils::IsTableCell(nsINode* node)
+{
+  MOZ_ASSERT(node);
+  nsCOMPtr<nsIAtom> nodeAtom = node->Tag();
   return (nodeAtom == nsEditProperty::td)
       || (nodeAtom == nsEditProperty::th);
 }
@@ -250,11 +276,11 @@ nsHTMLEditUtils::IsTableCell(nsIDOMNode *node)
 ///////////////////////////////////////////////////////////////////////////
 // IsTableCell: true if node an html td or th
 //                  
-PRBool 
-nsHTMLEditUtils::IsTableCellOrCaption(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsTableCellOrCaption(nsIDOMNode* aNode)
 {
-  NS_PRECONDITION(node, "null parent passed to nsHTMLEditUtils::IsTableCell");
-  nsCOMPtr<nsIAtom> nodeAtom = nsEditor::GetTag(node);
+  NS_PRECONDITION(aNode, "null parent passed to nsHTMLEditUtils::IsTableCell");
+  nsCOMPtr<nsIAtom> nodeAtom = nsEditor::GetTag(aNode);
   return (nodeAtom == nsEditProperty::td)
       || (nodeAtom == nsEditProperty::th)
       || (nodeAtom == nsEditProperty::caption);
@@ -264,11 +290,19 @@ nsHTMLEditUtils::IsTableCellOrCaption(nsIDOMNode *node)
 ///////////////////////////////////////////////////////////////////////////
 // IsList: true if node an html list
 //                  
-PRBool 
-nsHTMLEditUtils::IsList(nsIDOMNode *node)
+bool
+nsHTMLEditUtils::IsList(nsIDOMNode* aNode)
 {
-  NS_PRECONDITION(node, "null parent passed to nsHTMLEditUtils::IsList");
-  nsCOMPtr<nsIAtom> nodeAtom = nsEditor::GetTag(node);
+  NS_PRECONDITION(aNode, "null parent passed to nsHTMLEditUtils::IsList");
+  nsCOMPtr<nsINode> node = do_QueryInterface(aNode);
+  return node && IsList(node);
+}
+
+bool
+nsHTMLEditUtils::IsList(nsINode* node)
+{
+  MOZ_ASSERT(node);
+  nsCOMPtr<nsIAtom> nodeAtom = node->Tag();
   return (nodeAtom == nsEditProperty::ul)
       || (nodeAtom == nsEditProperty::ol)
       || (nodeAtom == nsEditProperty::dl);
@@ -278,109 +312,105 @@ nsHTMLEditUtils::IsList(nsIDOMNode *node)
 ///////////////////////////////////////////////////////////////////////////
 // IsOrderedList: true if node an html ordered list
 //                  
-PRBool 
-nsHTMLEditUtils::IsOrderedList(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsOrderedList(nsIDOMNode* aNode)
 {
-  return nsEditor::NodeIsType(node, nsEditProperty::ol);
+  return nsEditor::NodeIsType(aNode, nsEditProperty::ol);
 }
 
 
 ///////////////////////////////////////////////////////////////////////////
 // IsUnorderedList: true if node an html unordered list
 //                  
-PRBool 
-nsHTMLEditUtils::IsUnorderedList(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsUnorderedList(nsIDOMNode* aNode)
 {
-  return nsEditor::NodeIsType(node, nsEditProperty::ul);
+  return nsEditor::NodeIsType(aNode, nsEditProperty::ul);
 }
 
 
 ///////////////////////////////////////////////////////////////////////////
 // IsBlockquote: true if node an html blockquote node
 //                  
-PRBool 
-nsHTMLEditUtils::IsBlockquote(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsBlockquote(nsIDOMNode* aNode)
 {
-  return nsEditor::NodeIsType(node, nsEditProperty::blockquote);
+  return nsEditor::NodeIsType(aNode, nsEditProperty::blockquote);
 }
 
 
 ///////////////////////////////////////////////////////////////////////////
 // IsPre: true if node an html pre node
 //                  
-PRBool 
-nsHTMLEditUtils::IsPre(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsPre(nsIDOMNode* aNode)
 {
-  return nsEditor::NodeIsType(node, nsEditProperty::pre);
-}
-
-
-///////////////////////////////////////////////////////////////////////////
-// IsAddress: true if node an html address node
-//                  
-PRBool 
-nsHTMLEditUtils::IsAddress(nsIDOMNode *node)
-{
-  return nsEditor::NodeIsType(node, nsEditProperty::address);
+  return nsEditor::NodeIsType(aNode, nsEditProperty::pre);
 }
 
 
 ///////////////////////////////////////////////////////////////////////////
 // IsImage: true if node an html image node
 //                  
-PRBool 
-nsHTMLEditUtils::IsImage(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsImage(nsIDOMNode* aNode)
 {
-  return nsEditor::NodeIsType(node, nsEditProperty::img);
+  return nsEditor::NodeIsType(aNode, nsEditProperty::img);
 }
 
-PRBool 
+bool 
 nsHTMLEditUtils::IsLink(nsIDOMNode *aNode)
 {
-  NS_ENSURE_TRUE(aNode, PR_FALSE);
+  NS_ENSURE_TRUE(aNode, false);
   nsCOMPtr<nsIDOMHTMLAnchorElement> anchor = do_QueryInterface(aNode);
   if (anchor)
   {
     nsAutoString tmpText;
     if (NS_SUCCEEDED(anchor->GetHref(tmpText)) && !tmpText.IsEmpty())
-      return PR_TRUE;
+      return true;
   }
-  return PR_FALSE;
+  return false;
 }
 
-PRBool 
+bool 
 nsHTMLEditUtils::IsNamedAnchor(nsIDOMNode *aNode)
 {
-  NS_ENSURE_TRUE(aNode, PR_FALSE);
-  nsCOMPtr<nsIDOMHTMLAnchorElement> anchor = do_QueryInterface(aNode);
-  if (anchor)
-  {
-    nsAutoString tmpText;
-    if (NS_SUCCEEDED(anchor->GetName(tmpText)) && !tmpText.IsEmpty())
-      return PR_TRUE;
+  nsCOMPtr<nsINode> node = do_QueryInterface(aNode);
+  return node && IsNamedAnchor(node);
+}
+
+bool
+nsHTMLEditUtils::IsNamedAnchor(nsINode* aNode)
+{
+  MOZ_ASSERT(aNode);
+  if (!aNode->IsElement() || !aNode->AsElement()->IsHTML(nsGkAtoms::a)) {
+    return false;
   }
-  return PR_FALSE;
+
+  nsAutoString text;
+  return aNode->AsElement()->GetAttr(kNameSpaceID_None, nsGkAtoms::name,
+                                     text) && !text.IsEmpty();
 }
 
 
 ///////////////////////////////////////////////////////////////////////////
 // IsDiv: true if node an html div node
 //                  
-PRBool 
-nsHTMLEditUtils::IsDiv(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsDiv(nsIDOMNode* aNode)
 {
-  return nsEditor::NodeIsType(node, nsEditProperty::div);
+  return nsEditor::NodeIsType(aNode, nsEditProperty::div);
 }
 
 
 ///////////////////////////////////////////////////////////////////////////
 // IsMozDiv: true if node an html div node with type = _moz
 //                  
-PRBool 
-nsHTMLEditUtils::IsMozDiv(nsIDOMNode *node)
+bool 
+nsHTMLEditUtils::IsMozDiv(nsIDOMNode* aNode)
 {
-  if (IsDiv(node) && nsTextEditUtils::HasMozAttr(node)) return PR_TRUE;
-  return PR_FALSE;
+  if (IsDiv(aNode) && nsTextEditUtils::HasMozAttr(aNode)) return true;
+  return false;
 }
 
 
@@ -388,55 +418,67 @@ nsHTMLEditUtils::IsMozDiv(nsIDOMNode *node)
 ///////////////////////////////////////////////////////////////////////////
 // IsMailCite: true if node an html blockquote with type=cite
 //                  
-PRBool 
-nsHTMLEditUtils::IsMailCite(nsIDOMNode *node)
+bool
+nsHTMLEditUtils::IsMailCite(nsIDOMNode* aNode)
 {
-  NS_PRECONDITION(node, "null parent passed to nsHTMLEditUtils::IsMailCite");
-  nsCOMPtr<nsIDOMElement> elem = do_QueryInterface(node);
-  NS_ENSURE_TRUE(elem, PR_FALSE);
-  nsAutoString attrName (NS_LITERAL_STRING("type")); 
-  
+  NS_PRECONDITION(aNode, "null parent passed to nsHTMLEditUtils::IsMailCite");
+  nsCOMPtr<nsINode> node = do_QueryInterface(aNode);
+  return node && IsMailCite(node);
+}
+
+bool
+nsHTMLEditUtils::IsMailCite(nsINode* aNode)
+{
+  MOZ_ASSERT(aNode);
+
   // don't ask me why, but our html mailcites are id'd by "type=cite"...
-  nsAutoString attrVal;
-  nsresult res = elem->GetAttribute(attrName, attrVal);
-  ToLowerCase(attrVal);
-  if (NS_SUCCEEDED(res))
-  {
-    if (attrVal.EqualsLiteral("cite"))
-      return PR_TRUE;
+  if (aNode->IsElement() &&
+      aNode->AsElement()->AttrValueIs(kNameSpaceID_None, nsGkAtoms::type,
+                                      NS_LITERAL_STRING("cite"),
+                                      eIgnoreCase)) {
+    return true;
   }
 
   // ... but our plaintext mailcites by "_moz_quote=true".  go figure.
-  attrName.AssignLiteral("_moz_quote");
-  res = elem->GetAttribute(attrName, attrVal);
-  if (NS_SUCCEEDED(res))
-  {
-    ToLowerCase(attrVal);
-    if (attrVal.EqualsLiteral("true"))
-      return PR_TRUE;
+  if (aNode->IsElement() &&
+      aNode->AsElement()->AttrValueIs(kNameSpaceID_None, nsGkAtoms::mozquote,
+                                      NS_LITERAL_STRING("true"),
+                                      eIgnoreCase)) {
+    return true;
   }
 
-  return PR_FALSE;
+  return false;
 }
 
 
 ///////////////////////////////////////////////////////////////////////////
 // IsFormWidget: true if node is a form widget of some kind
 //                  
-PRBool 
-nsHTMLEditUtils::IsFormWidget(nsIDOMNode *node)
+bool
+nsHTMLEditUtils::IsFormWidget(nsIDOMNode* aNode)
 {
-  NS_PRECONDITION(node, "null node passed to nsHTMLEditUtils::IsFormWidget");
-  nsCOMPtr<nsIAtom> nodeAtom = nsEditor::GetTag(node);
+  NS_PRECONDITION(aNode, "null node passed to nsHTMLEditUtils::IsFormWidget");
+  nsCOMPtr<nsINode> node = do_QueryInterface(aNode);
+  return node && IsFormWidget(node);
+}
+
+bool
+nsHTMLEditUtils::IsFormWidget(nsINode* aNode)
+{
+  MOZ_ASSERT(aNode);
+  nsCOMPtr<nsIAtom> nodeAtom = aNode->Tag();
   return (nodeAtom == nsEditProperty::textarea)
       || (nodeAtom == nsEditProperty::select)
       || (nodeAtom == nsEditProperty::button)
       || (nodeAtom == nsEditProperty::output)
+      || (nodeAtom == nsEditProperty::keygen)
+      || (nodeAtom == nsEditProperty::progress)
+      || (nodeAtom == nsEditProperty::meter)
       || (nodeAtom == nsEditProperty::input);
 }
 
-PRBool
-nsHTMLEditUtils::SupportsAlignAttr(nsIDOMNode * aNode)
+bool
+nsHTMLEditUtils::SupportsAlignAttr(nsIDOMNode* aNode)
 {
   NS_PRECONDITION(aNode, "null node passed to nsHTMLEditUtils::SupportsAlignAttr");
   nsCOMPtr<nsIAtom> nodeAtom = nsEditor::GetTag(aNode);
@@ -473,17 +515,18 @@ nsHTMLEditUtils::SupportsAlignAttr(nsIDOMNode * aNode)
 // body, head, html
 #define GROUP_TOPLEVEL         (1 << 1)  
 
-// base, isindex, link, meta, script, style, title
+// base, link, meta, script, style, title
 #define GROUP_HEAD_CONTENT     (1 << 2)
 
 // b, big, i, s, small, strike, tt, u
 #define GROUP_FONTSTYLE        (1 << 3)
 
-// abbr, acronym, cite, code, del, dfn, em, ins, kbd, mark, samp, strong, var
+// abbr, acronym, cite, code, datalist, del, dfn, em, ins, kbd, mark, samp,
+// strong, var
 #define GROUP_PHRASE           (1 << 4)
 
-// a, applet, basefont, bdo, br, font, iframe, img, map, object, output, q,
-// script, span, sub, sup
+// a, applet, basefont, bdo, br, font, iframe, img, map, meter, object, output,
+// progress, q, script, span, sub, sup
 #define GROUP_SPECIAL          (1 << 5)
 
 // button, form, input, label, select, textarea
@@ -491,7 +534,7 @@ nsHTMLEditUtils::SupportsAlignAttr(nsIDOMNode * aNode)
 
 // address, applet, article, aside, blockquote, button, center, del, dir, div,
 // dl, fieldset, figure, footer, form, h1, h2, h3, h4, h5, h6, header, hgroup,
-// hr, iframe, ins, isindex, map, menu, nav, noframes, noscript, object, ol, p,
+// hr, iframe, ins, map, menu, nav, noframes, noscript, object, ol, p,
 // pre, table, section, ul
 #define GROUP_BLOCK            (1 << 7)
 
@@ -523,7 +566,7 @@ nsHTMLEditUtils::SupportsAlignAttr(nsIDOMNode * aNode)
 #define GROUP_SELECT_CONTENT   (1 << 16)
 
 // option
-#define GROUP_OPTGROUP_CONTENT (1 << 17)
+#define GROUP_OPTIONS          (1 << 17)
 
 // dd, dt
 #define GROUP_DL_CONTENT       (1 << 18)
@@ -555,10 +598,10 @@ struct nsElementInfo
 #ifdef DEBUG
   eHTMLTags mTag;
 #endif
-  PRUint32 mGroup;
-  PRUint32 mCanContainGroups;
-  PRPackedBool mIsContainer;
-  PRPackedBool mCanContainSelf;
+  uint32_t mGroup;
+  uint32_t mCanContainGroups;
+  bool mIsContainer;
+  bool mCanContainSelf;
 };
 
 #ifdef DEBUG
@@ -570,168 +613,171 @@ struct nsElementInfo
 #endif
 
 static const nsElementInfo kElements[eHTMLTag_userdefined] = {
-  ELEM(a, PR_TRUE, PR_FALSE, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
-  ELEM(abbr, PR_TRUE, PR_TRUE, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
-  ELEM(acronym, PR_TRUE, PR_TRUE, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
-  ELEM(address, PR_TRUE, PR_TRUE, GROUP_BLOCK,
+  ELEM(a, true, false, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
+  ELEM(abbr, true, true, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
+  ELEM(acronym, true, true, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
+  ELEM(address, true, true, GROUP_BLOCK,
        GROUP_INLINE_ELEMENT | GROUP_P),
-  ELEM(applet, PR_TRUE, PR_TRUE, GROUP_SPECIAL | GROUP_BLOCK,
+  ELEM(applet, true, true, GROUP_SPECIAL | GROUP_BLOCK,
        GROUP_FLOW_ELEMENT | GROUP_OBJECT_CONTENT),
-  ELEM(area, PR_FALSE, PR_FALSE, GROUP_MAP_CONTENT, GROUP_NONE),
-  ELEM(article, PR_TRUE, PR_TRUE, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
-  ELEM(aside, PR_TRUE, PR_TRUE, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
+  ELEM(area, false, false, GROUP_MAP_CONTENT, GROUP_NONE),
+  ELEM(article, true, true, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
+  ELEM(aside, true, true, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
 #if defined(MOZ_MEDIA)
-  ELEM(audio, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
+  ELEM(audio, false, false, GROUP_NONE, GROUP_NONE),
 #endif
-  ELEM(b, PR_TRUE, PR_TRUE, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
-  ELEM(base, PR_FALSE, PR_FALSE, GROUP_HEAD_CONTENT, GROUP_NONE),
-  ELEM(basefont, PR_FALSE, PR_FALSE, GROUP_SPECIAL, GROUP_NONE),
-  ELEM(bdo, PR_TRUE, PR_TRUE, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
-  ELEM(bgsound, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(big, PR_TRUE, PR_TRUE, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
-  ELEM(blink, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(blockquote, PR_TRUE, PR_TRUE, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
-  ELEM(body, PR_TRUE, PR_TRUE, GROUP_TOPLEVEL, GROUP_FLOW_ELEMENT),
-  ELEM(br, PR_FALSE, PR_FALSE, GROUP_SPECIAL, GROUP_NONE),
-  ELEM(button, PR_TRUE, PR_TRUE, GROUP_FORMCONTROL | GROUP_BLOCK,
+  ELEM(b, true, true, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
+  ELEM(base, false, false, GROUP_HEAD_CONTENT, GROUP_NONE),
+  ELEM(basefont, false, false, GROUP_SPECIAL, GROUP_NONE),
+  ELEM(bdo, true, true, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
+  ELEM(bgsound, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(big, true, true, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
+  ELEM(blink, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(blockquote, true, true, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
+  ELEM(body, true, true, GROUP_TOPLEVEL, GROUP_FLOW_ELEMENT),
+  ELEM(br, false, false, GROUP_SPECIAL, GROUP_NONE),
+  ELEM(button, true, true, GROUP_FORMCONTROL | GROUP_BLOCK,
        GROUP_FLOW_ELEMENT),
-  ELEM(canvas, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(caption, PR_TRUE, PR_TRUE, GROUP_NONE, GROUP_INLINE_ELEMENT),
-  ELEM(center, PR_TRUE, PR_TRUE, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
-  ELEM(cite, PR_TRUE, PR_TRUE, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
-  ELEM(code, PR_TRUE, PR_TRUE, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
-  ELEM(col, PR_FALSE, PR_FALSE, GROUP_TABLE_CONTENT | GROUP_COLGROUP_CONTENT,
+  ELEM(canvas, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(caption, true, true, GROUP_NONE, GROUP_INLINE_ELEMENT),
+  ELEM(center, true, true, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
+  ELEM(cite, true, true, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
+  ELEM(code, true, true, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
+  ELEM(col, false, false, GROUP_TABLE_CONTENT | GROUP_COLGROUP_CONTENT,
        GROUP_NONE),
-  ELEM(colgroup, PR_TRUE, PR_FALSE, GROUP_NONE, GROUP_COLGROUP_CONTENT),
-  ELEM(dd, PR_TRUE, PR_FALSE, GROUP_DL_CONTENT, GROUP_FLOW_ELEMENT),
-  ELEM(del, PR_TRUE, PR_TRUE, GROUP_PHRASE | GROUP_BLOCK, GROUP_FLOW_ELEMENT),
-  ELEM(dfn, PR_TRUE, PR_TRUE, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
-  ELEM(dir, PR_TRUE, PR_FALSE, GROUP_BLOCK, GROUP_LI),
-  ELEM(div, PR_TRUE, PR_TRUE, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
-  ELEM(dl, PR_TRUE, PR_FALSE, GROUP_BLOCK, GROUP_DL_CONTENT),
-  ELEM(dt, PR_TRUE, PR_TRUE, GROUP_DL_CONTENT, GROUP_INLINE_ELEMENT),
-  ELEM(em, PR_TRUE, PR_TRUE, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
-  ELEM(embed, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(fieldset, PR_TRUE, PR_TRUE, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
-  ELEM(figcaption, PR_TRUE, PR_FALSE, GROUP_FIGCAPTION, GROUP_FLOW_ELEMENT),
-  ELEM(figure, PR_TRUE, PR_TRUE, GROUP_BLOCK,
+  ELEM(colgroup, true, false, GROUP_NONE, GROUP_COLGROUP_CONTENT),
+  ELEM(datalist, true, false, GROUP_PHRASE,
+       GROUP_OPTIONS | GROUP_INLINE_ELEMENT),
+  ELEM(dd, true, false, GROUP_DL_CONTENT, GROUP_FLOW_ELEMENT),
+  ELEM(del, true, true, GROUP_PHRASE | GROUP_BLOCK, GROUP_FLOW_ELEMENT),
+  ELEM(dfn, true, true, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
+  ELEM(dir, true, false, GROUP_BLOCK, GROUP_LI),
+  ELEM(div, true, true, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
+  ELEM(dl, true, false, GROUP_BLOCK, GROUP_DL_CONTENT),
+  ELEM(dt, true, true, GROUP_DL_CONTENT, GROUP_INLINE_ELEMENT),
+  ELEM(em, true, true, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
+  ELEM(embed, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(fieldset, true, true, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
+  ELEM(figcaption, true, false, GROUP_FIGCAPTION, GROUP_FLOW_ELEMENT),
+  ELEM(figure, true, true, GROUP_BLOCK,
        GROUP_FLOW_ELEMENT | GROUP_FIGCAPTION),
-  ELEM(font, PR_TRUE, PR_TRUE, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
-  ELEM(footer, PR_TRUE, PR_TRUE, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
-  ELEM(form, PR_TRUE, PR_TRUE, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
-  ELEM(frame, PR_FALSE, PR_FALSE, GROUP_FRAME, GROUP_NONE),
-  ELEM(frameset, PR_TRUE, PR_TRUE, GROUP_FRAME, GROUP_FRAME),
-  ELEM(h1, PR_TRUE, PR_FALSE, GROUP_BLOCK | GROUP_HEADING,
+  ELEM(font, true, true, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
+  ELEM(footer, true, true, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
+  ELEM(form, true, true, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
+  ELEM(frame, false, false, GROUP_FRAME, GROUP_NONE),
+  ELEM(frameset, true, true, GROUP_FRAME, GROUP_FRAME),
+  ELEM(h1, true, false, GROUP_BLOCK | GROUP_HEADING,
        GROUP_INLINE_ELEMENT),
-  ELEM(h2, PR_TRUE, PR_FALSE, GROUP_BLOCK | GROUP_HEADING,
+  ELEM(h2, true, false, GROUP_BLOCK | GROUP_HEADING,
        GROUP_INLINE_ELEMENT),
-  ELEM(h3, PR_TRUE, PR_FALSE, GROUP_BLOCK | GROUP_HEADING,
+  ELEM(h3, true, false, GROUP_BLOCK | GROUP_HEADING,
        GROUP_INLINE_ELEMENT),
-  ELEM(h4, PR_TRUE, PR_FALSE, GROUP_BLOCK | GROUP_HEADING,
+  ELEM(h4, true, false, GROUP_BLOCK | GROUP_HEADING,
        GROUP_INLINE_ELEMENT),
-  ELEM(h5, PR_TRUE, PR_FALSE, GROUP_BLOCK | GROUP_HEADING,
+  ELEM(h5, true, false, GROUP_BLOCK | GROUP_HEADING,
        GROUP_INLINE_ELEMENT),
-  ELEM(h6, PR_TRUE, PR_FALSE, GROUP_BLOCK | GROUP_HEADING,
+  ELEM(h6, true, false, GROUP_BLOCK | GROUP_HEADING,
        GROUP_INLINE_ELEMENT),
-  ELEM(head, PR_TRUE, PR_FALSE, GROUP_TOPLEVEL, GROUP_HEAD_CONTENT),
-  ELEM(header, PR_TRUE, PR_TRUE, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
-  ELEM(hgroup, PR_TRUE, PR_FALSE, GROUP_BLOCK, GROUP_HEADING),
-  ELEM(hr, PR_FALSE, PR_FALSE, GROUP_BLOCK, GROUP_NONE),
-  ELEM(html, PR_TRUE, PR_FALSE, GROUP_TOPLEVEL, GROUP_TOPLEVEL),
-  ELEM(i, PR_TRUE, PR_TRUE, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
-  ELEM(iframe, PR_TRUE, PR_TRUE, GROUP_SPECIAL | GROUP_BLOCK,
+  ELEM(head, true, false, GROUP_TOPLEVEL, GROUP_HEAD_CONTENT),
+  ELEM(header, true, true, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
+  ELEM(hgroup, true, false, GROUP_BLOCK, GROUP_HEADING),
+  ELEM(hr, false, false, GROUP_BLOCK, GROUP_NONE),
+  ELEM(html, true, false, GROUP_TOPLEVEL, GROUP_TOPLEVEL),
+  ELEM(i, true, true, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
+  ELEM(iframe, true, true, GROUP_SPECIAL | GROUP_BLOCK,
        GROUP_FLOW_ELEMENT),
-  ELEM(image, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(img, PR_FALSE, PR_FALSE, GROUP_SPECIAL, GROUP_NONE),
-  ELEM(input, PR_FALSE, PR_FALSE, GROUP_FORMCONTROL, GROUP_NONE),
-  ELEM(ins, PR_TRUE, PR_TRUE, GROUP_PHRASE | GROUP_BLOCK, GROUP_FLOW_ELEMENT),
-  ELEM(isindex, PR_FALSE, PR_FALSE, GROUP_BLOCK | GROUP_HEAD_CONTENT,
-       GROUP_NONE),
-  ELEM(kbd, PR_TRUE, PR_TRUE, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
-  ELEM(keygen, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(label, PR_TRUE, PR_FALSE, GROUP_FORMCONTROL, GROUP_INLINE_ELEMENT),
-  ELEM(legend, PR_TRUE, PR_TRUE, GROUP_NONE, GROUP_INLINE_ELEMENT),
-  ELEM(li, PR_TRUE, PR_FALSE, GROUP_LI, GROUP_FLOW_ELEMENT),
-  ELEM(link, PR_FALSE, PR_FALSE, GROUP_HEAD_CONTENT, GROUP_NONE),
-  ELEM(listing, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(map, PR_TRUE, PR_TRUE, GROUP_SPECIAL, GROUP_BLOCK | GROUP_MAP_CONTENT),
-  ELEM(mark, PR_TRUE, PR_TRUE, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
-  ELEM(marquee, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(menu, PR_TRUE, PR_FALSE, GROUP_BLOCK, GROUP_LI),
-  ELEM(meta, PR_FALSE, PR_FALSE, GROUP_HEAD_CONTENT, GROUP_NONE),
-  ELEM(multicol, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(nav, PR_TRUE, PR_TRUE, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
-  ELEM(nobr, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(noembed, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(noframes, PR_TRUE, PR_TRUE, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
-  ELEM(noscript, PR_TRUE, PR_TRUE, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
-  ELEM(object, PR_TRUE, PR_TRUE, GROUP_SPECIAL | GROUP_BLOCK,
+  ELEM(image, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(img, false, false, GROUP_SPECIAL, GROUP_NONE),
+  ELEM(input, false, false, GROUP_FORMCONTROL, GROUP_NONE),
+  ELEM(ins, true, true, GROUP_PHRASE | GROUP_BLOCK, GROUP_FLOW_ELEMENT),
+  ELEM(kbd, true, true, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
+  ELEM(keygen, false, false, GROUP_FORMCONTROL, GROUP_NONE),
+  ELEM(label, true, false, GROUP_FORMCONTROL, GROUP_INLINE_ELEMENT),
+  ELEM(legend, true, true, GROUP_NONE, GROUP_INLINE_ELEMENT),
+  ELEM(li, true, false, GROUP_LI, GROUP_FLOW_ELEMENT),
+  ELEM(link, false, false, GROUP_HEAD_CONTENT, GROUP_NONE),
+  ELEM(listing, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(map, true, true, GROUP_SPECIAL, GROUP_BLOCK | GROUP_MAP_CONTENT),
+  ELEM(mark, true, true, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
+  ELEM(marquee, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(menu, true, true, GROUP_BLOCK, GROUP_LI | GROUP_FLOW_ELEMENT),
+  ELEM(menuitem, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(meta, false, false, GROUP_HEAD_CONTENT, GROUP_NONE),
+  ELEM(meter, true, false, GROUP_SPECIAL, GROUP_FLOW_ELEMENT),
+  ELEM(multicol, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(nav, true, true, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
+  ELEM(nobr, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(noembed, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(noframes, true, true, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
+  ELEM(noscript, true, true, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
+  ELEM(object, true, true, GROUP_SPECIAL | GROUP_BLOCK,
        GROUP_FLOW_ELEMENT | GROUP_OBJECT_CONTENT),
   // XXX Can contain self and ul because editor does sublists illegally.
-  ELEM(ol, PR_TRUE, PR_TRUE, GROUP_BLOCK | GROUP_OL_UL,
+  ELEM(ol, true, true, GROUP_BLOCK | GROUP_OL_UL,
        GROUP_LI | GROUP_OL_UL),
-  ELEM(optgroup, PR_TRUE, PR_FALSE, GROUP_SELECT_CONTENT,
-       GROUP_OPTGROUP_CONTENT),
-  ELEM(option, PR_TRUE, PR_FALSE,
-       GROUP_SELECT_CONTENT | GROUP_OPTGROUP_CONTENT, GROUP_LEAF),
-  ELEM(output, PR_TRUE, PR_TRUE, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
-  ELEM(p, PR_TRUE, PR_FALSE, GROUP_BLOCK | GROUP_P, GROUP_INLINE_ELEMENT),
-  ELEM(param, PR_FALSE, PR_FALSE, GROUP_OBJECT_CONTENT, GROUP_NONE),
-  ELEM(plaintext, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(pre, PR_TRUE, PR_TRUE, GROUP_BLOCK, GROUP_INLINE_ELEMENT),
-  ELEM(q, PR_TRUE, PR_TRUE, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
-  ELEM(s, PR_TRUE, PR_TRUE, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
-  ELEM(samp, PR_TRUE, PR_TRUE, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
-  ELEM(script, PR_TRUE, PR_FALSE, GROUP_HEAD_CONTENT | GROUP_SPECIAL,
+  ELEM(optgroup, true, false, GROUP_SELECT_CONTENT,
+       GROUP_OPTIONS),
+  ELEM(option, true, false,
+       GROUP_SELECT_CONTENT | GROUP_OPTIONS, GROUP_LEAF),
+  ELEM(output, true, true, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
+  ELEM(p, true, false, GROUP_BLOCK | GROUP_P, GROUP_INLINE_ELEMENT),
+  ELEM(param, false, false, GROUP_OBJECT_CONTENT, GROUP_NONE),
+  ELEM(plaintext, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(pre, true, true, GROUP_BLOCK, GROUP_INLINE_ELEMENT),
+  ELEM(progress, true, false, GROUP_SPECIAL, GROUP_FLOW_ELEMENT),
+  ELEM(q, true, true, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
+  ELEM(s, true, true, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
+  ELEM(samp, true, true, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
+  ELEM(script, true, false, GROUP_HEAD_CONTENT | GROUP_SPECIAL,
        GROUP_LEAF),
-  ELEM(section, PR_TRUE, PR_TRUE, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
-  ELEM(select, PR_TRUE, PR_FALSE, GROUP_FORMCONTROL, GROUP_SELECT_CONTENT),
-  ELEM(small, PR_TRUE, PR_TRUE, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
+  ELEM(section, true, true, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
+  ELEM(select, true, false, GROUP_FORMCONTROL, GROUP_SELECT_CONTENT),
+  ELEM(small, true, true, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
 #if defined(MOZ_MEDIA)
-  ELEM(source, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
+  ELEM(source, false, false, GROUP_NONE, GROUP_NONE),
 #endif
-  ELEM(span, PR_TRUE, PR_TRUE, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
-  ELEM(strike, PR_TRUE, PR_TRUE, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
-  ELEM(strong, PR_TRUE, PR_TRUE, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
-  ELEM(style, PR_TRUE, PR_FALSE, GROUP_HEAD_CONTENT, GROUP_LEAF),
-  ELEM(sub, PR_TRUE, PR_TRUE, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
-  ELEM(sup, PR_TRUE, PR_TRUE, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
-  ELEM(table, PR_TRUE, PR_FALSE, GROUP_BLOCK, GROUP_TABLE_CONTENT),
-  ELEM(tbody, PR_TRUE, PR_FALSE, GROUP_TABLE_CONTENT, GROUP_TBODY_CONTENT),
-  ELEM(td, PR_TRUE, PR_FALSE, GROUP_TR_CONTENT, GROUP_FLOW_ELEMENT),
-  ELEM(textarea, PR_TRUE, PR_FALSE, GROUP_FORMCONTROL, GROUP_LEAF),
-  ELEM(tfoot, PR_TRUE, PR_FALSE, GROUP_NONE, GROUP_TBODY_CONTENT),
-  ELEM(th, PR_TRUE, PR_FALSE, GROUP_TR_CONTENT, GROUP_FLOW_ELEMENT),
-  ELEM(thead, PR_TRUE, PR_FALSE, GROUP_NONE, GROUP_TBODY_CONTENT),
-  ELEM(title, PR_TRUE, PR_FALSE, GROUP_HEAD_CONTENT, GROUP_LEAF),
-  ELEM(tr, PR_TRUE, PR_FALSE, GROUP_TBODY_CONTENT, GROUP_TR_CONTENT),
-  ELEM(tt, PR_TRUE, PR_TRUE, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
-  ELEM(u, PR_TRUE, PR_TRUE, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
+  ELEM(span, true, true, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
+  ELEM(strike, true, true, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
+  ELEM(strong, true, true, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
+  ELEM(style, true, false, GROUP_HEAD_CONTENT, GROUP_LEAF),
+  ELEM(sub, true, true, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
+  ELEM(sup, true, true, GROUP_SPECIAL, GROUP_INLINE_ELEMENT),
+  ELEM(table, true, false, GROUP_BLOCK, GROUP_TABLE_CONTENT),
+  ELEM(tbody, true, false, GROUP_TABLE_CONTENT, GROUP_TBODY_CONTENT),
+  ELEM(td, true, false, GROUP_TR_CONTENT, GROUP_FLOW_ELEMENT),
+  ELEM(textarea, true, false, GROUP_FORMCONTROL, GROUP_LEAF),
+  ELEM(tfoot, true, false, GROUP_NONE, GROUP_TBODY_CONTENT),
+  ELEM(th, true, false, GROUP_TR_CONTENT, GROUP_FLOW_ELEMENT),
+  ELEM(thead, true, false, GROUP_NONE, GROUP_TBODY_CONTENT),
+  ELEM(title, true, false, GROUP_HEAD_CONTENT, GROUP_LEAF),
+  ELEM(tr, true, false, GROUP_TBODY_CONTENT, GROUP_TR_CONTENT),
+  ELEM(tt, true, true, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
+  ELEM(u, true, true, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
   // XXX Can contain self and ol because editor does sublists illegally.
-  ELEM(ul, PR_TRUE, PR_TRUE, GROUP_BLOCK | GROUP_OL_UL,
+  ELEM(ul, true, true, GROUP_BLOCK | GROUP_OL_UL,
        GROUP_LI | GROUP_OL_UL),
-  ELEM(var, PR_TRUE, PR_TRUE, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
+  ELEM(var, true, true, GROUP_PHRASE, GROUP_INLINE_ELEMENT),
 #if defined(MOZ_MEDIA)
-  ELEM(video, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
+  ELEM(video, false, false, GROUP_NONE, GROUP_NONE),
 #endif
-  ELEM(wbr, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(xmp, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
+  ELEM(wbr, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(xmp, false, false, GROUP_NONE, GROUP_NONE),
 
   // These aren't elements.
-  ELEM(text, PR_FALSE, PR_FALSE, GROUP_LEAF, GROUP_NONE),
-  ELEM(whitespace, PR_FALSE, PR_FALSE, GROUP_LEAF, GROUP_NONE),
-  ELEM(newline, PR_FALSE, PR_FALSE, GROUP_LEAF, GROUP_NONE),
-  ELEM(comment, PR_FALSE, PR_FALSE, GROUP_LEAF, GROUP_NONE),
-  ELEM(entity, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(doctypeDecl, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(markupDecl, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
-  ELEM(instruction, PR_FALSE, PR_FALSE, GROUP_NONE, GROUP_NONE),
+  ELEM(text, false, false, GROUP_LEAF, GROUP_NONE),
+  ELEM(whitespace, false, false, GROUP_LEAF, GROUP_NONE),
+  ELEM(newline, false, false, GROUP_LEAF, GROUP_NONE),
+  ELEM(comment, false, false, GROUP_LEAF, GROUP_NONE),
+  ELEM(entity, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(doctypeDecl, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(markupDecl, false, false, GROUP_NONE, GROUP_NONE),
+  ELEM(instruction, false, false, GROUP_NONE, GROUP_NONE),
 
-  ELEM(userdefined, PR_TRUE, PR_FALSE, GROUP_NONE, GROUP_FLOW_ELEMENT)
+  ELEM(userdefined, true, false, GROUP_NONE, GROUP_FLOW_ELEMENT)
 };
 
-PRBool
-nsHTMLEditUtils::CanContain(PRInt32 aParent, PRInt32 aChild)
+bool
+nsHTMLEditUtils::CanContain(int32_t aParent, int32_t aChild)
 {
   NS_ASSERTION(aParent > eHTMLTag_unknown && aParent <= eHTMLTag_userdefined,
                "aParent out of range!");
@@ -739,10 +785,10 @@ nsHTMLEditUtils::CanContain(PRInt32 aParent, PRInt32 aChild)
                "aChild out of range!");
 
 #ifdef DEBUG
-  static PRBool checked = PR_FALSE;
+  static bool checked = false;
   if (!checked) {
-    checked = PR_TRUE;
-    PRInt32 i;
+    checked = true;
+    int32_t i;
     for (i = 1; i <= eHTMLTag_userdefined; ++i) {
       NS_ASSERTION(kElements[i - 1].mTag == i,
                    "You need to update kElements (missing tags).");
@@ -758,27 +804,26 @@ nsHTMLEditUtils::CanContain(PRInt32 aParent, PRInt32 aChild)
       eHTMLTag_form,
       eHTMLTag_iframe,
       eHTMLTag_input,
-      eHTMLTag_isindex,
       eHTMLTag_select,
       eHTMLTag_textarea
     };
 
-    PRUint32 j;
-    for (j = 0; j < NS_ARRAY_LENGTH(kButtonExcludeKids); ++j) {
+    uint32_t j;
+    for (j = 0; j < ArrayLength(kButtonExcludeKids); ++j) {
       if (kButtonExcludeKids[j] == aChild) {
-        return PR_FALSE;
+        return false;
       }
     }
   }
 
   // Deprecated elements.
-  if (aChild == eHTMLTag_bgsound || aChild == eHTMLTag_keygen) {
-    return PR_FALSE;
+  if (aChild == eHTMLTag_bgsound) {
+    return false;
   }
 
   // Bug #67007, dont strip userdefined tags.
   if (aChild == eHTMLTag_userdefined) {
-    return PR_TRUE;
+    return true;
   }
 
   const nsElementInfo& parent = kElements[aParent - 1];
@@ -790,8 +835,8 @@ nsHTMLEditUtils::CanContain(PRInt32 aParent, PRInt32 aChild)
   return (parent.mCanContainGroups & child.mGroup) != 0;
 } 
 
-PRBool
-nsHTMLEditUtils::IsContainer(PRInt32 aTag)
+bool
+nsHTMLEditUtils::IsContainer(int32_t aTag)
 {
   NS_ASSERTION(aTag > eHTMLTag_unknown && aTag <= eHTMLTag_userdefined,
                "aTag out of range!");

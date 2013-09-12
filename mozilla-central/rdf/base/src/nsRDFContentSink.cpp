@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 
@@ -71,6 +38,8 @@
 
 */
 
+#include "mozilla/Util.h"
+
 #include "nsCOMPtr.h"
 #include "nsInterfaceHashtable.h"
 #include "nsIContentSink.h"
@@ -87,7 +56,6 @@
 #include "nsTArray.h"
 #include "nsXPIDLString.h"
 #include "prlog.h"
-#include "prmem.h"
 #include "rdf.h"
 #include "rdfutil.h"
 #include "nsReadableUtils.h"
@@ -97,6 +65,8 @@
 #include "nsStaticAtom.h"
 #include "nsIScriptError.h"
 #include "nsIDTD.h"
+
+using namespace mozilla;
 
 ////////////////////////////////////////////////////////////////////////
 // XPCOM IIDs
@@ -140,7 +110,7 @@ typedef
 NS_STDCALL_FUNCPROTO(nsresult,
                      nsContainerTestFn,
                      nsIRDFContainerUtils, IsAlt,
-                     (nsIRDFDataSource*, nsIRDFResource*, PRBool*));
+                     (nsIRDFDataSource*, nsIRDFResource*, bool*));
 
 typedef
 NS_STDCALL_FUNCPROTO(nsresult,
@@ -162,13 +132,13 @@ public:
     // nsIContentSink
     NS_IMETHOD WillParse(void);
     NS_IMETHOD WillBuildModel(nsDTDMode aDTDMode);
-    NS_IMETHOD DidBuildModel(PRBool aTerminated);
+    NS_IMETHOD DidBuildModel(bool aTerminated);
     NS_IMETHOD WillInterrupt(void);
     NS_IMETHOD WillResume(void);
-    NS_IMETHOD SetParser(nsIParser* aParser);  
+    NS_IMETHOD SetParser(nsParserBase* aParser);
     virtual void FlushPendingNotifications(mozFlushType aType) { }
     NS_IMETHOD SetDocumentCharset(nsACString& aCharset) { return NS_OK; }
-    virtual nsISupports *GetTarget() { return nsnull; }
+    virtual nsISupports *GetTarget() { return nullptr; }
 
     // nsIRDFContentSink
     NS_IMETHOD Init(nsIURI* aURL);
@@ -176,7 +146,7 @@ public:
     NS_IMETHOD GetDataSource(nsIRDFDataSource*& aDataSource);
 
     // pseudo constants
-    static PRInt32 gRefCnt;
+    static int32_t gRefCnt;
     static nsIRDFService* gRDFService;
     static nsIRDFContainerUtils* gRDFContainerUtils;
     static nsIRDFResource* kRDF_type;
@@ -201,7 +171,7 @@ protected:
     void ParseText(nsIRDFNode **aResult);
 
     nsresult FlushText();
-    nsresult AddText(const PRUnichar* aText, PRInt32 aLength);
+    nsresult AddText(const PRUnichar* aText, int32_t aLength);
 
     // RDF-specific parsing
     nsresult OpenRDF(const PRUnichar* aName);
@@ -210,14 +180,14 @@ protected:
     nsresult OpenMember(const PRUnichar* aName, const PRUnichar** aAttributes);
     nsresult OpenValue(const PRUnichar* aName, const PRUnichar** aAttributes);
     
-    nsresult GetIdAboutAttribute(const PRUnichar** aAttributes, nsIRDFResource** aResource, PRBool* aIsAnonymous = nsnull);
+    nsresult GetIdAboutAttribute(const PRUnichar** aAttributes, nsIRDFResource** aResource, bool* aIsAnonymous = nullptr);
     nsresult GetResourceAttribute(const PRUnichar** aAttributes, nsIRDFResource** aResource);
-    nsresult AddProperties(const PRUnichar** aAttributes, nsIRDFResource* aSubject, PRInt32* aCount = nsnull);
+    nsresult AddProperties(const PRUnichar** aAttributes, nsIRDFResource* aSubject, int32_t* aCount = nullptr);
     void SetParseMode(const PRUnichar **aAttributes);
 
     PRUnichar* mText;
-    PRInt32 mTextLength;
-    PRInt32 mTextSize;
+    int32_t mTextLength;
+    int32_t mTextSize;
 
     /**
      * From the set of given attributes, this method extracts the 
@@ -252,7 +222,7 @@ protected:
     RDFContentSinkParseMode mParseMode;
 
     // content stack management
-    PRInt32         
+    int32_t         
     PushContext(nsIRDFResource *aContext,
                 RDFContentSinkState aState,
                 RDFContentSinkParseMode aParseMode);
@@ -262,7 +232,7 @@ protected:
                RDFContentSinkState     &aState,
                RDFContentSinkParseMode &aParseMode);
 
-    nsIRDFResource* GetContextElement(PRInt32 ancestor = 0);
+    nsIRDFResource* GetContextElement(int32_t ancestor = 0);
 
 
     struct RDFContextStackElement {
@@ -276,7 +246,7 @@ protected:
     nsIURI*      mDocumentURL;
 };
 
-PRInt32         RDFContentSinkImpl::gRefCnt = 0;
+int32_t         RDFContentSinkImpl::gRefCnt = 0;
 nsIRDFService*  RDFContentSinkImpl::gRDFService;
 nsIRDFContainerUtils* RDFContentSinkImpl::gRDFContainerUtils;
 nsIRDFResource* RDFContentSinkImpl::kRDF_type;
@@ -303,13 +273,13 @@ static const nsStaticAtom rdf_atoms[] = {
 };
 
 RDFContentSinkImpl::RDFContentSinkImpl()
-    : mText(nsnull),
+    : mText(nullptr),
       mTextLength(0),
       mTextSize(0),
       mState(eRDFContentSinkState_InProlog),
       mParseMode(eRDFContentSinkParseMode_Literal),
-      mContextStack(nsnull),
-      mDocumentURL(nsnull)
+      mContextStack(nullptr),
+      mDocumentURL(nullptr)
 {
     if (gRefCnt++ == 0) {
         nsresult rv = CallGetService(kRDFServiceCID, &gRDFService);
@@ -333,7 +303,7 @@ RDFContentSinkImpl::RDFContentSinkImpl()
 
         rv = CallGetService(kRDFContainerUtilsCID, &gRDFContainerUtils);
 
-        NS_RegisterStaticAtoms(rdf_atoms, NS_ARRAY_LENGTH(rdf_atoms));
+        NS_RegisterStaticAtoms(rdf_atoms);
     }
 
     mNodeIDMap.Init();
@@ -361,9 +331,9 @@ RDFContentSinkImpl::~RDFContentSinkImpl()
         // XXX we should never need to do this, but, we'll write the
         // code all the same. If someone left the content stack dirty,
         // pop all the elements off the stack and release them.
-        PRInt32 i = mContextStack->Length();
+        int32_t i = mContextStack->Length();
         while (0 < i--) {
-            nsIRDFResource* resource = nsnull;
+            nsIRDFResource* resource = nullptr;
             RDFContentSinkState state;
             RDFContentSinkParseMode parseMode;
             PopContext(resource, state, parseMode);
@@ -385,7 +355,7 @@ RDFContentSinkImpl::~RDFContentSinkImpl()
 
         delete mContextStack;
     }
-    PR_FREEIF(mText);
+    moz_free(mText);
 
 
     if (--gRefCnt == 0) {
@@ -413,7 +383,7 @@ RDFContentSinkImpl::QueryInterface(REFNSIID iid, void** result)
     if (! result)
         return NS_ERROR_NULL_POINTER;
 
-    *result = nsnull;
+    *result = nullptr;
     if (iid.Equals(kIRDFContentSinkIID) ||
         iid.Equals(kIXMLContentSinkIID) ||
         iid.Equals(kIContentSinkIID) ||
@@ -433,9 +403,9 @@ RDFContentSinkImpl::QueryInterface(REFNSIID iid, void** result)
 NS_IMETHODIMP 
 RDFContentSinkImpl::HandleStartElement(const PRUnichar *aName, 
                                        const PRUnichar **aAtts, 
-                                       PRUint32 aAttsCount, 
-                                       PRInt32 aIndex, 
-                                       PRUint32 aLineNumber)
+                                       uint32_t aAttsCount, 
+                                       int32_t aIndex, 
+                                       uint32_t aLineNumber)
 {
   FlushText();
 
@@ -513,7 +483,7 @@ RDFContentSinkImpl::HandleEndElement(const PRUnichar *aName)
 
     case eRDFContentSinkState_InPropertyElement: 
       {
-        mDataSource->Assert(GetContextElement(1), GetContextElement(0), resource, PR_TRUE);                                          
+        mDataSource->Assert(GetContextElement(1), GetContextElement(0), resource, true);                                          
       } break;
     default:
       break;
@@ -534,7 +504,7 @@ RDFContentSinkImpl::HandleComment(const PRUnichar *aName)
 
 NS_IMETHODIMP 
 RDFContentSinkImpl::HandleCDataSection(const PRUnichar *aData, 
-                                       PRUint32 aLength)
+                                       uint32_t aLength)
 {
   return aData ?  AddText(aData, aLength) : NS_OK;
 }
@@ -551,7 +521,7 @@ RDFContentSinkImpl::HandleDoctypeDecl(const nsAString & aSubset,
 
 NS_IMETHODIMP 
 RDFContentSinkImpl::HandleCharacterData(const PRUnichar *aData, 
-                                        PRUint32 aLength)
+                                        uint32_t aLength)
 {
   return aData ?  AddText(aData, aLength) : NS_OK;
 }
@@ -566,7 +536,7 @@ RDFContentSinkImpl::HandleProcessingInstruction(const PRUnichar *aTarget,
 NS_IMETHODIMP 
 RDFContentSinkImpl::HandleXMLDeclaration(const PRUnichar *aVersion,
                                          const PRUnichar *aEncoding,
-                                         PRInt32 aStandalone)
+                                         int32_t aStandalone)
 {
     return NS_OK;
 }
@@ -575,12 +545,12 @@ NS_IMETHODIMP
 RDFContentSinkImpl::ReportError(const PRUnichar* aErrorText, 
                                 const PRUnichar* aSourceText,
                                 nsIScriptError *aError,
-                                PRBool *_retval)
+                                bool *_retval)
 {
   NS_PRECONDITION(aError && aSourceText && aErrorText, "Check arguments!!!");
 
   // The expat driver should report the error.
-  *_retval = PR_TRUE;
+  *_retval = true;
   return NS_OK;
 }
 
@@ -606,7 +576,7 @@ RDFContentSinkImpl::WillBuildModel(nsDTDMode)
 }
 
 NS_IMETHODIMP 
-RDFContentSinkImpl::DidBuildModel(PRBool aTerminated)
+RDFContentSinkImpl::DidBuildModel(bool aTerminated)
 {
     if (mDataSource) {
         nsCOMPtr<nsIRDFXMLSink> sink = do_QueryInterface(mDataSource);
@@ -639,7 +609,7 @@ RDFContentSinkImpl::WillResume(void)
 }
 
 NS_IMETHODIMP 
-RDFContentSinkImpl::SetParser(nsIParser* aParser)
+RDFContentSinkImpl::SetParser(nsParserBase* aParser)
 {
     return NS_OK;
 }
@@ -650,7 +620,7 @@ RDFContentSinkImpl::SetParser(nsIParser* aParser)
 NS_IMETHODIMP
 RDFContentSinkImpl::Init(nsIURI* aURL)
 {
-    NS_PRECONDITION(aURL != nsnull, "null ptr");
+    NS_PRECONDITION(aURL != nullptr, "null ptr");
     if (! aURL)
         return NS_ERROR_NULL_POINTER;
 
@@ -664,9 +634,9 @@ RDFContentSinkImpl::Init(nsIURI* aURL)
 NS_IMETHODIMP
 RDFContentSinkImpl::SetDataSource(nsIRDFDataSource* aDataSource)
 {
-    NS_PRECONDITION(aDataSource != nsnull, "SetDataSource null ptr");
+    NS_PRECONDITION(aDataSource != nullptr, "SetDataSource null ptr");
     mDataSource = aDataSource;
-    NS_ASSERTION(mDataSource != nsnull,"Couldn't QI RDF DataSource");
+    NS_ASSERTION(mDataSource != nullptr,"Couldn't QI RDF DataSource");
     return NS_OK;
 }
 
@@ -682,19 +652,19 @@ RDFContentSinkImpl::GetDataSource(nsIRDFDataSource*& aDataSource)
 ////////////////////////////////////////////////////////////////////////
 // Text buffering
 
-static PRBool
-rdf_IsDataInBuffer(PRUnichar* buffer, PRInt32 length)
+static bool
+rdf_IsDataInBuffer(PRUnichar* buffer, int32_t length)
 {
-    for (PRInt32 i = 0; i < length; ++i) {
+    for (int32_t i = 0; i < length; ++i) {
         if (buffer[i] == ' ' ||
             buffer[i] == '\t' ||
             buffer[i] == '\n' ||
             buffer[i] == '\r')
             continue;
 
-        return PR_TRUE;
+        return true;
     }
-    return PR_FALSE;
+    return false;
 }
 
 void
@@ -725,8 +695,8 @@ RDFContentSinkImpl::ParseText(nsIRDFNode **aResult)
 
     case eRDFContentSinkParseMode_Int:
         {
-            PRInt32 i, err;
-            i = value.ToInteger(&err);
+            nsresult err;
+            int32_t i = value.ToInteger(&err);
             nsIRDFInt *result;
             gRDFService->GetIntLiteral(i, &result);
             *aResult = result;
@@ -773,7 +743,7 @@ RDFContentSinkImpl::FlushText()
                 nsCOMPtr<nsIRDFNode> node;
                 ParseText(getter_AddRefs(node));
 
-                mDataSource->Assert(GetContextElement(1), GetContextElement(0), node, PR_TRUE);
+                mDataSource->Assert(GetContextElement(1), GetContextElement(0), node, true);
             } break;
 
             default:
@@ -788,11 +758,11 @@ RDFContentSinkImpl::FlushText()
 
 
 nsresult
-RDFContentSinkImpl::AddText(const PRUnichar* aText, PRInt32 aLength)
+RDFContentSinkImpl::AddText(const PRUnichar* aText, int32_t aLength)
 {
     // Create buffer when we first need it
     if (0 == mTextSize) {
-        mText = (PRUnichar *) PR_MALLOC(sizeof(PRUnichar) * 4096);
+        mText = (PRUnichar *) moz_malloc(sizeof(PRUnichar) * 4096);
         if (!mText) {
             return NS_ERROR_OUT_OF_MEMORY;
         }
@@ -802,15 +772,15 @@ RDFContentSinkImpl::AddText(const PRUnichar* aText, PRInt32 aLength)
     // Copy data from string into our buffer; grow the buffer as needed.
     // It never shrinks, but since the content sink doesn't stick around,
     // this shouldn't be a bloat issue.
-    PRInt32 amount = mTextSize - mTextLength;
+    int32_t amount = mTextSize - mTextLength;
     if (amount < aLength) {
         // Grow the buffer by at least a factor of two to prevent thrashing.
         // Since PR_REALLOC will leave mText intact if the call fails,
         // don't clobber mText or mTextSize until the new mem is allocated.
-        PRInt32 newSize = (2 * mTextSize > (mTextSize + aLength)) ?
+        int32_t newSize = (2 * mTextSize > (mTextSize + aLength)) ?
                           (2 * mTextSize) : (mTextSize + aLength);
         PRUnichar* newText = 
-            (PRUnichar *) PR_REALLOC(mText, sizeof(PRUnichar) * newSize);
+            (PRUnichar *) moz_realloc(mText, sizeof(PRUnichar) * newSize);
         if (!newText)
             return NS_ERROR_OUT_OF_MEMORY;
         mTextSize = newSize;
@@ -822,7 +792,7 @@ RDFContentSinkImpl::AddText(const PRUnichar* aText, PRInt32 aLength)
     return NS_OK;
 }
 
-PRBool
+bool
 rdf_RequiresAbsoluteURI(const nsString& uri)
 {
     // cheap shot at figuring out if this requires an absolute url translation
@@ -833,7 +803,7 @@ rdf_RequiresAbsoluteURI(const nsString& uri)
 nsresult
 RDFContentSinkImpl::GetIdAboutAttribute(const PRUnichar** aAttributes,
                                         nsIRDFResource** aResource,
-                                        PRBool* aIsAnonymous)
+                                        bool* aIsAnonymous)
 {
     // This corresponds to the dirty work of production [6.5]
     nsresult rv = NS_OK;
@@ -858,11 +828,11 @@ RDFContentSinkImpl::GetIdAboutAttribute(const PRUnichar** aAttributes,
       
         if (localName == kAboutAtom) {
             if (aIsAnonymous)
-                *aIsAnonymous = PR_FALSE;
+                *aIsAnonymous = false;
 
             nsAutoString relURI(aAttributes[1]);
             if (rdf_RequiresAbsoluteURI(relURI)) {
-                nsCAutoString uri;
+                nsAutoCString uri;
                 rv = mDocumentURL->Resolve(NS_ConvertUTF16toUTF8(aAttributes[1]), uri);
                 if (NS_FAILED(rv)) return rv;
                 
@@ -874,7 +844,7 @@ RDFContentSinkImpl::GetIdAboutAttribute(const PRUnichar** aAttributes,
         }
         else if (localName == kIdAtom) {
             if (aIsAnonymous)
-                *aIsAnonymous = PR_FALSE;
+                *aIsAnonymous = false;
             // In the spirit of leniency, we do not bother trying to
             // enforce that this be a valid "XML Name" (see
             // http://www.w3.org/TR/REC-xml#NT-Nmtoken), as per
@@ -883,8 +853,8 @@ RDFContentSinkImpl::GetIdAboutAttribute(const PRUnichar** aAttributes,
             // Construct an in-line resource whose URI is the
             // document's URI plus the XML name specified in the ID
             // attribute.
-            nsCAutoString name;
-            nsCAutoString ref('#');
+            nsAutoCString name;
+            nsAutoCString ref('#');
             AppendUTF16toUTF8(aAttributes[1], ref);
 
             rv = mDocumentURL->Resolve(ref, name);
@@ -905,7 +875,7 @@ RDFContentSinkImpl::GetIdAboutAttribute(const PRUnichar** aAttributes,
 
     // Otherwise, we couldn't find anything, so just gensym one...
     if (aIsAnonymous)
-        *aIsAnonymous = PR_TRUE;
+        *aIsAnonymous = true;
 
     // If nodeID is present, check if we already know about it. If we've seen
     // the nodeID before, use the same resource, otherwise generate a new one.
@@ -954,7 +924,7 @@ RDFContentSinkImpl::GetResourceAttribute(const PRUnichar** aAttributes,
           nsAutoString relURI(aAttributes[1]);
           if (rdf_RequiresAbsoluteURI(relURI)) {
               nsresult rv;
-              nsCAutoString uri;
+              nsAutoCString uri;
 
               rv = mDocumentURL->Resolve(NS_ConvertUTF16toUTF8(aAttributes[1]), uri);
               if (NS_FAILED(rv)) return rv;
@@ -991,7 +961,7 @@ RDFContentSinkImpl::GetResourceAttribute(const PRUnichar** aAttributes,
 nsresult
 RDFContentSinkImpl::AddProperties(const PRUnichar** aAttributes,
                                   nsIRDFResource* aSubject,
-                                  PRInt32* aCount)
+                                  int32_t* aCount)
 {
   if (aCount)
       *aCount = 0;
@@ -1037,7 +1007,7 @@ RDFContentSinkImpl::AddProperties(const PRUnichar** aAttributes,
       gRDFService->GetLiteral(aAttributes[1], 
                               getter_AddRefs(target));
 
-      mDataSource->Assert(aSubject, property, target, PR_TRUE);
+      mDataSource->Assert(aSubject, property, target, true);
   }
   return NS_OK;
 }
@@ -1093,7 +1063,7 @@ RDFContentSinkImpl::OpenRDF(const PRUnichar* aName)
         return NS_ERROR_UNEXPECTED;
     }
 
-    PushContext(nsnull, mState, mParseMode);
+    PushContext(nullptr, mState, mParseMode);
     mState = eRDFContentSinkState_InDocumentElement;
     return NS_OK;
 }
@@ -1123,10 +1093,10 @@ RDFContentSinkImpl::OpenObject(const PRUnichar* aName,
     // Now figure out what kind of state transition we need to
     // make. We'll either be going into a mode where we parse a
     // description or a container.
-    PRBool isaTypedNode = PR_TRUE;
+    bool isaTypedNode = true;
 
     if (nameSpaceURI.EqualsLiteral(RDF_NAMESPACE_URI)) {
-        isaTypedNode = PR_FALSE;
+        isaTypedNode = false;
 
         if (localName == kDescriptionAtom) {
             // it's a description
@@ -1150,7 +1120,7 @@ RDFContentSinkImpl::OpenObject(const PRUnichar* aName,
         else {
             // heh, that's not *in* the RDF namespace: just treat it
             // like a typed node
-            isaTypedNode = PR_TRUE;
+            isaTypedNode = true;
         }
     }
 
@@ -1162,7 +1132,7 @@ RDFContentSinkImpl::OpenObject(const PRUnichar* aName,
         nsresult rv = gRDFService->GetResource(typeStr, getter_AddRefs(type));
         if (NS_FAILED(rv)) return rv;
 
-        rv = mDataSource->Assert(source, kRDF_type, type, PR_TRUE);
+        rv = mDataSource->Assert(source, kRDF_type, type, true);
         if (NS_FAILED(rv)) return rv;
 
         mState = eRDFContentSinkState_InDescriptionElement;
@@ -1196,7 +1166,7 @@ RDFContentSinkImpl::OpenProperty(const PRUnichar* aName, const PRUnichar** aAttr
     nsCOMPtr<nsIRDFResource> target;
     GetResourceAttribute(aAttributes, getter_AddRefs(target));
 
-    PRBool isAnonymous = PR_FALSE;
+    bool isAnonymous = false;
 
     if (! target) {
         // See if an 'ID' attribute has been specified, in which case
@@ -1216,7 +1186,7 @@ RDFContentSinkImpl::OpenProperty(const PRUnichar* aName, const PRUnichar** aAttr
         // property. Create an RDF resource for the inline resource
         // URI, add the properties to it, and attach the inline
         // resource to its parent.
-        PRInt32 count;
+        int32_t count;
         rv = AddProperties(aAttributes, target, &count);
         NS_ASSERTION(NS_SUCCEEDED(rv), "problem adding properties");
         if (NS_FAILED(rv)) return rv;
@@ -1227,7 +1197,7 @@ RDFContentSinkImpl::OpenProperty(const PRUnichar* aName, const PRUnichar** aAttr
             // only assert this property from the context element *if*
             // there were properties specified on the anonymous
             // resource.
-            rv = mDataSource->Assert(GetContextElement(0), property, target, PR_TRUE);
+            rv = mDataSource->Assert(GetContextElement(0), property, target, true);
             if (NS_FAILED(rv)) return rv;
         }
 
@@ -1293,7 +1263,7 @@ RDFContentSinkImpl::OpenMember(const PRUnichar* aName,
     // The contained element will use nsIRDFContainer::AppendElement() to add
     // the element to the container, which requires only the container
     // and the element to be added.
-    PushContext(nsnull, mState, mParseMode);
+    PushContext(nullptr, mState, mParseMode);
     mState = eRDFContentSinkState_InMemberElement;
     SetParseMode(aAttributes);
 
@@ -1339,7 +1309,7 @@ RDFContentSinkImpl::RegisterNamespaces(const PRUnichar **aAttributes)
         nsDependentSubstring lname(attr, endLocal);
         nsCOMPtr<nsIAtom> preferred = do_GetAtom(lname);
         if (preferred == kXMLNSAtom) {
-            preferred = nsnull;
+            preferred = nullptr;
         }
         sink->AddNameSpace(preferred, nsDependentString(aAttributes[1]));
     }
@@ -1400,13 +1370,13 @@ RDFContentSinkImpl::InitContainer(nsIRDFResource* aContainerType, nsIRDFResource
         if (*info->mType != aContainerType)
             continue;
 
-        PRBool isContainer;
+        bool isContainer;
         rv = (gRDFContainerUtils->*(info->mTestFn))(mDataSource, aContainer, &isContainer);
         if (isContainer) {
             rv = ReinitContainer(aContainerType, aContainer);
         }
         else {
-            rv = (gRDFContainerUtils->*(info->mMakeFn))(mDataSource, aContainer, nsnull);
+            rv = (gRDFContainerUtils->*(info->mMakeFn))(mDataSource, aContainer, nullptr);
         }
         return rv;
     }
@@ -1433,14 +1403,14 @@ RDFContentSinkImpl::ReinitContainer(nsIRDFResource* aContainerType, nsIRDFResour
 
     // Re-initialize the 'nextval' property
     nsCOMPtr<nsIRDFNode> nextval;
-    rv = mDataSource->GetTarget(aContainer, kRDF_nextVal, PR_TRUE, getter_AddRefs(nextval));
+    rv = mDataSource->GetTarget(aContainer, kRDF_nextVal, true, getter_AddRefs(nextval));
     if (NS_FAILED(rv)) return rv;
 
     rv = mDataSource->Change(aContainer, kRDF_nextVal, nextval, one);
     if (NS_FAILED(rv)) return rv;
 
     // Re-mark as a container. XXX should be kRDF_type
-    rv = mDataSource->Assert(aContainer, kRDF_instanceOf, aContainerType, PR_TRUE);
+    rv = mDataSource->Assert(aContainer, kRDF_instanceOf, aContainerType, true);
     NS_ASSERTION(NS_SUCCEEDED(rv), "unable to mark container as such");
     if (NS_FAILED(rv)) return rv;
 
@@ -1451,18 +1421,18 @@ RDFContentSinkImpl::ReinitContainer(nsIRDFResource* aContainerType, nsIRDFResour
 // Content stack management
 
 nsIRDFResource* 
-RDFContentSinkImpl::GetContextElement(PRInt32 ancestor /* = 0 */)
+RDFContentSinkImpl::GetContextElement(int32_t ancestor /* = 0 */)
 {
-    if ((nsnull == mContextStack) ||
-        (PRUint32(ancestor) >= mContextStack->Length())) {
-        return nsnull;
+    if ((nullptr == mContextStack) ||
+        (uint32_t(ancestor) >= mContextStack->Length())) {
+        return nullptr;
     }
 
     return mContextStack->ElementAt(
            mContextStack->Length()-ancestor-1).mResource;
 }
 
-PRInt32 
+int32_t 
 RDFContentSinkImpl::PushContext(nsIRDFResource         *aResource,
                                 RDFContentSinkState     aState,
                                 RDFContentSinkParseMode aParseMode)
@@ -1489,12 +1459,12 @@ RDFContentSinkImpl::PopContext(nsIRDFResource         *&aResource,
                                RDFContentSinkState     &aState,
                                RDFContentSinkParseMode &aParseMode)
 {
-    if ((nsnull == mContextStack) ||
+    if ((nullptr == mContextStack) ||
         (mContextStack->IsEmpty())) {
         return NS_ERROR_NULL_POINTER;
     }
 
-    PRUint32 i = mContextStack->Length() - 1;
+    uint32_t i = mContextStack->Length() - 1;
     RDFContextStackElement &e = mContextStack->ElementAt(i);
 
     aResource  = e.mResource;
@@ -1512,7 +1482,7 @@ RDFContentSinkImpl::PopContext(nsIRDFResource         *&aResource,
 nsresult
 NS_NewRDFContentSink(nsIRDFContentSink** aResult)
 {
-    NS_PRECONDITION(aResult != nsnull, "null ptr");
+    NS_PRECONDITION(aResult != nullptr, "null ptr");
     if (! aResult)
         return NS_ERROR_NULL_POINTER;
 

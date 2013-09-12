@@ -20,18 +20,14 @@ TransportDIB::TransportDIB(HANDLE handle)
 }
 
 // static
-TransportDIB* TransportDIB::Create(size_t size, uint32 sequence_num) {
+TransportDIB* TransportDIB::Create(size_t size, uint32_t sequence_num) {
   size_t allocation_granularity = base::SysInfo::VMAllocationGranularity();
   size = size / allocation_granularity + 1;
   size = size * allocation_granularity;
 
   TransportDIB* dib = new TransportDIB;
 
-#ifdef CHROMIUM_MOZILLA_BUILD
   if (!dib->shared_memory_.Create("", false /* read write */,
-#else
-  if (!dib->shared_memory_.Create(L"", false /* read write */,
-#endif
                                   true /* open existing */, size)) {
     delete dib;
     return NULL;

@@ -1,58 +1,25 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is TransforMiiX XSLT processor code.
- *
- * The Initial Developer of the Original Code is
- * The MITRE Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Keith Visco <kvisco@ziplink.net> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  * Lexical analyzer for XPath expressions
  */
 
 #include "txExprLexer.h"
-#include "txAtoms.h"
+#include "nsGkAtoms.h"
 #include "nsString.h"
-#include "txError.h"
+#include "nsError.h"
 #include "txXMLUtils.h"
 
 /**
  * Creates a new ExprLexer
  */
 txExprLexer::txExprLexer()
-  : mCurrentItem(nsnull),
-    mFirstItem(nsnull),
-    mLastItem(nsnull),
+  : mCurrentItem(nullptr),
+    mFirstItem(nullptr),
+    mLastItem(nullptr),
     mTokenCount(0)
 {
 }
@@ -69,29 +36,31 @@ txExprLexer::~txExprLexer()
     delete tok;
     tok = temp;
   }
-  mCurrentItem = nsnull;
+  mCurrentItem = nullptr;
 }
 
 Token*
 txExprLexer::nextToken()
 {
-  NS_ASSERTION(mCurrentItem, "nextToken called beyoned the end");
+  if (!mCurrentItem) {
+    NS_NOTREACHED("nextToken called on uninitialized lexer");
+    return nullptr;
+  }
+
+  if (mCurrentItem->mType == Token::END) {
+    // Do not progress beyond the end token
+    return mCurrentItem;
+  }
+
   Token* token = mCurrentItem;
   mCurrentItem = mCurrentItem->mNext;
   return token;
 }
 
 void
-txExprLexer::pushBack()
-{
-  mCurrentItem = mCurrentItem ? mCurrentItem->mPrevious : mLastItem;
-}
-
-void
 txExprLexer::addToken(Token* aToken)
 {
   if (mLastItem) {
-    aToken->mPrevious = mLastItem;
     mLastItem->mNext = aToken;
   }
   if (!mFirstItem) {
@@ -107,11 +76,11 @@ txExprLexer::addToken(Token* aToken)
  * This is a helper for the first bullet of [XPath 3.7]
  *  Lexical Structure
  */
-PRBool
+bool
 txExprLexer::nextIsOperatorToken(Token* aToken)
 {
   if (!aToken || aToken->mType == Token::NULL_TOKEN) {
-    return PR_FALSE;
+    return false;
   }
   /* This relies on the tokens having the right order in txExprLexer.h */
   return aToken->mType < Token::COMMA ||
@@ -131,17 +100,17 @@ txExprLexer::parse(const nsASingleFragmentString& aPattern)
 
   //-- initialize previous token, this will automatically get
   //-- deleted when it goes out of scope
-  Token nullToken(nsnull, nsnull, Token::NULL_TOKEN);
+  Token nullToken(nullptr, nullptr, Token::NULL_TOKEN);
 
   Token::Type defType;
-  Token* newToken = nsnull;
+  Token* newToken = nullptr;
   Token* prevToken = &nullToken;
-  PRBool isToken;
+  bool isToken;
 
   while (mPosition < end) {
 
     defType = Token::CNAME;
-    isToken = PR_TRUE;
+    isToken = true;
 
     if (*mPosition == DOLLAR_SIGN) {
       if (++mPosition == end || !XMLUtils::isLetter(*mPosition)) {
@@ -180,16 +149,16 @@ txExprLexer::parse(const nsASingleFragmentString& aPattern)
       }
       if (nextIsOperatorToken(prevToken)) {
         nsDependentSubstring op(Substring(start, mPosition));
-        if (txXPathAtoms::_and->Equals(op)) {
+        if (nsGkAtoms::_and->Equals(op)) {
           defType = Token::AND_OP;
         }
-        else if (txXPathAtoms::_or->Equals(op)) {
+        else if (nsGkAtoms::_or->Equals(op)) {
           defType = Token::OR_OP;
         }
-        else if (txXPathAtoms::mod->Equals(op)) {
+        else if (nsGkAtoms::mod->Equals(op)) {
           defType = Token::MODULUS_OP;
         }
-        else if (txXPathAtoms::div->Equals(op)) {
+        else if (nsGkAtoms::div->Equals(op)) {
           defType = Token::DIVIDE_OP;
         }
         else {
@@ -220,7 +189,7 @@ txExprLexer::parse(const nsASingleFragmentString& aPattern)
       case TX_CR:
       case TX_LF:
         ++mPosition;
-        isToken = PR_FALSE;
+        isToken = false;
         break;
       case S_QUOTE :
       case D_QUOTE :
@@ -262,7 +231,7 @@ txExprLexer::parse(const nsASingleFragmentString& aPattern)
         }
         prevToken->mType = Token::AXIS_IDENTIFIER;
         ++mPosition;
-        isToken = PR_FALSE;
+        isToken = false;
         break;
       case FORWARD_SLASH :
         if (++mPosition < end && *mPosition == FORWARD_SLASH) {
@@ -342,7 +311,7 @@ txExprLexer::parse(const nsASingleFragmentString& aPattern)
           else {
             prevToken->mType = Token::FUNCTION_NAME_AND_PAREN;
           }
-          isToken = PR_FALSE;
+          isToken = false;
         }
         else {
           newToken = new Token(mPosition, Token::L_PAREN);

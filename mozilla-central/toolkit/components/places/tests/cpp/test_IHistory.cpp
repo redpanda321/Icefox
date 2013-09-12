@@ -1,46 +1,17 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  * vim: sw=2 ts=2 et lcs=trail\:.,tab\:>~ :
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is places test code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Shawn Wilsher <me@shawnwilsher.com> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "places_test_harness.h"
 #include "nsIBrowserHistory.h"
+#include "nsIPrefService.h"
+#include "nsIPrefBranch.h"
+#include "mozilla/Attributes.h"
 
 #include "mock_Link.h"
+using namespace mozilla;
 using namespace mozilla::dom;
 
 /**
@@ -66,8 +37,8 @@ already_AddRefed<nsIURI>
 new_test_uri()
 {
   // Create a unique spec.
-  static PRInt32 specNumber = 0;
-  nsCAutoString spec = NS_LITERAL_CSTRING("http://mozilla.org/");
+  static int32_t specNumber = 0;
+  nsAutoCString spec = NS_LITERAL_CSTRING("http://mozilla.org/");
   spec.AppendInt(specNumber++);
 
   // Create the URI for the spec.
@@ -77,7 +48,7 @@ new_test_uri()
   return testURI.forget();
 }
 
-class VisitURIObserver : public nsIObserver
+class VisitURIObserver MOZ_FINAL : public nsIObserver
 {
 public:
   NS_DECL_ISUPPORTS
@@ -91,7 +62,7 @@ public:
     do_check_true(observerService);
     (void)observerService->AddObserver(this,
                                        "uri-visit-saved",
-                                       PR_FALSE);
+                                       false);
   }
 
   void WaitForNotification()
@@ -127,14 +98,30 @@ NS_IMPL_ISUPPORTS1(
 ////////////////////////////////////////////////////////////////////////////////
 //// Test Functions
 
+void
+test_set_places_enabled()
+{
+  // Ensure places is enabled for everyone.
+  nsresult rv;
+  nsCOMPtr<nsIPrefBranch> prefBranch =
+    do_GetService(NS_PREFSERVICE_CONTRACTID, &rv);
+  do_check_success(rv);
+
+  rv = prefBranch->SetBoolPref("places.history.enabled", true);
+  do_check_success(rv);
+
+  // Run the next test.
+  run_next_test();
+}
+
 // These variables are shared between part 1 and part 2 of the test.  Part 2
-// sets the nsCOMPtr's to nsnull, freeing the reference.
+// sets the nsCOMPtr's to nullptr, freeing the reference.
 namespace test_unvisited_does_not_notify {
   nsCOMPtr<nsIURI> testURI;
-  nsCOMPtr<Link> testLink;
+  nsRefPtr<Link> testLink;
 }
 void
-test_unvisted_does_not_notify_part1()
+test_unvisited_does_not_notify_part1()
 {
   using namespace test_unvisited_does_not_notify;
 
@@ -151,7 +138,7 @@ test_unvisted_does_not_notify_part1()
   testLink = new mock_Link(expect_no_visit);
 
   // Now, register our Link to be notified.
-  nsCOMPtr<IHistory> history(do_get_IHistory());
+  nsCOMPtr<IHistory> history = do_get_IHistory();
   nsresult rv = history->RegisterVisitedCallback(testURI, testLink);
   do_check_success(rv);
 
@@ -163,35 +150,35 @@ void
 test_visited_notifies()
 {
   // First, we add our test URI to history.
-  nsCOMPtr<nsIURI> testURI(new_test_uri());
+  nsCOMPtr<nsIURI> testURI = new_test_uri();
   addURI(testURI);
 
   // Create our test Link.  The callback function will release the reference we
   // have on the Link.
-  Link* link = new mock_Link(expect_visit);
-  NS_ADDREF(link);
+  nsRefPtr<Link> link = new mock_Link(expect_visit);
 
   // Now, register our Link to be notified.
-  nsCOMPtr<IHistory> history(do_get_IHistory());
+  nsCOMPtr<IHistory> history = do_get_IHistory();
   nsresult rv = history->RegisterVisitedCallback(testURI, link);
   do_check_success(rv);
+
   // Note: test will continue upon notification.
 }
 
 void
-test_unvisted_does_not_notify_part2()
+test_unvisited_does_not_notify_part2()
 {
   using namespace test_unvisited_does_not_notify;
 
   // We would have had a failure at this point had the content node been told it
   // was visited.  Therefore, it is safe to unregister our content node.
-  nsCOMPtr<IHistory> history(do_get_IHistory());
+  nsCOMPtr<IHistory> history = do_get_IHistory();
   nsresult rv = history->UnregisterVisitedCallback(testURI, testLink);
   do_check_success(rv);
 
   // Clear the stored variables now.
-  testURI = nsnull;
-  testLink = nsnull;
+  testURI = nullptr;
+  testLink = nullptr;
 
   // Run the next test.
   run_next_test();
@@ -201,19 +188,17 @@ void
 test_same_uri_notifies_both()
 {
   // First, we add our test URI to history.
-  nsCOMPtr<nsIURI> testURI(new_test_uri());
+  nsCOMPtr<nsIURI> testURI = new_test_uri();
   addURI(testURI);
 
   // Create our two test Links.  The callback function will release the
   // reference we have on the Links.  Only the second Link should run the next
   // test!
-  Link* link1 = new mock_Link(expect_visit, false);
-  NS_ADDREF(link1);
-  Link* link2 = new mock_Link(expect_visit);
-  NS_ADDREF(link2);
+  nsRefPtr<Link> link1 = new mock_Link(expect_visit, false);
+  nsRefPtr<Link> link2 = new mock_Link(expect_visit);
 
   // Now, register our Link to be notified.
-  nsCOMPtr<IHistory> history(do_get_IHistory());
+  nsCOMPtr<IHistory> history = do_get_IHistory();
   nsresult rv = history->RegisterVisitedCallback(testURI, link1);
   do_check_success(rv);
   rv = history->RegisterVisitedCallback(testURI, link2);
@@ -229,8 +214,8 @@ test_unregistered_visited_does_not_notify()
   // The Link would have been notified by now if we were buggy and notified
   // unregistered Links (due to request serialization).
 
-  nsCOMPtr<nsIURI> testURI(new_test_uri());
-  nsCOMPtr<Link> link(new mock_Link(expect_no_visit));
+  nsCOMPtr<nsIURI> testURI = new_test_uri();
+  nsRefPtr<Link> link = new mock_Link(expect_no_visit);
 
   // Now, register our Link to be notified.
   nsCOMPtr<IHistory> history(do_get_IHistory());
@@ -258,12 +243,11 @@ test_new_visit_notifies_waiting_Link()
 {
   // Create our test Link.  The callback function will release the reference we
   // have on the link.
-  Link* link = new mock_Link(expect_visit);
-  NS_ADDREF(link);
+  nsRefPtr<Link> link = new mock_Link(expect_visit);
 
   // Now, register our content node to be notified.
-  nsCOMPtr<nsIURI> testURI(new_test_uri());
-  nsCOMPtr<IHistory> history(do_get_IHistory());
+  nsCOMPtr<nsIURI> testURI = new_test_uri();
+  nsCOMPtr<IHistory> history = do_get_IHistory();
   nsresult rv = history->RegisterVisitedCallback(testURI, link);
   do_check_success(rv);
 
@@ -277,14 +261,14 @@ void
 test_RegisterVisitedCallback_returns_before_notifying()
 {
   // Add a URI so that it's already in history.
-  nsCOMPtr<nsIURI> testURI(new_test_uri());
+  nsCOMPtr<nsIURI> testURI = new_test_uri();
   addURI(testURI);
 
   // Create our test Link.
-  nsCOMPtr<Link> link(new mock_Link(expect_no_visit));
+  nsRefPtr<Link> link = new mock_Link(expect_no_visit);
 
   // Now, register our content node to be notified.  It should not be notified.
-  nsCOMPtr<IHistory> history(do_get_IHistory());
+  nsCOMPtr<IHistory> history = do_get_IHistory();
   nsresult rv = history->RegisterVisitedCallback(testURI, link);
   do_check_success(rv);
 
@@ -300,7 +284,7 @@ namespace test_observer_topic_dispatched_helpers {
   #define URI_VISITED "visited"
   #define URI_NOT_VISITED "not visited"
   #define URI_VISITED_RESOLUTION_TOPIC "visited-status-resolution"
-  class statusObserver : public nsIObserver
+  class statusObserver MOZ_FINAL : public nsIObserver
   {
   public:
     NS_DECL_ISUPPORTS
@@ -317,7 +301,7 @@ namespace test_observer_topic_dispatched_helpers {
       do_check_true(observerService);
       (void)observerService->AddObserver(this,
                                          URI_VISITED_RESOLUTION_TOPIC,
-                                         PR_FALSE);
+                                         false);
     }
 
     NS_IMETHOD Observe(nsISupports* aSubject,
@@ -328,9 +312,10 @@ namespace test_observer_topic_dispatched_helpers {
       do_check_false(strcmp(aTopic, URI_VISITED_RESOLUTION_TOPIC));
 
       // If this isn't for our URI, do not do anything.
-      nsCOMPtr<nsIURI> notifiedURI(do_QueryInterface(aSubject));
+      nsCOMPtr<nsIURI> notifiedURI = do_QueryInterface(aSubject);
       do_check_true(notifiedURI);
-      PRBool isOurURI;
+
+      bool isOurURI;
       nsresult rv = notifiedURI->Equals(mURI, &isOurURI);
       do_check_success(rv);
       if (!isOurURI) {
@@ -343,7 +328,7 @@ namespace test_observer_topic_dispatched_helpers {
       do_check_true(visited || notVisited);
 
       // Check to make sure we got the state we expected.
-      do_check_eq(mExpectVisit, visited);
+      do_check_eq(visited, mExpectVisit);
 
       // Indicate that we've been notified.
       mNotified = true;
@@ -371,29 +356,29 @@ test_observer_topic_dispatched()
   using namespace test_observer_topic_dispatched_helpers;
 
   // Create two URIs, making sure only one is in history.
-  nsCOMPtr<nsIURI> visitedURI(new_test_uri());
-  nsCOMPtr<nsIURI> notVisitedURI(new_test_uri());
-  PRBool urisEqual;
+  nsCOMPtr<nsIURI> visitedURI = new_test_uri();
+  nsCOMPtr<nsIURI> notVisitedURI = new_test_uri();
+  bool urisEqual;
   nsresult rv = visitedURI->Equals(notVisitedURI, &urisEqual);
   do_check_success(rv);
   do_check_false(urisEqual);
   addURI(visitedURI);
 
   // Need two Link objects as well - one for each URI.
-  nsCOMPtr<Link> visitedLink(new mock_Link(expect_visit, false));
-  NS_ADDREF(visitedLink); // It will release itself when notified.
-  nsCOMPtr<Link> notVisitedLink(new mock_Link(expect_no_visit));
+  nsRefPtr<Link> visitedLink = new mock_Link(expect_visit, false);
+  nsRefPtr<Link> visitedLinkCopy = visitedLink;
+  nsRefPtr<Link> notVisitedLink = new mock_Link(expect_no_visit);
 
   // Add the right observers for the URIs to check results.
   bool visitedNotified = false;
-  nsCOMPtr<nsIObserver> vistedObs =
+  nsCOMPtr<nsIObserver> visitedObs =
     new statusObserver(visitedURI, true, visitedNotified);
   bool notVisitedNotified = false;
-  nsCOMPtr<nsIObserver> unvistedObs =
+  nsCOMPtr<nsIObserver> unvisitedObs =
     new statusObserver(notVisitedURI, false, notVisitedNotified);
 
   // Register our Links to be notified.
-  nsCOMPtr<IHistory> history(do_get_IHistory());
+  nsCOMPtr<IHistory> history = do_get_IHistory();
   rv = history->RegisterVisitedCallback(visitedURI, visitedLink);
   do_check_success(rv);
   rv = history->RegisterVisitedCallback(notVisitedURI, notVisitedLink);
@@ -414,13 +399,13 @@ test_observer_topic_dispatched()
 void
 test_visituri_inserts()
 {
-  nsCOMPtr<IHistory> history(do_get_IHistory());
-  nsCOMPtr<nsIURI> lastURI(new_test_uri());
-  nsCOMPtr<nsIURI> visitedURI(new_test_uri());
+  nsCOMPtr<IHistory> history = do_get_IHistory();
+  nsCOMPtr<nsIURI> lastURI = new_test_uri();
+  nsCOMPtr<nsIURI> visitedURI = new_test_uri();
 
   history->VisitURI(visitedURI, lastURI, mozilla::IHistory::TOP_LEVEL);
 
-  nsCOMPtr<VisitURIObserver> finisher = new VisitURIObserver();
+  nsRefPtr<VisitURIObserver> finisher = new VisitURIObserver();
   finisher->WaitForNotification();
 
   PlaceRecord place;
@@ -429,7 +414,7 @@ test_visituri_inserts()
   do_check_true(place.id > 0);
   do_check_false(place.hidden);
   do_check_false(place.typed);
-  do_check_true(place.visitCount == 1);
+  do_check_eq(place.visitCount, 1);
 
   run_next_test();
 }
@@ -437,10 +422,10 @@ test_visituri_inserts()
 void
 test_visituri_updates()
 {
-  nsCOMPtr<IHistory> history(do_get_IHistory());
-  nsCOMPtr<nsIURI> lastURI(new_test_uri());
-  nsCOMPtr<nsIURI> visitedURI(new_test_uri());
-  nsCOMPtr<VisitURIObserver> finisher;
+  nsCOMPtr<IHistory> history = do_get_IHistory();
+  nsCOMPtr<nsIURI> lastURI = new_test_uri();
+  nsCOMPtr<nsIURI> visitedURI = new_test_uri();
+  nsRefPtr<VisitURIObserver> finisher;
 
   history->VisitURI(visitedURI, lastURI, mozilla::IHistory::TOP_LEVEL);
   finisher = new VisitURIObserver();
@@ -453,7 +438,7 @@ test_visituri_updates()
   PlaceRecord place;
   do_get_place(visitedURI, place);
 
-  do_check_true(place.visitCount == 2);
+  do_check_eq(place.visitCount, 2);
 
   run_next_test();
 }
@@ -461,16 +446,16 @@ test_visituri_updates()
 void
 test_visituri_preserves_shown_and_typed()
 {
-  nsCOMPtr<IHistory> history(do_get_IHistory());
-  nsCOMPtr<nsIURI> lastURI(new_test_uri());
-  nsCOMPtr<nsIURI> visitedURI(new_test_uri());
+  nsCOMPtr<IHistory> history = do_get_IHistory();
+  nsCOMPtr<nsIURI> lastURI = new_test_uri();
+  nsCOMPtr<nsIURI> visitedURI = new_test_uri();
 
   history->VisitURI(visitedURI, lastURI, mozilla::IHistory::TOP_LEVEL);
   // this simulates the uri visit happening in a frame.  Normally frame
   // transitions would be hidden unless it was previously loaded top-level
   history->VisitURI(visitedURI, lastURI, 0);
 
-  nsCOMPtr<VisitURIObserver> finisher = new VisitURIObserver(2);
+  nsRefPtr<VisitURIObserver> finisher = new VisitURIObserver(2);
   finisher->WaitForNotification();
 
   PlaceRecord place;
@@ -483,12 +468,12 @@ test_visituri_preserves_shown_and_typed()
 void
 test_visituri_creates_visit()
 {
-  nsCOMPtr<IHistory> history(do_get_IHistory());
-  nsCOMPtr<nsIURI> lastURI(new_test_uri());
-  nsCOMPtr<nsIURI> visitedURI(new_test_uri());
+  nsCOMPtr<IHistory> history = do_get_IHistory();
+  nsCOMPtr<nsIURI> lastURI = new_test_uri();
+  nsCOMPtr<nsIURI> visitedURI = new_test_uri();
 
   history->VisitURI(visitedURI, lastURI, mozilla::IHistory::TOP_LEVEL);
-  nsCOMPtr<VisitURIObserver> finisher = new VisitURIObserver();
+  nsRefPtr<VisitURIObserver> finisher = new VisitURIObserver();
   finisher->WaitForNotification();
 
   PlaceRecord place;
@@ -497,8 +482,8 @@ test_visituri_creates_visit()
   do_get_lastVisit(place.id, visit);
 
   do_check_true(visit.id > 0);
-  do_check_true(visit.lastVisitId == 0);
-  do_check_true(visit.transitionType == nsINavHistoryService::TRANSITION_LINK);
+  do_check_eq(visit.lastVisitId, 0);
+  do_check_eq(visit.transitionType, nsINavHistoryService::TRANSITION_LINK);
 
   run_next_test();
 }
@@ -508,13 +493,13 @@ test_visituri_transition_typed()
 {
   nsCOMPtr<nsINavHistoryService> navHistory = do_get_NavHistory();
   nsCOMPtr<nsIBrowserHistory> browserHistory = do_QueryInterface(navHistory);
-  nsCOMPtr<IHistory> history(do_get_IHistory());
-  nsCOMPtr<nsIURI> lastURI(new_test_uri());
-  nsCOMPtr<nsIURI> visitedURI(new_test_uri());
+  nsCOMPtr<IHistory> history = do_get_IHistory();
+  nsCOMPtr<nsIURI> lastURI = new_test_uri();
+  nsCOMPtr<nsIURI> visitedURI = new_test_uri();
 
   browserHistory->MarkPageAsTyped(visitedURI);
   history->VisitURI(visitedURI, lastURI, mozilla::IHistory::TOP_LEVEL);
-  nsCOMPtr<VisitURIObserver> finisher = new VisitURIObserver();
+  nsRefPtr<VisitURIObserver> finisher = new VisitURIObserver();
   finisher->WaitForNotification();
 
   PlaceRecord place;
@@ -532,12 +517,12 @@ test_visituri_transition_embed()
 {
   nsCOMPtr<nsINavHistoryService> navHistory = do_get_NavHistory();
   nsCOMPtr<nsIBrowserHistory> browserHistory = do_QueryInterface(navHistory);
-  nsCOMPtr<IHistory> history(do_get_IHistory());
-  nsCOMPtr<nsIURI> lastURI(new_test_uri());
-  nsCOMPtr<nsIURI> visitedURI(new_test_uri());
+  nsCOMPtr<IHistory> history = do_get_IHistory();
+  nsCOMPtr<nsIURI> lastURI = new_test_uri();
+  nsCOMPtr<nsIURI> visitedURI = new_test_uri();
 
   history->VisitURI(visitedURI, lastURI, 0);
-  nsCOMPtr<VisitURIObserver> finisher = new VisitURIObserver();
+  nsRefPtr<VisitURIObserver> finisher = new VisitURIObserver();
   finisher->WaitForNotification();
 
   PlaceRecord place;
@@ -545,7 +530,55 @@ test_visituri_transition_embed()
   do_get_place(visitedURI, place);
   do_get_lastVisit(place.id, visit);
 
-  do_check_true(visit.transitionType == nsINavHistoryService::TRANSITION_EMBED);
+  do_check_eq(place.id, 0);
+  do_check_eq(visit.id, 0);
+
+  run_next_test();
+}
+
+void
+test_new_visit_adds_place_guid()
+{
+  // First, add a visit and wait.  This will also add a place.
+  nsCOMPtr<nsIURI> visitedURI = new_test_uri();
+  nsCOMPtr<IHistory> history = do_get_IHistory();
+  nsresult rv = history->VisitURI(visitedURI, NULL,
+                                  mozilla::IHistory::TOP_LEVEL);
+  do_check_success(rv);
+  nsRefPtr<VisitURIObserver> finisher = new VisitURIObserver();
+  finisher->WaitForNotification();
+
+  // Check that we have a guid for our visit.
+  PlaceRecord place;
+  do_get_place(visitedURI, place);
+  do_check_eq(place.visitCount, 1);
+  do_check_eq(place.guid.Length(), 12);
+
+  run_next_test();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//// IPC-only Tests
+
+void
+test_two_null_links_same_uri()
+{
+  // Tests that we do not crash when we have had two NULL Links passed to
+  // RegisterVisitedCallback and then the visit occurs (bug 607469).  This only
+  // happens in IPC builds.
+  nsCOMPtr<nsIURI> testURI = new_test_uri();
+
+  nsCOMPtr<IHistory> history = do_get_IHistory();
+  nsresult rv = history->RegisterVisitedCallback(testURI, NULL);
+  do_check_success(rv);
+  rv = history->RegisterVisitedCallback(testURI, NULL);
+  do_check_success(rv);
+
+  rv = history->VisitURI(testURI, NULL, mozilla::IHistory::TOP_LEVEL);
+  do_check_success(rv);
+
+  nsRefPtr<VisitURIObserver> finisher = new VisitURIObserver();
+  finisher->WaitForNotification();
 
   run_next_test();
 }
@@ -557,9 +590,10 @@ test_visituri_transition_embed()
  * Note: for tests marked "Order Important!", please see the test for details.
  */
 Test gTests[] = {
-  TEST(test_unvisted_does_not_notify_part1), // Order Important!
+  TEST(test_set_places_enabled), // Must come first!
+  TEST(test_unvisited_does_not_notify_part1), // Order Important!
   TEST(test_visited_notifies),
-  TEST(test_unvisted_does_not_notify_part2), // Order Important!
+  TEST(test_unvisited_does_not_notify_part2), // Order Important!
   TEST(test_same_uri_notifies_both),
   TEST(test_unregistered_visited_does_not_notify), // Order Important!
   TEST(test_new_visit_notifies_waiting_Link),
@@ -571,6 +605,10 @@ Test gTests[] = {
   TEST(test_visituri_creates_visit),
   TEST(test_visituri_transition_typed),
   TEST(test_visituri_transition_embed),
+  TEST(test_new_visit_adds_place_guid),
+
+  // The rest of these tests are tests that are only run in IPC builds.
+  TEST(test_two_null_links_same_uri),
 };
 
 const char* file = __FILE__;

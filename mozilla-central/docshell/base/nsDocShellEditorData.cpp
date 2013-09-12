@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla browser.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications, Inc.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Simon Fraser <sfraser@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #include "nsIComponentManager.h"
@@ -53,9 +20,9 @@
 
 nsDocShellEditorData::nsDocShellEditorData(nsIDocShell* inOwningDocShell)
 : mDocShell(inOwningDocShell)
-, mMakeEditable(PR_FALSE)
-, mIsDetached(PR_FALSE)
-, mDetachedMakeEditable(PR_FALSE)
+, mMakeEditable(false)
+, mIsDetached(false)
+, mDetachedMakeEditable(false)
 , mDetachedEditingState(nsIHTMLDocument::eOff)
 {
   NS_ASSERTION(mDocShell, "Where is my docShell?");
@@ -76,11 +43,11 @@ void
 nsDocShellEditorData::TearDownEditor()
 {
   if (mEditor) {
-    mEditor->PreDestroy(PR_FALSE);
-    mEditor = nsnull;
+    mEditor->PreDestroy(false);
+    mEditor = nullptr;
   }
-  mEditingSession = nsnull;
-  mIsDetached = PR_FALSE;
+  mEditingSession = nullptr;
+  mIsDetached = false;
 }
 
 
@@ -90,7 +57,7 @@ nsDocShellEditorData::TearDownEditor()
 
 ----------------------------------------------------------------------------*/
 nsresult
-nsDocShellEditorData::MakeEditable(PRBool inWaitForUriLoad)
+nsDocShellEditorData::MakeEditable(bool inWaitForUriLoad)
 {
   if (mMakeEditable)
     return NS_OK;
@@ -101,12 +68,12 @@ nsDocShellEditorData::MakeEditable(PRBool inWaitForUriLoad)
   {
     NS_WARNING("Destroying existing editor on frame");
     
-    mEditor->PreDestroy(PR_FALSE);
-    mEditor = nsnull;
+    mEditor->PreDestroy(false);
+    mEditor = nullptr;
   }
   
   if (inWaitForUriLoad)
-    mMakeEditable = PR_TRUE;
+    mMakeEditable = true;
   return NS_OK;
 }
 
@@ -116,10 +83,10 @@ nsDocShellEditorData::MakeEditable(PRBool inWaitForUriLoad)
   GetEditable
 
 ----------------------------------------------------------------------------*/
-PRBool
+bool
 nsDocShellEditorData::GetEditable()
 {
-  return mMakeEditable || (mEditor != nsnull);
+  return mMakeEditable || (mEditor != nullptr);
 }
 
 /*---------------------------------------------------------------------------
@@ -188,13 +155,13 @@ nsDocShellEditorData::SetEditor(nsIEditor *inEditor)
   {
     if (mEditor)
     {
-      mEditor->PreDestroy(PR_FALSE);
-      mEditor = nsnull;
+      mEditor->PreDestroy(false);
+      mEditor = nullptr;
     }
       
     mEditor = inEditor;    // owning addref
     if (!mEditor)
-      mMakeEditable = PR_FALSE;
+      mMakeEditable = false;
   }   
   
   return NS_OK;
@@ -236,9 +203,9 @@ nsDocShellEditorData::DetachFromWindow()
   nsresult rv = mEditingSession->DetachFromWindow(domWindow);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  mIsDetached = PR_TRUE;
+  mIsDetached = true;
   mDetachedMakeEditable = mMakeEditable;
-  mMakeEditable = PR_FALSE;
+  mMakeEditable = false;
 
   nsCOMPtr<nsIDOMDocument> domDoc;
   domWindow->GetDocument(getter_AddRefs(domDoc));
@@ -246,7 +213,7 @@ nsDocShellEditorData::DetachFromWindow()
   if (htmlDoc)
     mDetachedEditingState = htmlDoc->GetEditingState();
 
-  mDocShell = nsnull;
+  mDocShell = nullptr;
 
   return NS_OK;
 }
@@ -260,7 +227,7 @@ nsDocShellEditorData::ReattachToWindow(nsIDocShell* aDocShell)
   nsresult rv = mEditingSession->ReattachToWindow(domWindow);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  mIsDetached = PR_FALSE;
+  mIsDetached = false;
   mMakeEditable = mDetachedMakeEditable;
 
   nsCOMPtr<nsIDOMDocument> domDoc;

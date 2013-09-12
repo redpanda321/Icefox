@@ -1,40 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Stephen Henson <stephen.henson@gemplus.com>
- *   Dr Vipul Gupta <vipul.gupta@sun.com>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * This file implements PKCS 11 on top of our existing security modules
  *
@@ -58,7 +24,6 @@
 #include "pkcs11.h"
 #include "pkcs11i.h"
 #include "lowkeyi.h"
-#include "sechash.h"
 #include "secder.h"
 #include "secdig.h"
 #include "lowpbe.h"	/* We do PBE below */
@@ -388,6 +353,17 @@ sftk_GetContext(CK_SESSION_HANDLE handle,SFTKSessionContext **contextPtr,
     return CKR_OK;
 }
 
+/** Terminate operation (in the PKCS#11 spec sense).
+ *  Intuitive name for FreeContext/SetNullContext pair.
+ */
+static void
+sftk_TerminateOp( SFTKSession *session, SFTKContextType ctype,
+        SFTKSessionContext *context )
+{
+    sftk_FreeContext( context );
+    sftk_SetContextByType( session, ctype, NULL );
+}
+
 /*
  ************** Crypto Functions:     Encrypt ************************
  */
@@ -449,26 +425,48 @@ sftk_InitGeneric(SFTKSession *session,SFTKSessionContext **contextPtr,
     }
     context->type = ctype;
     context->multi = PR_TRUE;
+    context->rsa = PR_FALSE;
     context->cipherInfo = NULL;
     context->hashInfo = NULL;
     context->doPad = PR_FALSE;
     context->padDataLength = 0;
     context->key = key;
     context->blockSize = 0;
+    context->maxLen = 0;
 
     *contextPtr = context;
     return CKR_OK;
 }
 
-/* NSC_CryptInit initializes an encryption/Decryption operation. */
-/* This function is used by NSC_EncryptInit, NSC_DecryptInit, 
- *                          NSC_WrapKey, NSC_UnwrapKey, 
- *                          NSC_SignInit, NSC_VerifyInit (via sftk_InitCBCMac),
- * The only difference in their uses is the value of etype.
+static int
+sftk_aes_mode(CK_MECHANISM_TYPE mechanism)
+{
+    switch (mechanism) {
+    case CKM_AES_CBC_PAD:
+    case CKM_AES_CBC:
+	return NSS_AES_CBC;
+    case CKM_AES_ECB:
+	return NSS_AES;
+    case CKM_AES_CTS:
+	return NSS_AES_CTS;
+    case CKM_AES_CTR:
+	return NSS_AES_CTR;
+    case CKM_AES_GCM:
+	return NSS_AES_GCM;
+    }
+    return -1;
+}
+
+/** NSC_CryptInit initializes an encryption/Decryption operation.
+ *
+ * Always called by NSC_EncryptInit, NSC_DecryptInit, NSC_WrapKey,NSC_UnwrapKey.
+ * Called by NSC_SignInit, NSC_VerifyInit (via sftk_InitCBCMac) only for block
+ *  ciphers MAC'ing.
  */
 static CK_RV
 sftk_CryptInit(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
-		 CK_OBJECT_HANDLE hKey, CK_ATTRIBUTE_TYPE etype,
+     CK_OBJECT_HANDLE hKey,
+     CK_ATTRIBUTE_TYPE mechUsage, CK_ATTRIBUTE_TYPE keyUsage,
 		 SFTKContextType contextType, PRBool isEncrypt)
 {
     SFTKSession *session;
@@ -487,7 +485,7 @@ sftk_CryptInit(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
     PRBool useNewKey=PR_FALSE;
     int t;
 
-    crv = sftk_MechAllowsOperation(pMechanism->mechanism, etype);
+    crv = sftk_MechAllowsOperation(pMechanism->mechanism, mechUsage );
     if (crv != CKR_OK) 
     	return crv;
 
@@ -495,7 +493,7 @@ sftk_CryptInit(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
     if (session == NULL) return CKR_SESSION_HANDLE_INVALID;
 
     crv = sftk_InitGeneric(session,&context,contextType,&key,hKey,&key_type,
-    			isEncrypt ?CKO_PUBLIC_KEY:CKO_PRIVATE_KEY, etype);
+    			isEncrypt ?CKO_PUBLIC_KEY:CKO_PRIVATE_KEY, keyUsage);
 						
     if (crv != CKR_OK) {
 	sftk_FreeSession(session);
@@ -511,6 +509,7 @@ sftk_CryptInit(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
 	    break;
 	}
 	context->multi = PR_FALSE;
+	context->rsa = PR_TRUE;
 	if (isEncrypt) {
 	    NSSLOWKEYPublicKey *pubKey = sftk_GetPubKey(key,CKK_RSA,&crv);
 	    if (pubKey == NULL) {
@@ -773,6 +772,12 @@ finish_des:
     case CKM_AES_ECB:
     case CKM_AES_CBC:
 	context->blockSize = 16;
+    case CKM_AES_CTS:
+    case CKM_AES_CTR:
+    case CKM_AES_GCM:
+	if (pMechanism->mechanism == CKM_AES_GCM) {
+	    context->multi = PR_FALSE;
+	}
 	if (key_type != CKK_AES) {
 	    crv = CKR_KEY_TYPE_INCONSISTENT;
 	    break;
@@ -785,7 +790,7 @@ finish_des:
 	context->cipherInfo = AES_CreateContext(
 	    (unsigned char*)att->attrib.pValue,
 	    (unsigned char*)pMechanism->pParameter,
-	    pMechanism->mechanism == CKM_AES_ECB ? NSS_AES : NSS_AES_CBC,
+	    sftk_aes_mode(pMechanism->mechanism),
 	    isEncrypt, att->attrib.ulValueLen, 16);
 	sftk_FreeAttribute(att);
 	if (context->cipherInfo == NULL) {
@@ -845,7 +850,7 @@ CK_RV NSC_EncryptInit(CK_SESSION_HANDLE hSession,
 		 CK_MECHANISM_PTR pMechanism, CK_OBJECT_HANDLE hKey)
 {
     CHECK_FORK();
-    return sftk_CryptInit(hSession, pMechanism, hKey, CKA_ENCRYPT, 
+    return sftk_CryptInit(hSession, pMechanism, hKey, CKA_ENCRYPT, CKA_ENCRYPT,
 						SFTK_ENCRYPT, PR_TRUE);
 }
 
@@ -972,10 +977,8 @@ CK_RV NSC_EncryptFinal(CK_SESSION_HANDLE hSession,
     }
 
 finish:
-    if (contextFinished) {
-	sftk_SetContextByType(session, SFTK_ENCRYPT, NULL);
-	sftk_FreeContext(context);
-    }
+    if (contextFinished)
+        sftk_TerminateOp( session, SFTK_ENCRYPT, context );
     sftk_FreeSession(session);
     return (rv == SECSuccess) ? CKR_OK : sftk_MapCryptError(PORT_GetError());
 }
@@ -1005,8 +1008,8 @@ CK_RV NSC_Encrypt (CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
     if (crv != CKR_OK) return crv;
 
     if (!pEncryptedData) {
-	*pulEncryptedDataLen = context->multi ? 
-		ulDataLen + 2 * context->blockSize : context->maxLen;
+	*pulEncryptedDataLen = context->rsa ? context->maxLen :
+		ulDataLen + 2 * context->blockSize;
 	goto finish;
     }
 
@@ -1055,8 +1058,7 @@ CK_RV NSC_Encrypt (CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
     if (pText.data != pData)
     	PORT_ZFree(pText.data, pText.len);
 fail:
-    sftk_SetContextByType(session, SFTK_ENCRYPT, NULL);
-    sftk_FreeContext(context);
+    sftk_TerminateOp( session, SFTK_ENCRYPT, context );
 finish:
     sftk_FreeSession(session);
 
@@ -1073,8 +1075,7 @@ CK_RV NSC_DecryptInit( CK_SESSION_HANDLE hSession,
 			 CK_MECHANISM_PTR pMechanism, CK_OBJECT_HANDLE hKey)
 {
     CHECK_FORK();
-
-    return sftk_CryptInit(hSession, pMechanism, hKey, CKA_DECRYPT,
+    return sftk_CryptInit(hSession, pMechanism, hKey, CKA_DECRYPT, CKA_DECRYPT,
 						SFTK_DECRYPT, PR_FALSE);
 }
 
@@ -1172,7 +1173,6 @@ CK_RV NSC_DecryptFinal(CK_SESSION_HANDLE hSession,
 	if (context->padDataLength > 0) {
 	    *pulLastPartLen = context->padDataLength;
 	}
-	rv = SECSuccess;
 	goto finish;
     }
 
@@ -1183,23 +1183,35 @@ CK_RV NSC_DecryptFinal(CK_SESSION_HANDLE hSession,
 	     * buffer!!! */
     	    rv = (*context->update)(context->cipherInfo, pLastPart, &outlen,
 		 maxout, context->padBuf, context->blockSize);
-    	    if (rv == SECSuccess) {
+	    if (rv != SECSuccess) {
+		crv = sftk_MapDecryptError(PORT_GetError());
+	    } else {
 		unsigned int padSize = 
 			    (unsigned int) pLastPart[context->blockSize-1];
 		if ((padSize > context->blockSize) || (padSize == 0)) {
-		    rv = SECFailure;
+		    crv = CKR_ENCRYPTED_DATA_INVALID;
 		} else {
-		    *pulLastPartLen = outlen - padSize;
+		    unsigned int i;
+		    unsigned int badPadding = 0;  /* used as a boolean */
+		    for (i = 0; i < padSize; i++) {
+			badPadding |=
+			    (unsigned int) pLastPart[context->blockSize-1-i] ^
+			    padSize;
+		    }
+		    if (badPadding) {
+			crv = CKR_ENCRYPTED_DATA_INVALID;
+		    } else {
+			*pulLastPartLen = outlen - padSize;
+		    }
 		}
 	    }
 	}
     }
 
-    sftk_SetContextByType(session, SFTK_DECRYPT, NULL);
-    sftk_FreeContext(context);
+    sftk_TerminateOp( session, SFTK_DECRYPT, context );
 finish:
     sftk_FreeSession(session);
-    return (rv == SECSuccess) ? CKR_OK : sftk_MapDecryptError(PORT_GetError());
+    return crv;
 }
 
 /* NSC_Decrypt decrypts encrypted data in a single part. */
@@ -1249,15 +1261,24 @@ CK_RV NSC_Decrypt(CK_SESSION_HANDLE hSession,
     /* XXX need to do MUCH better error mapping than this. */
     crv = (rv == SECSuccess) ? CKR_OK : sftk_MapDecryptError(PORT_GetError());
     if (rv == SECSuccess && context->doPad) {
-    	CK_ULONG padding = pData[outlen - 1];
+	unsigned int padding = pData[outlen - 1];
 	if (padding > context->blockSize || !padding) {
 	    crv = CKR_ENCRYPTED_DATA_INVALID;
-	} else
-	    outlen -= padding;
+	} else {
+	    unsigned int i;
+	    unsigned int badPadding = 0;  /* used as a boolean */
+	    for (i = 0; i < padding; i++) {
+		badPadding |= (unsigned int) pData[outlen - 1 - i] ^ padding;
+	    }
+	    if (badPadding) {
+		crv = CKR_ENCRYPTED_DATA_INVALID;
+	    } else {
+		outlen -= padding;
+	    }
+	}
     }
     *pulDataLen = (CK_ULONG) outlen;
-    sftk_SetContextByType(session, SFTK_DECRYPT, NULL);
-    sftk_FreeContext(context);
+    sftk_TerminateOp( session, SFTK_DECRYPT, context );
 finish:
     sftk_FreeSession(session);
     return crv;
@@ -1310,6 +1331,7 @@ CK_RV NSC_DigestInit(CK_SESSION_HANDLE hSession,
     INIT_MECH(CKM_MD2,    MD2)
     INIT_MECH(CKM_MD5,    MD5)
     INIT_MECH(CKM_SHA_1,  SHA1)
+    INIT_MECH(CKM_SHA224, SHA224)
     INIT_MECH(CKM_SHA256, SHA256)
     INIT_MECH(CKM_SHA384, SHA384)
     INIT_MECH(CKM_SHA512, SHA512)
@@ -1358,8 +1380,7 @@ CK_RV NSC_Digest(CK_SESSION_HANDLE hSession,
     (*context->end)(context->cipherInfo, pDigest, &digestLen,maxout);
     *pulDigestLen = digestLen;
 
-    sftk_SetContextByType(session, SFTK_HASH, NULL);
-    sftk_FreeContext(context);
+    sftk_TerminateOp( session, SFTK_HASH, context );
 finish:
     sftk_FreeSession(session);
     return CKR_OK;
@@ -1403,8 +1424,7 @@ CK_RV NSC_DigestFinal(CK_SESSION_HANDLE hSession,CK_BYTE_PTR pDigest,
     if (pDigest != NULL) {
         (*context->end)(context->cipherInfo, pDigest, &digestLen, maxout);
         *pulDigestLen = digestLen;
-	sftk_SetContextByType(session, SFTK_HASH, NULL);
-	sftk_FreeContext(context);
+        sftk_TerminateOp( session, SFTK_HASH, context );
     } else {
 	*pulDigestLen = context->maxLen;
     }
@@ -1435,6 +1455,7 @@ sftk_doSub ## mmm(SFTKSessionContext *context) { \
 DOSUB(MD2)
 DOSUB(MD5)
 DOSUB(SHA1)
+DOSUB(SHA224)
 DOSUB(SHA256)
 DOSUB(SHA384)
 DOSUB(SHA512)
@@ -1636,8 +1657,10 @@ sftk_doSSLMACInit(SFTKSessionContext *context,SECOidTag oid,
  ************** Crypto Functions:     Sign  ************************
  */
 
-/*
+/** 
  * Check if We're using CBCMacing and initialize the session context if we are.
+ *  @param contextType SFTK_SIGN or SFTK_VERIFY
+ *  @param keyUsage    check whether key allows this usage
  */
 static CK_RV
 sftk_InitCBCMac(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
@@ -1655,7 +1678,7 @@ sftk_InitCBCMac(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
     unsigned char ivBlock[SFTK_MAX_BLOCK_SIZE];
     SFTKSessionContext *context;
     CK_RV crv;
-    int blockSize;
+    unsigned int blockSize;
 
     switch (pMechanism->mechanism) {
     case CKM_RC2_MAC_GENERAL:
@@ -1685,7 +1708,8 @@ sftk_InitCBCMac(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
 	rc5_params.ulWordsize = rc5_mac->ulWordsize;
 	rc5_params.ulRounds = rc5_mac->ulRounds;
 	rc5_params.pIv = ivBlock;
-	blockSize = rc5_mac->ulWordsize*2;
+	if( (blockSize = rc5_mac->ulWordsize*2) > SFTK_MAX_BLOCK_SIZE )
+            return CKR_MECHANISM_PARAM_INVALID;
 	rc5_params.ulIvLen = blockSize;
 	PORT_Memset(ivBlock,0,blockSize);
 	cbc_mechanism.mechanism = CKM_RC5_CBC;
@@ -1758,8 +1782,18 @@ sftk_InitCBCMac(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
 	return CKR_FUNCTION_NOT_SUPPORTED;
     }
 
-    crv = sftk_CryptInit(hSession, &cbc_mechanism, hKey, keyUsage,
-							contextType, PR_TRUE);
+    /* if MAC size is externally supplied, it should be checked.
+     */
+    if (mac_bytes == SFTK_INVALID_MAC_SIZE)
+        mac_bytes = blockSize >> 1;
+    else {
+        if( mac_bytes > blockSize )
+            return CKR_MECHANISM_PARAM_INVALID;
+    }
+
+    crv = sftk_CryptInit(hSession, &cbc_mechanism, hKey,
+            CKA_ENCRYPT, /* CBC mech is able to ENCRYPT, not SIGN/VERIFY */
+            keyUsage, contextType, PR_TRUE );
     if (crv != CKR_OK) return crv;
     crv = sftk_GetContext(hSession,&context,contextType,PR_TRUE,NULL);
 
@@ -1767,7 +1801,6 @@ sftk_InitCBCMac(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
     PORT_Assert(crv == CKR_OK);
     if (crv != CKR_OK) return crv;
     context->blockSize = blockSize;
-    if (mac_bytes == SFTK_INVALID_MAC_SIZE) mac_bytes = blockSize/2;
     context->macSize = mac_bytes;
     return CKR_OK;
 }
@@ -1847,6 +1880,14 @@ RSA_HashSign(SECOidTag hashOid, NSSLOWKEYPrivateKey *key,
 	PORT_FreeArena(arena, PR_FALSE);
     }
     return rv;
+}
+
+static SECStatus
+sftk_SignPSS(SFTKHashSignInfo *info,unsigned char *sig,unsigned int *sigLen,
+		unsigned int maxLen,unsigned char *hash, unsigned int hashLen)
+{
+    return RSA_SignPSS(info->params,info->key,sig,sigLen,maxLen,
+							hash,hashLen);
 }
 
 static SECStatus
@@ -1987,6 +2028,7 @@ CK_RV NSC_SignInit(CK_SESSION_HANDLE hSession,
     INIT_RSA_SIGN_MECH(MD5)
     INIT_RSA_SIGN_MECH(MD2)
     INIT_RSA_SIGN_MECH(SHA1)
+    INIT_RSA_SIGN_MECH(SHA224)
     INIT_RSA_SIGN_MECH(SHA256)
     INIT_RSA_SIGN_MECH(SHA384)
     INIT_RSA_SIGN_MECH(SHA512)
@@ -1998,13 +2040,13 @@ CK_RV NSC_SignInit(CK_SESSION_HANDLE hSession,
 	context->update = (SFTKCipher)  RSA_SignRaw;
 finish_rsa:
 	if (key_type != CKK_RSA) {
-	    if (info) PORT_Free(info);
 	    crv = CKR_KEY_TYPE_INCONSISTENT;
 	    break;
 	}
+	context->rsa = PR_TRUE;
 	privKey = sftk_GetPrivKey(key,CKK_RSA,&crv);
 	if (privKey == NULL) {
-	    if (info) PORT_Free(info);
+	    crv = CKR_KEY_TYPE_INCONSISTENT;
 	    break;
 	}
 	/* OK, info is allocated only if we're doing hash and sign mechanism.
@@ -2021,6 +2063,32 @@ finish_rsa:
 	}
 	context->maxLen = nsslowkey_PrivateModulusLen(privKey);
 	break;
+    case CKM_RSA_PKCS_PSS:
+	if (key_type != CKK_RSA) {
+	    crv = CKR_KEY_TYPE_INCONSISTENT;
+	    break;
+	} 
+	context->rsa = PR_TRUE;
+	if (pMechanism->ulParameterLen != sizeof(CK_RSA_PKCS_PSS_PARAMS)) {
+	    crv = CKR_MECHANISM_PARAM_INVALID;
+	    break;
+	}
+	info = PORT_New(SFTKHashSignInfo);
+	if (info == NULL) {
+	    crv = CKR_HOST_MEMORY;
+	    break;
+	}
+	info->params = pMechanism->pParameter;
+	info->key = sftk_GetPrivKey(key,CKK_RSA,&crv);
+	if (info->key == NULL) {
+	    PORT_Free(info);
+	    break;
+	}
+	context->cipherInfo = info;
+	context->destroy = (SFTKDestroy) sftk_Space;
+	context->update = (SFTKCipher) sftk_SignPSS;
+	context->maxLen = nsslowkey_PrivateModulusLen(info->key);
+	break;	
 
     case CKM_DSA_SHA1:
         context->multi = PR_TRUE;
@@ -2040,7 +2108,7 @@ finish_rsa:
 	context->update     = (SFTKCipher) nsc_DSA_Sign_Stub;
 	context->destroy    = (privKey == key->objectInfo) ?
 		(SFTKDestroy) sftk_Null:(SFTKDestroy)sftk_FreePrivKey;
-	context->maxLen     = DSA_SIGNATURE_LEN;
+	context->maxLen     = DSA_MAX_SIGNATURE_LEN;
 
 	break;
 
@@ -2080,6 +2148,7 @@ finish_rsa:
 
     INIT_HMAC_MECH(MD2)
     INIT_HMAC_MECH(MD5)
+    INIT_HMAC_MECH(SHA224)
     INIT_HMAC_MECH(SHA256)
     INIT_HMAC_MECH(SHA384)
     INIT_HMAC_MECH(SHA512)
@@ -2109,92 +2178,118 @@ finish_rsa:
     }
 
     if (crv != CKR_OK) {
+	if (info) PORT_Free(info);
         sftk_FreeContext(context);
-	sftk_FreeSession(session);
-	return crv;
+        sftk_FreeSession(session);
+        return crv;
     }
     sftk_SetContextByType(session, SFTK_SIGN, context);
     sftk_FreeSession(session);
     return CKR_OK;
 }
 
+/** MAC one block of data by block cipher
+ */
+static CK_RV
+sftk_MACBlock( SFTKSessionContext *ctx, void *blk )
+{
+    unsigned int outlen;
+    return ( SECSuccess == (ctx->update)( ctx->cipherInfo, ctx->macBuf, &outlen,
+                SFTK_MAX_BLOCK_SIZE, blk, ctx->blockSize ))
+            ? CKR_OK : sftk_MapCryptError(PORT_GetError());
+}
 
-/* MACUpdate is the common implementation for SignUpdate and VerifyUpdate.
- * (sign and verify only very in their setup and final operations) */
-static CK_RV 
+/** MAC last (incomplete) block of data by block cipher
+ *
+ *  Call once, then terminate MACing operation.
+ */
+static CK_RV
+sftk_MACFinal( SFTKSessionContext *ctx )
+{
+    unsigned int padLen = ctx->padDataLength;
+    /* pad and proceed the residual */
+    if( padLen ) {
+        /* shd clr ctx->padLen to make sftk_MACFinal idempotent */
+        PORT_Memset( ctx->padBuf + padLen, 0, ctx->blockSize - padLen );
+        return sftk_MACBlock( ctx, ctx->padBuf );
+    } else
+        return CKR_OK;
+}
+
+/** The common implementation for {Sign,Verify}Update. (S/V only vary in their
+ * setup and final operations).
+ * 
+ * A call which results in an error terminates the operation [PKCS#11,v2.11]
+ */
+static CK_RV
 sftk_MACUpdate(CK_SESSION_HANDLE hSession,CK_BYTE_PTR pPart,
     					CK_ULONG ulPartLen,SFTKContextType type)
 {
-    unsigned int outlen;
+    SFTKSession *session;
     SFTKSessionContext *context;
     CK_RV crv;
-    SECStatus rv;
 
     /* make sure we're legal */
-    crv = sftk_GetContext(hSession,&context,type,PR_TRUE,NULL);
+    crv = sftk_GetContext(hSession,&context,type, PR_TRUE, &session );
     if (crv != CKR_OK) return crv;
 
     if (context->hashInfo) {
 	(*context->hashUpdate)(context->hashInfo, pPart, ulPartLen);
-	return CKR_OK;
-    }
+    } else {   
+    	/* must be block cipher MACing */
 
-    /* must be block cipher macing */
+        unsigned int  blkSize   = context->blockSize;
+        unsigned char *residual = /* free room in context->padBuf */
+                                context->padBuf + context->padDataLength;
+        unsigned int  minInput  = /* min input for MACing at least one block */
+                                blkSize - context->padDataLength;
 
-    /* deal with previous buffered data */
-    if (context->padDataLength != 0) {
-	int i;
-	/* fill in the padded to a full block size */
-	for (i=context->padDataLength; (ulPartLen != 0) && 
-					i < (int)context->blockSize; i++) {
-	    context->padBuf[i] = *pPart++;
-	    ulPartLen--;
-	    context->padDataLength++;
-	}
+        /* not enough data even for one block */
+        if( ulPartLen < minInput ) {
+            PORT_Memcpy( residual, pPart, ulPartLen );
+            context->padDataLength += ulPartLen;
+            goto cleanup;
+        }
+        /* MACing residual */
+        if( context->padDataLength ) {
+            PORT_Memcpy( residual, pPart, minInput );
+            ulPartLen -= minInput;
+            pPart     += minInput;
+            if( CKR_OK != (crv = sftk_MACBlock( context, context->padBuf )) )
+                goto terminate;
+        }
+        /* MACing full blocks */
+        while( ulPartLen >= blkSize )
+        {
+            if( CKR_OK != (crv = sftk_MACBlock( context, pPart )) )
+                goto terminate;
+            ulPartLen -= blkSize;
+            pPart     += blkSize;
+        }
+        /* save the residual */
+        if( (context->padDataLength = ulPartLen) )
+            PORT_Memcpy( context->padBuf, pPart, ulPartLen );
+    } /* blk cipher MACing */
 
-	/* not enough data to encrypt yet? then return */
-	if (context->padDataLength != context->blockSize)  return CKR_OK;
-	/* encrypt the current padded data */
-    	rv = (*context->update)(context->cipherInfo,context->macBuf,&outlen,
-			SFTK_MAX_BLOCK_SIZE,context->padBuf,context->blockSize);
-    	if (rv != SECSuccess) return sftk_MapCryptError(PORT_GetError());
-    }
+    goto  cleanup;
 
-    /* save the residual */
-    context->padDataLength = ulPartLen % context->blockSize;
-    if (context->padDataLength) {
-	PORT_Memcpy(context->padBuf,
-		    &pPart[ulPartLen-context->padDataLength],
-		    context->padDataLength);
-	ulPartLen -= context->padDataLength;
-    }
-
-    /* if we've exhausted our new buffer, we're done */
-    if (ulPartLen == 0) { return CKR_OK; }
-
-    /* run the data through out encrypter */	
-    while (ulPartLen) {
-    	rv = (*context->update)(context->cipherInfo, context->padBuf, &outlen, 
-			SFTK_MAX_BLOCK_SIZE, pPart, context->blockSize);
-	if (rv != SECSuccess) return sftk_MapCryptError(PORT_GetError());
-	/* paranoia.. make sure we exit the loop */
-	PORT_Assert(ulPartLen >= context->blockSize);
-	if (ulPartLen < context->blockSize) break;
-	ulPartLen -= context->blockSize;
-    }
-
-    return CKR_OK;
-	
+terminate:
+    sftk_TerminateOp( session, type, context );
+cleanup:
+    sftk_FreeSession(session);
+    return crv;
 }
 
 /* NSC_SignUpdate continues a multiple-part signature operation,
  * where the signature is (will be) an appendix to the data, 
- * and plaintext cannot be recovered from the signature */
+ * and plaintext cannot be recovered from the signature 
+ *
+ * A call which results in an error terminates the operation [PKCS#11,v2.11]
+ */
 CK_RV NSC_SignUpdate(CK_SESSION_HANDLE hSession,CK_BYTE_PTR pPart,
     							CK_ULONG ulPartLen)
 {
     CHECK_FORK();
-
     return sftk_MACUpdate(hSession, pPart, ulPartLen, SFTK_SIGN);
 }
 
@@ -2207,51 +2302,46 @@ CK_RV NSC_SignFinal(CK_SESSION_HANDLE hSession,CK_BYTE_PTR pSignature,
     SFTKSession *session;
     SFTKSessionContext *context;
     unsigned int outlen;
-    unsigned int digestLen;
     unsigned int maxoutlen = *pulSignatureLen;
-    unsigned char tmpbuf[SFTK_MAX_MAC_LENGTH];
     CK_RV crv;
-    SECStatus rv = SECSuccess;
 
     CHECK_FORK();
 
     /* make sure we're legal */
-    *pulSignatureLen = 0;
     crv = sftk_GetContext(hSession,&context,SFTK_SIGN,PR_TRUE,&session);
     if (crv != CKR_OK) return crv;
 
-    if (!pSignature) {
-	*pulSignatureLen = context->maxLen;
-	goto finish;
-    } else if (context->hashInfo) {
+    if (context->hashInfo) {
+        unsigned int digestLen;
+        unsigned char tmpbuf[SFTK_MAX_MAC_LENGTH];
+
+        if( !pSignature ) {
+            outlen = context->maxLen; goto finish;
+        }
         (*context->end)(context->hashInfo, tmpbuf, &digestLen, sizeof(tmpbuf));
-	rv = (*context->update)(context->cipherInfo, pSignature,
-					&outlen, maxoutlen, tmpbuf, digestLen);
-        *pulSignatureLen = (CK_ULONG) outlen;
+        if( SECSuccess != (context->update)(context->cipherInfo, pSignature,
+                    &outlen, maxoutlen, tmpbuf, digestLen))
+            crv = sftk_MapCryptError(PORT_GetError());
+        /* CKR_BUFFER_TOO_SMALL here isn't continuable, let operation terminate.
+         * Keeping "too small" CK_RV intact is a standard violation, but allows
+         * application read EXACT signature length */
     } else {
-	/* deal with the last block if any residual */
-	if (context->padDataLength) {
-	    /* fill out rest of pad buffer with pad magic*/
-	    int i;
-	    for (i=context->padDataLength; i < (int)context->blockSize; i++) {
-		context->padBuf[i] = 0;
-	    }
-	    rv = (*context->update)(context->cipherInfo,context->macBuf,
-		&outlen,SFTK_MAX_BLOCK_SIZE,context->padBuf,context->blockSize);
-	}
-	if (rv == SECSuccess) {
-	    PORT_Memcpy(pSignature,context->macBuf,context->macSize);
-	    *pulSignatureLen = context->macSize;
-	}
+        /* must be block cipher MACing */
+        outlen = context->macSize;
+        /* null or "too small" buf doesn't terminate operation [PKCS#11,v2.11]*/
+        if( !pSignature  ||  maxoutlen < outlen ) {
+            if( pSignature ) crv = CKR_BUFFER_TOO_SMALL;
+            goto finish;
+        }
+        if( CKR_OK == (crv = sftk_MACFinal( context )) )
+	    PORT_Memcpy(pSignature, context->macBuf, outlen );
     }
 
-    sftk_FreeContext(context);
-    sftk_SetContextByType(session, SFTK_SIGN, NULL);
-
+    sftk_TerminateOp( session, SFTK_SIGN, context );
 finish:
+    *pulSignatureLen = outlen;
     sftk_FreeSession(session);
-
-    return (rv == SECSuccess) ? CKR_OK : sftk_MapCryptError(PORT_GetError());
+    return crv;
 }
 
 /* NSC_Sign signs (encrypts with private key) data in a single part,
@@ -2263,10 +2353,7 @@ CK_RV NSC_Sign(CK_SESSION_HANDLE hSession,
 {
     SFTKSession *session;
     SFTKSessionContext *context;
-    unsigned int outlen;
-    unsigned int maxoutlen = *pulSignatureLen;
-    CK_RV crv,crv2;
-    SECStatus rv = SECSuccess;
+    CK_RV crv;
 
     CHECK_FORK();
 
@@ -2275,30 +2362,35 @@ CK_RV NSC_Sign(CK_SESSION_HANDLE hSession,
     if (crv != CKR_OK) return crv;
 
     if (!pSignature) {
-	*pulSignatureLen = context->maxLen;
+        /* see also how C_SignUpdate implements this */
+	*pulSignatureLen = (!context->multi || context->hashInfo)
+            ? context->maxLen
+            : context->macSize; /* must be block cipher MACing */
 	goto finish;
     }
 
     /* multi part Signing are completely implemented by SignUpdate and
      * sign Final */
     if (context->multi) {
-        sftk_FreeSession(session);
-	crv = NSC_SignUpdate(hSession,pData,ulDataLen);
-	if (crv != CKR_OK) *pulSignatureLen = 0;
-	crv2 = NSC_SignFinal(hSession, pSignature, pulSignatureLen);
-	return crv == CKR_OK ? crv2 :crv;
-    }
-
-    rv = (*context->update)(context->cipherInfo, pSignature,
-					&outlen, maxoutlen, pData, ulDataLen);
-    *pulSignatureLen = (CK_ULONG) outlen;
-    sftk_FreeContext(context);
-    sftk_SetContextByType(session, SFTK_SIGN, NULL);
+        /* SignFinal can't follow failed SignUpdate */
+	if( CKR_OK == (crv = NSC_SignUpdate(hSession,pData,ulDataLen) ))
+            crv = NSC_SignFinal(hSession, pSignature, pulSignatureLen);
+    } else {   
+    	/* single-part PKC signature (e.g. CKM_ECDSA) */
+        unsigned int outlen;
+        unsigned int maxoutlen = *pulSignatureLen;
+        if( SECSuccess != (*context->update)(context->cipherInfo, pSignature,
+                    &outlen, maxoutlen, pData, ulDataLen))
+            crv = sftk_MapCryptError(PORT_GetError());
+        *pulSignatureLen = (CK_ULONG) outlen;
+        /*  "too small" here is certainly continuable */
+        if( crv != CKR_BUFFER_TOO_SMALL )
+            sftk_TerminateOp(session, SFTK_SIGN, context);
+    } /* single-part */
 
 finish:
     sftk_FreeSession(session);
-
-    return (rv == SECSuccess) ? CKR_OK : sftk_MapCryptError(PORT_GetError());
+    return crv;
 }
 
 
@@ -2400,6 +2492,14 @@ RSA_HashCheckSign(SECOidTag hashOid, NSSLOWKEYPublicKey *key,
     return rv;
 }
 
+static SECStatus
+sftk_CheckSignPSS(SFTKHashVerifyInfo *info, unsigned char *sig,
+	unsigned int sigLen, unsigned char *digest, unsigned int digestLen)
+{
+    return RSA_CheckSignPSS(info->params, info->key, sig, sigLen,
+						digest, digestLen);
+}
+
 /* NSC_VerifyInit initializes a verification operation, 
  * where the signature is an appendix to the data, 
  * and plaintext cannot be recovered from the signature (e.g. DSA) */
@@ -2446,6 +2546,7 @@ CK_RV NSC_VerifyInit(CK_SESSION_HANDLE hSession,
     INIT_RSA_VFY_MECH(MD5) 
     INIT_RSA_VFY_MECH(MD2) 
     INIT_RSA_VFY_MECH(SHA1) 
+    INIT_RSA_VFY_MECH(SHA224)
     INIT_RSA_VFY_MECH(SHA256) 
     INIT_RSA_VFY_MECH(SHA384) 
     INIT_RSA_VFY_MECH(SHA512) 
@@ -2457,11 +2558,15 @@ CK_RV NSC_VerifyInit(CK_SESSION_HANDLE hSession,
 	context->verify = (SFTKVerify) RSA_CheckSignRaw;
 finish_rsa:
 	if (key_type != CKK_RSA) {
+	    if (info) PORT_Free(info);
 	    crv = CKR_KEY_TYPE_INCONSISTENT;
 	    break;
 	}
+	context->rsa = PR_TRUE;
 	pubKey = sftk_GetPubKey(key,CKK_RSA,&crv);
 	if (pubKey == NULL) {
+	    if (info) PORT_Free(info);
+	    crv = CKR_KEY_TYPE_INCONSISTENT;
 	    break;
 	}
 	if (info) {
@@ -2472,6 +2577,31 @@ finish_rsa:
 	    context->cipherInfo = pubKey;
 	    context->destroy = sftk_Null;
 	}
+	break;
+    case CKM_RSA_PKCS_PSS:
+	if (key_type != CKK_RSA) {
+	    crv = CKR_KEY_TYPE_INCONSISTENT;
+	    break;
+	} 
+	context->rsa = PR_TRUE;
+	if (pMechanism->ulParameterLen != sizeof(CK_RSA_PKCS_PSS_PARAMS)) {
+	    crv = CKR_MECHANISM_PARAM_INVALID;
+	    break;
+	}
+	info = PORT_New(SFTKHashVerifyInfo);
+	if (info == NULL) {
+	    crv = CKR_HOST_MEMORY;
+	    break;
+	}
+	info->params = pMechanism->pParameter;
+	info->key = sftk_GetPubKey(key,CKK_RSA,&crv);
+	if (info->key == NULL) {
+	    PORT_Free(info);
+	    break;
+	}
+	context->cipherInfo = info;
+	context->destroy = (SFTKDestroy) sftk_Space;
+	context->verify = (SFTKVerify) sftk_CheckSignPSS;
 	break;
     case CKM_DSA_SHA1:
         context->multi = PR_TRUE;
@@ -2515,6 +2645,7 @@ finish_rsa:
 
     INIT_HMAC_MECH(MD2)
     INIT_HMAC_MECH(MD5)
+    INIT_HMAC_MECH(SHA224)
     INIT_HMAC_MECH(SHA256)
     INIT_HMAC_MECH(SHA384)
     INIT_HMAC_MECH(SHA512)
@@ -2546,7 +2677,7 @@ finish_rsa:
 
     if (crv != CKR_OK) {
 	if (info) PORT_Free(info);
-        PORT_Free(context);
+        sftk_FreeContext(context);
 	sftk_FreeSession(session);
 	return crv;
     }
@@ -2563,8 +2694,7 @@ CK_RV NSC_Verify(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
 {
     SFTKSession *session;
     SFTKSessionContext *context;
-    CK_RV crv, crv2;
-    SECStatus rv;
+    CK_RV crv;
 
     CHECK_FORK();
 
@@ -2575,31 +2705,31 @@ CK_RV NSC_Verify(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
     /* multi part Verifying are completely implemented by VerifyUpdate and
      * VerifyFinal */
     if (context->multi) {
-	sftk_FreeSession(session);
-	crv = NSC_VerifyUpdate(hSession, pData, ulDataLen);
-	crv2 = NSC_VerifyFinal(hSession, pSignature, ulSignatureLen);
-	return crv == CKR_OK ? crv2 :crv;
+        /* VerifyFinal can't follow failed VerifyUpdate */
+	if( CKR_OK == (crv = NSC_VerifyUpdate(hSession, pData, ulDataLen)))
+            crv = NSC_VerifyFinal(hSession, pSignature, ulSignatureLen);
+    } else {
+        if (SECSuccess != (*context->verify)(context->cipherInfo,pSignature,
+                                             ulSignatureLen, pData, ulDataLen))
+            crv = sftk_MapCryptError(PORT_GetError());
+
+        sftk_TerminateOp( session, SFTK_VERIFY, context );
     }
-
-    rv = (*context->verify)(context->cipherInfo,pSignature, ulSignatureLen,
-							 pData, ulDataLen);
-    sftk_FreeContext(context);
-    sftk_SetContextByType(session, SFTK_VERIFY, NULL);
     sftk_FreeSession(session);
-
-    return (rv == SECSuccess) ? CKR_OK : sftk_MapVerifyError(PORT_GetError());
-
+    return crv;
 }
 
 
 /* NSC_VerifyUpdate continues a multiple-part verification operation, 
  * where the signature is an appendix to the data, 
- * and plaintext cannot be recovered from the signature */
+ * and plaintext cannot be recovered from the signature
+ *
+ * A call which results in an error terminates the operation [PKCS#11,v2.11]
+ */
 CK_RV NSC_VerifyUpdate( CK_SESSION_HANDLE hSession, CK_BYTE_PTR pPart,
 						CK_ULONG ulPartLen)
 {
     CHECK_FORK();
-
     return sftk_MACUpdate(hSession, pPart, ulPartLen, SFTK_VERIFY);
 }
 
@@ -2611,42 +2741,37 @@ CK_RV NSC_VerifyFinal(CK_SESSION_HANDLE hSession,
 {
     SFTKSession *session;
     SFTKSessionContext *context;
-    unsigned int outlen;
-    unsigned int digestLen;
-    unsigned char tmpbuf[SFTK_MAX_MAC_LENGTH];
     CK_RV crv;
-    SECStatus rv = SECSuccess;
 
     CHECK_FORK();
 
+    if (!pSignature) 
+    	return CKR_ARGUMENTS_BAD;
+
     /* make sure we're legal */
     crv = sftk_GetContext(hSession,&context,SFTK_VERIFY,PR_TRUE,&session);
-    if (crv != CKR_OK) return crv;
-
+    if (crv != CKR_OK) 
+    	return crv;
+    
     if (context->hashInfo) {
+        unsigned int digestLen;
+        unsigned char tmpbuf[SFTK_MAX_MAC_LENGTH];
+        
         (*context->end)(context->hashInfo, tmpbuf, &digestLen, sizeof(tmpbuf));
-	rv = (*context->verify)(context->cipherInfo, pSignature, 
-					ulSignatureLen, tmpbuf, digestLen);
-    } else {
-	if (context->padDataLength) {
-	    /* fill out rest of pad buffer with pad magic*/
-	    int i;
-	    for (i=context->padDataLength; i < (int)context->blockSize; i++) {
-		context->padBuf[i] = 0;
-	    }
-	    rv = (*context->update)(context->cipherInfo,context->macBuf, 
-		&outlen,SFTK_MAX_BLOCK_SIZE,context->padBuf,context->blockSize);
-	}
-	if (rv == SECSuccess) {
-	    rv =(PORT_Memcmp(pSignature,context->macBuf,context->macSize) == 0)
-				 ? SECSuccess : SECFailure;
-	}
+        if( SECSuccess != (context->verify)(context->cipherInfo, pSignature,
+                                            ulSignatureLen, tmpbuf, digestLen))
+            crv = sftk_MapCryptError(PORT_GetError());
+    } else if (ulSignatureLen != context->macSize) {
+	/* must be block cipher MACing */
+	crv = CKR_SIGNATURE_LEN_RANGE;
+    } else if (CKR_OK == (crv = sftk_MACFinal(context))) {
+	if (PORT_Memcmp(pSignature, context->macBuf, ulSignatureLen))
+	    crv = CKR_SIGNATURE_INVALID;
     }
 
-    sftk_FreeContext(context);
-    sftk_SetContextByType(session, SFTK_VERIFY, NULL);
+    sftk_TerminateOp( session, SFTK_VERIFY, context );
     sftk_FreeSession(session);
-    return (rv == SECSuccess) ? CKR_OK : sftk_MapVerifyError(PORT_GetError());
+    return crv;
 
 }
 
@@ -2688,6 +2813,7 @@ CK_RV NSC_VerifyRecoverInit(CK_SESSION_HANDLE hSession,
 	    break;
 	}
 	context->multi = PR_FALSE;
+	context->rsa = PR_TRUE;
 	pubKey = sftk_GetPubKey(key,CKK_RSA,&crv);
 	if (pubKey == NULL) {
 	    break;
@@ -2745,8 +2871,7 @@ CK_RV NSC_VerifyRecover(CK_SESSION_HANDLE hSession,
 						pSignature, ulSignatureLen);
     *pulDataLen = (CK_ULONG) outlen;
 
-    sftk_FreeContext(context);
-    sftk_SetContextByType(session, SFTK_VERIFY_RECOVER, NULL);
+    sftk_TerminateOp(session, SFTK_VERIFY_RECOVER, context);
 finish:
     sftk_FreeSession(session);
     return (rv == SECSuccess)  ? CKR_OK : sftk_MapVerifyError(PORT_GetError());
@@ -2834,14 +2959,36 @@ nsc_pbe_key_gen(NSSPKCS5PBEParameter *pkcs5_pbe, CK_MECHANISM_PTR pMechanism,
 
     return CKR_OK;
 }
+
+/* 
+ * this is coded for "full" support. These selections will be limitted to
+ * the official subset by freebl.
+ */
+static unsigned int
+sftk_GetSubPrimeFromPrime(unsigned int primeBits)
+{
+   if (primeBits <= 1024) {
+	return 160;
+   } else if (primeBits <= 2048) {
+	return 224;
+   } else if (primeBits <= 3072) {
+	return 256;
+   } else if (primeBits <= 7680) {
+	return 384;
+   } else {
+	return 512;
+   }
+}
+
 static CK_RV
 nsc_parameter_gen(CK_KEY_TYPE key_type, SFTKObject *key)
 {
     SFTKAttribute *attribute;
     CK_ULONG counter;
     unsigned int seedBits = 0;
+    unsigned int subprimeBits = 0;
     unsigned int primeBits;
-    unsigned int j;
+    unsigned int j = 8; /* default to 1024 bits */
     CK_RV crv = CKR_OK;
     PQGParams *params = NULL;
     PQGVerify *vfy = NULL;
@@ -2853,9 +3000,11 @@ nsc_parameter_gen(CK_KEY_TYPE key_type, SFTKObject *key)
     }
     primeBits = (unsigned int) *(CK_ULONG *)attribute->attrib.pValue;
     sftk_FreeAttribute(attribute);
-    j = PQG_PBITS_TO_INDEX(primeBits);
-    if (j == (unsigned int)-1) {
-	return CKR_ATTRIBUTE_VALUE_INVALID;
+    if (primeBits < 1024) {
+	j = PQG_PBITS_TO_INDEX(primeBits);
+	if (j == (unsigned int)-1) {
+	    return CKR_ATTRIBUTE_VALUE_INVALID;
+	}
     }
 
     attribute = sftk_FindAttribute(key, CKA_NETSCAPE_PQG_SEED_BITS);
@@ -2864,14 +3013,34 @@ nsc_parameter_gen(CK_KEY_TYPE key_type, SFTKObject *key)
 	sftk_FreeAttribute(attribute);
     }
 
+    attribute = sftk_FindAttribute(key, CKA_SUBPRIME_BITS);
+    if (attribute != NULL) {
+	subprimeBits = (unsigned int) *(CK_ULONG *)attribute->attrib.pValue;
+	sftk_FreeAttribute(attribute);
+    }
+
     sftk_DeleteAttributeType(key,CKA_PRIME_BITS);
+    sftk_DeleteAttributeType(key,CKA_SUBPRIME_BITS);
     sftk_DeleteAttributeType(key,CKA_NETSCAPE_PQG_SEED_BITS);
 
-    if (seedBits == 0) {
-	rv = PQG_ParamGen(j, &params, &vfy);
+    /* use the old PQG interface if we have old input data */
+    if ((primeBits < 1024) || ((primeBits == 1024) && (subprimeBits == 0))) {
+	if (seedBits == 0) {
+	    rv = PQG_ParamGen(j, &params, &vfy);
+	} else {
+	    rv = PQG_ParamGenSeedLen(j,seedBits/8, &params, &vfy);
+	}
     } else {
-	rv = PQG_ParamGenSeedLen(j,seedBits/8, &params, &vfy);
+	if (subprimeBits == 0) {
+	    subprimeBits = sftk_GetSubPrimeFromPrime(primeBits);
+        }
+	if (seedBits == 0) {
+	    seedBits = primeBits;
+	}
+	rv = PQG_ParamGenV2(primeBits, subprimeBits, seedBits/8, &params, &vfy);
     }
+	
+
 
     if (rv != SECSuccess) {
 	if (PORT_GetError() == SEC_ERROR_LIBRARY_FAILURE) {
@@ -2899,9 +3068,8 @@ nsc_parameter_gen(CK_KEY_TYPE key_type, SFTKObject *key)
     if (crv != CKR_OK) goto loser;
 
 loser:
-    if (params) {
-	PQG_DestroyParams(params);
-    }
+    PQG_DestroyParams(params);
+
     if (vfy) {
 	PQG_DestroyVerify(vfy);
     }
@@ -3141,7 +3309,7 @@ CK_RV NSC_GenerateKey(CK_SESSION_HANDLE hSession,
     int i;
     SFTKSlot *slot = sftk_SlotFromSessionHandle(hSession);
     unsigned char buf[MAX_KEY_LEN];
-    enum {nsc_pbe, nsc_ssl, nsc_bulk, nsc_param} key_gen_type;
+    enum {nsc_pbe, nsc_ssl, nsc_bulk, nsc_param, nsc_jpake} key_gen_type;
     NSSPKCS5PBEParameter *pbe_param;
     SSL3RSAPreMasterSecret *rsa_pms;
     CK_VERSION *version;
@@ -3150,6 +3318,7 @@ CK_RV NSC_GenerateKey(CK_SESSION_HANDLE hSession,
      * produce them any more.  The affected algorithm was 3DES.
      */
     PRBool faultyPBE3DES = PR_FALSE;
+    HASH_HashType hashType;
 
     CHECK_FORK();
 
@@ -3249,6 +3418,24 @@ CK_RV NSC_GenerateKey(CK_SESSION_HANDLE hSession,
 	objclass = CKO_KG_PARAMETERS;
 	crv = CKR_OK;
 	break;
+    case CKM_NSS_JPAKE_ROUND1_SHA1:   hashType = HASH_AlgSHA1;   goto jpake1;
+    case CKM_NSS_JPAKE_ROUND1_SHA256: hashType = HASH_AlgSHA256; goto jpake1;
+    case CKM_NSS_JPAKE_ROUND1_SHA384: hashType = HASH_AlgSHA384; goto jpake1;
+    case CKM_NSS_JPAKE_ROUND1_SHA512: hashType = HASH_AlgSHA512; goto jpake1;
+jpake1:
+	key_gen_type = nsc_jpake;
+	key_type = CKK_NSS_JPAKE_ROUND1;
+        objclass = CKO_PRIVATE_KEY;
+        if (pMechanism->pParameter == NULL ||
+            pMechanism->ulParameterLen != sizeof(CK_NSS_JPAKERound1Params)) {
+            crv = CKR_MECHANISM_PARAM_INVALID;
+            break;
+        }
+        if (sftk_isTrue(key, CKA_TOKEN)) {
+            crv = CKR_TEMPLATE_INCONSISTENT;
+        }
+        crv = CKR_OK;
+        break;
     default:
 	crv = CKR_MECHANISM_INVALID;
 	break;
@@ -3295,6 +3482,11 @@ CK_RV NSC_GenerateKey(CK_SESSION_HANDLE hSession,
 	*buf = 0;
 	crv = nsc_parameter_gen(key_type,key);
 	break;
+    case nsc_jpake:
+        crv = jpake_Round1(hashType,
+                           (CK_NSS_JPAKERound1Params *) pMechanism->pParameter,
+                           key);
+        break;
     }
 
     if (crv != CKR_OK) { sftk_FreeObject(key); return crv; }
@@ -3365,6 +3557,7 @@ sftk_PairwiseConsistencyCheck(CK_SESSION_HANDLE hSession,
     CK_MECHANISM mech = {0, NULL, 0};
 
     CK_ULONG modulusLen;
+    CK_ULONG subPrimeLen;
     PRBool isEncryptable = PR_FALSE;
     PRBool canSignVerify = PR_FALSE;
     PRBool isDerivable = PR_FALSE;
@@ -3378,10 +3571,12 @@ sftk_PairwiseConsistencyCheck(CK_SESSION_HANDLE hSession,
     unsigned char *text_compared;
     CK_ULONG bytes_encrypted;
     CK_ULONG bytes_compared;
+    CK_ULONG pairwise_digest_length = PAIRWISE_DIGEST_LENGTH;
 
     /* Variables used for Signature/Verification functions. */
-    /* always uses SHA-1 digest */
-    unsigned char *known_digest = (unsigned char *)"Mozilla Rules World!";
+    /* Must be at least 256 bits for DSA2 digest */
+    unsigned char *known_digest = (unsigned char *)
+				"Mozilla Rules the World through NSS!";
     unsigned char *signature;
     CK_ULONG signature_length;
 
@@ -3396,6 +3591,19 @@ sftk_PairwiseConsistencyCheck(CK_SESSION_HANDLE hSession,
 	modulusLen = attribute->attrib.ulValueLen;
 	if (*(unsigned char *)attribute->attrib.pValue == 0) {
 	    modulusLen--;
+	}
+	sftk_FreeAttribute(attribute);
+    } else if (keyType == CKK_DSA) {
+	SFTKAttribute *attribute;
+
+	/* Get subprime length of private key. */
+	attribute = sftk_FindAttribute(privateKey, CKA_SUBPRIME);
+	if (attribute == NULL) {
+	    return CKR_DEVICE_ERROR;
+	}
+	subPrimeLen = attribute->attrib.ulValueLen;
+	if (subPrimeLen > 1 && *(unsigned char *)attribute->attrib.pValue == 0) {
+	    subPrimeLen--;
 	}
 	sftk_FreeAttribute(attribute);
     }
@@ -3523,7 +3731,8 @@ sftk_PairwiseConsistencyCheck(CK_SESSION_HANDLE hSession,
 	    mech.mechanism = CKM_RSA_PKCS;
 	    break;
 	case CKK_DSA:
-	    signature_length = DSA_SIGNATURE_LEN;
+	    signature_length = DSA_MAX_SIGNATURE_LEN;
+	    pairwise_digest_length = subPrimeLen;
 	    mech.mechanism = CKM_DSA;
 	    break;
 #ifdef NSS_ENABLE_ECC
@@ -3551,7 +3760,7 @@ sftk_PairwiseConsistencyCheck(CK_SESSION_HANDLE hSession,
 
 	crv = NSC_Sign(hSession,
 		       known_digest,
-		       PAIRWISE_DIGEST_LENGTH,
+		       pairwise_digest_length,
 		       signature,
 		       &signature_length);
 	if (crv != CKR_OK) {
@@ -3568,7 +3777,7 @@ sftk_PairwiseConsistencyCheck(CK_SESSION_HANDLE hSession,
 
 	crv = NSC_Verify(hSession,
 			 known_digest,
-			 PAIRWISE_DIGEST_LENGTH,
+			 pairwise_digest_length,
 			 signature,
 			 signature_length);
 
@@ -3811,7 +4020,7 @@ kpg_done:
 	sftk_DeleteAttributeType(privateKey,CKA_BASE);
 	key_type = CKK_DSA;
 
-	/* extract the necessary paramters and copy them to the private key */
+	/* extract the necessary parameters and copy them to the private key */
 	crv=sftk_Attribute2SSecItem(NULL,&pqgParam.prime,publicKey,CKA_PRIME);
 	if (crv != CKR_OK) break;
 	crv=sftk_Attribute2SSecItem(NULL,&pqgParam.subPrime,publicKey,
@@ -3851,9 +4060,12 @@ kpg_done:
 	    break;
 	}
 
+	/*
+	 * these are checked by DSA_NewKey
+	 */
         bitSize = sftk_GetLengthInBits(pqgParam.subPrime.data, 
 							pqgParam.subPrime.len);
-        if (bitSize != DSA_Q_BITS)  {
+        if ((bitSize < DSA_MIN_Q_BITS) || (bitSize > DSA_MAX_Q_BITS))  {
 	    crv = CKR_TEMPLATE_INCOMPLETE;
 	    PORT_Free(pqgParam.prime.data);
 	    PORT_Free(pqgParam.subPrime.data);
@@ -3869,7 +4081,7 @@ kpg_done:
 	    break;
 	}
         bitSize = sftk_GetLengthInBits(pqgParam.base.data,pqgParam.base.len);
-        if ((bitSize <  1) || (bitSize > DSA_MAX_P_BITS)) {
+        if ((bitSize <  2) || (bitSize > DSA_MAX_P_BITS)) {
 	    crv = CKR_TEMPLATE_INCOMPLETE;
 	    PORT_Free(pqgParam.prime.data);
 	    PORT_Free(pqgParam.subPrime.data);
@@ -4352,7 +4564,7 @@ CK_RV NSC_WrapKey(CK_SESSION_HANDLE hSession,
 		break;
 	    }
 	    crv = sftk_CryptInit(hSession, pMechanism, hWrappingKey, 
-					CKA_WRAP, SFTK_ENCRYPT, PR_TRUE);
+				CKA_WRAP, CKA_WRAP, SFTK_ENCRYPT, PR_TRUE);
 	    if (crv != CKR_OK) {
 		sftk_FreeAttribute(attribute);
 		break;
@@ -4415,7 +4627,7 @@ CK_RV NSC_WrapKey(CK_SESSION_HANDLE hSession,
 		}
 
 		crv = sftk_CryptInit(hSession, pMechanism, hWrappingKey,
-					CKA_WRAP, SFTK_ENCRYPT, PR_TRUE);
+				CKA_WRAP, CKA_WRAP, SFTK_ENCRYPT, PR_TRUE);
 		if(crv != CKR_OK) {
 		    SECITEM_ZfreeItem(bpki, PR_TRUE);
 		    crv = CKR_KEY_TYPE_INCONSISTENT;
@@ -4731,7 +4943,7 @@ CK_RV NSC_UnwrapKey(CK_SESSION_HANDLE hSession,
     }
 
     crv = sftk_CryptInit(hSession,pMechanism,hUnwrappingKey,CKA_UNWRAP,
-							SFTK_DECRYPT, PR_FALSE);
+					CKA_UNWRAP, SFTK_DECRYPT, PR_FALSE);
     if (crv != CKR_OK) {
 	sftk_FreeObject(key);
 	return sftk_mapWrap(crv);
@@ -4971,6 +5183,113 @@ sftk_MapKeySize(CK_KEY_TYPE keyType)
     return 0;
 }
 
+/* Inputs:
+ *  key_len: Length of derived key to be generated.
+ *  SharedSecret: a shared secret that is the output of a key agreement primitive.
+ *  SharedInfo: (Optional) some data shared by the entities computing the secret key.
+ *  SharedInfoLen: the length in octets of SharedInfo
+ *  Hash: The hash function to be used in the KDF
+ *  HashLen: the length in octets of the output of Hash
+ * Output:
+ *  key: Pointer to a buffer containing derived key, if return value is SECSuccess.
+ */
+static CK_RV sftk_compute_ANSI_X9_63_kdf(CK_BYTE **key, CK_ULONG key_len, SECItem *SharedSecret,
+		CK_BYTE_PTR SharedInfo, CK_ULONG SharedInfoLen,
+		SECStatus Hash(unsigned char *, const unsigned char *, uint32),
+		CK_ULONG HashLen)
+{
+    unsigned char *buffer = NULL, *output_buffer = NULL;
+    uint32 buffer_len, max_counter, i;
+    SECStatus rv;
+
+    /* Check that key_len isn't too long.  The maximum key length could be
+     * greatly increased if the code below did not limit the 4-byte counter
+     * to a maximum value of 255. */
+    if (key_len > 254 * HashLen)
+	return SEC_ERROR_INVALID_ARGS;
+
+    if (SharedInfo == NULL)
+	SharedInfoLen = 0;
+
+    buffer_len = SharedSecret->len + 4 + SharedInfoLen;
+    buffer = (CK_BYTE *)PORT_Alloc(buffer_len);
+    if (buffer == NULL) {
+	rv = SEC_ERROR_NO_MEMORY;
+	goto loser;
+    }
+
+    max_counter = key_len/HashLen;
+    if (key_len > max_counter * HashLen)
+	max_counter++;
+
+    output_buffer = (CK_BYTE *)PORT_Alloc(max_counter * HashLen);
+    if (output_buffer == NULL) {
+	rv = SEC_ERROR_NO_MEMORY;
+	goto loser;
+    }
+
+    /* Populate buffer with SharedSecret || Counter || [SharedInfo]
+     * where Counter is 0x00000001 */
+    PORT_Memcpy(buffer, SharedSecret->data, SharedSecret->len);
+    buffer[SharedSecret->len] = 0;
+    buffer[SharedSecret->len + 1] = 0;
+    buffer[SharedSecret->len + 2] = 0;
+    buffer[SharedSecret->len + 3] = 1;
+    if (SharedInfo) {
+	PORT_Memcpy(&buffer[SharedSecret->len + 4], SharedInfo, SharedInfoLen);
+    }
+
+    for(i=0; i < max_counter; i++) {
+	rv = Hash(&output_buffer[i * HashLen], buffer, buffer_len);
+	if (rv != SECSuccess)
+	    goto loser;
+
+	/* Increment counter (assumes max_counter < 255) */
+	buffer[SharedSecret->len + 3]++;
+    }
+
+    PORT_ZFree(buffer, buffer_len);
+    if (key_len < max_counter * HashLen) {
+	PORT_Memset(output_buffer + key_len, 0, max_counter * HashLen - key_len);
+    }
+    *key = output_buffer;
+
+    return SECSuccess;
+
+    loser:
+	if (buffer) {
+	    PORT_ZFree(buffer, buffer_len);
+	}
+	if (output_buffer) {
+	    PORT_ZFree(output_buffer, max_counter * HashLen);
+	}
+	return rv;
+}
+
+static CK_RV sftk_ANSI_X9_63_kdf(CK_BYTE **key, CK_ULONG key_len,
+		SECItem *SharedSecret,
+		CK_BYTE_PTR SharedInfo, CK_ULONG SharedInfoLen,
+		CK_EC_KDF_TYPE kdf)
+{
+    if (kdf == CKD_SHA1_KDF)
+	return sftk_compute_ANSI_X9_63_kdf(key, key_len, SharedSecret, SharedInfo,
+		   		 SharedInfoLen, SHA1_HashBuf, SHA1_LENGTH);
+    else if (kdf == CKD_SHA224_KDF)
+	return sftk_compute_ANSI_X9_63_kdf(key, key_len, SharedSecret, SharedInfo,
+		   		 SharedInfoLen, SHA224_HashBuf, SHA224_LENGTH);
+    else if (kdf == CKD_SHA256_KDF)
+	return sftk_compute_ANSI_X9_63_kdf(key, key_len, SharedSecret, SharedInfo,
+		   		 SharedInfoLen, SHA256_HashBuf, SHA256_LENGTH);
+    else if (kdf == CKD_SHA384_KDF)
+	return sftk_compute_ANSI_X9_63_kdf(key, key_len, SharedSecret, SharedInfo,
+		   		 SharedInfoLen, SHA384_HashBuf, SHA384_LENGTH);
+    else if (kdf == CKD_SHA512_KDF)
+	return sftk_compute_ANSI_X9_63_kdf(key, key_len, SharedSecret, SharedInfo,
+		   		 SharedInfoLen, SHA512_HashBuf, SHA512_LENGTH);
+    else
+	return SEC_ERROR_INVALID_ALGORITHM;
+}
+
 /*
  * SSL Key generation given pre master secret
  */
@@ -5000,8 +5319,8 @@ CK_RV NSC_DeriveKey( CK_SESSION_HANDLE hSession,
     SFTKSlot    *   slot	= sftk_SlotFromSessionHandle(hSession);
     SFTKObject  *   key;
     SFTKObject  *   sourceKey;
-    SFTKAttribute * att;
-    SFTKAttribute * att2;
+    SFTKAttribute * att = NULL;
+    SFTKAttribute * att2 = NULL;
     unsigned char * buf;
     SHA1Context *   sha;
     MD5Context *    md5;
@@ -5024,6 +5343,8 @@ CK_RV NSC_DeriveKey( CK_SESSION_HANDLE hSession,
     unsigned char   key_block[NUM_MIXERS * MD5_LENGTH];
     unsigned char   key_block2[MD5_LENGTH];
     PRBool          isFIPS;		
+    HASH_HashType   hashType;
+    PRBool          extractValue = PR_TRUE;
 
     CHECK_FORK();
 
@@ -5061,8 +5382,24 @@ CK_RV NSC_DeriveKey( CK_SESSION_HANDLE hSession,
 	keySize = sftk_MapKeySize(keyType);
     }
 
-    /* Derive can only create SECRET KEY's currently... */
-    classType = CKO_SECRET_KEY;
+    switch (pMechanism->mechanism) {
+      case CKM_NSS_JPAKE_ROUND2_SHA1:   /* fall through */
+      case CKM_NSS_JPAKE_ROUND2_SHA256: /* fall through */
+      case CKM_NSS_JPAKE_ROUND2_SHA384: /* fall through */
+      case CKM_NSS_JPAKE_ROUND2_SHA512:
+          extractValue = PR_FALSE;
+          classType = CKO_PRIVATE_KEY;
+          break;
+      case CKM_NSS_JPAKE_FINAL_SHA1:   /* fall through */
+      case CKM_NSS_JPAKE_FINAL_SHA256: /* fall through */
+      case CKM_NSS_JPAKE_FINAL_SHA384: /* fall through */
+      case CKM_NSS_JPAKE_FINAL_SHA512:
+          extractValue = PR_FALSE;
+          /* fall through */
+      default:
+          classType = CKO_SECRET_KEY;
+    }
+    
     crv = sftk_forceAttribute (key,CKA_CLASS,&classType,sizeof(classType));
     if (crv != CKR_OK) {
 	sftk_FreeObject(key);
@@ -5083,12 +5420,14 @@ CK_RV NSC_DeriveKey( CK_SESSION_HANDLE hSession,
         return CKR_KEY_HANDLE_INVALID;
     }
 
-    /* get the value of the base key */
-    att = sftk_FindAttribute(sourceKey,CKA_VALUE);
-    if (att == NULL) {
-	sftk_FreeObject(key);
-	sftk_FreeObject(sourceKey);
-        return CKR_KEY_HANDLE_INVALID;
+    if (extractValue) {
+        /* get the value of the base key */
+        att = sftk_FindAttribute(sourceKey,CKA_VALUE);
+        if (att == NULL) {
+            sftk_FreeObject(key);
+            sftk_FreeObject(sourceKey);
+            return CKR_KEY_HANDLE_INVALID;
+        }
     }
 
     switch (pMechanism->mechanism) {
@@ -5779,17 +6118,8 @@ key_and_mac_derive_fail:
 	    crv = CKR_TEMPLATE_INCONSISTENT;
 	    break;
 	}
-	/* now allocate the hash contexts */
-	md5 = MD5_NewContext();
-	if (md5 == NULL) { 
-	    crv = CKR_HOST_MEMORY;
-	    break;
-	}
-	MD5_Begin(md5);
-	MD5_Update(md5,(const unsigned char*)att->attrib.pValue,
+	MD5_HashBuf(key_block,(const unsigned char*)att->attrib.pValue,
 		   att->attrib.ulValueLen);
-	MD5_End(md5,key_block,&outLen,MD5_LENGTH);
-	MD5_DestroyContext(md5, PR_TRUE);
 
 	crv = sftk_forceAttribute (key,CKA_VALUE,key_block,keySize);
 	break;
@@ -5799,17 +6129,56 @@ key_and_mac_derive_fail:
 	    crv = CKR_TEMPLATE_INCONSISTENT;
 	    break;
 	}
-	/* now allocate the hash contexts */
-	sha = SHA1_NewContext();
-	if (sha == NULL) { 
-	    crv = CKR_HOST_MEMORY;
+	SHA1_HashBuf(key_block,(const unsigned char*)att->attrib.pValue,
+		    att->attrib.ulValueLen);
+
+	crv = sftk_forceAttribute(key,CKA_VALUE,key_block,keySize);
+	break;
+
+     case CKM_SHA224_KEY_DERIVATION:
+	if (keySize == 0) keySize = SHA224_LENGTH;
+	if (keySize > SHA224_LENGTH) {
+	    crv = CKR_TEMPLATE_INCONSISTENT;
 	    break;
 	}
-	SHA1_Begin(sha);
-	SHA1_Update(sha,(const unsigned char*)att->attrib.pValue,
+	SHA224_HashBuf(key_block,(const unsigned char*)att->attrib.pValue,
 		    att->attrib.ulValueLen);
-	SHA1_End(sha,key_block,&outLen,SHA1_LENGTH);
-	SHA1_DestroyContext(sha, PR_TRUE);
+
+	crv = sftk_forceAttribute(key,CKA_VALUE,key_block,keySize);
+	break;
+
+     case CKM_SHA256_KEY_DERIVATION:
+	if (keySize == 0) keySize = SHA256_LENGTH;
+	if (keySize > SHA256_LENGTH) {
+	    crv = CKR_TEMPLATE_INCONSISTENT;
+	    break;
+	}
+	SHA256_HashBuf(key_block,(const unsigned char*)att->attrib.pValue,
+		    att->attrib.ulValueLen);
+
+	crv = sftk_forceAttribute(key,CKA_VALUE,key_block,keySize);
+	break;
+
+     case CKM_SHA384_KEY_DERIVATION:
+	if (keySize == 0) keySize = SHA384_LENGTH;
+	if (keySize > SHA384_LENGTH) {
+	    crv = CKR_TEMPLATE_INCONSISTENT;
+	    break;
+	}
+	SHA384_HashBuf(key_block,(const unsigned char*)att->attrib.pValue,
+		    att->attrib.ulValueLen);
+
+	crv = sftk_forceAttribute(key,CKA_VALUE,key_block,keySize);
+	break;
+
+     case CKM_SHA512_KEY_DERIVATION:
+	if (keySize == 0) keySize = SHA512_LENGTH;
+	if (keySize > SHA512_LENGTH) {
+	    crv = CKR_TEMPLATE_INCONSISTENT;
+	    break;
+	}
+	SHA512_HashBuf(key_block,(const unsigned char*)att->attrib.pValue,
+		    att->attrib.ulValueLen);
 
 	crv = sftk_forceAttribute(key,CKA_VALUE,key_block,keySize);
 	break;
@@ -5853,7 +6222,6 @@ key_and_mac_derive_fail:
 	SECItem  ecScalar, ecPoint;
 	SECItem  tmp;
 	PRBool   withCofactor = PR_FALSE;
-	unsigned char secret_hash[20];
 	unsigned char *secret;
 	unsigned char *keyData = NULL;
 	int secretlen, curveLen, pubKeyLen;
@@ -5939,28 +6307,30 @@ key_and_mac_derive_fail:
 	    break;
 	}
 
-	/*
-	 * tmp is the raw data created by ECDH_Derive,
-	 * secret and secretlen are the values we will eventually pass as our
-	 * generated key.
-	 */
-	secret = tmp.data;
-	secretlen = tmp.len;
 
 	/*
 	 * apply the kdf function.
 	 */
-	if (mechParams->kdf == CKD_SHA1_KDF) {
-	    /* Compute SHA1 hash */
-	    PORT_Memset(secret_hash, 0, 20);
-	    rv = SHA1_HashBuf(secret_hash, tmp.data, tmp.len);
+	if (mechParams->kdf == CKD_NULL) {
+	    /*
+	     * tmp is the raw data created by ECDH_Derive,
+	     * secret and secretlen are the values we will
+	     * eventually pass as our generated key.
+	     */
+	    secret = tmp.data;
+	    secretlen = tmp.len;
+	} else {
+	    secretlen = keySize;
+	    rv = sftk_ANSI_X9_63_kdf(&secret, keySize,
+			&tmp, mechParams->pSharedData,
+			mechParams->ulSharedDataLen, mechParams->kdf);
+	    PORT_ZFree(tmp.data, tmp.len);
 	    if (rv != SECSuccess) {
-		PORT_ZFree(tmp.data, tmp.len);
 		crv = CKR_HOST_MEMORY;
 		break;
-	    } 
-	    secret = secret_hash;
-	    secretlen = 20;
+	    }
+	    tmp.data = secret;
+	    tmp.len = secretlen;
 	}
 
 	/*
@@ -5991,8 +6361,6 @@ key_and_mac_derive_fail:
 	if (keyData) {
 	    PORT_ZFree(keyData, keySize);
 	}
-	PORT_Memset(secret_hash, 0, 20);
-	    
 	break;
 
 ec_loser:
@@ -6008,10 +6376,161 @@ ec_loser:
       }
 #endif /* NSS_ENABLE_ECC */
 
+    /* See RFC 5869 and CK_NSS_HKDFParams for documentation. */
+    case CKM_NSS_HKDF_SHA1:   hashType = HASH_AlgSHA1;   goto hkdf;
+    case CKM_NSS_HKDF_SHA256: hashType = HASH_AlgSHA256; goto hkdf;
+    case CKM_NSS_HKDF_SHA384: hashType = HASH_AlgSHA384; goto hkdf;
+    case CKM_NSS_HKDF_SHA512: hashType = HASH_AlgSHA512; goto hkdf;
+hkdf: {
+        const CK_NSS_HKDFParams * params =
+            (const CK_NSS_HKDFParams *) pMechanism->pParameter;
+        const SECHashObject * rawHash;
+        unsigned hashLen;
+        CK_BYTE buf[HASH_LENGTH_MAX];
+        CK_BYTE * prk;  /* psuedo-random key */
+        CK_ULONG prkLen;
+        CK_BYTE * okm;  /* output keying material */
+
+        rawHash = HASH_GetRawHashObject(hashType);
+        if (rawHash == NULL || rawHash->length > sizeof buf) {
+            crv = CKR_FUNCTION_FAILED;
+            break;
+        }
+        hashLen = rawHash->length;
+
+        if (pMechanism->ulParameterLen != sizeof(CK_NSS_HKDFParams) ||
+            !params || (!params->bExpand && !params->bExtract) ||
+            (params->bExtract && params->ulSaltLen > 0 && !params->pSalt) ||
+            (params->bExpand && params->ulInfoLen > 0 && !params->pInfo)) {
+            crv = CKR_MECHANISM_PARAM_INVALID;
+            break;
+        }
+        if (keySize == 0 || keySize > sizeof key_block ||
+            (!params->bExpand && keySize > hashLen) ||
+            (params->bExpand && keySize > 255 * hashLen)) {
+            crv = CKR_TEMPLATE_INCONSISTENT;
+            break;
+        }
+        crv = sftk_DeriveSensitiveCheck(sourceKey, key);
+        if (crv != CKR_OK)
+            break;
+
+        /* HKDF-Extract(salt, base key value) */
+        if (params->bExtract) {
+            CK_BYTE * salt;
+            CK_ULONG saltLen;
+            HMACContext * hmac;
+            unsigned int bufLen;
+
+            salt = params->pSalt;
+            saltLen = params->ulSaltLen;
+            if (salt == NULL) {
+                saltLen = hashLen;
+                salt = buf;
+                memset(salt, 0, saltLen);
+            }
+            hmac = HMAC_Create(rawHash, salt, saltLen, isFIPS);
+            if (!hmac) {
+                crv = CKR_HOST_MEMORY;
+                break;
+            }
+            HMAC_Begin(hmac);
+            HMAC_Update(hmac, (const unsigned char*) att->attrib.pValue,
+		        att->attrib.ulValueLen);
+            HMAC_Finish(hmac, buf, &bufLen, sizeof(buf));
+            HMAC_Destroy(hmac, PR_TRUE);
+            PORT_Assert(bufLen == rawHash->length);
+            prk = buf;
+            prkLen = bufLen;
+        } else {
+            /* PRK = base key value */
+            prk = (CK_BYTE*) att->attrib.pValue;
+            prkLen = att->attrib.ulValueLen;
+        }
+        
+        /* HKDF-Expand */
+        if (!params->bExpand) {
+            okm = prk;
+        } else {
+            /* T(1) = HMAC-Hash(prk, "" | info | 0x01)
+             * T(n) = HMAC-Hash(prk, T(n-1) | info | n
+             * key material = T(1) | ... | T(n)
+             */
+            HMACContext * hmac;
+            CK_BYTE i;
+            unsigned iterations = PR_ROUNDUP(keySize, hashLen) / hashLen;
+            hmac = HMAC_Create(rawHash, prk, prkLen, isFIPS);
+            if (hmac == NULL) {
+                crv = CKR_HOST_MEMORY;
+                break;
+            }
+            for (i = 1; i <= iterations; ++i) {
+                unsigned len;
+                HMAC_Begin(hmac);
+                if (i > 1) {
+                    HMAC_Update(hmac, key_block + ((i-2) * hashLen), hashLen);
+                }
+                if (params->ulInfoLen != 0) {
+                    HMAC_Update(hmac, params->pInfo, params->ulInfoLen);
+                }
+                HMAC_Update(hmac, &i, 1);
+                HMAC_Finish(hmac, key_block + ((i-1) * hashLen), &len,
+                            hashLen);
+                PORT_Assert(len == hashLen);
+            }
+            HMAC_Destroy(hmac, PR_TRUE);
+            okm = key_block;
+        }
+        /* key material = prk */
+        crv = sftk_forceAttribute(key, CKA_VALUE, okm, keySize);
+        break;
+      } /* end of CKM_NSS_HKDF_* */
+
+    case CKM_NSS_JPAKE_ROUND2_SHA1: hashType = HASH_AlgSHA1; goto jpake2;
+    case CKM_NSS_JPAKE_ROUND2_SHA256: hashType = HASH_AlgSHA256; goto jpake2;
+    case CKM_NSS_JPAKE_ROUND2_SHA384: hashType = HASH_AlgSHA384; goto jpake2;
+    case CKM_NSS_JPAKE_ROUND2_SHA512: hashType = HASH_AlgSHA512; goto jpake2;
+jpake2:
+        if (pMechanism->pParameter == NULL ||
+            pMechanism->ulParameterLen != sizeof(CK_NSS_JPAKERound2Params))
+            crv = CKR_MECHANISM_PARAM_INVALID;
+        if (crv == CKR_OK && sftk_isTrue(key, CKA_TOKEN))
+            crv = CKR_TEMPLATE_INCONSISTENT;
+	if (crv == CKR_OK)
+            crv = sftk_DeriveSensitiveCheck(sourceKey, key);
+	if (crv == CKR_OK)
+            crv = jpake_Round2(hashType,
+                        (CK_NSS_JPAKERound2Params *) pMechanism->pParameter,
+                        sourceKey, key);
+        break;
+
+    case CKM_NSS_JPAKE_FINAL_SHA1: hashType = HASH_AlgSHA1; goto jpakeFinal;
+    case CKM_NSS_JPAKE_FINAL_SHA256: hashType = HASH_AlgSHA256; goto jpakeFinal;
+    case CKM_NSS_JPAKE_FINAL_SHA384: hashType = HASH_AlgSHA384; goto jpakeFinal;
+    case CKM_NSS_JPAKE_FINAL_SHA512: hashType = HASH_AlgSHA512; goto jpakeFinal;
+jpakeFinal:
+        if (pMechanism->pParameter == NULL ||
+            pMechanism->ulParameterLen != sizeof(CK_NSS_JPAKEFinalParams))
+            crv = CKR_MECHANISM_PARAM_INVALID;
+        /* We purposely do not do the derive sensitivity check; we want to be
+           able to derive non-sensitive keys while allowing the ROUND1 and 
+           ROUND2 keys to be sensitive (which they always are, since they are
+           in the CKO_PRIVATE_KEY class). The caller must include CKA_SENSITIVE
+           in the template in order for the resultant keyblock key to be
+           sensitive.
+         */
+        if (crv == CKR_OK)
+            crv = jpake_Final(hashType,
+                        (CK_NSS_JPAKEFinalParams *) pMechanism->pParameter,
+                        sourceKey, key);
+        break;
+
     default:
 	crv = CKR_MECHANISM_INVALID;
     }
-    sftk_FreeAttribute(att);
+    if (att) {
+        sftk_FreeAttribute(att);
+    }
     sftk_FreeObject(sourceKey);
     if (crv != CKR_OK) { 
 	if (key) sftk_FreeObject(key);

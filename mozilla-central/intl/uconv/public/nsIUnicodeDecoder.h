@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsIUnicodeDecoder_h___
 #define nsIUnicodeDecoder_h___
@@ -49,37 +17,6 @@
 #define NS_IUNICODEDECODER_IID	\
 	{ 0x25359602, 0xfc70, 0x4d13,	\
 		{ 0xa9, 0xab, 0x80, 0x86, 0xd3, 0x82, 0x7c, 0xd }}
-
-// XXX deprecated
-/*---------- BEGIN DEPRECATED */ 
-#define NS_EXACT_LENGTH \
-  NS_ERROR_GENERATE_SUCCESS(NS_ERROR_MODULE_UCONV, 11)
-
-#define NS_PARTIAL_MORE_INPUT \
-  NS_ERROR_GENERATE_SUCCESS(NS_ERROR_MODULE_UCONV, 12)
-
-#define NS_PARTIAL_MORE_OUTPUT \
-  NS_ERROR_GENERATE_SUCCESS(NS_ERROR_MODULE_UCONV, 13)
-
-#define NS_ERROR_ILLEGAL_INPUT \
-  NS_ERROR_GENERATE_FAILURE(NS_ERROR_MODULE_UCONV, 14)
-/*---------- END DEPRECATED */ 
-
-// XXX make us hex! (same digits though)
-#define NS_OK_UDEC_EXACTLENGTH      \
-  NS_ERROR_GENERATE_SUCCESS(NS_ERROR_MODULE_UCONV, 11)
-
-#define NS_OK_UDEC_MOREINPUT        \
-  NS_ERROR_GENERATE_SUCCESS(NS_ERROR_MODULE_UCONV, 12)
-
-#define NS_OK_UDEC_MOREOUTPUT       \
-  NS_ERROR_GENERATE_SUCCESS(NS_ERROR_MODULE_UCONV, 13)
-
-#define NS_ERROR_UDEC_ILLEGALINPUT  \
-  NS_ERROR_GENERATE_FAILURE(NS_ERROR_MODULE_UCONV, 14)
-
-#define NS_OK_UDEC_NOBOMFOUND       \
-  NS_ERROR_GENERATE_SUCCESS(NS_ERROR_MODULE_UCONV, 14)
 
 
 #define NS_UNICODEDECODER_CONTRACTID_BASE "@mozilla.org/intl/unicode/decoder;1?charset="
@@ -154,8 +91,8 @@ public:
    *                    the caller must skip over one byte, reset the decoder
    *                    and retry.
    */
-  NS_IMETHOD Convert(const char * aSrc, PRInt32 * aSrcLength, 
-      PRUnichar * aDest, PRInt32 * aDestLength) = 0;
+  NS_IMETHOD Convert(const char * aSrc, int32_t * aSrcLength, 
+      PRUnichar * aDest, int32_t * aDestLength) = 0;
 
   /**
    * Returns a quick estimation of the size of the buffer needed to hold the
@@ -168,8 +105,8 @@ public:
    * @return            NS_EXACT_LENGTH if an exact length was computed
    *                    NS_OK is all we have is an approximation
    */
-  NS_IMETHOD GetMaxLength(const char * aSrc, PRInt32 aSrcLength, 
-      PRInt32 * aDestLength) = 0;
+  NS_IMETHOD GetMaxLength(const char * aSrc, int32_t aSrcLength, 
+      int32_t * aDestLength) = 0;
 
   /**
    * Resets the charset converter so it may be recycled for a completely 
@@ -184,7 +121,7 @@ public:
    * @see kOnError_Recover
    * @see kOnError_Signal
    */
-  virtual void SetInputErrorBehavior(PRInt32 aBehavior) = 0;
+  virtual void SetInputErrorBehavior(int32_t aBehavior) = 0;
 
   /**
    * return the UNICODE character for unmapped character

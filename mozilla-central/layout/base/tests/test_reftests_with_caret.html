@@ -2,12 +2,19 @@
 <html>
 <head>
   <title>Reftests with caret drawing</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/WindowSnapshot.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
+  <style>
+    iframe {
+      width: 600px;
+      height: 600px;
+    }
+  </style>
 <script type="text/javascript">
+
+SimpleTest.waitForExplicitFinish();
 
 var canvases = [];
 function callbackTestCanvas(canvas)
@@ -45,7 +52,7 @@ function remotePageLoaded() {
   setTimeout(function(){doSnapShot(iframe);}, 0)
 };
 
-const MAX_ITERATIONS = 10;
+const MAX_ITERATIONS = 1000;
 
 function createIframe(url,next) {
   var iframe = document.createElement("iframe");
@@ -58,7 +65,7 @@ function createIframe(url,next) {
     if (docEl.className.indexOf("reftest-wait") >= 0) {
       if (currentIteration++ > MAX_ITERATIONS) {
         ok(false, "iframe load for " + url + " timed out");
-        SimpleTest.finish();
+        endTest();
       } else {
         setTimeout(iframeLoadCompleted, 10);
       }
@@ -75,29 +82,81 @@ function refTest(test,ref) {
   createIframe(test,ref);
 };
 
-var caretBlinkTime;
+var caretBlinkTime = null;
 function endTest() {
-  SimpleTest.finish();
-  netscape.security.PrivilegeManager.enablePrivilege(
-   'UniversalPreferencesRead UniversalPreferencesWrite UniversalXPConnect');
-  var prefs = Components.classes["@mozilla.org/preferences-service;1"]
-                        .getService(Components.interfaces.nsIPrefBranch);
-  prefs.setIntPref("ui.caretBlinkTime", caretBlinkTime);
+  if (caretBlinkTime !== null) {
+    SpecialPowers.setIntPref("ui.caretBlinkTime", caretBlinkTime);
+  } else {
+    SpecialPowers.clearUserPref("ui.caretBlinkTime");
+  }
+
+  // finish(), yet let the test actually end first, to be safe.
+  SimpleTest.executeSoon(SimpleTest.finish);
 }
 
+var isWindows = /WINNT/.test(SpecialPowers.OS);
+var isOSXMtnLion = navigator.userAgent.indexOf("Mac OS X 10.8") != -1;
+
 var tests = [
-    [ 'bug106855-1.html' , 'bug106855-1-ref.html' ] ,
-    [ 'bug106855-2.html' , 'bug106855-1-ref.html' ] ,
-    [ 'bug482484.html'   , 'bug482484-ref.html'   ] ,
-    [ 'bug512295-1.html' , 'bug512295-1-ref.html' ] ,
-    [ 'bug512295-2.html' , 'bug512295-2-ref.html' ] ,
-    [ 'bug585922.html'   , 'bug585922-ref.html'   ]
+    [ 'bug389321-2.html' , 'bug389321-2-ref.html' ] ,
+    [ 'bug389321-3.html' , 'bug389321-3-ref.html' ] ,
+    [ 'bug585922.html'   , 'bug585922-ref.html'   ] ,
+    [ 'bug632215-1.html' , 'bug632215-ref.html'   ] ,
+    [ 'bug632215-2.html' , 'bug632215-ref.html'   ] ,
+    [ 'bug633044-1.html' , 'bug633044-1-ref.html' ] ,
 ];
+
+if (!isWindows) {
+  tests.push([ 'bug240933-1.html' , 'bug240933-1-ref.html' ]); // bug 681144
+  tests.push([ 'bug240933-2.html' , 'bug240933-1-ref.html' ]); // bug 681162
+  tests.push([ 'bug389321-1.html' , 'bug389321-1-ref.html' ]); // bug 683163
+  tests.push([ 'bug482484.html'   , 'bug482484-ref.html'   ]); // bug 688575
+  tests.push([ 'bug512295-1.html' , 'bug512295-1-ref.html' ]); // bug 681152
+  tests.push([ 'bug512295-2.html' , 'bug512295-2-ref.html' ]); // bug 681331
+  tests.push([ 'bug597519-1.html' , 'bug597519-1-ref.html' ]); // bug 680579
+  tests.push([ 'bug602141-1.html' , 'bug602141-1-ref.html' ]); // bug 681334
+  tests.push([ 'bug602141-2.html' , 'bug602141-2-ref.html' ]); // bug 682836
+  tests.push([ 'bug602141-3.html' , 'bug602141-3-ref.html' ]); // bug 683048
+  tests.push([ 'bug602141-4.html' , 'bug602141-4-ref.html' ]); // bug 681167
+  tests.push([ 'bug612271-1.html' , 'bug612271-ref.html' ]);   // bug 681032
+  tests.push([ 'bug612271-2.html' , 'bug612271-ref.html' ]);   // bug 680581
+  tests.push([ 'bug612271-3.html' , 'bug612271-ref.html' ]);   // bug 681035
+  tests.push([ 'bug613433-1.html' , 'bug613433-ref.html' ]);   // bug 681332
+  tests.push([ 'bug613433-2.html' , 'bug613433-ref.html' ]);   // bug 681332
+  tests.push([ 'bug613433-3.html' , 'bug613433-ref.html' ]);   // bug 681332
+  tests.push([ 'bug613807-1.html' , 'bug613807-1-ref.html' ]); // bug 680574
+  tests.push([ 'bug634406-1.html' , 'bug634406-1-ref.html' ]); // bug 681146
+  tests.push([ 'bug644428-1.html' , 'bug644428-1-ref.html' ]); // bug 689435
+  tests.push([ 'bug746993-1.html' , 'bug746993-1-ref.html' ]); // bug 746993
+}
+
+if (!isWindows && !isOSXMtnLion) {
+  tests.push([ 'bug106855-1.html' , 'bug106855-1-ref.html' ]); // bug 682837
+  tests.push([ 'bug106855-2.html' , 'bug106855-1-ref.html' ]); // bug 681138
+}
+
+tests.push(function() {SpecialPowers.setBoolPref("bidi.browser.ui", true);});
+
+if (!isWindows) {
+  tests.push([ 'bug646382-1.html' , 'bug646382-1-ref.html' ]);  // bug 681076
+  tests.push([ 'bug646382-2.html' , 'bug646382-2-ref.html' ]);  // bug 680577
+  tests.push([ 'bug664087-1.html' , 'bug664087-1-ref.html' ]);  // bug 681038
+  tests.push([ 'bug664087-2.html' , 'bug664087-2-ref.html' ]);  // bug 680578
+  tests.push([ 'bug682712-1.html' , 'bug682712-1-ref.html' ]);  // disabled on Windows
+}
+
+tests.push(function() {SpecialPowers.clearUserPref("bidi.browser.ui");});
+
 var testIndex = 0;
 
 function nextTest() {
   if (testIndex < tests.length) {
-    refTest(tests[testIndex][0],tests[testIndex][1]);
+    if (typeof(tests[testIndex]) == 'function') {
+      tests[testIndex]();
+      SimpleTest.executeSoon(nextTest);
+    } else {
+      refTest(tests[testIndex][0],tests[testIndex][1]);
+    }
     ++testIndex;
   } else {
     endTest();
@@ -105,14 +164,10 @@ function nextTest() {
 }
 function runTests() {
   try {
-    SimpleTest.waitForExplicitFinish();
-
-    netscape.security.PrivilegeManager.enablePrivilege(
-      'UniversalPreferencesRead UniversalPreferencesWrite UniversalXPConnect');
-    var prefs = Components.classes["@mozilla.org/preferences-service;1"]
-                          .getService(Components.interfaces.nsIPrefBranch);
-    caretBlinkTime = prefs.getIntPref("ui.caretBlinkTime");
-    prefs.setIntPref("ui.caretBlinkTime", -1);
+    try {
+      caretBlinkTime = SpecialPowers.getIntPref("ui.caretBlinkTime");
+    } catch (e) {}
+    SpecialPowers.setIntPref("ui.caretBlinkTime", -1);
 
     nextTest();
   } catch(e) {

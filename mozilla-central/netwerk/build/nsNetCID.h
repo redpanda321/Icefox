@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@netscape.com> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsNetCID_h__
 #define nsNetCID_h__
@@ -60,6 +27,19 @@
 // service implementing nsINetUtil
 #define NS_NETUTIL_CONTRACTID \
     "@mozilla.org/network/util;1"
+
+// serialization scriptable helper
+#define NS_SERIALIZATION_HELPER_CLASSNAME \
+  "nsSerializationHelper"
+#define NS_SERIALIZATION_HELPER_CONTRACTID \
+  "@mozilla.org/network/serialization-helper;1"
+#define NS_SERIALIZATION_HELPER_CID                  \
+{ /* D6EF593D-A429-4b14-A887-D9E2F765D9ED */         \
+  0xd6ef593d,                                        \
+  0xa429,                                            \
+  0x4b14,                                           \
+  { 0xa8, 0x87, 0xd9, 0xe2, 0xf7, 0x65, 0xd9, 0xed } \
+}
 
 // service implementing nsIProtocolProxyService and nsPIProtocolProxyService.
 #define NS_PROTOCOLPROXYSERVICE_CLASSNAME \
@@ -306,6 +286,34 @@
     {0xbb, 0x4f, 0x96, 0x5c, 0xff, 0xd2, 0x3e, 0xce} \
 }
 
+// component implementing nsIBackgroundFileSaver and
+// nsIOutputStream.
+#define NS_BACKGROUNDFILESAVEROUTPUTSTREAM_CLASSNAME \
+    "BackgroundFileSaverOutputStream"
+#define NS_BACKGROUNDFILESAVEROUTPUTSTREAM_CONTRACTID \
+    "@mozilla.org/network/background-file-saver;1?mode=outputstream"
+#define NS_BACKGROUNDFILESAVEROUTPUTSTREAM_CID \
+{ /* 62147d1e-ef6a-40e8-aaf8-d039f5caaa81 */         \
+    0x62147d1e,                                      \
+    0xef6a,                                          \
+    0x40e8,                                          \
+    {0xaa, 0xf8, 0xd0, 0x39, 0xf5, 0xca, 0xaa, 0x81} \
+}
+
+// component implementing nsIBackgroundFileSaver and
+// nsIStreamListener.
+#define NS_BACKGROUNDFILESAVERSTREAMLISTENER_CLASSNAME \
+    "BackgroundFileSaverStreamListener"
+#define NS_BACKGROUNDFILESAVERSTREAMLISTENER_CONTRACTID \
+    "@mozilla.org/network/background-file-saver;1?mode=streamlistener"
+#define NS_BACKGROUNDFILESAVERSTREAMLISTENER_CID \
+{ /* 208de7fc-a781-4031-bbae-cc0de539f61a */         \
+    0x208de7fc,                                      \
+    0xa781,                                          \
+    0x4031,                                          \
+    {0xbb, 0xae, 0xcc, 0x0d, 0xe5, 0x39, 0xf6, 0x1a} \
+}
+
 // component implementing nsISyncStreamListener.
 #define NS_SYNCSTREAMLISTENER_CLASSNAME \
     "nsSyncStreamListener"
@@ -403,6 +411,18 @@
     {0x8c, 0xda, 0x00, 0x60, 0xb0, 0xfc, 0x14, 0xa3} \
 }
 
+#define NS_PARTIALLOCALFILEINPUTSTREAM_CLASSNAME \
+    "nsPartialFileInputStream"
+#define NS_PARTIALLOCALFILEINPUTSTREAM_CONTRACTID \
+    "@mozilla.org/network/partial-file-input-stream;1"
+#define NS_PARTIALLOCALFILEINPUTSTREAM_CID           \
+{ /* 8738afd6-162a-418d-a99b-75b3a6b10a56 */         \
+    0x8738afd6,                                      \
+    0x162a,                                          \
+    0x418d,                                          \
+    {0xa9, 0x9b, 0x75, 0xb3, 0xa6, 0xb1, 0x0a, 0x56} \
+}
+
 #define NS_BUFFEREDINPUTSTREAM_CLASSNAME \
     "nsBufferedInputStream"
 #define NS_BUFFEREDINPUTSTREAM_CONTRACTID \
@@ -440,6 +460,19 @@
     {0x94, 0xdb, 0xd4, 0xf8, 0x59, 0x05, 0x82, 0x15} \
 }
 
+// component implementing nsIFileStream
+#define NS_LOCALFILESTREAM_CLASSNAME \
+    "nsFileStream"
+#define NS_LOCALFILESTREAM_CONTRACTID \
+    "@mozilla.org/network/file-stream;1"
+#define NS_LOCALFILESTREAM_CID                       \
+{ /* f8a69bd7-176c-4a60-9a05-b6d92f8f229a */         \
+    0xf8a69bd7,                                      \
+    0x176c,                                          \
+    0x4a60,                                          \
+    {0x9a, 0x05, 0xb6, 0xd9, 0x2f, 0x8f, 0x22, 0x9a} \
+}
+
 // component implementing nsIPrivateBrowsingService
 #define NS_PRIVATE_BROWSING_SERVICE_CONTRACTID \
     "@mozilla.org/privatebrowsing-wrapper;1"
@@ -457,6 +490,17 @@
  */
 #define NS_URICLASSIFIERSERVICE_CONTRACTID \
     "@mozilla.org/uriclassifierservice"
+
+// Redirect channel registrar used for redirect to various protocols
+#define NS_REDIRECTCHANNELREGISTRAR_CONTRACTID \
+    "@mozilla.org/redirectchannelregistrar;1"
+#define NS_REDIRECTCHANNELREGISTRAR_CID \
+{ /* {b69043a6-8929-4d60-8d17-a27e44a8393e} */ \
+    0xb69043a6, \
+    0x8929, \
+    0x4d60, \
+    { 0x8d, 0x17, 0xa2, 0x7e, 0x44, 0xa8, 0x39, 0x3e } \
+}
 
 /******************************************************************************
  * netwerk/cache/ classes
@@ -498,6 +542,19 @@
     0x04e2,                                          \
     0x4f74,                                          \
    {0x8e, 0x1c, 0xd1, 0xaf, 0x79, 0xdf, 0xd1, 0x2f}  \
+}
+
+#define NS_APPLICATIONCACHE_CLASSNAME \
+    "nsApplicationCache"
+#define NS_APPLICATIONCACHE_CONTRACTID \
+    "@mozilla.org/network/application-cache;1"
+
+#define NS_APPLICATIONCACHE_CID             \
+{ /* 463440c5-baad-4f3c-9e50-0b107abe7183 */ \
+    0x463440c5, \
+    0xbaad, \
+    0x4f3c, \
+   {0x9e, 0x50, 0xb, 0x10, 0x7a, 0xbe, 0x71, 0x83 } \
 }
 
 /******************************************************************************
@@ -674,6 +731,38 @@
 }
 
 /******************************************************************************
+ * netwerk/protocol/wyciwyg/ classes
+ */
+
+#define NS_WYCIWYGPROTOCOLHANDLER_CID                \
+{ /* {0xe7509b46-2eB2-410a-9d7c-c3ce73284d01} */     \
+  0xe7509b46,                                        \
+  0x2eb2,                                            \
+  0x410a,                                            \
+  {0x9d, 0x7c, 0xc3, 0xce, 0x73, 0x28, 0x4d, 0x01}   \
+}
+
+/******************************************************************************
+ * netwerk/protocol/websocket/ classes
+ */
+
+#define NS_WEBSOCKETPROTOCOLHANDLER_CID              \
+{ /* {dc01db59-a513-4c90-824b-085cce06c0aa} */       \
+  0xdc01db59,                                        \
+  0xa513,                                            \
+  0x4c90,                                            \
+  {0x82, 0x4b, 0x08, 0x5c, 0xce, 0x06, 0xc0, 0xaa}   \
+}
+
+#define NS_WEBSOCKETSSLPROTOCOLHANDLER_CID           \
+{ /* {dc01dbbb-a5bb-4cbb-82bb-085cce06c0bb} */       \
+  0xdc01dbbb,                                        \
+  0xa5bb,                                            \
+  0x4cbb,                                            \
+  {0x82, 0xbb, 0x08, 0x5c, 0xce, 0x06, 0xc0, 0xbb}   \
+}
+
+/******************************************************************************
  * netwerk/protocol/about/ classes
  */
 
@@ -804,6 +893,19 @@
  */
 #define NS_STARTTLSSOCKETPROVIDER_CONTRACTID \
     NS_NETWORK_SOCKET_CONTRACTID_PREFIX "starttls"
+
+
+#define NS_DASHBOARD_CLASSNAME \
+    "Dashboard"
+#define NS_DASHBOARD_CONTRACTID \
+    "@mozilla.org/network/dashboard;1"
+#define NS_DASHBOARD_CID                               \
+{   /*c79eb3c6-091a-45a6-8544-5a8d1ab79537 */          \
+    0xc79eb3c6,                                        \
+    0x091a,                                            \
+    0x45a6,                                            \
+    { 0x85, 0x44, 0x5a, 0x8d, 0x1a, 0xb7, 0x95, 0x37 } \
+}
 
 
 /******************************************************************************
@@ -965,6 +1067,12 @@
  * nsIChannel::LOAD_CALL_CONTENT_SNIFFERS.
  */
 #define NS_CONTENT_SNIFFER_CATEGORY "net-content-sniffers"
+
+/**
+ * Services in this category can sniff content that is not necessarily loaded
+ * from the network, and they won't be told about each load.
+ */
+#define NS_DATA_SNIFFER_CATEGORY "content-sniffing-services"
 
 /**
  * Must implement nsINSSErrorsService.

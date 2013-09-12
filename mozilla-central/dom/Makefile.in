@@ -1,41 +1,9 @@
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1998
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either of the GNU General Public License Version 2 or later (the "GPL"),
-# or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH		= ..
+DEPTH		= @DEPTH@
 topsrcdir	= @top_srcdir@
 srcdir		= @srcdir@
 VPATH		= @srcdir@
@@ -43,14 +11,17 @@ VPATH		= @srcdir@
 include $(DEPTH)/config/autoconf.mk
 
 MODULE		= dom
-DIRS = \
+
+PARALLEL_DIRS = \
   interfaces/base \
   interfaces/canvas \
   interfaces/core \
   interfaces/html \
   interfaces/events \
+  interfaces/devicestorage \
+  interfaces/contacts \
+  interfaces/settings \
   interfaces/stylesheets \
-  interfaces/views \
   interfaces/sidebar \
   interfaces/css \
   interfaces/traversal \
@@ -63,36 +34,79 @@ DIRS = \
   interfaces/json \
   interfaces/offline \
   interfaces/geolocation \
-  interfaces/threads \
+  interfaces/notification \
+  interfaces/permission \
+  interfaces/svg \
+  interfaces/smil \
+  interfaces/apps \
   $(NULL)
 
-ifdef MOZ_SVG
-DIRS += interfaces/svg
-endif
-
-ifdef MOZ_SMIL
-DIRS += interfaces/smil
-endif
-
-DIRS += \
-  public/coreEvents \
+PARALLEL_DIRS += \
+  apps \
   base \
+  activities \
+  bindings \
+  battery \
+  bluetooth \
+  browser-element \
+  contacts \
+  phonenumberutils \
+  alarm \
+  devicestorage \
+  encoding \
+  file \
+  media \
+  messages \
+  power \
+  quota \
+  settings \
+  sms \
+  mms \
   src \
+  time \
   locales \
-  plugins \
+  network \
+  permission \
+  plugins/base \
+  plugins/ipc \
   indexedDB \
   system \
+  ipc \
+  identity \
+  workers \
+  camera \
+  audiochannel \
   $(NULL)
 
-ifdef MOZ_IPC
-DIRS += \
-  ipc \
+ifdef MOZ_B2G_RIL
+PARALLEL_DIRS += \
+  telephony \
+  wifi \
+  icc \
+  cellbroadcast \
   $(NULL)
 endif
 
-ifdef ENABLE_TESTS
-DIRS += tests
+ifdef MOZ_B2G_FM
+PARALLEL_DIRS += fm
+endif
+
+ifdef MOZ_PAY
+PARALLEL_DIRS += \
+  payment \
+  $(NULL)
+endif
+
+# bindings/test is here, because it needs to build after bindings/, and
+# we build subdirectories before ourselves.
+TEST_DIRS += \
+  tests \
+  imptests \
+  bindings/test \
+  $(NULL)
+
+ifneq (,$(filter gtk2 cocoa windows android qt os2,$(MOZ_WIDGET_TOOLKIT)))
+TEST_DIRS += plugins/test
 endif
 
 include $(topsrcdir)/config/rules.mk
-

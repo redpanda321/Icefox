@@ -5,22 +5,16 @@
 <title>
 Mochitest version of the WebGL Conformance Test Suite
 </title>
-<script type="application/javascript" src="/MochiKit/packed.js"></script>
 <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
 <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
 <script type="text/javascript" src="resources/webgl-test-harness.js"></script>
 <script>
 
-function occurencesCount(array, obj) {
-  var i = array.length;
-  var result = 0;
-  while (i--) {
-    if (array[i] === obj) {
-      ++result;
-    }
-  }
-  return result;
-}
+var CONFORMANCE_TEST_VERSION = "1.0.1 (beta)";
+
+var OPTIONS = {
+  version: CONFORMANCE_TEST_VERSION
+};
 
 /**
  * This is copied from webgl-test-harness.js where it is defined as a private function, not accessible to us (argh!)
@@ -29,80 +23,60 @@ function occurencesCount(array, obj) {
  * @param {string} url The url of the external file.
  * @return {string} the loaded text if the request is synchronous.
  */
-var loadTextFileSynchronous = function(url) {
-  var error = 'loadTextFileSynchronous failed to load url "' + url + '"';
-  var request;
-  if (window.XMLHttpRequest) {
-    request = new XMLHttpRequest();
-    if (request.overrideMimeType) {
-      request.overrideMimeType('text/plain');
+  var loadTextFileSynchronous = function (url) {
+    var error = 'loadTextFileSynchronous failed to load url "' + url + '"';
+    var request;
+    if (window.XMLHttpRequest) {
+      request = new XMLHttpRequest();
+      if (request.overrideMimeType) {
+        request.overrideMimeType('text/plain');
+      }
+    } else {
+      throw 'XMLHttpRequest is disabled';
     }
-  } else {
-    throw 'XMLHttpRequest is disabled';
-  }
-  request.open('GET', url, false);
-  request.send(null);
-  if (request.readyState != 4) {
-    throw error;
-  }
-  return request.responseText;
-};
+    request.open('GET', url, false);
+    request.send(null);
+    if (request.readyState != 4) {
+      throw error;
+    }
+    return request.responseText;
+  };
+
+SimpleTest.waitForExplicitFinish();
 
 function start() {
 
-  function webglBranch() {
-    return Components.classes["@mozilla.org/preferences-service;1"]
-                     .getService(Components.interfaces.nsIPrefService)
-                     .getBranch("webgl.");
-  }
+  var kIsWindows = false;
+  var kIsLinux = false;
+  var kIsAndroid = false;
+  if (navigator.platform.indexOf("Win") == 0)
+    kIsWindows = true;
+  else if (navigator.appVersion.indexOf("Android") != -1)
+    kIsAndroid = true;
+  else if (navigator.platform.indexOf("Linux") == 0) // must be checked after android, as android also has a 'Linux' platform string
+    kIsLinux = true;
 
-  function setEnabledForAllSites(value) {
+  // Set kMacVersion to the OS X version for Mac, and 0 otherwise.
+  var osxmatch = /Mac OS X (\d+.\d+)/.exec(navigator.userAgent);
+  var kMacVersion = osxmatch ? parseFloat(osxmatch[1]) : 0;
+
+  var kIsWindowsVistaOrHigher = false;
+  if (kIsWindows) {
+    // code borrowed from browser/modules/test/browser_taskbar_preview.js
     netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-    webglBranch().setBoolPref("enabled_for_all_sites", value);
+    var version = Components.classes["@mozilla.org/system-info;1"]
+                            .getService(Components.interfaces.nsIPropertyBag2)
+                            .getProperty("version");
+    kIsWindowsVistaOrHigher = (parseFloat(version) >= 6.0);
   }
 
-  function getEnabledForAllSites() {
+  function getEnv(env) {
     netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-    return webglBranch().getBoolPref("enabled_for_all_sites");
-  }
-
-  function setForceOSMesa(value) {
-    netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-    webglBranch().setBoolPref("force_osmesa", value);
-  }
-
-  function getForceOSMesa() {
-    netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-    return webglBranch().getBoolPref("force_osmesa");
-  }
-
-  function getMochitestNativeGL() {
-    netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-    return webglBranch().getBoolPref("mochitest_native_gl");
-  }
-
-  function setOSMesaLib(value) {
-    netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-    webglBranch().setCharPref("osmesalib", value);
-  }
-
-  function getOSMesaLib() {
-    netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-    return webglBranch().getCharPref("osmesalib");
-  }
-
-  function restoreOldPrefs() {
-    setEnabledForAllSites(saved_enabled_for_all_sites);
-    setForceOSMesa(saved_force_osmesa);
-    setOSMesaLib(saved_osmesalib);
-  }
-
-  function forceOSMesaInThisTestRun() {
-    return timesTestSuiteAlreadyRun == 1 ? true : false;
-  }
-
-  function GLImplementationName() {
-    return forceOSMesaInThisTestRun() ? 'OSMesa' : 'default GL';
+    var envsvc = Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment);
+    var val = envsvc.get(env);
+    if (val == "")
+      return null;
+    return val;
   }
 
   var reportType = WebGLTestHarnessModule.TestHarness.reportType;
@@ -132,14 +106,32 @@ function start() {
     this.elem = li;
   };
 
+  /**
+   * Indicates whether this test page results are not to be ignored.
+   */
+  Page.prototype.shouldBeAccountedFor = function() {
+    return testsToIgnore.indexOf(this.url) == -1;
+  }
+
+  /**
+   * Indicates whether all this test page results are expected not to fail,
+   * if not ignored.
+   */
   Page.prototype.isExpectedToFullyPass = function() {
-    return occurencesCount(testsExpectedToFail, this.url) == 0;
+    return this.shouldBeAccountedFor() &&
+           testsExpectedToFail.indexOf(this.url) == -1;
   }
 
-  Page.prototype.errormsg = function(msg) {
-    return msg + ' (URL: ' + this.url + ', using ' + GLImplementationName() + ')';
+  /**
+   * Returns log message with added test page url.
+   */
+  Page.prototype.logMsg = function(msg) {
+    return '[' + this.url + '] ' + msg;
   }
 
+  /**
+   * Reports an individual test result of test page.
+   */
   Page.prototype.addResult = function(msg, success) {
     ++this.totalTests;
     if (success === undefined) {
@@ -148,19 +140,28 @@ function start() {
       var css = "timeout";
       // only few timeouts are actually caught here --- most are caught in finishPage().
       if (this.isExpectedToFullyPass()) {
-        ok(false, this.errormsg('Test timed out, "' + msg + '"'));
+        ok(false, this.logMsg('Test timed out'), msg);
+      } else {
+        todo(false, this.logMsg('Test timed out'), msg);
       }
     } else if (success) {
       ++this.totalSuccessful;
       var result = "success";
       var css = "success";
-      // don't report success.
+      if (this.shouldBeAccountedFor()) {
+        ok(true, this.logMsg('Test passed'), msg);
+      } else {
+        todo(false, this.logMsg('Test passed, but is ignored'), msg);
+      }
+      // Don't report individual success to UI, to keep it light.
       return;
     } else {
       var result = "failed";
       var css = "fail";
       if (this.isExpectedToFullyPass()) {
-        ok(false, this.errormsg('Test failed, "' + msg + '"'));
+        ok(false, this.logMsg('Test failed'), msg);
+      } else {
+        todo(false, this.logMsg('Test failed'), msg);
       }
     }
 
@@ -183,6 +184,9 @@ function start() {
     return true;
   };
 
+  /**
+   * Reports test page result summary.
+   */
   Page.prototype.finishPage = function(success) {
     var msg = ' (' + this.totalSuccessful + ' of ' +
               this.totalTests + ' passed)';
@@ -191,28 +195,31 @@ function start() {
       msg = '(*timeout*)';
       ++this.totalTests;
       ++this.totalTimeouts;
+      // Most timeouts are only caught here --- though a few are (already) caught in addResult().
       if (this.isExpectedToFullyPass()) {
-        ok(false, this.errormsg('Unexpected timeout in this test page'));
-        window.dump('WebGL test error: test page timeout: ' + this.url +
-                    ' (using ' + GLImplementationName() + ')\n');
+        ok(false, this.logMsg('Timeout in this test page'));
+      } else {
+        todo(false, this.logMsg('Timeout in this test page'));
       }
     } else if (this.totalSuccessful != this.totalTests) {
       var css = 'testpagefail';
+      var totalFailed = this.totalTests - this.totalTimeouts - this.totalSuccessful;
       if (this.isExpectedToFullyPass()) {
-        window.dump('WebGL test error: test page failure: ' + this.url +
-                    ' (using ' + GLImplementationName() + ')\n');
+        ok(false, this.logMsg("(WebGL test error) " + totalFailed + ' failure(s) and ' + this.totalTimeouts + ' timeout(s)'));
+      } else {
+        todo(false, this.logMsg("(WebGL test error) " + totalFailed + ' failure(s) and ' + this.totalTimeouts + ' timeout(s)'));
       }
-      // failures have already been reported for the sub-tests
     } else {
       var css = 'testpagesuccess';
-      if (forceOSMesaInThisTestRun()) {
-        testsSuccessesWithOSMesa.push(this.url);
-      }
       if (this.isExpectedToFullyPass()) {
-        ok(true, this.errormsg('Successful test page'));
+        ok(true, this.logMsg('All ' + this.totalSuccessful + ' test(s) passed'));
+      } else {
+        if (this.shouldBeAccountedFor()) {
+          todo(true, this.logMsg('Test page expected to fail, but all ' + this.totalSuccessful + ' tests passed'));
+        } else {
+          todo(false, this.logMsg('All ' + this.totalSuccessful + ' test(s) passed, but test page is ignored'));
+        }
       }
-      window.dump('WebGL test page successful: ' + this.url +
-                    ' (using ' + GLImplementationName() + ')\n');
     }
     this.elem.setAttribute('class', css);
     this.totalsElem.textContent = msg;
@@ -221,8 +228,7 @@ function start() {
   var Reporter = function() {
     this.localDoc = document;
 
-    this.fullResultsElem
-      = document.getElementById(forceOSMesaInThisTestRun() ? "results-osmesa" : "results-default");
+    this.fullResultsElem = document.getElementById("results-default");
 
     this.resultElem = document.getElementById("results");
     var node = this.localDoc.createTextNode('');
@@ -254,23 +260,35 @@ function start() {
   };
 
   Reporter.prototype.startPage = function(url) {
+    if (testsToSkip.indexOf(url) != -1) {
+      info("[" + url + "] (WebGL mochitest) Skipping test page");
+      return false;
+    }
+    info("[" + url + "] (WebGL mochitest) Starting test page");
+
+    // Calling garbageCollect before each test page fixes intermittent failures with
+    // out-of-memory errors, often failing to create a WebGL context.
+    // The explanation is that the JS engine keeps unreferenced WebGL contexts around
+    // for too long before GCing (bug 617453), so that during this mochitest dozens of unreferenced
+    // WebGL contexts can accumulate at a given time.
+    SpecialPowers.DOMWindowUtils.garbageCollect();
+
     var page = this.pagesByURL[url];
     this.currentPage = page;
-    statusTextNode.textContent = 'Running (' + GLImplementationName() + '), URL: ' + url;
+    statusTextNode.textContent = 'Running URL: ' + url;
     expectedtofailTextNode.textContent = testsExpectedToFail.length +
                                          ' test pages are expected to fail out of ' +
                                          this.totalPages;
+    ignoredtestsTextNode.textContent = testsToIgnore.length +
+                                         ' test pages have their results ignored';
     return page.startPage();
   };
 
-  Reporter.prototype.totalFailed = function() {
-    return this.totalTests - this.totalSuccessful;
-  };
-
   Reporter.prototype.displayStats = function() {
+    var totalFailed = this.totalTests - this.totalTimeouts - this.totalSuccessful;
     this.fullResultsNode.textContent =
       this.totalSuccessful + ' passed, ' +
-      this.totalFailed() + ' failed, ' +
+      totalFailed + ' failed, ' +
       this.totalTimeouts + ' timed out';
   };
 
@@ -291,15 +309,22 @@ function start() {
     }
   };
 
-  Reporter.prototype.completedCurrentTestSuiteRun = function() {
-        timesTestSuiteAlreadyRun++;
-        runTestSuite();
-  };
+  Reporter.prototype.finishedTestSuite = function() {
+      statusTextNode.textContent = 'Finished';
+      SimpleTest.finish();
+  }
+
+  Reporter.prototype.ready = function() {
+    statusTextNode.textContent = 'Loaded test lists. Starting tests...';
+    window.webglTestHarness.runTests();
+  }
 
   Reporter.prototype.reportFunc = function(type, msg, success) {
     switch (type) {
       case reportType.ADD_PAGE:
         return this.addPage(msg);
+      case reportType.READY:
+        return this.ready();
       case reportType.START_PAGE:
         return this.startPage(msg);
       case reportType.TEST_RESULT:
@@ -307,97 +332,70 @@ function start() {
       case reportType.FINISH_PAGE:
         return this.finishPage(success);
       case reportType.FINISHED_ALL_TESTS:
-        this.completedCurrentTestSuiteRun();
+        this.finishedTestSuite();
         return true;
       default:
         throw 'unhandled';
         break;
-    };
+    }
   };
 
-  function doRunTests() {
-    var reporter = new Reporter();
-
-    if (!mochitestNativeGL && !forceOSMesaInThisTestRun()) {
-        var errmsg = "Disabled. By default, we don't run tests on native OpenGL as it can give inconsistent results. " +
-                  "If you want to run tests on native OpenGL, set the preference webgl.mochitest_native_gl to true.";
-        reporter.fullResultsNode.textContent = errmsg;
-        reporter.completedCurrentTestSuiteRun();
-        return;
+  var getURLOptions = function(obj) {
+    var s = window.location.href;
+    var q = s.indexOf("?");
+    var e = s.indexOf("#");
+    if (e < 0) {
+      e = s.length;
     }
+    var query = s.substring(q + 1, e);
+    var pairs = query.split("&");
+    for (var ii = 0; ii < pairs.length; ++ii) {
+      var keyValue = pairs[ii].split("=");
+      var key = keyValue[0];
+      var value = decodeURIComponent(keyValue[1]);
+          obj[key] = value;
+    }
+  };
 
-    // set WebGL-related preferences needed to run WebGL tests
-    setEnabledForAllSites(true);
-    setForceOSMesa(forceOSMesaInThisTestRun());
+  getURLOptions(OPTIONS);
+
+  function runTestSuite() {
+    var reporter = new Reporter();
 
     // try to create a dummy WebGL context, just to catch context creation failures once here,
     // rather than having them result in 100's of failures (one in each test page)
-    var canvas = document.getElementById(forceOSMesaInThisTestRun() ? "webglcheck-osmesa" : "webglcheck-default");
-    var ctx = null;
+    var ctx;
     try {
-        ctx = canvas.getContext("experimental-webgl");
+      ctx = document.getElementById("webglcheck-default")
+                    .getContext("experimental-webgl");
     } catch(e) {}
-
-    if (ctx) {
-        var iframe = document.getElementById("testframe");
-        var testHarness = new WebGLTestHarnessModule.TestHarness(
-            iframe,
-            '00_testFIXME_list.txt',
-            function(type, msg, success) {
-                return reporter.reportFunc(type, msg, success);
-            });
-        testHarness.setTimeoutDelay(10000); // and make it much higher when running under valgrind.
-        window.webglTestHarness = testHarness;
-        testHarness.runTests();
-    } else {
-        // if the webgl context is null, we agreed that we wouldn't fail the test, we only add a TODO mentioning
-        // that the GL setup needs to be fixed in order for these tests to be actually run. The reason why we don't
-        // currently want to fail the test is that we want to be able to land this mochitest as soon as possible and
-        // just take care of the GL setups on the test machines afterwards.
-        var errmsg = "";
-        if (forceOSMesaInThisTestRun()) {
-            errmsg
-                = "Disabled, because a usable OSMesa was not found. " +
-                  "Install the OSMesa library and let webgl.osmesalib point to it. " +
-                  "This makes the WebGL tests run in a setup that is completely independent from your graphics hardware.";
-        } else {
-            errmsg
-                = "Disabled, because we were unable to create a WebGL context anyhow.";
-        }
+    if (!ctx) {
+        var errmsg = "Can't create a WebGL context";
         reporter.fullResultsNode.textContent = errmsg;
-        todo(false, errmsg);
-        reporter.completedCurrentTestSuiteRun();
+        // Workaround for SeaMonkey tinderboxes which don't support WebGL.
+        if (navigator.userAgent.match(/ SeaMonkey\//))
+          todo(false, errmsg + " (This is expected on SeaMonkey (tinderboxes).)");
+        else
+          ok(false, errmsg);
+        reporter.finishedTestSuite();
+        return;
     }
-  };
 
-  function runTestSuite() {
-    if (timesTestSuiteAlreadyRun == 2) {
-      for(var i = 0; i < testsExpectedToFail.length; ++i) {
-        if(occurencesCount(testsSuccessesWithOSMesa, testsExpectedToFail[i]) == 1) {
-          ok(false, 'The following test page is successful with OSMesa, ' +
-                    'remove it from the list of failing pages: ' +
-                    testsExpectedToFail[i]);
-          window.dump('WebGL test error: page must be removed from failing_tests.txt: ' +
-                      testsExpectedToFail[i] + '\n');
-        }
-      }
-      restoreOldPrefs();
-      statusTextNode.textContent = 'Finished';
-      SimpleTest.finish();
-    } else {
-      doRunTests();
-    }
-  };
+    statusTextNode.textContent = 'Loading test lists...';
+    var iframe = document.getElementById("testframe");
+    var testHarness = new WebGLTestHarnessModule.TestHarness(
+        iframe,
+        '00_test_list.txt',
+        function(type, msg, success) {
+          return reporter.reportFunc(type, msg, success);
+        },
+        OPTIONS);
+    // Make timeout delay much higher when running under valgrind.
+    testHarness.setTimeoutDelay(20000);
+    window.webglTestHarness = testHarness;
+  }
 
-  var timesTestSuiteAlreadyRun = 0;
-
-  var saved_enabled_for_all_sites = getEnabledForAllSites();
-  var saved_force_osmesa = getForceOSMesa();
-  var saved_osmesalib = getOSMesaLib();
-  var mochitestNativeGL = getMochitestNativeGL();
-
-  SimpleTest.waitForExplicitFinish();
-  SimpleTest.requestLongerTimeout(2);
+  SimpleTest.requestLongerTimeout(kIsAndroid ? 6 : 3);
 
   var statusElem = document.getElementById("status");
   var statusTextNode = document.createTextNode('');
@@ -407,57 +405,94 @@ function start() {
   var expectedtofailTextNode = document.createTextNode('');
   expectedtofailElem.appendChild(expectedtofailTextNode);
 
-  var testsExpectedToFail = loadTextFileSynchronous('failing_tests.txt').split('\n');
-  var testsSuccessesWithOSMesa = [];
+  var ignoredtestsElem = document.getElementById("ignoredtests");
+  var ignoredtestsTextNode = document.createTextNode('');
+  ignoredtestsElem.appendChild(ignoredtestsTextNode);
+
+  // Windows uses the ANGLE library for rendering. Until everything is perfect, this means a different set of
+  // failing tests. It's easier to do a platform check for Windows than for ANGLE itself.
+  // Moreover, we currently also have different tests failing on Mac and on Linux,
+  // presumably due to differences in the drivers.
+  var failingTestsFilename;
+  if (kIsWindows)
+    failingTestsFilename = 'failing_tests_windows.txt';
+  else if (kIsLinux)
+    failingTestsFilename = 'failing_tests_linux.txt';
+  else if (kMacVersion == 10.8)
+    failingTestsFilename = 'failing_tests_mac_mtnlion.txt';
+  else if (kMacVersion)
+    failingTestsFilename = 'failing_tests_mac.txt';
+  else if (kIsAndroid)
+    failingTestsFilename = 'failing_tests_android.txt';
+
+  var testsExpectedToFail = loadTextFileSynchronous(failingTestsFilename)
+                            .replace(/\r/g, '') // convert to unix line breaks
+                            .split('\n');
+
+  // remove empty filenames
+  var indexOfEmptyFilename = testsExpectedToFail.indexOf("");
+  while(indexOfEmptyFilename != -1) {
+    testsExpectedToFail.splice(indexOfEmptyFilename, 1);
+    indexOfEmptyFilename = testsExpectedToFail.indexOf("");
+  }
+
+  if (kIsWindows && !kIsWindowsVistaOrHigher)
+    testsExpectedToFail.push('conformance/textures/texture-mips.html');
+
+  var testsToIgnore = [];
+
+  var testsToSkip = [];
+
+  if (kIsAndroid) {
+    var testsToSkip = loadTextFileSynchronous('skipped_tests_android.txt')
+                      .replace(/\r/g, '') // convert to unix line breaks
+                      .split('\n');
+  }
 
   runTestSuite();
 }
 
 </script>
 </head>
-<body onload="start()">
+<body onload="start();">
 <p id="display"></p>
 <div id="content" style="display: none">
 
 </div>
-<table border="2">
-<tr style="height: 300px;">
-<td>
-<table>
-<tr><td><h4>WebGL Conformance Test Runner</h4>
-<tr><td>
-  <div style="border: 1px">
-    <b>Status:</b> <div><span id="status"></span></div><br />
-    <b>Results:</b>
-    <table>
-    <tr>
-        <td>With default GL:</td>
-        <td><div><span id="results-default"></span></div></td>
-    </tr>
-    <tr>
-        <td>With OSMesa:</td>
-        <td><div><span id="results-osmesa"></span></div></td>
-    </tr>
-    </table>
-    <br />
-    <div><span id="expectedtofail"></span></div>
-  </div>
-</td></tr>
-</table>
-</td>
-<td>
-<iframe id="testframe" scrolling="yes" width="100%" height="100%"></iframe>
-</td>
-</tr>
-<tr>
-<td colspan="2">
-<div style="text-align: left; width: 100%; height: 100%; overflow: auto;">
-<div><ul id="results"></ul></div>
-</div>
-</td>
-</tr>
+<table border="2px">
+  <tr style="height: 500px;">
+    <td style="width: 500px;">
+      <iframe id="testframe" scrolling="no" width="500px" height="500px"></iframe>
+    </td>
+    <td>
+      <table>
+        <tr>
+          <td><h4>WebGL Conformance Test Runner</h4></td>
+        </tr>
+        <tr>
+          <td>
+            <div style="border: 1px">
+              <b>Status:</b> <div><span id="status"></span></div><br />
+              <b>Results:</b>
+              <div><span id="results-default"></span></div>
+              <br />
+              <div><span id="expectedtofail"></span></div>
+              <br />
+              <div><span id="ignoredtests"></span></div>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2">
+      <div style="text-align: left; width: 100%; height: 100%; overflow: auto;">
+        <div><ul id="results"></ul></div>
+      </div>
+    </td>
+  </tr>
 </table>
 <canvas id="webglcheck-default" style="display: none;"></canvas>
-<canvas id="webglcheck-osmesa" style="display: none;"></canvas>
 </body>
 </html>

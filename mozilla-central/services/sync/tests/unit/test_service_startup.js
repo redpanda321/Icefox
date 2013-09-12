@@ -1,40 +1,41 @@
-Cu.import("resource://services-sync/ext/Observers.js");
-Cu.import("resource://services-sync/ext/Sync.js");
-Cu.import("resource://services-sync/identity.js");
+/* Any copyright is dedicated to the Public Domain.
+ * http://creativecommons.org/publicdomain/zero/1.0/ */
+
+Cu.import("resource://services-common/observers.js");
+Cu.import("resource://services-sync/engines.js");
 Cu.import("resource://services-sync/util.js");
+Cu.import("resource://testing-common/services/sync/utils.js");
+
+Svc.Prefs.set("registerEngines", "Tab,Bookmarks,Form,History");
+Cu.import("resource://services-sync/service.js");
 
 function run_test() {
-  _("When imported, Weave.Service.onStartup is called");
+  _("When imported, Service.onStartup is called");
+  initTestLogging("Trace");
+
+  new SyncTestingInfrastructure();
 
   // Test fixtures
-  let observerCalled = false;
+  Service.identity.username = "johndoe";
+
+  Cu.import("resource://services-sync/service.js");
+
+  _("Service is enabled.");
+  do_check_eq(Service.enabled, true);
+
+  _("Engines are registered.");
+  let engines = Service.engineManager.getAll();
+  do_check_true(Utils.deepEquals([engine.name for each (engine in engines)],
+                                 ['tabs', 'bookmarks', 'forms', 'history']));
+
+  _("Observers are notified of startup");
+  do_test_pending();
+  do_check_false(Service.status.ready);
   Observers.add("weave:service:ready", function (subject, data) {
-    observerCalled = true;
-  });
-  Svc.Prefs.set("registerEngines", "Tab,Bookmarks,Form,History");
-  Svc.Prefs.set("username", "johndoe");
+    do_check_true(Service.status.ready);
 
-  try {
-    Cu.import("resource://services-sync/service.js");
-
-    _("Service is enabled.");
-    do_check_eq(Weave.Service.enabled, true);
-
-    _("Engines are registered.");
-    let engines = Weave.Engines.getAll();
-    do_check_true(Utils.deepEquals([engine.name for each (engine in engines)],
-                                   ['tabs', 'bookmarks', 'forms', 'history']));
-
-    _("Identities are registered.");
-    do_check_eq(ID.get('WeaveID').username, "johndoe");
-    do_check_eq(ID.get('WeaveCryptoID').username, "johndoe");
-
-    _("Observers are notified of startup");
-    // Synchronize with Weave.Service.onStartup's async notification
-    Sync.sleep(0);
-    do_check_true(observerCalled);
-
-  } finally {
+    // Clean up.
     Svc.Prefs.resetBranch("");
-  }
+    do_test_finished();
+  });
 }

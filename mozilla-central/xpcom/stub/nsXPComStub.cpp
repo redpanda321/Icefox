@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.
- *
- * The Initial Developer of the Original Code is IBM Corporation.
- * Portions created by IBM Corporation are Copyright (C) 2004
- * IBM Corporation. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@meer.net>
- *   Benjamin Smedberg <benjamin@smedbergs.us>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsXPCOM.h"
 #include "nsXPCOMPrivate.h"
@@ -51,7 +18,7 @@
  * stub implementation that does nothing.
  */
 XPCOM_API(nsresult)
-NS_RegisterXPCOMExitRoutine(XPCOMExitRoutine exitRoutine, PRUint32 priority);
+NS_RegisterXPCOMExitRoutine(XPCOMExitRoutine exitRoutine, uint32_t priority);
 
 XPCOM_API(nsresult)
 NS_UnregisterXPCOMExitRoutine(XPCOMExitRoutine exitRoutine);
@@ -115,8 +82,8 @@ static const XPCOMFunctions kFrozenFunctions = {
     &NS_GetXPTCallStub_P,
     &NS_DestroyXPTCallStub_P,
     &NS_InvokeByIndex_P,
-    &NS_CycleCollectorSuspect_P,
-    &NS_CycleCollectorForget_P,
+    nullptr,
+    nullptr,
     &NS_StringSetIsVoid_P,
     &NS_StringGetIsVoid_P,
     &NS_CStringSetIsVoid_P,
@@ -136,7 +103,7 @@ NS_GetFrozenFunctions(XPCOMFunctions *functions, const char* /* libraryPath */)
     if (functions->version != XPCOM_GLUE_VERSION)
         return NS_ERROR_FAILURE;
 
-    PRUint32 size = functions->size;
+    uint32_t size = functions->size;
     if (size > sizeof(XPCOMFunctions))
         size = sizeof(XPCOMFunctions);
 
@@ -198,8 +165,8 @@ NS_GetMemoryManager(nsIMemory* *result)
 #undef NS_NewLocalFile
 EXPORT_XPCOM_API(nsresult)
 NS_NewLocalFile(const nsAString &path,
-                PRBool followLinks,
-                nsILocalFile **result)
+                bool followLinks,
+                nsIFile **result)
 {
   return NS_NewLocalFile_P(path, followLinks, result);
 }
@@ -207,8 +174,8 @@ NS_NewLocalFile(const nsAString &path,
 #undef NS_NewNativeLocalFile
 EXPORT_XPCOM_API(nsresult)
 NS_NewNativeLocalFile(const nsACString &path,
-                      PRBool followLinks,
-                      nsILocalFile **result)
+                      bool followLinks,
+                      nsIFile **result)
 {
   return NS_NewNativeLocalFile_P(path, followLinks, result);
 }
@@ -229,14 +196,14 @@ NS_GetTraceRefcnt(nsITraceRefcnt **result)
 
 #undef NS_Alloc
 EXPORT_XPCOM_API(void*)
-NS_Alloc(PRSize size)
+NS_Alloc(size_t size)
 {
   return NS_Alloc_P(size);
 }
 
 #undef NS_Realloc
 EXPORT_XPCOM_API(void*)
-NS_Realloc(void* ptr, PRSize size)
+NS_Realloc(void* ptr, size_t size)
 {
   return NS_Realloc_P(ptr, size);
 }
@@ -250,8 +217,8 @@ NS_Free(void* ptr)
 
 #undef NS_DebugBreak
 EXPORT_XPCOM_API(void)
-NS_DebugBreak(PRUint32 aSeverity, const char *aStr, const char *aExpr,
-              const char *aFile, PRInt32 aLine)
+NS_DebugBreak(uint32_t aSeverity, const char *aStr, const char *aExpr,
+              const char *aFile, int32_t aLine)
 {
   NS_DebugBreak_P(aSeverity, aStr, aExpr, aFile, aLine);
 }
@@ -273,7 +240,7 @@ NS_LogTerm()
 #undef NS_LogAddRef
 EXPORT_XPCOM_API(void)
 NS_LogAddRef(void* aPtr, nsrefcnt aNewRefCnt,
-             const char *aTypeName, PRUint32 aInstanceSize)
+             const char *aTypeName, uint32_t aInstanceSize)
 {
   NS_LogAddRef_P(aPtr, aNewRefCnt, aTypeName, aInstanceSize);
 }
@@ -287,14 +254,14 @@ NS_LogRelease(void* aPtr, nsrefcnt aNewRefCnt, const char *aTypeName)
 
 #undef NS_LogCtor
 EXPORT_XPCOM_API(void)
-NS_LogCtor(void *aPtr, const char *aTypeName, PRUint32 aInstanceSize)
+NS_LogCtor(void *aPtr, const char *aTypeName, uint32_t aInstanceSize)
 {
   NS_LogCtor_P(aPtr, aTypeName, aInstanceSize);
 }
 
 #undef NS_LogDtor
 EXPORT_XPCOM_API(void)
-NS_LogDtor(void *aPtr, const char *aTypeName, PRUint32 aInstanceSize)
+NS_LogDtor(void *aPtr, const char *aTypeName, uint32_t aInstanceSize)
 {
   NS_LogDtor_P(aPtr, aTypeName, aInstanceSize);
 }
@@ -330,8 +297,8 @@ NS_DestroyXPTCallStub(nsISomeInterface* aStub)
 
 #undef NS_InvokeByIndex
 EXPORT_XPCOM_API(nsresult)
-NS_InvokeByIndex(nsISupports* that, PRUint32 methodIndex,
-                 PRUint32 paramCount, nsXPTCVariant* params)
+NS_InvokeByIndex(nsISupports* that, uint32_t methodIndex,
+                 uint32_t paramCount, nsXPTCVariant* params)
 {
   return NS_InvokeByIndex_P(that, methodIndex, paramCount, params);
 }
@@ -341,7 +308,7 @@ NS_InvokeByIndex(nsISupports* that, PRUint32 methodIndex,
  */
 
 EXPORT_XPCOM_API(nsresult)
-NS_RegisterXPCOMExitRoutine(XPCOMExitRoutine exitRoutine, PRUint32 priority)
+NS_RegisterXPCOMExitRoutine(XPCOMExitRoutine exitRoutine, uint32_t priority)
 {
   return NS_OK;
 }
@@ -367,8 +334,8 @@ NS_StringContainerInit(nsStringContainer &aStr)
 EXPORT_XPCOM_API(nsresult)
 NS_StringContainerInit2(nsStringContainer &aStr,
                         const PRUnichar   *aData,
-                        PRUint32           aDataLength,
-                        PRUint32           aFlags)
+                        uint32_t           aDataLength,
+                        uint32_t           aFlags)
 {   
   return NS_StringContainerInit2_P(aStr, aData, aDataLength, aFlags);
 }
@@ -381,15 +348,15 @@ NS_StringContainerFinish(nsStringContainer &aStr)
 }
 
 #undef NS_StringGetData
-EXPORT_XPCOM_API(PRUint32)
-NS_StringGetData(const nsAString &aStr, const PRUnichar **aBuf, PRBool *aTerm)
+EXPORT_XPCOM_API(uint32_t)
+NS_StringGetData(const nsAString &aStr, const PRUnichar **aBuf, bool *aTerm)
 {
   return NS_StringGetData_P(aStr, aBuf, aTerm);
 }
 
 #undef NS_StringGetMutableData
-EXPORT_XPCOM_API(PRUint32)
-NS_StringGetMutableData(nsAString &aStr, PRUint32 aLen, PRUnichar **aBuf)
+EXPORT_XPCOM_API(uint32_t)
+NS_StringGetMutableData(nsAString &aStr, uint32_t aLen, PRUnichar **aBuf)
 {
   return NS_StringGetMutableData_P(aStr, aLen, aBuf);
 }
@@ -403,15 +370,15 @@ NS_StringCloneData(const nsAString &aStr)
 
 #undef NS_StringSetData
 EXPORT_XPCOM_API(nsresult)
-NS_StringSetData(nsAString &aStr, const PRUnichar *aBuf, PRUint32 aCount)
+NS_StringSetData(nsAString &aStr, const PRUnichar *aBuf, uint32_t aCount)
 {
   return NS_StringSetData_P(aStr, aBuf, aCount);
 }
 
 #undef NS_StringSetDataRange
 EXPORT_XPCOM_API(nsresult)
-NS_StringSetDataRange(nsAString &aStr, PRUint32 aCutStart, PRUint32 aCutLength,
-                      const PRUnichar *aBuf, PRUint32 aCount)
+NS_StringSetDataRange(nsAString &aStr, uint32_t aCutStart, uint32_t aCutLength,
+                      const PRUnichar *aBuf, uint32_t aCount)
 {
   return NS_StringSetDataRange_P(aStr, aCutStart, aCutLength, aBuf, aCount);
 }
@@ -425,13 +392,13 @@ NS_StringCopy(nsAString &aDest, const nsAString &aSrc)
 
 #undef NS_StringSetIsVoid
 EXPORT_XPCOM_API(void)
-NS_StringSetIsVoid(nsAString &aStr, const PRBool aIsVoid)
+NS_StringSetIsVoid(nsAString &aStr, const bool aIsVoid)
 {
   NS_StringSetIsVoid_P(aStr, aIsVoid);
 }
 
 #undef NS_StringGetIsVoid
-EXPORT_XPCOM_API(PRBool)
+EXPORT_XPCOM_API(bool)
 NS_StringGetIsVoid(const nsAString &aStr)
 {
   return NS_StringGetIsVoid_P(aStr);
@@ -448,8 +415,8 @@ NS_CStringContainerInit(nsCStringContainer &aStr)
 EXPORT_XPCOM_API(nsresult)
 NS_CStringContainerInit2(nsCStringContainer &aStr,
                          const char         *aData,
-                         PRUint32            aDataLength,
-                         PRUint32            aFlags)
+                         uint32_t            aDataLength,
+                         uint32_t            aFlags)
 {   
   return NS_CStringContainerInit2_P(aStr, aData, aDataLength, aFlags);
 }
@@ -462,15 +429,15 @@ NS_CStringContainerFinish(nsCStringContainer &aStr)
 }
 
 #undef NS_CStringGetData
-EXPORT_XPCOM_API(PRUint32)
-NS_CStringGetData(const nsACString &aStr, const char **aBuf, PRBool *aTerm)
+EXPORT_XPCOM_API(uint32_t)
+NS_CStringGetData(const nsACString &aStr, const char **aBuf, bool *aTerm)
 {
   return NS_CStringGetData_P(aStr, aBuf, aTerm);
 }
 
 #undef NS_CStringGetMutableData
-EXPORT_XPCOM_API(PRUint32)
-NS_CStringGetMutableData(nsACString &aStr, PRUint32 aLen, char **aBuf)
+EXPORT_XPCOM_API(uint32_t)
+NS_CStringGetMutableData(nsACString &aStr, uint32_t aLen, char **aBuf)
 {
   return NS_CStringGetMutableData_P(aStr, aLen, aBuf);
 }
@@ -484,15 +451,15 @@ NS_CStringCloneData(const nsACString &aStr)
 
 #undef NS_CStringSetData
 EXPORT_XPCOM_API(nsresult)
-NS_CStringSetData(nsACString &aStr, const char *aBuf, PRUint32 aCount)
+NS_CStringSetData(nsACString &aStr, const char *aBuf, uint32_t aCount)
 {
   return NS_CStringSetData_P(aStr, aBuf, aCount);
 }
 
 #undef NS_CStringSetDataRange
 EXPORT_XPCOM_API(nsresult)
-NS_CStringSetDataRange(nsACString &aStr, PRUint32 aCutStart, PRUint32 aCutLength,
-                       const char *aBuf, PRUint32 aCount)
+NS_CStringSetDataRange(nsACString &aStr, uint32_t aCutStart, uint32_t aCutLength,
+                       const char *aBuf, uint32_t aCount)
 {
   return NS_CStringSetDataRange_P(aStr, aCutStart, aCutLength, aBuf, aCount);
 }
@@ -506,13 +473,13 @@ NS_CStringCopy(nsACString &aDest, const nsACString &aSrc)
 
 #undef NS_CStringSetIsVoid
 EXPORT_XPCOM_API(void)
-NS_CStringSetIsVoid(nsACString &aStr, const PRBool aIsVoid)
+NS_CStringSetIsVoid(nsACString &aStr, const bool aIsVoid)
 {
   NS_CStringSetIsVoid_P(aStr, aIsVoid);
 }
 
 #undef NS_CStringGetIsVoid
-EXPORT_XPCOM_API(PRBool)
+EXPORT_XPCOM_API(bool)
 NS_CStringGetIsVoid(const nsACString &aStr)
 {
   return NS_CStringGetIsVoid_P(aStr);
@@ -532,29 +499,15 @@ NS_UTF16ToCString(const nsAString &aSrc, nsCStringEncoding aDestEncoding, nsACSt
   return NS_UTF16ToCString_P(aSrc, aDestEncoding, aDest);
 }
 
-#undef NS_CycleCollectorSuspect
-EXPORT_XPCOM_API(PRBool)
-NS_CycleCollectorSuspect(nsISupports* obj)
-{
-  return NS_CycleCollectorSuspect_P(obj);
-}
-
-#undef NS_CycleCollectorForget
-EXPORT_XPCOM_API(PRBool)
-NS_CycleCollectorForget(nsISupports* obj)
-{
-  return NS_CycleCollectorForget_P(obj);
-}
-
 #undef NS_CycleCollectorSuspect2
 EXPORT_XPCOM_API(nsPurpleBufferEntry*)
-NS_CycleCollectorSuspect2(nsISupports* obj)
+NS_CycleCollectorSuspect2(void *obj, nsCycleCollectionParticipant *p)
 {
-  return NS_CycleCollectorSuspect2_P(obj);
+  return NS_CycleCollectorSuspect2_P(obj, p);
 }
 
 #undef NS_CycleCollectorForget2
-EXPORT_XPCOM_API(PRBool)
+EXPORT_XPCOM_API(bool)
 NS_CycleCollectorForget2(nsPurpleBufferEntry* e)
 {
   return NS_CycleCollectorForget2_P(e);

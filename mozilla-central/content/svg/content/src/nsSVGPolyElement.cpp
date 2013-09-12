@@ -1,41 +1,16 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SVG project.
- *
- * The Initial Developer of the Original Code is IBM Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "mozilla/Util.h"
 
 #include "nsSVGPolyElement.h"
+#include "DOMSVGPointList.h"
 #include "gfxContext.h"
+#include "SVGContentUtils.h"
+
+using namespace mozilla;
 
 //----------------------------------------------------------------------
 // nsISupports methods
@@ -56,97 +31,72 @@ nsSVGPolyElement::nsSVGPolyElement(already_AddRefed<nsINodeInfo> aNodeInfo)
 
 }
 
-nsresult
-nsSVGPolyElement::Init()
-{
-  nsresult rv = nsSVGPolyElementBase::Init();
-  NS_ENSURE_SUCCESS(rv,rv);
-
-  // Create mapped properties:
-  
-  // points #IMPLIED
-  rv = nsSVGPointList::Create(getter_AddRefs(mPoints));
-  NS_ENSURE_SUCCESS(rv,rv);
-  rv = AddMappedSVGValue(nsGkAtoms::points, mPoints);
-  NS_ENSURE_SUCCESS(rv,rv);
-
-  return rv;
-}
-
 //----------------------------------------------------------------------
 // nsIDOMSGAnimatedPoints methods:
 
-/* readonly attribute nsIDOMSVGPointList points; */
+/* readonly attribute DOMSVGPointList points; */
 NS_IMETHODIMP 
-nsSVGPolyElement::GetPoints(nsIDOMSVGPointList * *aPoints)
+nsSVGPolyElement::GetPoints(nsISupports * *aPoints)
 {
-  *aPoints = mPoints;
-  NS_ADDREF(*aPoints);
+  void *key = mPoints.GetBaseValKey();
+  *aPoints = DOMSVGPointList::GetDOMWrapper(key, this, false).get();
   return NS_OK;
 }
 
-/* readonly attribute nsIDOMSVGPointList animatedPoints; */
+/* readonly attribute DOMSVGPointList animatedPoints; */
 NS_IMETHODIMP 
-nsSVGPolyElement::GetAnimatedPoints(nsIDOMSVGPointList * *aAnimatedPoints)
+nsSVGPolyElement::GetAnimatedPoints(nsISupports * *aAnimatedPoints)
 {
-  *aAnimatedPoints = mPoints;
-  NS_ADDREF(*aAnimatedPoints);
+  void *key = mPoints.GetAnimValKey();
+  *aAnimatedPoints = DOMSVGPointList::GetDOMWrapper(key, this, true).get();
   return NS_OK;
 }
 
 //----------------------------------------------------------------------
 // nsIContent methods
 
-NS_IMETHODIMP_(PRBool)
+NS_IMETHODIMP_(bool)
 nsSVGPolyElement::IsAttributeMapped(const nsIAtom* name) const
 {
   static const MappedAttributeEntry* const map[] = {
     sMarkersMap
   };
   
-  return FindAttributeDependence(name, map, NS_ARRAY_LENGTH(map)) ||
+  return FindAttributeDependence(name, map) ||
     nsSVGPolyElementBase::IsAttributeMapped(name);
 }
 
 //----------------------------------------------------------------------
 // nsSVGPathGeometryElement methods
 
-PRBool
+bool
 nsSVGPolyElement::AttributeDefinesGeometry(const nsIAtom *aName)
 {
   if (aName == nsGkAtoms::points)
-    return PR_TRUE;
+    return true;
 
-  return PR_FALSE;
+  return false;
 }
 
 void
 nsSVGPolyElement::GetMarkPoints(nsTArray<nsSVGMark> *aMarks)
 {
-  if (!mPoints)
+  const SVGPointList &points = mPoints.GetAnimValue();
+
+  if (!points.Length())
     return;
 
-  PRUint32 count;
-  mPoints->GetNumberOfItems(&count);
-  if (count == 0)
-    return;
+  float px = 0.0, py = 0.0, prevAngle = 0.0;
 
-  float px = 0.0, py = 0.0, prevAngle;
-
-  for (PRUint32 i = 0; i < count; ++i) {
-    nsCOMPtr<nsIDOMSVGPoint> point;
-    mPoints->GetItem(i, getter_AddRefs(point));
-
-    float x, y;
-    point->GetX(&x);
-    point->GetY(&y);
-
+  for (uint32_t i = 0; i < points.Length(); ++i) {
+    float x = points[i].mX;
+    float y = points[i].mY;
     float angle = atan2(y-py, x-px);
     if (i == 1)
       aMarks->ElementAt(aMarks->Length() - 1).angle = angle;
     else if (i > 1)
       aMarks->ElementAt(aMarks->Length() - 1).angle =
-        nsSVGUtils::AngleBisect(prevAngle, angle);
+        SVGContentUtils::AngleBisect(prevAngle, angle);
 
     aMarks->AppendElement(nsSVGMark(x, y, 0));
 
@@ -161,26 +111,14 @@ nsSVGPolyElement::GetMarkPoints(nsTArray<nsSVGMark> *aMarks)
 void
 nsSVGPolyElement::ConstructPath(gfxContext *aCtx)
 {
-  if (!mPoints)
+  const SVGPointList &points = mPoints.GetAnimValue();
+
+  if (!points.Length())
     return;
 
-  PRUint32 count;
-  mPoints->GetNumberOfItems(&count);
-  if (count == 0)
-    return;
-
-  PRUint32 i;
-  for (i = 0; i < count; ++i) {
-    nsCOMPtr<nsIDOMSVGPoint> point;
-    mPoints->GetItem(i, getter_AddRefs(point));
-
-    float x, y;
-    point->GetX(&x);
-    point->GetY(&y);
-    if (i == 0)
-      aCtx->MoveTo(gfxPoint(x, y));
-    else
-      aCtx->LineTo(gfxPoint(x, y));
+  aCtx->MoveTo(points[0]);
+  for (uint32_t i = 1; i < points.Length(); ++i) {
+    aCtx->LineTo(points[i]);
   }
 }
 

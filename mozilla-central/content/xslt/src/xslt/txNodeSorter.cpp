@@ -1,46 +1,12 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is TransforMiiX XSLT processor code.
- *
- * The Initial Developer of the Original Code is
- * Jonas Sicking.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Jonas Sicking <sicking@bigfoot.com>
- *   Peter Van der Beken <peterv@propagandism.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "txNodeSorter.h"
 #include "txExecutionState.h"
 #include "txXPathResultComparator.h"
-#include "txAtoms.h"
+#include "nsGkAtoms.h"
 #include "txNodeSetContext.h"
 #include "txExpr.h"
 #include "txStringUtils.h"
@@ -78,16 +44,16 @@ txNodeSorter::addSortElement(Expr* aSelectExpr, Expr* aLangExpr,
     key->mExpr = aSelectExpr;
 
     // Order
-    MBool ascending = MB_TRUE;
+    bool ascending = true;
     if (aOrderExpr) {
         nsAutoString attrValue;
         rv = aOrderExpr->evaluateToString(aContext, attrValue);
         NS_ENSURE_SUCCESS(rv, rv);
 
-        if (TX_StringEqualsAtom(attrValue, txXSLTAtoms::descending)) {
-            ascending = MB_FALSE;
+        if (TX_StringEqualsAtom(attrValue, nsGkAtoms::descending)) {
+            ascending = false;
         }
-        else if (!TX_StringEqualsAtom(attrValue, txXSLTAtoms::ascending)) {
+        else if (!TX_StringEqualsAtom(attrValue, nsGkAtoms::ascending)) {
             // XXX ErrorReport: unknown value for order attribute
             return NS_ERROR_XSLT_BAD_VALUE;
         }
@@ -101,7 +67,7 @@ txNodeSorter::addSortElement(Expr* aSelectExpr, Expr* aLangExpr,
         NS_ENSURE_SUCCESS(rv, rv);
     }
 
-    if (!aDataTypeExpr || TX_StringEqualsAtom(dataType, txXSLTAtoms::text)) {
+    if (!aDataTypeExpr || TX_StringEqualsAtom(dataType, nsGkAtoms::text)) {
         // Text comparator
         
         // Language
@@ -112,18 +78,18 @@ txNodeSorter::addSortElement(Expr* aSelectExpr, Expr* aLangExpr,
         }
 
         // Case-order 
-        MBool upperFirst = PR_FALSE;
+        bool upperFirst = false;
         if (aCaseOrderExpr) {
             nsAutoString attrValue;
 
             rv = aCaseOrderExpr->evaluateToString(aContext, attrValue);
             NS_ENSURE_SUCCESS(rv, rv);
 
-            if (TX_StringEqualsAtom(attrValue, txXSLTAtoms::upperFirst)) {
-                upperFirst = PR_TRUE;
+            if (TX_StringEqualsAtom(attrValue, nsGkAtoms::upperFirst)) {
+                upperFirst = true;
             }
             else if (!TX_StringEqualsAtom(attrValue,
-                                          txXSLTAtoms::lowerFirst)) {
+                                          nsGkAtoms::lowerFirst)) {
                 // XXX ErrorReport: unknown value for case-order attribute
                 return NS_ERROR_XSLT_BAD_VALUE;
             }
@@ -134,7 +100,7 @@ txNodeSorter::addSortElement(Expr* aSelectExpr, Expr* aLangExpr,
                                                         lang);
         NS_ENSURE_TRUE(key->mComparator, NS_ERROR_OUT_OF_MEMORY);
     }
-    else if (TX_StringEqualsAtom(dataType, txXSLTAtoms::number)) {
+    else if (TX_StringEqualsAtom(dataType, nsGkAtoms::number)) {
         // Number comparator
         key->mComparator = new txResultNumberComparator(ascending);
         NS_ENSURE_TRUE(key->mComparator, NS_ERROR_OUT_OF_MEMORY);
@@ -164,7 +130,7 @@ txNodeSorter::sortNodeSet(txNodeSet* aNodes, txExecutionState* aEs,
         return NS_OK;
     }
 
-    *aResult = nsnull;
+    *aResult = nullptr;
 
     nsRefPtr<txNodeSet> sortedNodes;
     nsresult rv = aEs->recycler()->getNodeSet(getter_AddRefs(sortedNodes));
@@ -177,26 +143,26 @@ txNodeSorter::sortNodeSet(txNodeSet* aNodes, txExecutionState* aEs,
     NS_ENSURE_SUCCESS(rv, rv);
 
     // Create and set up memoryblock for sort-values and indexarray
-    PRUint32 len = static_cast<PRUint32>(aNodes->size());
+    uint32_t len = static_cast<uint32_t>(aNodes->size());
 
     // Limit resource use to something sane.
-    PRUint32 itemSize = sizeof(PRUint32) + mNKeys * sizeof(TxObject*);
-    if (mNKeys > (PR_UINT32_MAX - sizeof(PRUint32)) / sizeof(TxObject*) ||
-        len >= PR_UINT32_MAX / itemSize) {
+    uint32_t itemSize = sizeof(uint32_t) + mNKeys * sizeof(txObject*);
+    if (mNKeys > (UINT32_MAX - sizeof(uint32_t)) / sizeof(txObject*) ||
+        len >= UINT32_MAX / itemSize) {
         return NS_ERROR_OUT_OF_MEMORY;
     }
 
     void* mem = PR_Malloc(len * itemSize);
     NS_ENSURE_TRUE(mem, NS_ERROR_OUT_OF_MEMORY);
 
-    PRUint32* indexes = static_cast<PRUint32*>(mem);
-    TxObject** sortValues = reinterpret_cast<TxObject**>(indexes + len);
+    uint32_t* indexes = static_cast<uint32_t*>(mem);
+    txObject** sortValues = reinterpret_cast<txObject**>(indexes + len);
 
-    PRUint32 i;
+    uint32_t i;
     for (i = 0; i < len; ++i) {
         indexes[i] = i;
     }
-    memset(sortValues, 0, len * mNKeys * sizeof(TxObject*));
+    memset(sortValues, 0, len * mNKeys * sizeof(txObject*));
 
     // Sort the indexarray
     SortData sortData;
@@ -204,11 +170,11 @@ txNodeSorter::sortNodeSet(txNodeSet* aNodes, txExecutionState* aEs,
     sortData.mContext = evalContext;
     sortData.mSortValues = sortValues;
     sortData.mRv = NS_OK;
-    NS_QuickSort(indexes, len, sizeof(PRUint32), compareNodes, &sortData);
+    NS_QuickSort(indexes, len, sizeof(uint32_t), compareNodes, &sortData);
 
     // Delete these here so we don't have to deal with them at every possible
     // failurepoint
-    PRUint32 numSortValues = len * mNKeys;
+    uint32_t numSortValues = len * mNKeys;
     for (i = 0; i < numSortValues; ++i) {
         delete sortValues[i];
     }
@@ -246,11 +212,11 @@ txNodeSorter::compareNodes(const void* aIndexA, const void* aIndexB,
     NS_ENSURE_SUCCESS(sortData->mRv, -1);
 
     txListIterator iter(&sortData->mNodeSorter->mSortKeys);
-    PRUint32 indexA = *static_cast<const PRUint32*>(aIndexA);
-    PRUint32 indexB = *static_cast<const PRUint32*>(aIndexB);
-    TxObject** sortValuesA = sortData->mSortValues +
+    uint32_t indexA = *static_cast<const uint32_t*>(aIndexA);
+    uint32_t indexB = *static_cast<const uint32_t*>(aIndexB);
+    txObject** sortValuesA = sortData->mSortValues +
                              indexA * sortData->mNodeSorter->mNKeys;
-    TxObject** sortValuesB = sortData->mSortValues +
+    txObject** sortValuesB = sortData->mSortValues +
                              indexB * sortData->mNodeSorter->mNKeys;
 
     unsigned int i;
@@ -279,9 +245,9 @@ txNodeSorter::compareNodes(const void* aIndexA, const void* aIndexB,
 }
 
 //static
-PRBool
-txNodeSorter::calcSortValue(TxObject*& aSortValue, SortKey* aKey,
-                            SortData* aSortData, PRUint32 aNodeIndex)
+bool
+txNodeSorter::calcSortValue(txObject*& aSortValue, SortKey* aKey,
+                            SortData* aSortData, uint32_t aNodeIndex)
 {
     aSortData->mContext->setPosition(aNodeIndex + 1); // position is 1-based
 
@@ -290,8 +256,8 @@ txNodeSorter::calcSortValue(TxObject*& aSortValue, SortKey* aKey,
                                                          aSortValue);
     if (NS_FAILED(rv)) {
         aSortData->mRv = rv;
-        return PR_FALSE;
+        return false;
     }
 
-    return PR_TRUE;
+    return true;
 }

@@ -1,43 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla MathML Project.
- *
- * The Initial Developer of the Original Code is
- * The University Of Queensland.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Roger B. Sidje <rbs@maths.uq.edu.au>
- *   David J. Fiddes <D.J.Fiddes@hw.ac.uk>
- *   Vilya Harvey <vilya@nag.co.uk>
- *   Shyjan Mahamud <mahamud@cs.cmu.edu>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #include "nsCOMPtr.h"
@@ -45,8 +9,7 @@
 #include "nsPresContext.h"
 #include "nsStyleContext.h"
 #include "nsStyleConsts.h"
-#include "nsIRenderingContext.h"
-#include "nsIFontMetrics.h"
+#include "nsRenderingContext.h"
 
 #include "nsMathMLmrootFrame.h"
 
@@ -101,7 +64,7 @@ nsMathMLmrootFrame::Init(nsIContent*      aContent,
   // up-to-date if dynamic changes arise.
   nsAutoString sqrChar; sqrChar.Assign(kSqrChar);
   mSqrChar.SetData(presContext, sqrChar);
-  ResolveMathMLCharStyle(presContext, mContent, mStyleContext, &mSqrChar, PR_TRUE);
+  ResolveMathMLCharStyle(presContext, mContent, mStyleContext, &mSqrChar, true);
 
   return rv;
 }
@@ -135,13 +98,13 @@ nsMathMLmrootFrame::BuildDisplayList(nsDisplayListBuilder*   aBuilder,
   /////////////
   // paint the sqrt symbol
   if (!NS_MATHML_HAS_ERROR(mPresentationData.flags)) {
-    rv = mSqrChar.Display(aBuilder, this, aLists);
+    rv = mSqrChar.Display(aBuilder, this, aLists, 0);
     NS_ENSURE_SUCCESS(rv, rv);
 
     rv = DisplayBar(aBuilder, this, mBarRect, aLists);
     NS_ENSURE_SUCCESS(rv, rv);
 
-#if defined(NS_DEBUG) && defined(SHOW_BOUNDING_BOX)
+#if defined(DEBUG) && defined(SHOW_BOUNDING_BOX)
     // for visual debug
     nsRect rect;
     mSqrChar.GetRect(rect);
@@ -156,14 +119,13 @@ nsMathMLmrootFrame::BuildDisplayList(nsDisplayListBuilder*   aBuilder,
 
 static void
 GetRadicalXOffsets(nscoord aIndexWidth, nscoord aSqrWidth,
-                   nsIFontMetrics* aFontMetrics,
+                   nsFontMetrics* aFontMetrics,
                    nscoord* aIndexOffset, nscoord* aSqrOffset)
 {
   // The index is tucked in closer to the radical while making sure
   // that the kern does not make the index and radical collide
   nscoord dxIndex, dxSqr;
-  nscoord xHeight = 0;
-  aFontMetrics->GetXHeight(xHeight);
+  nscoord xHeight = aFontMetrics->XHeight();
   nscoord indexRadicalKern = NSToCoordRound(1.35f * xHeight);
   if (indexRadicalKern > aIndexWidth) {
     dxIndex = indexRadicalKern - aIndexWidth;
@@ -206,14 +168,14 @@ nsMathMLmrootFrame::Reflow(nsPresContext*          aPresContext,
   aDesiredSize.ascent = 0;
 
   nsBoundingMetrics bmSqr, bmBase, bmIndex;
-  nsIRenderingContext& renderingContext = *aReflowState.rendContext;
+  nsRenderingContext& renderingContext = *aReflowState.rendContext;
 
   //////////////////
   // Reflow Children
 
-  PRInt32 count = 0;
-  nsIFrame* baseFrame = nsnull;
-  nsIFrame* indexFrame = nsnull;
+  int32_t count = 0;
+  nsIFrame* baseFrame = nullptr;
+  nsIFrame* indexFrame = nullptr;
   nsHTMLReflowMetrics baseSize;
   nsHTMLReflowMetrics indexSize;
   nsIFrame* childFrame = mFrames.FirstChild();
@@ -259,10 +221,9 @@ nsMathMLmrootFrame::Reflow(nsPresContext*          aPresContext,
   ////////////
   // Prepare the radical symbol and the overline bar
 
-  renderingContext.SetFont(GetStyleFont()->mFont,
-                           aPresContext->GetUserFontSet());
-  nsCOMPtr<nsIFontMetrics> fm;
-  renderingContext.GetFontMetrics(*getter_AddRefs(fm));
+  nsRefPtr<nsFontMetrics> fm;
+  nsLayoutUtils::GetFontMetricsForFrame(this, getter_AddRefs(fm));
+  renderingContext.SetFont(fm);
 
   // For radical glyphs from TeX fonts and some of the radical glyphs from
   // Mathematica fonts, the thickness of the overline can be obtained from the
@@ -271,8 +232,8 @@ nsMathMLmrootFrame::Reflow(nsPresContext*          aPresContext,
   nscoord ruleThickness, leading, em;
   GetRuleThickness(renderingContext, fm, ruleThickness);
 
-  nsBoundingMetrics bmOne;
-  renderingContext.GetBoundingMetrics(NS_LITERAL_STRING("1").get(), 1, bmOne);
+  PRUnichar one = '1';
+  nsBoundingMetrics bmOne = renderingContext.GetBoundingMetrics(&one, 1);
 
   // get the leading to be left at the top of the resulting frame
   // this seems more reliable than using fm->GetLeading() on suspicious fonts
@@ -283,7 +244,7 @@ nsMathMLmrootFrame::Reflow(nsPresContext*          aPresContext,
   // psi = clearance between rule and content
   nscoord phi = 0, psi = 0;
   if (NS_MATHML_IS_DISPLAYSTYLE(mPresentationData.flags))
-    fm->GetXHeight(phi);
+    phi = fm->XHeight();
   else
     phi = ruleThickness;
   psi = ruleThickness + phi/4;
@@ -314,7 +275,8 @@ nsMathMLmrootFrame::Reflow(nsPresContext*          aPresContext,
   mSqrChar.Stretch(aPresContext, renderingContext,
                    NS_STRETCH_DIRECTION_VERTICAL, 
                    contSize, radicalSize,
-                   NS_STRETCH_LARGER);
+                   NS_STRETCH_LARGER,
+                   NS_MATHML_IS_RTL(mPresentationData.flags));
   // radicalSize have changed at this point, and should match with
   // the bounding metrics of the char
   mSqrChar.GetBoundingMetrics(bmSqr);
@@ -359,34 +321,40 @@ nsMathMLmrootFrame::Reflow(nsPresContext*          aPresContext,
   nscoord dxIndex, dxSqr;
   GetRadicalXOffsets(bmIndex.width, bmSqr.width, fm, &dxIndex, &dxSqr);
 
-  // place the index
-  nscoord dx = dxIndex;
-  nscoord dy = aDesiredSize.ascent - (indexRaisedAscent + indexSize.ascent - bmIndex.ascent);
-  FinishReflowChild(indexFrame, aPresContext, nsnull, indexSize, dx, dy, 0);
-
-  // place the radical symbol and the radical bar
-  dx = dxSqr;
-  dy = indexClearance + leading; // leave a leading at the top
-  mSqrChar.SetRect(nsRect(dx, dy, bmSqr.width, bmSqr.ascent + bmSqr.descent));
-  dx += bmSqr.width;
-  mBarRect.SetRect(dx, dy, bmBase.width, ruleThickness);
-
-  // place the base
-  dy = aDesiredSize.ascent - baseSize.ascent;
-  FinishReflowChild(baseFrame, aPresContext, nsnull, baseSize, dx, dy, 0);
-
-  mReference.x = 0;
-  mReference.y = aDesiredSize.ascent;
-
-  mBoundingMetrics.width = dx + bmBase.width;
+  mBoundingMetrics.width = dxSqr + bmSqr.width + bmBase.width;
   mBoundingMetrics.leftBearing = 
     NS_MIN(dxIndex + bmIndex.leftBearing, dxSqr + bmSqr.leftBearing);
-  mBoundingMetrics.rightBearing = dx +
+  mBoundingMetrics.rightBearing = dxSqr + bmSqr.width +
     NS_MAX(bmBase.width, bmBase.rightBearing);
 
   aDesiredSize.width = mBoundingMetrics.width;
   aDesiredSize.mBoundingMetrics = mBoundingMetrics;
   GatherAndStoreOverflow(&aDesiredSize);
+
+  // place the index
+  nscoord dx = dxIndex;
+  nscoord dy = aDesiredSize.ascent - (indexRaisedAscent + indexSize.ascent - bmIndex.ascent);
+  FinishReflowChild(indexFrame, aPresContext, nullptr, indexSize,
+                    MirrorIfRTL(aDesiredSize.width, indexSize.width, dx),
+                    dy, 0);
+
+  // place the radical symbol and the radical bar
+  dx = dxSqr;
+  dy = indexClearance + leading; // leave a leading at the top
+  mSqrChar.SetRect(nsRect(MirrorIfRTL(aDesiredSize.width, bmSqr.width, dx),
+                          dy, bmSqr.width, bmSqr.ascent + bmSqr.descent));
+  dx += bmSqr.width;
+  mBarRect.SetRect(MirrorIfRTL(aDesiredSize.width, bmBase.width, dx),
+                   dy, bmBase.width, ruleThickness);
+
+  // place the base
+  dy = aDesiredSize.ascent - baseSize.ascent;
+  FinishReflowChild(baseFrame, aPresContext, nullptr, baseSize,
+                    MirrorIfRTL(aDesiredSize.width, baseSize.width, dx),
+                    dy, 0);
+
+  mReference.x = 0;
+  mReference.y = aDesiredSize.ascent;
 
   aStatus = NS_FRAME_COMPLETE;
   NS_FRAME_SET_TRUNCATION(aStatus, aReflowState, aDesiredSize);
@@ -394,10 +362,10 @@ nsMathMLmrootFrame::Reflow(nsPresContext*          aPresContext,
 }
 
 /* virtual */ nscoord
-nsMathMLmrootFrame::GetIntrinsicWidth(nsIRenderingContext* aRenderingContext)
+nsMathMLmrootFrame::GetIntrinsicWidth(nsRenderingContext* aRenderingContext)
 {
   nsIFrame* baseFrame = mFrames.FirstChild();
-  nsIFrame* indexFrame = nsnull;
+  nsIFrame* indexFrame = nullptr;
   if (baseFrame)
     indexFrame = baseFrame->GetNextSibling();
   if (!indexFrame || indexFrame->GetNextSibling()) {
@@ -414,10 +382,9 @@ nsMathMLmrootFrame::GetIntrinsicWidth(nsIRenderingContext* aRenderingContext)
                                          nsLayoutUtils::PREF_WIDTH);
   nscoord sqrWidth = mSqrChar.GetMaxWidth(PresContext(), *aRenderingContext);
 
-  nsCOMPtr<nsIFontMetrics> fm;
-  aRenderingContext->GetFontMetrics(*getter_AddRefs(fm));
   nscoord dxSqr;
-  GetRadicalXOffsets(indexWidth, sqrWidth, fm, nsnull, &dxSqr);
+  GetRadicalXOffsets(indexWidth, sqrWidth, aRenderingContext->FontMetrics(),
+                     nullptr, &dxSqr);
 
   return dxSqr + sqrWidth + baseWidth;
 }
@@ -425,19 +392,19 @@ nsMathMLmrootFrame::GetIntrinsicWidth(nsIRenderingContext* aRenderingContext)
 // ----------------------
 // the Style System will use these to pass the proper style context to our MathMLChar
 nsStyleContext*
-nsMathMLmrootFrame::GetAdditionalStyleContext(PRInt32 aIndex) const
+nsMathMLmrootFrame::GetAdditionalStyleContext(int32_t aIndex) const
 {
   switch (aIndex) {
   case NS_SQR_CHAR_STYLE_CONTEXT_INDEX:
     return mSqrChar.GetStyleContext();
     break;
   default:
-    return nsnull;
+    return nullptr;
   }
 }
 
 void
-nsMathMLmrootFrame::SetAdditionalStyleContext(PRInt32          aIndex, 
+nsMathMLmrootFrame::SetAdditionalStyleContext(int32_t          aIndex, 
                                               nsStyleContext*  aStyleContext)
 {
   switch (aIndex) {

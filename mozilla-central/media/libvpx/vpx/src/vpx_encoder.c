@@ -1,21 +1,22 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license 
+ *  Use of this source code is governed by a BSD-style license
  *  that can be found in the LICENSE file in the root of the source
  *  tree. An additional intellectual property rights grant can be found
- *  in the file PATENTS.  All contributing project authors may 
+ *  in the file PATENTS.  All contributing project authors may
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
 
-/*!\file vpx_encoder.c
+/*!\file
  * \brief Provides the high level interface to wrap encoder algorithms.
  *
  */
 #include <limits.h>
 #include <string.h>
 #include "vpx/internal/vpx_codec_internal.h"
+#include "vpx_config.h"
 
 #define SAVE_STATUS(ctx,var) (ctx?(ctx->err = var):var)
 
@@ -40,6 +41,9 @@ vpx_codec_err_t vpx_codec_enc_init_ver(vpx_codec_ctx_t      *ctx,
     else if ((flags & VPX_CODEC_USE_PSNR)
              && !(iface->caps & VPX_CODEC_CAP_PSNR))
         res = VPX_CODEC_INCAPABLE;
+    else if ((flags & VPX_CODEC_USE_OUTPUT_PARTITION)
+             && !(iface->caps & VPX_CODEC_CAP_OUTPUT_PARTITION))
+        res = VPX_CODEC_INCAPABLE;
     else
     {
         ctx->iface = iface;
@@ -47,7 +51,7 @@ vpx_codec_err_t vpx_codec_enc_init_ver(vpx_codec_ctx_t      *ctx,
         ctx->priv = NULL;
         ctx->init_flags = flags;
         ctx->config.enc = cfg;
-        res = ctx->iface->init(ctx);
+        res = ctx->iface->init(ctx, NULL);
 
         if (res)
         {
@@ -62,6 +66,85 @@ vpx_codec_err_t vpx_codec_enc_init_ver(vpx_codec_ctx_t      *ctx,
     return SAVE_STATUS(ctx, res);
 }
 
+vpx_codec_err_t vpx_codec_enc_init_multi_ver(vpx_codec_ctx_t      *ctx,
+                                             vpx_codec_iface_t    *iface,
+                                             vpx_codec_enc_cfg_t  *cfg,
+                                             int                   num_enc,
+                                             vpx_codec_flags_t     flags,
+                                             vpx_rational_t       *dsf,
+                                             int                   ver)
+{
+    vpx_codec_err_t res = 0;
+
+    if (ver != VPX_ENCODER_ABI_VERSION)
+        res = VPX_CODEC_ABI_MISMATCH;
+    else if (!ctx || !iface || !cfg || (num_enc > 16 || num_enc < 1))
+        res = VPX_CODEC_INVALID_PARAM;
+    else if (iface->abi_version != VPX_CODEC_INTERNAL_ABI_VERSION)
+        res = VPX_CODEC_ABI_MISMATCH;
+    else if (!(iface->caps & VPX_CODEC_CAP_ENCODER))
+        res = VPX_CODEC_INCAPABLE;
+    else if ((flags & VPX_CODEC_USE_XMA) && !(iface->caps & VPX_CODEC_CAP_XMA))
+        res = VPX_CODEC_INCAPABLE;
+    else if ((flags & VPX_CODEC_USE_PSNR)
+             && !(iface->caps & VPX_CODEC_CAP_PSNR))
+        res = VPX_CODEC_INCAPABLE;
+    else if ((flags & VPX_CODEC_USE_OUTPUT_PARTITION)
+             && !(iface->caps & VPX_CODEC_CAP_OUTPUT_PARTITION))
+        res = VPX_CODEC_INCAPABLE;
+    else
+    {
+        int i;
+        void *mem_loc = NULL;
+
+        if(!(res = iface->enc.mr_get_mem_loc(cfg, &mem_loc)))
+        {
+            for (i = 0; i < num_enc; i++)
+            {
+                vpx_codec_priv_enc_mr_cfg_t mr_cfg;
+
+                /* Validate down-sampling factor. */
+                if(dsf->num < 1 || dsf->num > 4096 || dsf->den < 1 ||
+                   dsf->den > dsf->num)
+                {
+                    res = VPX_CODEC_INVALID_PARAM;
+                    break;
+                }
+
+                mr_cfg.mr_low_res_mode_info = mem_loc;
+                mr_cfg.mr_total_resolutions = num_enc;
+                mr_cfg.mr_encoder_id = num_enc-1-i;
+                mr_cfg.mr_down_sampling_factor.num = dsf->num;
+                mr_cfg.mr_down_sampling_factor.den = dsf->den;
+
+                ctx->iface = iface;
+                ctx->name = iface->name;
+                ctx->priv = NULL;
+                ctx->init_flags = flags;
+                ctx->config.enc = cfg;
+                res = ctx->iface->init(ctx, &mr_cfg);
+
+                if (res)
+                {
+                    ctx->err_detail = ctx->priv ? ctx->priv->err_detail : NULL;
+                    vpx_codec_destroy(ctx);
+                }
+
+                if (ctx->priv)
+                    ctx->priv->iface = ctx->iface;
+
+                if (res)
+                    break;
+
+                ctx++;
+                cfg++;
+                dsf++;
+            }
+        }
+    }
+
+    return SAVE_STATUS(ctx, res);
+}
 
 
 vpx_codec_err_t  vpx_codec_enc_config_default(vpx_codec_iface_t    *iface,
@@ -119,7 +202,7 @@ vpx_codec_err_t  vpx_codec_encode(vpx_codec_ctx_t            *ctx,
                                   vpx_enc_frame_flags_t       flags,
                                   unsigned long               deadline)
 {
-    vpx_codec_err_t res;
+    vpx_codec_err_t res = 0;
 
     if (!ctx || (img && !duration))
         res = VPX_CODEC_INVALID_PARAM;
@@ -127,28 +210,43 @@ vpx_codec_err_t  vpx_codec_encode(vpx_codec_ctx_t            *ctx,
         res = VPX_CODEC_ERROR;
     else if (!(ctx->iface->caps & VPX_CODEC_CAP_ENCODER))
         res = VPX_CODEC_INCAPABLE;
-
-#if CONFIG_EVAL_LIMIT
-    else if (ctx->priv->eval_counter >= 500)
-    {
-        ctx->priv->err_detail = "Evaluation limit exceeded.";
-        res = VPX_CODEC_ERROR;
-    }
-
-#endif
     else
     {
         /* Execute in a normalized floating point environment, if the platform
          * requires it.
          */
-        FLOATING_POINT_INIT();
-        res = ctx->iface->enc.encode(ctx->priv->alg_priv, img, pts,
-                                     duration, flags, deadline);
-        FLOATING_POINT_RESTORE();
+        unsigned int num_enc =ctx->priv->enc.total_encoders;
 
-#if CONFIG_EVAL_LIMIT
-        ctx->priv->eval_counter++;
-#endif
+        FLOATING_POINT_INIT();
+
+        if (num_enc == 1)
+            res = ctx->iface->enc.encode(ctx->priv->alg_priv, img, pts,
+                                         duration, flags, deadline);
+        else
+        {
+            /* Multi-resolution encoding:
+             * Encode multi-levels in reverse order. For example,
+             * if mr_total_resolutions = 3, first encode level 2,
+             * then encode level 1, and finally encode level 0.
+             */
+            int i;
+
+            ctx += num_enc - 1;
+            if (img) img += num_enc - 1;
+
+            for (i = num_enc-1; i >= 0; i--)
+            {
+                if ((res = ctx->iface->enc.encode(ctx->priv->alg_priv, img, pts,
+                                                  duration, flags, deadline)))
+                    break;
+
+                ctx--;
+                if (img) img--;
+            }
+            ctx++;
+        }
+
+        FLOATING_POINT_RESTORE();
     }
 
     return SAVE_STATUS(ctx, res);
@@ -316,7 +414,7 @@ const vpx_codec_cx_pkt_t *vpx_codec_pkt_list_get(struct vpx_codec_pkt_list *list
 
     pkt = (const void *) * iter;
 
-    if (pkt - list->pkts < list->cnt)
+    if ((size_t)(pkt - list->pkts) < list->cnt)
         *iter = pkt + 1;
     else
         pkt = NULL;

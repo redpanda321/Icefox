@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /* 
  *  The following code handles the storage of PKCS 11 modules used by the
  * NSS. For the rest of NSS, only one kind of database handle exists:
@@ -55,10 +23,9 @@
 #include "pkcs11i.h"
 #include "sdb.h"
 #include "prprf.h" 
-#include "secmodt.h"
 #include "pratom.h"
 #include "lgglue.h"
-#include "sftkpars.h"
+#include "utilpars.h"
 #include "secerr.h"
 #include "softoken.h"
 
@@ -1495,6 +1462,9 @@ sftkdb_CloseDB(SFTKDBHandle *handle)
         }
 	(*handle->db->sdb_Close)(handle->db);
     }
+    if (handle->passwordKey.data) {
+	PORT_ZFree(handle->passwordKey.data, handle->passwordKey.len);
+    }
     if (handle->passwordLock) {
 	SKIP_AFTER_FORK(PZ_DestroyLock(handle->passwordLock));
     }
@@ -1914,17 +1884,15 @@ sftkdb_reconcileTrustEntry(PRArenaPool *arena, CK_ATTRIBUTE *target,
      * trust attribute should be, and neither agree exactly. 
      * At this point, we prefer 'hard' attributes over 'soft' ones. 
      * 'hard' ones are CKT_NSS_TRUSTED, CKT_NSS_TRUSTED_DELEGATOR, and
-     * CKT_NSS_UNTRUTED. Soft ones are ones which don't change the
-     * actual trust of the cert (CKT_MUST_VERIFY, CKT_NSS_VALID,
+     * CKT_NSS_NOT_TRUTED. Soft ones are ones which don't change the
+     * actual trust of the cert (CKT_MUST_VERIFY_TRUST, 
      * CKT_NSS_VALID_DELEGATOR).
      */
-    if ((sourceTrust == CKT_NSS_MUST_VERIFY) 
-	|| (sourceTrust == CKT_NSS_VALID)
+    if ((sourceTrust == CKT_NSS_MUST_VERIFY_TRUST) 
 	|| (sourceTrust == CKT_NSS_VALID_DELEGATOR)) {
 	return SFTKDB_DROP_ATTRIBUTE;
     }
-    if ((targetTrust == CKT_NSS_MUST_VERIFY) 
-	|| (targetTrust == CKT_NSS_VALID)
+    if ((targetTrust == CKT_NSS_MUST_VERIFY_TRUST) 
 	|| (targetTrust == CKT_NSS_VALID_DELEGATOR)) {
 	/* again, overwriting the target in this case is OK */
 	return SFTKDB_MODIFY_OBJECT;
@@ -2424,7 +2392,7 @@ sftk_freeDB(SFTKDBHandle *handle)
     PRInt32 ref;
 
     if (!handle) return;
-    ref = PR_AtomicDecrement(&handle->ref);
+    ref = PR_ATOMIC_DECREMENT(&handle->ref);
     if (ref == 0) {
 	sftkdb_CloseDB(handle);
     }
@@ -2444,7 +2412,7 @@ sftk_getCertDB(SFTKSlot *slot)
     PZ_Lock(slot->slotLock);
     dbHandle = slot->certDB;
     if (dbHandle) {
-        PR_AtomicIncrement(&dbHandle->ref);
+        PR_ATOMIC_INCREMENT(&dbHandle->ref);
     }
     PZ_Unlock(slot->slotLock);
     return dbHandle;
@@ -2462,7 +2430,7 @@ sftk_getKeyDB(SFTKSlot *slot)
     SKIP_AFTER_FORK(PZ_Lock(slot->slotLock));
     dbHandle = slot->keyDB;
     if (dbHandle) {
-        PR_AtomicIncrement(&dbHandle->ref);
+        PR_ATOMIC_INCREMENT(&dbHandle->ref);
     }
     SKIP_AFTER_FORK(PZ_Unlock(slot->slotLock));
     return dbHandle;
@@ -2480,7 +2448,7 @@ sftk_getDBForTokenObject(SFTKSlot *slot, CK_OBJECT_HANDLE objectID)
     PZ_Lock(slot->slotLock);
     dbHandle = objectID & SFTK_KEYDB_TYPE ? slot->keyDB : slot->certDB;
     if (dbHandle) {
-        PR_AtomicIncrement(&dbHandle->ref);
+        PR_ATOMIC_INCREMENT(&dbHandle->ref);
     }
     PZ_Unlock(slot->slotLock);
     return dbHandle;
@@ -2606,7 +2574,7 @@ sftk_DBInit(const char *configdir, const char *certPrefix,
                 SFTKDBHandle **certDB, SFTKDBHandle **keyDB)
 {
     const char *confdir;
-    SDBType dbType;
+    NSSDBType dbType = NSS_DB_TYPE_NONE;
     char *appName = NULL;
     SDB *keySDB, *certSDB;
     CK_RV crv = CKR_OK;
@@ -2624,22 +2592,22 @@ sftk_DBInit(const char *configdir, const char *certPrefix,
     if (noKeyDB && noCertDB) {
 	return CKR_OK;
     }
-    confdir = sftk_EvaluateConfigDir(configdir, &dbType, &appName);
+    confdir = _NSSUTIL_EvaluateConfigDir(configdir, &dbType, &appName);
 
     /*
      * now initialize the appropriate database
      */
     switch (dbType) {
-    case SDB_LEGACY:
+    case NSS_DB_TYPE_LEGACY:
 	crv = sftkdbCall_open(confdir, certPrefix, keyPrefix, 8, 3, flags,
 		 isFIPS, noCertDB? NULL : &certSDB, noKeyDB ? NULL: &keySDB);
 	break;
-    case SDB_MULTIACCESS:
+    case NSS_DB_TYPE_MULTIACCESS:
 	crv = sftkdbCall_open(configdir, certPrefix, keyPrefix, 8, 3, flags,
 		isFIPS, noCertDB? NULL : &certSDB, noKeyDB ? NULL: &keySDB);
 	break;
-    case SDB_SQL:
-    case SDB_EXTERN: /* SHOULD open a loadable db */
+    case NSS_DB_TYPE_SQL:
+    case NSS_DB_TYPE_EXTERN: /* SHOULD open a loadable db */
 	crv = s_open(confdir, certPrefix, keyPrefix, 9, 4, flags, 
 		noCertDB? NULL : &certSDB, noKeyDB ? NULL : &keySDB, &newInit);
 

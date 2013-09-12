@@ -1,40 +1,8 @@
-# -*- Mode: Java; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is View Source Utilities.
-#
-# The Initial Developer of the Original Code is
-# Jason Barnabe.
-# Portions created by the Initial Developer are Copyright (C) 2005
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Simon Bünzli <zeniko@gmail.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+// -*- Mode: Java; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
+
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * To keep the global namespace safe, don't define global variables and 
@@ -84,6 +52,25 @@ var gViewSourceUtils = {
                aURL, charset, aPageDescriptor, aLineNumber, isForcedCharset);
   },
 
+  buildEditorArgs: function(aPath, aLineNumber) {
+    // Determine the command line arguments to pass to the editor.
+    // We currently support a %LINE% placeholder which is set to the passed
+    // line number (or to 0 if there's none)
+    var editorArgs = [];
+    var prefs = Components.classes["@mozilla.org/preferences-service;1"]
+                          .getService(Components.interfaces.nsIPrefBranch);
+    var args = prefs.getCharPref("view_source.editor.args");
+    if (args) {
+      args = args.replace("%LINE%", aLineNumber || "0");
+      // add the arguments to the array (keeping quoted strings intact)
+      const argumentRE = /"([^"]+)"|(\S+)/g;
+      while (argumentRE.test(args))
+        editorArgs.push(RegExp.$1 || RegExp.$2);
+    }
+    editorArgs.push(aPath);
+    return editorArgs;
+  },
+
   // aCallBack is a function accepting two arguments - result (true=success) and a data object
   // It defaults to openInInternalViewer if undefined.
   openInExternalEditor: function(aURL, aPageDescriptor, aDocument, aLineNumber, aCallBack)
@@ -110,7 +97,9 @@ var gViewSourceUtils = {
       if (uri.scheme == "file") {    
         // it's a local file; we can open it directly
         path = uri.QueryInterface(Components.interfaces.nsIFileURL).file.path;
-        editor.runw(false, [path], 1);
+
+        var editorArgs = this.buildEditorArgs(path, data.lineNumber);
+        editor.runw(false, editorArgs, editorArgs.length);
         this.handleCallBack(aCallBack, true, data);
       } else {
         // set up the progress listener with what we know so far
@@ -122,18 +111,36 @@ var gViewSourceUtils = {
           var file = this.getTemporaryFile(uri, aDocument, contentType);
           this.viewSourceProgressListener.file = file;
 
+          let fromPrivateWindow = false;
+          if (aDocument) {
+            try {
+              fromPrivateWindow =
+                aDocument.defaultView
+                         .QueryInterface(Components.interfaces.nsIInterfaceRequestor)
+                         .getInterface(Components.interfaces.nsIWebNavigation)
+                         .QueryInterface(Components.interfaces.nsILoadContext)
+                         .usePrivateBrowsing;
+            } catch (e) {
+            }
+          }
+
           var webBrowserPersist = Components
                                   .classes["@mozilla.org/embedding/browser/nsWebBrowserPersist;1"]
                                   .createInstance(this.mnsIWebBrowserPersist);
           // the default setting is to not decode. we need to decode.
           webBrowserPersist.persistFlags = this.mnsIWebBrowserPersist.PERSIST_FLAGS_REPLACE_EXISTING_FILES;
           webBrowserPersist.progressListener = this.viewSourceProgressListener;
-          webBrowserPersist.saveURI(uri, null, null, null, null, file);
+          webBrowserPersist.savePrivacyAwareURI(uri, null, null, null, null, file, fromPrivateWindow);
 
-          // register the file to be deleted on app exit
-          Components.classes["@mozilla.org/uriloader/external-helper-app-service;1"]
-                    .getService(Components.interfaces.nsPIExternalAppLauncher)
-                    .deleteTemporaryFileOnExit(file);
+          let helperService = Components.classes["@mozilla.org/uriloader/external-helper-app-service;1"]
+                                        .getService(Components.interfaces.nsPIExternalAppLauncher);
+          if (fromPrivateWindow) {
+            // register the file to be deleted when possible
+            helperService.deleteTemporaryPrivateFileWhenPossible(file);
+          } else {
+            // register the file to be deleted on app exit
+            helperService.deleteTemporaryFileOnExit(file);
+          }
         } else {
           // we'll use nsIWebPageDescriptor to get the source because it may
           // not have to refetch the file from the server
@@ -181,14 +188,11 @@ var gViewSourceUtils = {
   getExternalViewSourceEditor: function()
   {
     try {
-      let prefPath =
+      let viewSourceAppPath =
           Components.classes["@mozilla.org/preferences-service;1"]
                     .getService(Components.interfaces.nsIPrefBranch)
-                    .getCharPref("view_source.editor.path");
-      let viewSourceAppPath =
-              Components.classes["@mozilla.org/file/local;1"]
-                        .createInstance(Components.interfaces.nsILocalFile);
-      viewSourceAppPath.initWithPath(prefPath);
+                    .getComplexValue("view_source.editor.path",
+                                     Components.interfaces.nsIFile);
       let editor = Components.classes['@mozilla.org/process/util;1']
                              .createInstance(Components.interfaces.nsIProcess);
       editor.init(viewSourceAppPath);
@@ -215,7 +219,9 @@ var gViewSourceUtils = {
     },
 
     destroy: function() {
-      this.webShell.QueryInterface(Components.interfaces.nsIBaseWindow).destroy();
+      if (this.webShell) {
+        this.webShell.QueryInterface(Components.interfaces.nsIBaseWindow).destroy();
+      }
       this.webShell = null;
       this.editor = null;
       this.callBack = null;
@@ -223,67 +229,86 @@ var gViewSourceUtils = {
       this.file = null;
     },
 
+    // This listener is used both for tracking the progress of an HTML parse
+    // in one case and for tracking the progress of nsIWebBrowserPersist in
+    // another case.
     onStateChange: function(aProgress, aRequest, aFlag, aStatus) {
       // once it's done loading...
       if ((aFlag & this.mnsIWebProgressListener.STATE_STOP) && aStatus == 0) {
-        try {
-          if (!this.file) {
-            // it's not saved to file yet, it's in the webshell
-
-            // get a temporary filename using the attributes from the data object that
-            // openInExternalEditor gave us
-            this.file = gViewSourceUtils.getTemporaryFile(this.data.uri, this.data.doc, 
-                                                          this.data.doc.contentType);
-
-            // we have to convert from the source charset.
-            var webNavigation = this.webShell.QueryInterface(Components.interfaces.nsIWebNavigation);
-            var foStream = Components.classes["@mozilla.org/network/file-output-stream;1"]
-                                     .createInstance(Components.interfaces.nsIFileOutputStream);
-            foStream.init(this.file, 0x02 | 0x08 | 0x20, 0664, 0); // write | create | truncate
-            var coStream = Components.classes["@mozilla.org/intl/converter-output-stream;1"]
-                                     .createInstance(Components.interfaces.nsIConverterOutputStream);
-            coStream.init(foStream, this.data.doc.characterSet, 0, null);
-
-            // write the source to the file
-            coStream.writeString(webNavigation.document.body.textContent);
-          
-            // clean up
-            coStream.close();
-            foStream.close();
-
-            // register the file to be deleted on app exit
-            Components.classes["@mozilla.org/uriloader/external-helper-app-service;1"]
-                      .getService(Components.interfaces.nsPIExternalAppLauncher)
-                      .deleteTemporaryFileOnExit(this.file);
-          }
-
-          // Determine the command line arguments to pass to the editor.
-          // We currently support a %LINE% placeholder which is set to the passed
-          // line number (or to 0 if there's none)
-          var editorArgs = [];
-          var prefs = Components.classes["@mozilla.org/preferences-service;1"]
-                                .getService(Components.interfaces.nsIPrefBranch);
-          var args = prefs.getCharPref("view_source.editor.args");
-          if (args) {
-            args = args.replace("%LINE%", this.data.lineNumber || "0");
-            // add the arguments to the array (keeping quoted strings intact)
-            const argumentRE = /"([^"]+)"|(\S+)/g;
-            while (argumentRE.test(args))
-              editorArgs.push(RegExp.$1 || RegExp.$2);
-          }
-          editorArgs.push(this.file.path);
-          this.editor.runw(false, editorArgs, editorArgs.length);
-
-          gViewSourceUtils.handleCallBack(this.callBack, true, this.data);
-        } catch (ex) {
-          // we failed loading it with the external editor.
-          Components.utils.reportError(ex);
-          gViewSourceUtils.handleCallBack(this.callBack, false, this.data);
-        } finally {
-          this.destroy();
+        if (!this.webShell) {
+          // We aren't waiting for the parser. Instead, we are waiting for
+          // an nsIWebBrowserPersist.
+          this.onContentLoaded();
+          return 0;
+        }
+        var webNavigation = this.webShell.QueryInterface(Components.interfaces.nsIWebNavigation);
+        if (webNavigation.document.readyState == "complete") {
+          // This branch is probably never taken. Including it for completeness.
+          this.onContentLoaded();
+        } else {
+          webNavigation.document.addEventListener("DOMContentLoaded",
+                                                  this.onContentLoaded.bind(this));
         }
       }
       return 0;
+    },
+
+    onContentLoaded: function() {
+      try {
+        if (!this.file) {
+          // it's not saved to file yet, it's in the webshell
+
+          // get a temporary filename using the attributes from the data object that
+          // openInExternalEditor gave us
+          this.file = gViewSourceUtils.getTemporaryFile(this.data.uri, this.data.doc, 
+                                                        this.data.doc.contentType);
+
+          // we have to convert from the source charset.
+          var webNavigation = this.webShell.QueryInterface(Components.interfaces.nsIWebNavigation);
+          var foStream = Components.classes["@mozilla.org/network/file-output-stream;1"]
+                                   .createInstance(Components.interfaces.nsIFileOutputStream);
+          foStream.init(this.file, 0x02 | 0x08 | 0x20, -1, 0); // write | create | truncate
+          var coStream = Components.classes["@mozilla.org/intl/converter-output-stream;1"]
+                                   .createInstance(Components.interfaces.nsIConverterOutputStream);
+          coStream.init(foStream, this.data.doc.characterSet, 0, null);
+
+          // write the source to the file
+          coStream.writeString(webNavigation.document.body.textContent);
+          
+          // clean up
+          coStream.close();
+          foStream.close();
+
+          let fromPrivateWindow =
+            this.data.doc.defaultView
+                         .QueryInterface(Components.interfaces.nsIInterfaceRequestor)
+                         .getInterface(Components.interfaces.nsIWebNavigation)
+                         .QueryInterface(Components.interfaces.nsILoadContext)
+                         .usePrivateBrowsing;
+
+          let helperService = Components.classes["@mozilla.org/uriloader/external-helper-app-service;1"]
+                              .getService(Components.interfaces.nsPIExternalAppLauncher);
+          if (fromPrivateWindow) {
+            // register the file to be deleted when possible
+            helperService.deleteTemporaryPrivateFileWhenPossible(this.file);
+          } else {
+            // register the file to be deleted on app exit
+            helperService.deleteTemporaryFileOnExit(this.file);
+          }
+        }
+
+        var editorArgs = gViewSourceUtils.buildEditorArgs(this.file.path,
+                                                          this.data.lineNumber);
+        this.editor.runw(false, editorArgs, editorArgs.length);
+
+        gViewSourceUtils.handleCallBack(this.callBack, true, this.data);
+      } catch (ex) {
+        // we failed loading it with the external editor.
+        Components.utils.reportError(ex);
+        gViewSourceUtils.handleCallBack(this.callBack, false, this.data);
+      } finally {
+        this.destroy();
+      }
     },
 
     onLocationChange: function() {return 0;},

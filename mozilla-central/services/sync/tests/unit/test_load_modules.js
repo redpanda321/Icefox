@@ -1,41 +1,53 @@
+/* Any copyright is dedicated to the Public Domain.
+   http://creativecommons.org/publicdomain/zero/1.0/ */
+
 const modules = [
-                 "auth.js",
-                 "base_records/collection.js",
-                 "base_records/crypto.js",
-                 "base_records/keys.js",
-                 "base_records/wbo.js",
-                 "constants.js",
-                 "engines/bookmarks.js",
-                 "engines/clients.js",
-                 "engines/forms.js",
-                 "engines/history.js",
-                 "engines/passwords.js",
-                 "engines/prefs.js",
-                 "engines/tabs.js",
-                 "engines.js",
-                 "ext/Observers.js",
-                 "ext/Preferences.js",
-                 "identity.js",
-                 "log4moz.js",
-                 "notifications.js",
-                 "resource.js",
-                 "service.js",
-                 "stores.js",
-                 "trackers.js",
-                 "type_records/bookmark.js",
-                 "type_records/clients.js",
-                 "type_records/forms.js",
-                 "type_records/history.js",
-                 "type_records/passwords.js",
-                 "type_records/prefs.js",
-                 "type_records/tabs.js",
-                 "util.js",
+  "addonutils.js",
+  "addonsreconciler.js",
+  "constants.js",
+  "engines/addons.js",
+  "engines/bookmarks.js",
+  "engines/clients.js",
+  "engines/forms.js",
+  "engines/history.js",
+  "engines/passwords.js",
+  "engines/prefs.js",
+  "engines/tabs.js",
+  "engines.js",
+  "identity.js",
+  "jpakeclient.js",
+  "keys.js",
+  "main.js",
+  "notifications.js",
+  "policies.js",
+  "record.js",
+  "resource.js",
+  "rest.js",
+  "service.js",
+  "stages/cluster.js",
+  "stages/enginesync.js",
+  "status.js",
+  "userapi.js",
+  "util.js",
+];
+
+const testingModules = [
+  "fakeservices.js",
+  "rotaryengine.js",
+  "utils.js",
 ];
 
 function run_test() {
-  for each (let m in modules) {
-    _("Attempting to load resource://services-sync/" + m);
-    Cu.import("resource://services-sync/" + m, {});
+  for (let m of modules) {
+    let res = "resource://services-sync/" + m;
+    _("Attempting to load " + res);
+    Cu.import(res, {});
+  }
+
+  for (let m of testingModules) {
+    let res = "resource://testing-common/services/sync/" + m;
+    _("Attempting to load " + res);
+    Cu.import(res, {});
   }
 }
 

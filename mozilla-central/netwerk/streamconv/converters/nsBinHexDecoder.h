@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Scott MacGregor <mscott@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // A decoder for Mac Bin Hex 4.0.
 
@@ -68,15 +35,15 @@
 
 typedef struct _binhex_header
 {
-  PRUint32 type, creator;
-  PRUint16 flags;
-  PRInt32 dlen, rlen;
+  uint32_t type, creator;
+  uint16_t flags;
+  int32_t dlen, rlen;
 } binhex_header;
 
 typedef union
 {
   unsigned char c[4];
-  PRUint32      val;
+  uint32_t      val;
 } longbuf;
 
 #define BINHEX_STATE_START    0
@@ -111,8 +78,8 @@ public:
 protected:
   virtual ~nsBinHexDecoder();
 
-  PRInt16  GetNextChar(PRUint32 numBytesInBuffer);
-  nsresult ProcessNextChunk(nsIRequest * aRequest, nsISupports * aContext, PRUint32 numBytesInBuffer);
+  int16_t  GetNextChar(uint32_t numBytesInBuffer);
+  nsresult ProcessNextChunk(nsIRequest * aRequest, nsISupports * aContext, uint32_t numBytesInBuffer);
   nsresult ProcessNextState(nsIRequest * aRequest, nsISupports * aContext);
   nsresult DetectContentType(nsIRequest * aRequest, const nsAFlatCString &aFilename);
 
@@ -123,13 +90,13 @@ protected:
   nsCOMPtr<nsIOutputStream>     mOutputStream;     // output stream
   nsCOMPtr<nsIInputStream>      mInputStream;
 
-  PRInt16   mState;      /* current state */
-  PRUint16  mCRC;        /* cumulative CRC */
-  PRUint16  mFileCRC;    /* CRC value from file */
+  int16_t   mState;      /* current state */
+  uint16_t  mCRC;        /* cumulative CRC */
+  uint16_t  mFileCRC;    /* CRC value from file */
   longbuf   mOctetBuf;   /* buffer for decoded 6-bit values     */
-  PRInt16   mOctetin;    /* current input position in octetbuf */
-  PRInt16   mDonePos;    /* ending position in octetbuf */
-  PRInt16   mInCRC;      /* flag set when reading a CRC */
+  int16_t   mOctetin;    /* current input position in octetbuf */
+  int16_t   mDonePos;    /* ending position in octetbuf */
+  int16_t   mInCRC;      /* flag set when reading a CRC */
 
   // Bin Hex Header Information
   binhex_header mHeader;
@@ -139,15 +106,15 @@ protected:
   // for the outgoing decoded data. I tried getting them to share a buffer but things didn't work out so nicely.
   char * mDataBuffer; // temporary holding pen for the incoming data.
   char * mOutgoingBuffer; // temporary holding pen for the incoming data.
-  PRUint32 mPosInDataBuffer;
+  uint32_t mPosInDataBuffer;
 
   unsigned char mRlebuf;  /* buffer for last run length encoding value */
 
-  PRUint32 mCount;        /* generic counter */
-  PRInt16 mMarker;        /* flag indicating maker */
+  uint32_t mCount;        /* generic counter */
+  int16_t mMarker;        /* flag indicating maker */
 
-  PRInt32 mPosInbuff;     /* the index of the inbuff.  */
-  PRInt32 mPosOutputBuff; /* the position of the out buff.    */
+  int32_t mPosInbuff;     /* the index of the inbuff.  */
+  int32_t mPosOutputBuff; /* the position of the out buff.    */
 };
 
 #endif /* nsBinHexDecoder_h__ */

@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=352728
 -->
 <head>
   <title>Test for Bug 352728</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>        
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -30,7 +29,7 @@ function checkTypes(aNode, aNodeType, aTypeArray)
 function checkInterfaces(aNode, aNodeType, aInterfaceArray)
 {
   for (var i = 0; i < aInterfaceArray.length; ++i) {
-    ok(aNode instanceof Components.interfaces[aInterfaceArray[i]],
+    ok(aNode instanceof SpecialPowers.Ci[aInterfaceArray[i]],
        aNodeType + " interface test " + i,
        aNodeType + " should be a " + aInterfaceArray[i]);
   }
@@ -45,7 +44,7 @@ function testCharacterData(aNode, aText)
   is(aNode.namespaceURI, null, "Check namespaceURI");
 }
 
-function testComment(aText, aShouldSucceed)
+function testComment(aText)
 {
   try {
     var comment = document.createComment(aText);
@@ -53,23 +52,14 @@ function testComment(aText, aShouldSucceed)
     checkTypes(comment, "comment", types);
 
     var interfaces = [ "nsIDOMComment", "nsIDOMCharacterData", "nsIDOMNode",
-                       "nsIDOM3Node", "nsIDOMEventTarget" ];
+                       "nsIDOMEventTarget" ];
     checkInterfaces(comment, "comment", interfaces);
 
     testCharacterData(comment, aText);
     is(comment.nodeName, "#comment", "Check nodeName");
     is(comment.nodeType, Node.COMMENT_NODE, "Check nodeType");
-
-    if (!aShouldSucceed) {
-      ok(0, "Invalid comment creation",
-         "Shouldn't create comment with embedded \"--\"");
-    }
   } catch (e) {
-    if (aShouldSucceed) {
-      ok(0, "Correct functioning of comment stuff", "something broke: " + e);
-    } else {
-      is(e.code, DOMException.INVALID_CHARACTER_ERR, "Check exception code");
-    }
+    ok(0, "Correct functioning of comment stuff", "something broke: " + e);
   }
 }
 
@@ -80,6 +70,7 @@ function testCDATASection(aText, aShouldSucceed)
     ok(0, "Invalid CDATA section creation",
        "Shouldn't create CDATA sections in HTML");
   } catch (e) {
+    is(e.name, "NotSupportedError", "Check exception");
     is(e.code, DOMException.NOT_SUPPORTED_ERR, "Check exception code");
   }
 }
@@ -88,18 +79,41 @@ function testPI(aTarget, aData, aShouldSucceed, aReason)
 {
   try {
     var pi = document.createProcessingInstruction(aTarget, aData);
-    ok(0, "Invalid processing instruction creation",
-       "Shouldn't create processing instructions in HTML");
+    var types = [ ProcessingInstruction, Node ];
+    checkTypes(pi, "processing instruction", types);
+
+    var interfaces = [ "nsIDOMProcessingInstruction", "nsIDOMNode",
+                       "nsIDOMEventTarget" ];
+    checkInterfaces(pi, "processing instruction", interfaces);
+
+    is(pi.target, aTarget, "Check target");
+    is(pi.data, aData, "Check data");
+    is(pi.nodeName, aTarget, "Check nodeName");
+    is(pi.nodeValue, aData, "Check nodeValue");
+    is(pi.localName, null, "Check localName")
+    is(pi.namespaceURI, null, "Check namespaceURI");
+    
+    is(pi.nodeType, Node.PROCESSING_INSTRUCTION_NODE, "Check nodeType");
+
+    if (!aShouldSucceed) {
+      ok(false, "Invalid processing instruction creation", aReason);
+    }
   } catch (e) {
-    is(e.code, DOMException.NOT_SUPPORTED_ERR, "Check exception code");
+    if (aShouldSucceed) {
+      ok(false, "Correct functioning of processing instruction stuff",
+         "something broke: " + e);
+    } else {
+      is(e.name, "InvalidCharacterError", "Check exception");
+      is(e.code, DOMException.INVALID_CHARACTER_ERR, "Check exception code");
+    }
   }
 }
 
-testComment("Some text", true);
-testComment("Some text with a '-' in it", true);
-testComment("Some text with a '-' and a '-' and another '-'", true);
-testComment("Some text -- this shouldn't create a node!", false);
-testComment("<!-- This is an HTML comment -->", false);
+testComment("Some text");
+testComment("Some text with a '-' in it");
+testComment("Some text with a '-' and a '-' and another '-'");
+testComment("Some text -- this should create a node!");
+testComment("<!-- This is an HTML comment -->");
 
 testCDATASection("Some text", true);
 testCDATASection("Some text with a '?' in it", true);

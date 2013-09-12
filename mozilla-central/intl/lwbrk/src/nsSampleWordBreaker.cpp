@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #include "nsSampleWordBreaker.h"
@@ -49,15 +17,15 @@ nsSampleWordBreaker::~nsSampleWordBreaker()
 
 NS_IMPL_ISUPPORTS1(nsSampleWordBreaker, nsIWordBreaker)
 
-PRBool nsSampleWordBreaker::BreakInBetween(
-  const PRUnichar* aText1 , PRUint32 aTextLen1,
-  const PRUnichar* aText2 , PRUint32 aTextLen2)
+bool nsSampleWordBreaker::BreakInBetween(
+  const PRUnichar* aText1 , uint32_t aTextLen1,
+  const PRUnichar* aText2 , uint32_t aTextLen2)
 {
-  NS_PRECONDITION( nsnull != aText1, "null ptr");
-  NS_PRECONDITION( nsnull != aText2, "null ptr");
+  NS_PRECONDITION( nullptr != aText1, "null ptr");
+  NS_PRECONDITION( nullptr != aText2, "null ptr");
 
   if(!aText1 || !aText2 || (0 == aTextLen1) || (0 == aTextLen2))
-    return PR_FALSE;
+    return false;
 
   return (this->GetClass(aText1[aTextLen1-1]) != this->GetClass(aText2[0]));
 }
@@ -76,7 +44,7 @@ PRBool nsSampleWordBreaker::BreakInBetween(
 #define IS_HALFWIDTHKATAKANA(c)         (( 0xFF60 <= (c)) && ((c) <= 0xFF9F))
 #define IS_THAI(c)         (0x0E00 == (0xFF80 & (c) )) // Look at the higest 9 bits
 
-PRUint8 nsSampleWordBreaker::GetClass(PRUnichar c)
+uint8_t nsSampleWordBreaker::GetClass(PRUnichar c)
 {
   // begin of the hack
 
@@ -113,11 +81,11 @@ PRUint8 nsSampleWordBreaker::GetClass(PRUnichar c)
 }
 
 nsWordRange nsSampleWordBreaker::FindWord(
-  const PRUnichar* aText , PRUint32 aTextLen,
-  PRUint32 aOffset)
+  const PRUnichar* aText , uint32_t aTextLen,
+  uint32_t aOffset)
 {
   nsWordRange range;
-  NS_PRECONDITION( nsnull != aText, "null ptr");
+  NS_PRECONDITION( nullptr != aText, "null ptr");
   NS_PRECONDITION( 0 != aTextLen, "len = 0");
   NS_PRECONDITION( aOffset <= aTextLen, "aOffset > aTextLen");
 
@@ -127,8 +95,8 @@ nsWordRange nsSampleWordBreaker::FindWord(
   if(!aText || aOffset > aTextLen)
     return range;
 
-  PRUint8 c = this->GetClass(aText[aOffset]);
-  PRUint32 i;
+  uint8_t c = this->GetClass(aText[aOffset]);
+  uint32_t i;
   // Scan forward
   range.mEnd--;
   for(i = aOffset +1;i <= aTextLen; i++)
@@ -158,11 +126,11 @@ nsWordRange nsSampleWordBreaker::FindWord(
   return range;
 }
 
-PRInt32 nsSampleWordBreaker::NextWord( 
-  const PRUnichar* aText, PRUint32 aLen, PRUint32 aPos) 
+int32_t nsSampleWordBreaker::NextWord( 
+  const PRUnichar* aText, uint32_t aLen, uint32_t aPos) 
 {
-  PRInt8 c1, c2;
-  PRUint32 cur = aPos;
+  int8_t c1, c2;
+  uint32_t cur = aPos;
   if (cur == aLen)
     return NS_WORDBREAKER_NEED_MORE_TEXT;
   c1 = this->GetClass(aText[cur]);

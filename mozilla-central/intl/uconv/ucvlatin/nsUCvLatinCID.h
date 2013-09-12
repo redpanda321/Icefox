@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsUCvLatinCID_h___
 #define nsUCvLatinCID_h___
@@ -200,11 +168,6 @@
 // {6394EEAB-FC3D-11d2-B3B8-00805F8A6670}
 #define NS_MACICELANDICTOUNICODE_CID \
   { 0x6394eeab, 0xfc3d, 0x11d2, {0xb3, 0xb8, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
-
-// Class ID for our GEOSTD8ToUnicode charset converter
-// {6394EEAF-FC3D-11d2-B3B8-00805F8A6670}
-#define NS_GEOSTD8TOUNICODE_CID \
-  { 0x6394eeaf, 0xfc3d, 0x11d2, {0xb3, 0xb8, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
 
 // Class ID for our ARMSCII8ToUnicode charset converter
 // {6394EEAC-FC3D-11d2-B3B8-00805F8A6670}
@@ -397,11 +360,6 @@
 #define NS_UNICODETOMACICELANDIC_CID \
   { 0x6394eebb, 0xfc3d, 0x11d2, {0xb3, 0xb8, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
 
-// Class ID for our UnicodeToGEOSTD8 charset converter
-// {6394EEBE-FC3D-11d2-B3B8-00805F8A6670}
-#define NS_UNICODETOGEOSTD8_CID \
-  { 0x6394eebe, 0xfc3d, 0x11d2, {0xb3, 0xb8, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
-
 // Class ID for our UnicodeToARMSCII8 charset converter
 // {6394EEBC-FC3D-11d2-B3B8-00805F8A6670}
 #define NS_UNICODETOARMSCII8_CID \
@@ -452,26 +410,6 @@
 #define NS_UNICODETOCP1256_CID \
   { 0xba6151a4, 0x1dfa, 0x11d3, {0xb3, 0xbf, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
 
-// Class ID for our UnicodeToVIQR charset converter
-// {BA6151A5-1DFA-11d3-B3BF-00805F8A6670}
-#define NS_UNICODETOVIQR_CID \
-  { 0xba6151a5, 0x1dfa, 0x11d3, {0xb3, 0xbf, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
-
-// Class ID for our VIQRToUnicode charset converter
-// {BA6151A6-1DFA-11d3-B3BF-00805F8A6670}
-#define NS_VIQRTOUNICODE_CID \
-  { 0xba6151a6, 0x1dfa, 0x11d3, {0xb3, 0xbf, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
-
-// Class ID for our UnicodeToVNI charset converter
-// {BA6151A7-1DFA-11d3-B3BF-00805F8A6670}
-#define NS_UNICODETOVNI_CID \
-  { 0xba6151a7, 0x1dfa, 0x11d3, {0xb3, 0xbf, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
-
-// Class ID for our VNIToUnicode charset converter
-// {BA6151A8-1DFA-11d3-B3BF-00805F8A6670}
-#define NS_VNITOUNICODE_CID \
-  { 0xba6151a8, 0x1dfa, 0x11d3, {0xb3, 0xbf, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
-
 // Class ID for our CP866ToUnicode charset converter
 // {BA6151A9-1DFA-11d3-B3BF-00805F8A6670}
 #define NS_CP866TOUNICODE_CID \
@@ -502,11 +440,6 @@
 #define NS_UNICODETOUTF16BE_CID \
   { 0xba6151ad, 0x1dfa, 0x11d3, {0xb3, 0xbf, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
 
-// Class ID for our UnicodeToUTF32BE charset converter
-// {BA6151AE-1DFA-11d3-B3BF-00805F8A6670}
-#define NS_UNICODETOUTF32BE_CID \
-  { 0xba6151ae, 0x1dfa, 0x11d3, {0xb3, 0xbf, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
-
 // Class ID for our UnicodeToT61 charset converter
 // {BA6151AF-1DFA-11d3-B3BF-00805F8A6670}
 #define NS_UNICODETOT61_CID \
@@ -532,11 +465,6 @@
 #define NS_UTF16BETOUNICODE_CID \
   { 0xba6151b2, 0x1dfa, 0x11d3, {0xb3, 0xbf, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
 
-// Class ID for our UTF32BEToUnicode charset converter
-// {BA6151B3-1DFA-11d3-B3BF-00805F8A6670}
-#define NS_UTF32BETOUNICODE_CID \
-  { 0xba6151b3, 0x1dfa, 0x11d3, {0xb3, 0xbf, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
-
 // Class ID for our T61ToUnicode charset converter
 // {BA6151B4-1DFA-11d3-B3BF-00805F8A6670}
 #define NS_T61TOUNICODE_CID \
@@ -547,30 +475,15 @@
 #define NS_UNICODETOUTF16LE_CID \
   { 0xba6151b5, 0x1dfa, 0x11d3, {0xb3, 0xbf, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
 
-// Class ID for our UnicodeToUTF32LE charset converter
-// {BA6151B6-1DFA-11d3-B3BF-00805F8A6670}
-#define NS_UNICODETOUTF32LE_CID \
-  { 0xba6151b6, 0x1dfa, 0x11d3, {0xb3, 0xbf, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
-
 // Class ID for our UTF16ToUnicode charset converter
 // {d673255d-1184-400a-b0b5-ee9d1295bd85}
 #define NS_UTF16TOUNICODE_CID \
   { 0xd673255d, 0x1184, 0x400a, {0xb0, 0xb5, 0xee,0x9d, 0x12, 0x95, 0xbd, 0x85}}
 
-// Class ID for our UTF32ToUnicode charset converter
-// {30DCD313-73E1-447d-8339-37744952154E}
-#define NS_UTF32TOUNICODE_CID \
-  { 0x30dcd313, 0x73e1, 0x447d, {0x83, 0x39, 0x37, 0x74, 0x49, 0x52, 0x15, 0x4e}}
-
 // Class ID for our UTF16LEToUnicode charset converter
 // {BA6151B7-1DFA-11d3-B3BF-00805F8A6670}
 #define NS_UTF16LETOUNICODE_CID \
   { 0xba6151b7, 0x1dfa, 0x11d3, {0xb3, 0xbf, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
-
-// Class ID for our UTF32LEToUnicode charset converter
-// {BA6151B8-1DFA-11d3-B3BF-00805F8A6670}
-#define NS_UTF32LETOUNICODE_CID \
-  { 0xba6151b8, 0x1dfa, 0x11d3, {0xb3, 0xbf, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
 
 // Class ID for our ISOIR111ToUnicode charset converter
 #define NS_ISOIR111TOUNICODE_CID \
@@ -608,17 +521,9 @@
 #define NS_UNICODETOADOBEEURO_CID \
   { 0x822cb9ae, 0x6421, 0x4484, {0xb3, 0xc3, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
 
-// {4F26B731-46CB-11d3-B3C3-00805F8A6670}
-#define NS_UNICODETOTIS620WIN_CID \
-  { 0x4f26b731, 0x46cb, 0x11d3, {0xb3, 0xc3, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
-
 // {49B38F12-6193-11d3-B3C5-00805F8A6670}
 #define NS_UNICODETOUTF16_CID \
   { 0x49b38f12, 0x6193, 0x11d3, {0xb3, 0xc5, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
-
-// {49B38F14-6193-11d3-B3C5-00805F8A6670}
-#define NS_UNICODETOUTF32_CID \
-  { 0x49b38f14, 0x6193, 0x11d3, {0xb3, 0xc5, 0x0, 0x80, 0x5f, 0x8a, 0x66, 0x70}}
 
 // {6803CAC4-1E3B-11d5-A145-005004832142}
 #define NS_MACDEVANAGARITOUNICODE_CID \

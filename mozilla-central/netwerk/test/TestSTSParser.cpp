@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Strict-Transport-Security.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Sid Stamm <sid@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 //#define MOZILLA_INTERNAL_API
 
@@ -49,7 +16,7 @@
   PR_BEGIN_MACRO \
   if (NS_FAILED(rv)) { \
     fail(__VA_ARGS__); \
-    return PR_FALSE; \
+    return false; \
   } \
   PR_END_MACRO
 
@@ -58,7 +25,7 @@
   PR_BEGIN_MACRO \
   if (NS_SUCCEEDED(rv)) { \
     fail(__VA_ARGS__); \
-    return PR_FALSE; \
+    return false; \
   } \
   PR_END_MACRO
 
@@ -66,12 +33,13 @@
   PR_BEGIN_MACRO \
   if (a != b) { \
     fail(__VA_ARGS__); \
-    return PR_FALSE; \
+    return false; \
   } \
   PR_END_MACRO
 
-PRBool
-TestSuccess(const char* hdr, PRBool extraTokens,
+bool
+TestSuccess(const char* hdr, bool extraTokens,
+            uint64_t expectedMaxAge, bool expectedIncludeSubdomains,
             nsIStrictTransportSecurityService* stss,
             nsIPermissionManager* pm)
 {
@@ -79,8 +47,13 @@ TestSuccess(const char* hdr, PRBool extraTokens,
   nsresult rv = NS_NewURI(getter_AddRefs(dummyUri), "https://foo.com/bar.html");
   EXPECT_SUCCESS(rv, "Failed to create URI");
 
-  rv = stss->ProcessStsHeader(dummyUri, hdr);
+  uint64_t maxAge = 0;
+  bool includeSubdomains = false;
+  rv = stss->ProcessStsHeader(dummyUri, hdr, 0, &maxAge, &includeSubdomains);
   EXPECT_SUCCESS(rv, "Failed to process valid header: %s", hdr);
+
+  REQUIRE_EQUAL(maxAge, expectedMaxAge, "Did not correctly parse maxAge");
+  REQUIRE_EQUAL(includeSubdomains, expectedIncludeSubdomains, "Did not correctly parse presence/absence of includeSubdomains");
 
   if (extraTokens) {
     REQUIRE_EQUAL(rv, NS_SUCCESS_LOSS_OF_INSIGNIFICANT_DATA,
@@ -90,10 +63,10 @@ TestSuccess(const char* hdr, PRBool extraTokens,
   }
 
   passed(hdr);
-  return PR_TRUE;
+  return true;
 }
 
-PRBool TestFailure(const char* hdr,
+bool TestFailure(const char* hdr,
                    nsIStrictTransportSecurityService* stss,
                    nsIPermissionManager* pm)
 {
@@ -101,70 +74,76 @@ PRBool TestFailure(const char* hdr,
   nsresult rv = NS_NewURI(getter_AddRefs(dummyUri), "https://foo.com/bar.html");
   EXPECT_SUCCESS(rv, "Failed to create URI");
 
-  rv = stss->ProcessStsHeader(dummyUri, hdr);
+  rv = stss->ProcessStsHeader(dummyUri, hdr, 0, NULL, NULL);
   EXPECT_FAILURE(rv, "Parsed invalid header: %s", hdr);
   passed(hdr);
-  return PR_TRUE;
+  return true;
 }
 
 
 int
-main(PRInt32 argc, char *argv[])
+main(int32_t argc, char *argv[])
 {
     nsresult rv;
     ScopedXPCOM xpcom("STS Parser Tests");
     if (xpcom.failed())
       return -1;
+    // Initialize a profile folder to ensure a clean shutdown.
+    nsCOMPtr<nsIFile> profile = xpcom.GetProfileDirectory();
+    if (!profile) {
+      fail("Couldn't get the profile directory.");
+      return -1;
+    }
 
     // grab handle to the service
     nsCOMPtr<nsIStrictTransportSecurityService> stss;
     stss = do_GetService("@mozilla.org/stsservice;1", &rv);
-    NS_ENSURE_SUCCESS(rv, rv);
+    NS_ENSURE_SUCCESS(rv, -1);
 
     nsCOMPtr<nsIPermissionManager> pm;
     pm = do_GetService("@mozilla.org/permissionmanager;1", &rv);
-    NS_ENSURE_SUCCESS(rv, rv);
+    NS_ENSURE_SUCCESS(rv, -1);
 
     int rv0, rv1;
 
-    nsTArray<PRBool> rvs(24);
+    nsTArray<bool> rvs(24);
 
     // *** parsing tests
     printf("*** Attempting to parse valid STS headers ...\n");
 
     // SHOULD SUCCEED:
-    rvs.AppendElement(TestSuccess("max-age=100", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess("max-age  =100", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess(" max-age=100", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess("max-age = 100 ", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess("max-age  =       100             ", PR_FALSE, stss, pm));
+    rvs.AppendElement(TestSuccess("max-age=100", false, 100, false, stss, pm));
+    rvs.AppendElement(TestSuccess("max-age  =100", false, 100, false, stss, pm));
+    rvs.AppendElement(TestSuccess(" max-age=100", false, 100, false, stss, pm));
+    rvs.AppendElement(TestSuccess("max-age = 100 ", false, 100, false, stss, pm));
+    rvs.AppendElement(TestSuccess("max-age  =       100             ", false, 100, false, stss, pm));
 
-    rvs.AppendElement(TestSuccess("maX-aGe=100", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess("MAX-age  =100", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess("max-AGE=100", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess("Max-Age = 100 ", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess("MAX-AGE = 100 ", PR_FALSE, stss, pm));
+    rvs.AppendElement(TestSuccess("maX-aGe=100", false, 100, false, stss, pm));
+    rvs.AppendElement(TestSuccess("MAX-age  =100", false, 100, false, stss, pm));
+    rvs.AppendElement(TestSuccess("max-AGE=100", false, 100, false, stss, pm));
+    rvs.AppendElement(TestSuccess("Max-Age = 100 ", false, 100, false, stss, pm));
+    rvs.AppendElement(TestSuccess("MAX-AGE = 100 ", false, 100, false, stss, pm));
 
-    rvs.AppendElement(TestSuccess("max-age=100;includeSubdomains", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess("max-age=100; includeSubdomains", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess(" max-age=100; includeSubdomains", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess("max-age = 100 ; includeSubdomains", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess("max-age  =       100             ; includeSubdomains", PR_FALSE, stss, pm));
+    rvs.AppendElement(TestSuccess("max-age=100;includeSubdomains", false, 100, true, stss, pm));
+    rvs.AppendElement(TestSuccess("max-age=100; includeSubdomains", false, 100, true, stss, pm));
+    rvs.AppendElement(TestSuccess(" max-age=100; includeSubdomains", false, 100, true, stss, pm));
+    rvs.AppendElement(TestSuccess("max-age = 100 ; includeSubdomains", false, 100, true, stss, pm));
+    rvs.AppendElement(TestSuccess("max-age  =       100             ; includeSubdomains", false, 100, true, stss, pm));
 
-    rvs.AppendElement(TestSuccess("maX-aGe=100; includeSUBDOMAINS", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess("MAX-age  =100; includeSubDomains", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess("max-AGE=100; iNcLuDeSuBdoMaInS", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess("Max-Age = 100; includesubdomains ", PR_FALSE, stss, pm));
-    rvs.AppendElement(TestSuccess("INCLUDESUBDOMAINS;MaX-AgE = 100 ", PR_FALSE, stss, pm));
+    rvs.AppendElement(TestSuccess("maX-aGe=100; includeSUBDOMAINS", false, 100, true, stss, pm));
+    rvs.AppendElement(TestSuccess("MAX-age  =100; includeSubDomains", false, 100, true, stss, pm));
+    rvs.AppendElement(TestSuccess("max-AGE=100; iNcLuDeSuBdoMaInS", false, 100, true, stss, pm));
+    rvs.AppendElement(TestSuccess("Max-Age = 100; includesubdomains ", false, 100, true, stss, pm));
+    rvs.AppendElement(TestSuccess("INCLUDESUBDOMAINS;MaX-AgE = 100 ", false, 100, true, stss, pm));
 
     // these are weird tests, but are testing that some extended syntax is
     // still allowed (but it is ignored)
-    rvs.AppendElement(TestSuccess("max-age=100randomstuffhere", PR_TRUE, stss, pm));
-    rvs.AppendElement(TestSuccess("max-age=100 includesubdomains", PR_TRUE, stss, pm));
-    rvs.AppendElement(TestSuccess("max-age=100 bar foo", PR_TRUE, stss, pm));
-    rvs.AppendElement(TestSuccess("max-age=100 ; includesubdomainsSomeStuff", PR_TRUE, stss, pm));
+    rvs.AppendElement(TestSuccess("max-age=100randomstuffhere", true, 100, false, stss, pm));
+    rvs.AppendElement(TestSuccess("max-age=100 includesubdomains", true, 100, false, stss, pm));
+    rvs.AppendElement(TestSuccess("max-age=100 bar foo", true, 100, false, stss, pm));
+    rvs.AppendElement(TestSuccess("max-age=100 ; includesubdomainsSomeStuff", true, 100, false, stss, pm));
 
-    rv0 = rvs.Contains(PR_FALSE) ? 1 : 0;
+    rv0 = rvs.Contains(false) ? 1 : 0;
     if (rv0 == 0)
       passed("Successfully Parsed STS headers with mixed case and LWS");
 
@@ -188,7 +167,7 @@ main(PRInt32 argc, char *argv[])
     rvs.AppendElement(TestFailure("includesubdomains", stss, pm));
     rvs.AppendElement(TestFailure(";", stss, pm));
 
-    rv1 = rvs.Contains(PR_FALSE) ? 1 : 0;
+    rv1 = rvs.Contains(false) ? 1 : 0;
     if (rv1 == 0)
       passed("Avoided parsing invalid STS headers");
 

@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=437448
 -->
 <head>
   <title>Test for Bug 437448</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -25,6 +24,7 @@ function runTests()
   var doc = $("svg").contentWindow.document;
   var filter = doc.getElementById("filter");
   var convolve = doc.getElementById("convolve");
+  var blur = doc.getElementById("blur");
   var marker = doc.getElementById("marker");
 
   // class attribute
@@ -38,8 +38,11 @@ function runTests()
   is(filter.className.animVal, "bar", "className animVal");
   filter.removeAttribute("class");
   is(filter.hasAttribute("class"), false, "class attribute");
+  ok(filter.getAttribute("class") === null, "removed class attribute");
   is(filter.className.baseVal, "", "className baseVal");
   is(filter.className.animVal, "", "className animVal");
+  filter.setAttribute("class", "");
+  ok(filter.getAttribute("class") === "", "empty class attribute");
 
   // length attribute
 
@@ -57,6 +60,11 @@ function runTests()
   is(marker.markerWidth.animVal.value, 7.5, "length animVal");
   is(marker.getAttribute("markerWidth"), "7.5", "length attribute");
 
+  marker.setAttribute("markerWidth", "");
+  ok(marker.getAttribute("markerWidth") === "", "empty length attribute");
+  marker.removeAttribute("markerWidth");
+  ok(marker.getAttribute("markerWidth") === null, "removed length attribute");
+
   // number attribute
 
   convolve.setAttribute("divisor", "12.5");
@@ -67,6 +75,40 @@ function runTests()
   is(convolve.divisor.animVal, 7.5, "number animVal");
   is(convolve.getAttribute("divisor"), "7.5", "number attribute");
 
+  convolve.setAttribute("divisor", "");
+  ok(convolve.getAttribute("divisor") === "", "empty number attribute");
+  convolve.removeAttribute("divisor");
+  ok(convolve.getAttribute("divisor") === null, "removed number attribute");
+
+  // number-optional-number attribute
+
+  blur.setAttribute("stdDeviation", "20.5");
+  is(blur.stdDeviationX.baseVal, 20.5, "number-optional-number first baseVal");
+  is(blur.stdDeviationX.animVal, 20.5, "number-optional-number first animVal");
+  is(blur.stdDeviationY.baseVal, 20.5, "number-optional-number second baseVal");
+  is(blur.stdDeviationY.animVal, 20.5, "number-optional-number second animVal");
+
+  blur.stdDeviationX.baseVal = 8.5;
+  is(blur.stdDeviationX.animVal, 8.5, "number-optional-number first animVal");
+  is(blur.stdDeviationY.animVal, 20.5, "number-optional-number second animVal");
+  is(blur.getAttribute("stdDeviation"), "8.5, 20.5", "number-optional-number attribute");
+
+  blur.stdDeviationY.baseVal = 8.5;
+  is(blur.getAttribute("stdDeviation"), "8.5", "number-optional-number attribute");
+
+  blur.setStdDeviation(24.5, 0.5);
+  is(blur.stdDeviationX.baseVal, 24.5, "integer-optional-integer first baseVal");
+  is(blur.stdDeviationX.animVal, 24.5, "integer-optional-integer first animVal");
+  is(blur.stdDeviationY.baseVal, 0.5, "integer-optional-integer second baseVal");
+  is(blur.stdDeviationY.animVal, 0.5, "integer-optional-integer second animVal");
+
+  blur.setAttribute("stdDeviation", "");
+  ok(blur.getAttribute("stdDeviation") === "",
+     "empty number-optional-number attribute");
+  blur.removeAttribute("stdDeviation");
+  ok(blur.getAttribute("stdDeviation") === null,
+     "removed number-optional-number attribute");
+
   // integer attribute
 
   convolve.setAttribute("targetX", "12");
@@ -75,6 +117,39 @@ function runTests()
   convolve.targetX.baseVal = 7;
   is(convolve.targetX.animVal, 7, "integer animVal");
   is(convolve.getAttribute("targetX"), "7", "integer attribute");
+  convolve.setAttribute("targetX", "");
+  ok(convolve.getAttribute("targetX") === "", "empty integer attribute");
+  convolve.removeAttribute("targetX");
+  ok(convolve.getAttribute("targetX") === null, "removed integer attribute");
+
+  // integer-optional-integer attribute
+
+  filter.setAttribute("filterRes", "100");
+  is(filter.filterResX.baseVal, 100, "integer-optional-integer first baseVal");
+  is(filter.filterResX.animVal, 100, "integer-optional-integer first animVal");
+  is(filter.filterResY.baseVal, 100, "integer-optional-integer second baseVal");
+  is(filter.filterResY.animVal, 100, "integer-optional-integer second animVal");
+
+  filter.filterResX.baseVal = 50;
+  is(filter.filterResX.animVal, 50, "integer-optional-integer first animVal");
+  is(filter.filterResY.animVal, 100, "integer-optional-integer second animVal");
+  is(filter.getAttribute("filterRes"), "50, 100", "integer-optional-integer attribute");
+
+  filter.filterResY.baseVal = 50;
+  is(filter.getAttribute("filterRes"), "50", "integer-optional-integer attribute");
+
+  filter.setFilterRes(80, 90);
+  is(filter.filterResX.baseVal, 80, "integer-optional-integer first baseVal");
+  is(filter.filterResX.animVal, 80, "integer-optional-integer first animVal");
+  is(filter.filterResY.baseVal, 90, "integer-optional-integer second baseVal");
+  is(filter.filterResY.animVal, 90, "integer-optional-integer second animVal");
+
+  filter.setAttribute("filterRes", "");
+  ok(filter.getAttribute("filterRes") === "",
+     "empty integer-optional-integer attribute");
+  filter.removeAttribute("filterRes");
+  ok(filter.getAttribute("filterRes") === null,
+     "removed integer-optional-integer attribute");
 
   // angle attribute
 
@@ -92,6 +167,11 @@ function runTests()
   is(marker.orientAngle.animVal.value, 30, "angle animVal");
   is(marker.getAttribute("orient"), "30deg", "angle attribute");
 
+  marker.setAttribute("orient", "");
+  ok(marker.getAttribute("orient") === "", "empty angle attribute");
+  marker.removeAttribute("orient");
+  ok(marker.getAttribute("orient") === null, "removed angle attribute");
+
   // boolean attribute
 
   convolve.setAttribute("preserveAlpha", "false");
@@ -100,6 +180,11 @@ function runTests()
   convolve.preserveAlpha.baseVal = true;
   is(convolve.preserveAlpha.animVal, true, "boolean animVal");
   is(convolve.getAttribute("preserveAlpha"), "true", "boolean attribute");
+  convolve.setAttribute("preserveAlpha", "");
+  ok(convolve.getAttribute("preserveAlpha") === "", "empty boolean attribute");
+  convolve.removeAttribute("preserveAlpha");
+  ok(convolve.getAttribute("preserveAlpha") === null,
+     "removed boolean attribute");
 
   // enum attribute
 
@@ -109,6 +194,10 @@ function runTests()
   convolve.edgeMode.baseVal = 1;
   is(convolve.edgeMode.animVal, 1, "enum animVal");
   is(convolve.getAttribute("edgeMode"), "duplicate", "enum attribute");
+  convolve.setAttribute("edgeMode", "");
+  ok(convolve.getAttribute("edgeMode") === "", "empty enum attribute");
+  convolve.removeAttribute("edgeMode");
+  ok(convolve.getAttribute("edgeMode") === null, "removed enum attribute");
 
   // string attribute
 
@@ -118,6 +207,10 @@ function runTests()
   convolve.result.baseVal = "bar";
   is(convolve.result.animVal, "bar", "string animVal");
   is(convolve.getAttribute("result"), "bar", "string attribute");
+  convolve.setAttribute("result", "");
+  ok(convolve.getAttribute("result") === "", "empty string attribute");
+  convolve.removeAttribute("result");
+  ok(convolve.getAttribute("result") === null, "removed string attribute");
 
   // preserveAspectRatio attribute
 
@@ -141,6 +234,13 @@ function runTests()
   is(animPreserveAspectRatio.align, 7, "preserveAspectRatio.align animVal");
   is(basePreserveAspectRatio.meetOrSlice, 2, "preserveAspectRatio.meetOrSlice baseVal");
   is(animPreserveAspectRatio.meetOrSlice, 2, "preserveAspectRatio.meetOrSlice animVal");
+
+  marker.setAttribute("preserveAspectRatio", "");
+  ok(marker.getAttribute("preserveAspectRatio") === "",
+     "empty preserveAspectRatio attribute");
+  marker.removeAttribute("preserveAspectRatio");
+  ok(marker.getAttribute("preserveAspectRatio") === null,
+     "removed preserveAspectRatio attribute");
 
   // viewBox attribute
   var baseViewBox = marker.viewBox.baseVal;
@@ -179,6 +279,10 @@ function runTests()
   is(marker.getAttribute("viewBox"), "5 6 7 8", "viewBox attribute");
   marker.removeAttribute("viewBox");
   is(marker.hasAttribute("viewBox"), false, "viewBox hasAttribute");
+  ok(marker.getAttribute("viewBox") === null, "removed viewBox attribute");
+
+  marker.setAttribute("viewBox", "");
+  ok(marker.getAttribute("viewBox") === "", "empty viewBox attribute");
 
   SimpleTest.finish();
 }

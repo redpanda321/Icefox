@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/LGPL 2.1/GPL 2.0
- *
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is IBM Corporation.
- * Portions created by IBM are
- *   Copyright (C) 2002, International Business Machines Corporation.
- *   All Rights Reserved.
- *
- * Contributor(s):
- *
- *  Alternatively, the contents of this file may be used under the terms of
- *  either of the GNU General Public License Version 2 or later (the "GPL"),
- *  or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- *  in which case the provisions of the GPL or the LGPL are applicable instead
- *  of those above. If you wish to allow use of your version of this file only
- *  under the terms of either the GPL or the LGPL, and not to allow others to
- *  use your version of this file under the terms of the MPL, indicate your
- *  decision by deleting the provisions above and replace them with the notice
- *  and other provisions required by the LGPL or the GPL. If you do not delete
- *  the provisions above, a recipient may use your version of this file under
- *  the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* Implement shared vtbl methods. */
 
@@ -48,7 +16,7 @@
         arriving in registers
 */
 extern "C" nsresult
-PrepareAndDispatch(nsXPTCStubBase* self, PRUint64 methodIndex, PRUint64* args, PRUint64 *gprData, double *fprData)
+PrepareAndDispatch(nsXPTCStubBase* self, uint64_t methodIndex, uint64_t* args, uint64_t *gprData, double *fprData)
 {
 
 #define PARAM_BUFFER_COUNT     16
@@ -57,13 +25,13 @@ PrepareAndDispatch(nsXPTCStubBase* self, PRUint64 methodIndex, PRUint64* args, P
     nsXPTCMiniVariant paramBuffer[PARAM_BUFFER_COUNT];
     nsXPTCMiniVariant* dispatchParams = NULL;
     const nsXPTMethodInfo* info = NULL;
-    PRUint8 paramCount;
-    PRUint8 i;
+    uint8_t paramCount;
+    uint8_t i;
     nsresult result = NS_ERROR_FAILURE;
 
     NS_ASSERTION(self,"no self");
 
-    self->mEntry->GetMethodInfo(PRUint16(methodIndex), &info);
+    self->mEntry->GetMethodInfo(uint16_t(methodIndex), &info);
     NS_ASSERTION(info,"no method info");
 
     paramCount = info->GetParamCount();
@@ -75,9 +43,9 @@ PrepareAndDispatch(nsXPTCStubBase* self, PRUint64 methodIndex, PRUint64* args, P
         dispatchParams = paramBuffer;
     NS_ASSERTION(dispatchParams,"no place for params");
 
-    PRUint64* ap = args;
-    PRUint32 iCount = 0;
-    PRUint32 fpCount = 0;
+    uint64_t* ap = args;
+    uint32_t iCount = 0;
+    uint32_t fpCount = 0;
     for(i = 0; i < paramCount; i++)
     {
         const nsXPTParamInfo& param = info->GetParam(i);
@@ -96,44 +64,44 @@ PrepareAndDispatch(nsXPTCStubBase* self, PRUint64 methodIndex, PRUint64* args, P
         switch(type)
         {
         case nsXPTType::T_I8      :  if (iCount < PARAM_GPR_COUNT)
-                                         dp->val.i8  = (PRInt8) gprData[iCount++];
+                                         dp->val.i8  = (int8_t) gprData[iCount++];
                                      else
-                                         dp->val.i8  = (PRInt8)  *ap++;
+                                         dp->val.i8  = (int8_t)  *ap++;
                                      break;
         case nsXPTType::T_I16     :  if (iCount < PARAM_GPR_COUNT)
-                                         dp->val.i16  = (PRInt16) gprData[iCount++];
+                                         dp->val.i16  = (int16_t) gprData[iCount++];
                                      else
-                                         dp->val.i16  = (PRInt16)  *ap++;
+                                         dp->val.i16  = (int16_t)  *ap++;
                                      break;
         case nsXPTType::T_I32     :  if (iCount < PARAM_GPR_COUNT)
-                                         dp->val.i32  = (PRInt32) gprData[iCount++];
+                                         dp->val.i32  = (int32_t) gprData[iCount++];
                                      else
-                                         dp->val.i32  = (PRInt32)  *ap++;
+                                         dp->val.i32  = (int32_t)  *ap++;
                                      break;
         case nsXPTType::T_I64     :  if (iCount < PARAM_GPR_COUNT)
-                                         dp->val.i64  = (PRInt64) gprData[iCount++];
+                                         dp->val.i64  = (int64_t) gprData[iCount++];
                                      else
-                                         dp->val.i64  = (PRInt64) *ap++;
+                                         dp->val.i64  = (int64_t) *ap++;
                                      break;
         case nsXPTType::T_U8      :  if (iCount < PARAM_GPR_COUNT)
-                                         dp->val.u8  = (PRUint8) gprData[iCount++];
+                                         dp->val.u8  = (uint8_t) gprData[iCount++];
                                      else
-                                         dp->val.u8  = (PRUint8)  *ap++;
+                                         dp->val.u8  = (uint8_t)  *ap++;
                                      break;
         case nsXPTType::T_U16     :  if (iCount < PARAM_GPR_COUNT)
-                                         dp->val.u16  = (PRUint16) gprData[iCount++];
+                                         dp->val.u16  = (uint16_t) gprData[iCount++];
                                      else
-                                         dp->val.u16  = (PRUint16)  *ap++;
+                                         dp->val.u16  = (uint16_t)  *ap++;
                                      break;
         case nsXPTType::T_U32     :  if (iCount < PARAM_GPR_COUNT)
-                                         dp->val.u32  = (PRUint32) gprData[iCount++];
+                                         dp->val.u32  = (uint32_t) gprData[iCount++];
                                      else
-                                         dp->val.u32  = (PRUint32)  *ap++;
+                                         dp->val.u32  = (uint32_t)  *ap++;
                                      break;
         case nsXPTType::T_U64     :  if (iCount < PARAM_GPR_COUNT)
-                                         dp->val.u64  = (PRUint64) gprData[iCount++];
+                                         dp->val.u64  = (uint64_t) gprData[iCount++];
                                      else
-                                         dp->val.u64  = (PRUint64)  *ap++;
+                                         dp->val.u64  = (uint64_t)  *ap++;
                                      break;
         case nsXPTType::T_FLOAT   :  if (fpCount < 13) {
                                          dp->val.f  = (float) fprData[fpCount++];
@@ -162,9 +130,9 @@ PrepareAndDispatch(nsXPTCStubBase* self, PRUint64 methodIndex, PRUint64* args, P
                                      }
                                      break;
         case nsXPTType::T_BOOL    :  if (iCount < PARAM_GPR_COUNT)
-                                         dp->val.b  = (PRBool) gprData[iCount++];
+                                         dp->val.b  = (bool) gprData[iCount++];
                                      else
-                                         dp->val.b  = (PRBool)  *ap++;
+                                         dp->val.b  = (bool)  *ap++;
                                      break;
         case nsXPTType::T_CHAR    :  if (iCount < PARAM_GPR_COUNT)
                                          dp->val.c  = (char) gprData[iCount++];
@@ -182,7 +150,7 @@ PrepareAndDispatch(nsXPTCStubBase* self, PRUint64 methodIndex, PRUint64* args, P
         }
     }
 
-    result = self->mOuter->CallMethod((PRUint16)methodIndex,info,dispatchParams);
+    result = self->mOuter->CallMethod((uint16_t)methodIndex,info,dispatchParams);
 
     if(dispatchParams != paramBuffer)
         delete [] dispatchParams;

@@ -1,45 +1,13 @@
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1998
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either of the GNU General Public License Version 2 or later (the "GPL"),
-# or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH		= ../../..
+DEPTH		= @DEPTH@
 topsrcdir	= @top_srcdir@
 srcdir		= @srcdir@
 VPATH		= @srcdir@
-relativesrcdir	= layout/base/tests
+relativesrcdir	= @relativesrcdir@
 
 include $(DEPTH)/config/autoconf.mk
 
@@ -47,28 +15,29 @@ PARALLEL_DIRS += \
   chrome \
   $(NULL)
 
-# We can't use CPP_UNIT_TESTS for TestPoisonArea because libxpcom
-# (which it does not need) isn't available at this point in the build.
+TOOL_DIRS := \
+  cpp-tests \
+  $(NULL)
 
-BARE_UNIT_TESTS = \
-		TestPoisonArea.cpp \
-		$(NULL)
-
-CPPSRCS += $(BARE_UNIT_TESTS)
-SIMPLE_PROGRAMS += $(BARE_UNIT_TESTS:.cpp=$(BIN_SUFFIX))
-
-include $(topsrcdir)/config/rules.mk
-
-DEFINES += -D_IMPL_NS_LAYOUT
-
-_TEST_FILES =	\
+MOCHITEST_FILES =	\
+		border_radius_hit_testing_iframe.html \
+		test_preserve3d_sorting_hit_testing.html \
+		preserve3d_sorting_hit_testing_iframe.html \
+		test_image_layers.html \
+		image_rgrg-256x256.png \
+		image_rrgg-256x256.png \
 		bug369950-subframe.xml \
-		bug495648.rdf \
-		decoration_line_rendering.js \
+		test_after_paint_pref.html \
+		test_border_radius_hit_testing.html \
 		test_bug66619.html \
+		test_bug93077-1.html \
+		test_bug93077-2.html \
+		test_bug93077-3.html \
+		test_bug93077-4.html \
+		test_bug93077-5.html \
+		test_bug93077-6.html \
 		test_bug114649.html \
-		$(warning test_bug369950.html disabled due to random orange; see bug 492575) \
-		test_bug370436.html \
+		$(filter disabled-for-random-orange--bug-492575, test_bug369950.html) \
 		test_bug386575.xhtml \
 		test_bug388019.html \
 		test_bug394057.html \
@@ -76,22 +45,30 @@ _TEST_FILES =	\
 		test_bug399951.html \
 		test_bug404209.xhtml \
 		test_bug416896.html \
-		test_bug420499.xul \
 		test_bug423523.html \
-		test_bug445810.html \
 		test_bug449781.html \
 		test_bug450930.xhtml \
+		bug450930.xhtml \
+		test_bug458898.html \
 		test_bug465448.xul \
 		test_bug469170.html \
 		test_bug471126.html \
 		test_bug435293-scale.html \
 		test_bug435293-interaction.html \
 		test_bug435293-skew.html \
-		test_bug495648.xul \
 		test_reftests_with_caret.html \
 		     bug106855-1.html \
 		     bug106855-2.html \
 		     bug106855-1-ref.html \
+		     bug240933-1.html \
+		     bug240933-2.html \
+		     bug240933-1-ref.html \
+		     bug389321-1.html \
+		     bug389321-1-ref.html \
+		     bug389321-2.html \
+		     bug389321-2-ref.html \
+		     bug389321-3.html \
+		     bug389321-3-ref.html \
 		     bug482484.html \
 		     bug482484-ref.html \
 		     bug512295-1.html \
@@ -100,24 +77,94 @@ _TEST_FILES =	\
 		     bug512295-2-ref.html \
 		     bug585922.html \
 		     bug585922-ref.html \
+		     bug597519-1.html \
+		     bug597519-1-ref.html \
+		     bug602141-1.html \
+		     bug602141-1-ref.html \
+		     bug602141-2.html \
+		     bug602141-2-ref.html \
+		     bug602141-3.html \
+		     bug602141-3-ref.html \
+		     bug602141-4.html \
+		     bug602141-4-ref.html \
+		     bug612271-1.html \
+		     bug612271-2.html \
+		     bug612271-3.html \
+		     bug612271-ref.html \
+		     bug613433-1.html \
+		     bug613433-2.html \
+		     bug613433-3.html \
+		     bug613433-ref.html \
+		     bug613807-1.html \
+		     bug613807-1-ref.html \
+		     bug632215-1.html \
+		     bug632215-2.html \
+		     bug632215-ref.html \
+		     bug633044-1.html \
+		     bug633044-1-ref.html \
+		     bug634406-1.html \
+		     bug634406-1-ref.html \
+		     bug644428-1.html \
+		     bug644428-1-ref.html \
+		     bug646382-1.html \
+		     bug646382-1-ref.html \
+		     bug646382-2.html \
+		     bug646382-2-ref.html \
+		     bug664087-1.html \
+		     bug664087-1-ref.html \
+		     bug664087-2.html \
+		     bug664087-2-ref.html \
+		     bug682712-1.html \
+		     bug682712-1-ref.html \
+		     bug746993-1.html \
+		     bug746993-1-ref.html \
 		test_bug514127.html \
 		test_bug518777.html \
 		test_bug548545.xhtml \
 		test_bug558663.html \
 		test_bug559499.html \
-		test_flush_on_paint.html \
+		test_bug569520.html \
+		test_bug582181-1.html \
+		test_bug582181-2.html \
+		test_bug588174.html \
+		test_bug607529.html \
+		file_bug607529.html \
+		test_bug667512.html \
+		test_bug677878.html \
+		test_bug696020.html \
+ 		test_event_target_radius.html \
 		test_mozPaintCount.html \
+		test_scroll_event_ordering.html \
 		test_scroll_selection_into_view.html \
+		test_bug583889.html \
+		bug583889_inner1.html \
+		bug583889_inner2.html \
+		test_bug582771.html \
+		test_bug603550.html \
+		test_bug629838.html \
+		test_bug646757.html \
+		test_bug718809.html \
+		test_bug725426.html \
+		test_bug731777.html \
+		test_bug761572.html \
+		test_bug770106.html \
+		test_maxLineBoxWidth.html \
+		test_remote_frame.html \
 		$(NULL)
 
 # Tests for bugs 441782, 467672 and 570378 don't pass reliably on Windows, because of bug 469208
-# Test for bug 458898 doesn't pass on Windows 7. See bug 562955.
 ifeq (,$(filter windows,$(MOZ_WIDGET_TOOLKIT)))
-_TEST_FILES += \
-		test_bug458898.html \
+# THESE TESTS (BELOW) DO NOT RUN ON WINDOWS
+MOCHITEST_FILES += \
 		bidi_numeral_test.js \
+		$(NULL)
+# THESE TESTS (ABOVE AND BELOW) DO NOT RUN ON WINDOWS
+MOCHITEST_FILES += \
 		test_bug332655-1.html \
 		test_bug332655-2.html \
+		$(NULL)
+# THESE TESTS (ABOVE AND BELOW) DO NOT RUN ON WINDOWS
+MOCHITEST_FILES += \
 		test_bug441782-1a.html \
 		test_bug441782-1b.html \
 		test_bug441782-1c.html \
@@ -153,6 +200,9 @@ _TEST_FILES += \
 		test_bug441782-5e.html \
 		bug441782-5.html \
 		bug441782-5-ref.html \
+		$(NULL)
+# THESE TESTS (ABOVE AND BELOW) DO NOT RUN ON WINDOWS
+MOCHITEST_FILES += \
 		test_bug467672-1a.html \
 		test_bug467672-1b.html \
 		test_bug467672-1c.html \
@@ -198,8 +248,13 @@ _TEST_FILES += \
 		test_bug467672-5g.html \
 		bug467672-5.html \
 		bug467672-5-ref.html \
+		$(NULL)
+# THESE TESTS (ABOVE AND BELOW) DO NOT RUN ON WINDOWS
+MOCHITEST_FILES += \
 		test_bug499538-1.html \
-		test_bug569520.html \
+		$(NULL)
+# THESE TESTS (ABOVE AND BELOW) DO NOT RUN ON WINDOWS
+MOCHITEST_FILES += \
 		test_bug570378-arabic-1a.html \
 		test_bug570378-arabic-1b.html \
 		test_bug570378-arabic-1c.html \
@@ -280,14 +335,26 @@ _TEST_FILES += \
 		test_bug570378-persian-5g.html \
 		bug570378-persian-5.html \
 		bug570378-persian-5-ref.html \
+                test_bug749186.html \
 		$(NULL)
+# THESE TESTS (ABOVE AND BELOW) DO NOT RUN ON WINDOWS
+MOCHITEST_FILES += \
+		test_bug644768.html \
+		$(NULL)
+# THESE TESTS (ABOVE) DO NOT RUN ON WINDOWS
 endif
 
-libs:: $(_TEST_FILES)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
+# test_flush_on_paint.html fails frequently on Mac, bug 688128
+ifeq (,$(filter cocoa,$(MOZ_WIDGET_TOOLKIT)))
+# THESE TESTS (BELOW) DO NOT RUN ON MAC
+MOCHITEST_FILES += \
+		$(filter disabled-for-random-orange--bug-539356, test_flush_on_paint.html) \
+		$(NULL)
+# THESE TESTS (ABOVE) DO NOT RUN ON MAC
+endif
 
-check::
-	@$(EXIT_ON_ERROR) \
-	  for f in $(subst .cpp,$(BIN_SUFFIX),$(BARE_UNIT_TESTS)); do \
-	    $(RUN_TEST_PROGRAM) $(DIST)/bin/$$f; \
-	  done
+MOCHITEST_BROWSER_FILES = \
+	browser_bug617076.js \
+	$(NULL)
+
+include $(topsrcdir)/config/rules.mk

@@ -5,7 +5,11 @@
 #ifndef CHROME_COMMON_MACH_MESSAGE_SOURCE_MAC_H_
 #define CHROME_COMMON_MACH_MESSAGE_SOURCE_MAC_H_
 
+#ifdef XP_MACOSX
 #include <CoreServices/CoreServices.h>
+#else
+#include <CoreFoundation/CFRunLoop.h>
+#endif
 
 #include "base/scoped_cftyperef.h"
 

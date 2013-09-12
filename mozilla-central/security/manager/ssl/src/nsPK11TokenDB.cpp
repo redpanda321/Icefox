@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Terry Hayes <thayes@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "nsISupports.h"
 #include "nsIPK11TokenDB.h"
 #include "prerror.h"
@@ -84,7 +51,7 @@ nsPK11Token::refreshTokenInfo()
       ccLabel, 
       ccLabel+PL_strnlen(ccLabel, sizeof(tok_info.label)));
     mTokenLabel = NS_ConvertUTF8toUTF16(cLabel);
-    mTokenLabel.Trim(" ", PR_FALSE, PR_TRUE);
+    mTokenLabel.Trim(" ", false, true);
 
     // Set the Manufacturer field
     const char *ccManID = (const char*)tok_info.manufacturerID;
@@ -92,7 +59,7 @@ nsPK11Token::refreshTokenInfo()
       ccManID, 
       ccManID+PL_strnlen(ccManID, sizeof(tok_info.manufacturerID)));
     mTokenManID = NS_ConvertUTF8toUTF16(cManID);
-    mTokenManID.Trim(" ", PR_FALSE, PR_TRUE);
+    mTokenManID.Trim(" ", false, true);
 
     // Set the Hardware Version field
     mTokenHWVersion.AppendInt(tok_info.hardwareVersion.major);
@@ -108,7 +75,7 @@ nsPK11Token::refreshTokenInfo()
       ccSerial, 
       ccSerial+PL_strnlen(ccSerial, sizeof(tok_info.serialNumber)));
     mTokenSerialNum = NS_ConvertUTF8toUTF16(cSerial);
-    mTokenSerialNum.Trim(" ", PR_FALSE, PR_TRUE);
+    mTokenSerialNum.Trim(" ", false, true);
   }
 
 }
@@ -135,7 +102,7 @@ void nsPK11Token::destructorSafeDestroyNSSReference()
 
   if (mSlot) {
     PK11_FreeSlot(mSlot);
-    mSlot = nsnull;
+    mSlot = nullptr;
   }
 }
 
@@ -213,7 +180,7 @@ NS_IMETHODIMP nsPK11Token::GetTokenSerialNumber(PRUnichar **aTokSerialNum)
 }
 
 /* boolean isLoggedIn (); */
-NS_IMETHODIMP nsPK11Token::IsLoggedIn(PRBool *_retval)
+NS_IMETHODIMP nsPK11Token::IsLoggedIn(bool *_retval)
 {
   nsNSSShutDownPreventionLock locker;
   if (isAlreadyShutDown())
@@ -228,7 +195,7 @@ NS_IMETHODIMP nsPK11Token::IsLoggedIn(PRBool *_retval)
 
 /* void logout (in boolean force); */
 NS_IMETHODIMP 
-nsPK11Token::Login(PRBool force)
+nsPK11Token::Login(bool force)
 {
   nsNSSShutDownPreventionLock locker;
   if (isAlreadyShutDown())
@@ -236,7 +203,7 @@ nsPK11Token::Login(PRBool force)
 
   nsresult rv;
   SECStatus srv;
-  PRBool test;
+  bool test;
   rv = this->NeedsLogin(&test);
   if (NS_FAILED(rv)) return rv;
   if (test && force) {
@@ -245,7 +212,7 @@ nsPK11Token::Login(PRBool force)
   }
   rv = setPassword(mSlot, mUIContext);
   if (NS_FAILED(rv)) return rv;
-  srv = PK11_Authenticate(mSlot, PR_TRUE, mUIContext);
+  srv = PK11_Authenticate(mSlot, true, mUIContext);
   return (srv == SECSuccess) ? NS_OK : NS_ERROR_FAILURE;
 }
 
@@ -287,7 +254,7 @@ NS_IMETHODIMP nsPK11Token::Reset()
 }
 
 /* readonly attribute long minimumPasswordLength; */
-NS_IMETHODIMP nsPK11Token::GetMinimumPasswordLength(PRInt32 *aMinimumPasswordLength)
+NS_IMETHODIMP nsPK11Token::GetMinimumPasswordLength(int32_t *aMinimumPasswordLength)
 {
   nsNSSShutDownPreventionLock locker;
   if (isAlreadyShutDown())
@@ -299,7 +266,7 @@ NS_IMETHODIMP nsPK11Token::GetMinimumPasswordLength(PRInt32 *aMinimumPasswordLen
 }
 
 /* readonly attribute boolean needsUserInit; */
-NS_IMETHODIMP nsPK11Token::GetNeedsUserInit(PRBool *aNeedsUserInit)
+NS_IMETHODIMP nsPK11Token::GetNeedsUserInit(bool *aNeedsUserInit)
 {
   nsNSSShutDownPreventionLock locker;
   if (isAlreadyShutDown())
@@ -310,26 +277,26 @@ NS_IMETHODIMP nsPK11Token::GetNeedsUserInit(PRBool *aNeedsUserInit)
 }
 
 /* boolean checkPassword (in wstring password); */
-NS_IMETHODIMP nsPK11Token::CheckPassword(const PRUnichar *password, PRBool *_retval)
+NS_IMETHODIMP nsPK11Token::CheckPassword(const PRUnichar *password, bool *_retval)
 {
   nsNSSShutDownPreventionLock locker;
   if (isAlreadyShutDown())
     return NS_ERROR_NOT_AVAILABLE;
 
   SECStatus srv;
-  PRInt32 prerr;
+  int32_t prerr;
   NS_ConvertUTF16toUTF8 aUtf8Password(password);
   srv = PK11_CheckUserPassword(mSlot, 
                   const_cast<char *>(aUtf8Password.get()));
   if (srv != SECSuccess) {
-    *_retval =  PR_FALSE;
+    *_retval =  false;
     prerr = PR_GetError();
     if (prerr != SEC_ERROR_BAD_PASSWORD) {
       /* something really bad happened - throw an exception */
       return NS_ERROR_FAILURE;
     }
   } else {
-    *_retval =  PR_TRUE;
+    *_retval =  true;
   }
   return NS_OK;
 }
@@ -354,7 +321,7 @@ done:
 
 /* long getAskPasswordTimes(); */
 NS_IMETHODIMP 
-nsPK11Token::GetAskPasswordTimes(PRInt32 *rvAskTimes)
+nsPK11Token::GetAskPasswordTimes(int32_t *rvAskTimes)
 {
   nsNSSShutDownPreventionLock locker;
   if (isAlreadyShutDown())
@@ -368,7 +335,7 @@ nsPK11Token::GetAskPasswordTimes(PRInt32 *rvAskTimes)
 
 /* long getAskPasswordTimeout(); */
 NS_IMETHODIMP 
-nsPK11Token::GetAskPasswordTimeout(PRInt32 *rvAskTimeout)
+nsPK11Token::GetAskPasswordTimeout(int32_t *rvAskTimeout)
 {
   nsNSSShutDownPreventionLock locker;
   if (isAlreadyShutDown())
@@ -384,8 +351,8 @@ nsPK11Token::GetAskPasswordTimeout(PRInt32 *rvAskTimeout)
  *                             in unsigned long timeout);
  */
 NS_IMETHODIMP 
-nsPK11Token::SetAskPasswordDefaults(const PRInt32 askTimes,
-                                    const PRInt32 askTimeout)
+nsPK11Token::SetAskPasswordDefaults(const int32_t askTimes,
+                                    const int32_t askTimeout)
 {
   nsNSSShutDownPreventionLock locker;
   if (isAlreadyShutDown())
@@ -407,13 +374,13 @@ NS_IMETHODIMP nsPK11Token::ChangePassword(const PRUnichar *oldPassword, const PR
   NS_ConvertUTF16toUTF8 aUtf8NewPassword(newPassword);
 
   rv = PK11_ChangePW(mSlot, 
-         (oldPassword != NULL ? const_cast<char *>(aUtf8OldPassword.get()) : NULL), 
-         (newPassword != NULL ? const_cast<char *>(aUtf8NewPassword.get()) : NULL));
+         (oldPassword ? const_cast<char *>(aUtf8OldPassword.get()) : nullptr),
+         (newPassword ? const_cast<char *>(aUtf8NewPassword.get()) : nullptr));
   return (rv == SECSuccess) ? NS_OK : NS_ERROR_FAILURE;
 }
 
 /* boolean isHardwareToken (); */
-NS_IMETHODIMP nsPK11Token::IsHardwareToken(PRBool *_retval)
+NS_IMETHODIMP nsPK11Token::IsHardwareToken(bool *_retval)
 {
   nsNSSShutDownPreventionLock locker;
   if (isAlreadyShutDown())
@@ -427,7 +394,7 @@ NS_IMETHODIMP nsPK11Token::IsHardwareToken(PRBool *_retval)
 }
 
 /* boolean needsLogin (); */
-NS_IMETHODIMP nsPK11Token::NeedsLogin(PRBool *_retval)
+NS_IMETHODIMP nsPK11Token::NeedsLogin(bool *_retval)
 {
   nsNSSShutDownPreventionLock locker;
   if (isAlreadyShutDown())
@@ -441,7 +408,7 @@ NS_IMETHODIMP nsPK11Token::NeedsLogin(PRBool *_retval)
 }
 
 /* boolean isFriendly (); */
-NS_IMETHODIMP nsPK11Token::IsFriendly(PRBool *_retval)
+NS_IMETHODIMP nsPK11Token::IsFriendly(bool *_retval)
 {
   nsNSSShutDownPreventionLock locker;
   if (isAlreadyShutDown())
@@ -480,8 +447,6 @@ NS_IMETHODIMP nsPK11TokenDB::GetInternalKeyToken(nsIPK11Token **_retval)
   if (!slot) { rv = NS_ERROR_FAILURE; goto done; }
 
   token = new nsPK11Token(slot);
-  if (!token) { rv = NS_ERROR_OUT_OF_MEMORY; goto done; }
-
   *_retval = token;
   NS_ADDREF(*_retval);
 
@@ -502,8 +467,6 @@ FindTokenByName(const PRUnichar* tokenName, nsIPK11Token **_retval)
   if (!slot) { rv = NS_ERROR_FAILURE; goto done; }
 
   *_retval = new nsPK11Token(slot);
-  if (!*_retval) { rv = NS_ERROR_OUT_OF_MEMORY; goto done; }
-
   NS_ADDREF(*_retval);
 
 done:
@@ -519,22 +482,19 @@ NS_IMETHODIMP nsPK11TokenDB::ListTokens(nsIEnumerator* *_retval)
   PK11SlotList *list = 0;
   PK11SlotListElement *le;
 
-  *_retval = nsnull;
+  *_retval = nullptr;
   nsresult rv = NS_NewISupportsArray(getter_AddRefs(array));
   if (NS_FAILED(rv)) { goto done; }
 
   /* List all tokens, creating PK11Token objects and putting them
    * into the array.
    */
-  list = PK11_GetAllTokens(CKM_INVALID_MECHANISM, PR_FALSE, PR_FALSE, 0);
+  list = PK11_GetAllTokens(CKM_INVALID_MECHANISM, false, false, 0);
   if (!list) { rv = NS_ERROR_FAILURE; goto done; }
 
-  for (le = PK11_GetFirstSafe(list); le; le = PK11_GetNextSafe(list, le, PR_FALSE)) {
+  for (le = PK11_GetFirstSafe(list); le; le = PK11_GetNextSafe(list, le, false)) {
     nsCOMPtr<nsIPK11Token> token = new nsPK11Token(le->slot);
-    rv = token
-      ? array->AppendElement(token)
-      : NS_ERROR_OUT_OF_MEMORY;
-
+    rv = array->AppendElement(token);
     if (NS_FAILED(rv)) {
       PK11_FreeSlotListElement(list, le);
       rv = NS_ERROR_OUT_OF_MEMORY;

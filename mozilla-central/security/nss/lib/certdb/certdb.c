@@ -1,45 +1,11 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *    Aaron Spangler <aaron@spangler.ods.org>
- *    Kaspar Brand <mozbugzilla@velox.ch>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Certificate handling code
  *
- * $Id: certdb.c,v 1.104 2010/04/25 00:44:55 nelson%bolyard.com Exp $
+ * $Id: certdb.c,v 1.123 2012/04/25 14:49:26 gerv%gerv.net Exp $
  */
 
 #include "nssilock.h"
@@ -481,57 +447,6 @@ GetKeyUsage(CERTCertificate *cert)
 }
 
 
-/*
- * determine if a fortezza V1 Cert is a CA or not.
- */
-static PRBool
-fortezzaIsCA( CERTCertificate *cert) {
-    PRBool isCA = PR_FALSE;
-    CERTSubjectPublicKeyInfo *spki = &cert->subjectPublicKeyInfo;
-    int tag;
-
-    tag = SECOID_GetAlgorithmTag(&spki->algorithm);
-    if ((tag == SEC_OID_MISSI_KEA_DSS_OLD) ||
-       (tag == SEC_OID_MISSI_KEA_DSS) ||
-       (tag == SEC_OID_MISSI_DSS_OLD) ||
-       (tag == SEC_OID_MISSI_DSS) ) {
-	SECItem rawkey;
-	unsigned char *rawptr;
-	unsigned char *end;
-	int len;
-
-	rawkey = spki->subjectPublicKey;
-	DER_ConvertBitString(&rawkey);
-	rawptr = rawkey.data;
-	end = rawkey.data + rawkey.len;
-
-	/* version */	
-	rawptr += sizeof(((SECKEYPublicKey*)0)->u.fortezza.KMID)+2;
-
-	/* clearance (the string up to the first byte with the hi-bit on */
-	while ((rawptr < end) && (*rawptr++ & 0x80));
-	if (rawptr >= end) { return PR_FALSE; }
-
-	/* KEAPrivilege (the string up to the first byte with the hi-bit on */
-	while ((rawptr < end) && (*rawptr++ & 0x80));
-	if (rawptr >= end) { return PR_FALSE; }
-
-	/* skip the key */
-	len = (*rawptr << 8) | rawptr[1];
-	rawptr += 2 + len;
-
-	/* shared key */
-	if (rawptr >= end) { return PR_FALSE; }
-	/* DSS Version is next */
-	rawptr += 2;
-
-	/* DSSPrivilege (the string up to the first byte with the hi-bit on */
-	if (*rawptr & 0x30) isCA = PR_TRUE;
-	
-   }
-   return isCA;
-}
-
 static SECStatus
 findOIDinOIDSeqByTagNum(CERTOidSequence *seq, SECOidTag tagnum)
 {
@@ -647,7 +562,10 @@ cert_ComputeCertType(CERTCertificate *cert)
 		nsCertType |= NS_CERT_TYPE_SSL_SERVER;
 	    }
 	}
-	/* Treat certs with step-up OID as also having SSL server type. */
+	/*
+	 * Treat certs with step-up OID as also having SSL server type.
+ 	 * COMODO needs this behaviour until June 2020.  See Bug 737802.
+	 */
 	if (findOIDinOIDSeqByTagNum(extKeyUsage, 
 				    SEC_OID_NS_KEY_USAGE_GOVT_APPROVED) ==
 	    SECSuccess){
@@ -703,12 +621,6 @@ cert_ComputeCertType(CERTCertificate *cert)
 	/* allow any ssl or email (no ca or object signing. */
 	nsCertType |= NS_CERT_TYPE_SSL_CLIENT | NS_CERT_TYPE_SSL_SERVER |
 	              NS_CERT_TYPE_EMAIL;
-
-	/* if the cert is a fortezza CA cert, then allow SSL CA and EMAIL CA */
-	if (fortezzaIsCA(cert)) {
-		nsCertType |= NS_CERT_TYPE_SSL_CA;
-		nsCertType |= NS_CERT_TYPE_EMAIL_CA;
-	}
     }
 
     if (encodedExtKeyUsage.data != NULL) {
@@ -728,7 +640,6 @@ cert_GetKeyID(CERTCertificate *cert)
 {
     SECItem tmpitem;
     SECStatus rv;
-    SECKEYPublicKey *key;
     
     cert->subjectKeyID.len = 0;
 
@@ -745,26 +656,6 @@ cert_GetKeyID(CERTCertificate *cert)
 	PORT_Free(tmpitem.data);
     }
     
-    /* if the cert doesn't have a key identifier extension and the cert is
-     * a V1 fortezza certificate, use the cert's 8 byte KMID as the
-     * key identifier.  */
-    key = CERT_KMIDPublicKey(cert);
-
-    if (key != NULL) {
-	
-	if (key->keyType == fortezzaKey) {
-
-	    cert->subjectKeyID.data = (unsigned char *)PORT_ArenaAlloc(cert->arena, 8);
-	    if ( cert->subjectKeyID.data != NULL ) {
-		PORT_Memcpy(cert->subjectKeyID.data, key->u.fortezza.KMID, 8);
-		cert->subjectKeyID.len = 8;
-		cert->keyIDGenerated = PR_FALSE;
-	    }
-	}
-		
-	SECKEY_DestroyPublicKey(key);
-    }
-
     /* if the cert doesn't have a key identifier extension, then generate one*/
     if ( cert->subjectKeyID.len == 0 ) {
 	/*
@@ -1265,6 +1156,11 @@ CERT_KeyUsageAndTypeForCertUsage(SECCertUsage usage,
     } else {
 	switch ( usage ) {
 	  case certUsageSSLClient:
+	    /* 
+	     * RFC 5280 lists digitalSignature and keyAgreement for
+	     * id-kp-clientAuth.  NSS does not support the *_fixed_dh and
+	     * *_fixed_ecdh client certificate types.
+	     */
 	    requiredKeyUsage = KU_DIGITAL_SIGNATURE;
 	    requiredCertType = NS_CERT_TYPE_SSL_CLIENT;
 	    break;
@@ -1282,7 +1178,7 @@ CERT_KeyUsageAndTypeForCertUsage(SECCertUsage usage,
 	    requiredCertType = NS_CERT_TYPE_SSL_CA;
 	    break;
 	  case certUsageEmailSigner:
-	    requiredKeyUsage = KU_DIGITAL_SIGNATURE;
+	    requiredKeyUsage = KU_DIGITAL_SIGNATURE_OR_NON_REPUDIATION;
 	    requiredCertType = NS_CERT_TYPE_EMAIL;
 	    break;
 	  case certUsageEmailRecipient:
@@ -1290,11 +1186,12 @@ CERT_KeyUsageAndTypeForCertUsage(SECCertUsage usage,
 	    requiredCertType = NS_CERT_TYPE_EMAIL;
 	    break;
 	  case certUsageObjectSigner:
+	    /* RFC 5280 lists only digitalSignature for id-kp-codeSigning. */
 	    requiredKeyUsage = KU_DIGITAL_SIGNATURE;
 	    requiredCertType = NS_CERT_TYPE_OBJECT_SIGNING;
 	    break;
 	  case certUsageStatusResponder:
-	    requiredKeyUsage = KU_DIGITAL_SIGNATURE;
+	    requiredKeyUsage = KU_DIGITAL_SIGNATURE_OR_NON_REPUDIATION;
 	    requiredCertType = EXT_KEY_USAGE_STATUS_RESPONDER;
 	    break;
 	  default:
@@ -1321,8 +1218,6 @@ loser:
 SECStatus
 CERT_CheckKeyUsage(CERTCertificate *cert, unsigned int requiredUsage)
 {
-    unsigned int certKeyUsage;
-
     if (!cert) {
         PORT_SetError(SEC_ERROR_INVALID_ARGS);
 	return SECFailure;
@@ -1342,8 +1237,6 @@ CERT_CheckKeyUsage(CERTCertificate *cert, unsigned int requiredUsage)
 	case dsaKey:
 	    requiredUsage |= KU_DIGITAL_SIGNATURE;
 	    break;
-	case fortezzaKey:
-	case keaKey:
 	case dhKey:
 	    requiredUsage |= KU_KEY_AGREEMENT;
 	    break;
@@ -1357,10 +1250,16 @@ CERT_CheckKeyUsage(CERTCertificate *cert, unsigned int requiredUsage)
 	}
     }
 
-    certKeyUsage = cert->keyUsage;
-    if (certKeyUsage & KU_NON_REPUDIATION)
-        certKeyUsage |= KU_DIGITAL_SIGNATURE;
-    if ( (certKeyUsage & requiredUsage) == requiredUsage ) 
+    /* Allow either digital signature or non-repudiation */
+    if ( requiredUsage & KU_DIGITAL_SIGNATURE_OR_NON_REPUDIATION ) {
+	/* turn off the special bit */
+	requiredUsage &= (~KU_DIGITAL_SIGNATURE_OR_NON_REPUDIATION);
+
+        if (!(cert->keyUsage & (KU_DIGITAL_SIGNATURE | KU_NON_REPUDIATION)))
+             goto loser;
+     }
+    
+    if ( (cert->keyUsage & requiredUsage) == requiredUsage ) 
     	return SECSuccess;
 
 loser:
@@ -1413,6 +1312,15 @@ sec_lower_string(char *s)
     }
     
     return;
+}
+
+static PRBool
+cert_IsIPAddr(const char *hn)
+{
+    PRBool            isIPaddr       = PR_FALSE;
+    PRNetAddr         netAddr;
+    isIPaddr = (PR_SUCCESS == PR_StringToNetAddr(hn, &netAddr));
+    return isIPaddr;
 }
 
 /*
@@ -1645,8 +1553,7 @@ finish:
  *   - return value is NULL
  */
 CERTGeneralName *
-cert_GetSubjectAltNameList(CERTCertificate *cert,
-                           PRArenaPool *arena)
+cert_GetSubjectAltNameList(CERTCertificate *cert, PRArenaPool *arena)
 {
     CERTGeneralName * nameList       = NULL;
     SECStatus         rv             = SECFailure;
@@ -1880,7 +1787,17 @@ CERT_VerifyCertName(CERTCertificate *cert, const char *hn)
 
     cn = CERT_GetCommonName(&cert->subject);
     if ( cn ) {
-	rv = cert_TestHostName(cn, hn);
+        PRBool isIPaddr = cert_IsIPAddr(hn);
+        if (isIPaddr) {
+            if (PORT_Strcasecmp(hn, cn) == 0) {
+                rv =  SECSuccess;
+            } else {
+                PORT_SetError(SSL_ERROR_BAD_CERT_DOMAIN);
+                rv = SECFailure;
+            }
+        } else {
+            rv = cert_TestHostName(cn, hn);
+        }
 	PORT_Free(cn);
     } else 
 	PORT_SetError(SSL_ERROR_BAD_CERT_DOMAIN);
@@ -2038,80 +1955,68 @@ CERT_MakeCANickname(CERTCertificate *cert)
     char *nickname = NULL;
     int count;
     CERTCertificate *dummycert;
-    CERTCertDBHandle *handle;
     
-    handle = cert->dbhandle;
-    
-    nickname = CERT_GetNickName(cert, handle, cert->arena);
-    if (nickname == NULL) {
-	firstname = CERT_GetCommonName(&cert->subject);
-	if ( firstname == NULL ) {
-	    firstname = CERT_GetOrgUnitName(&cert->subject);
-	}
+    firstname = CERT_GetCommonName(&cert->subject);
+    if ( firstname == NULL ) {
+	firstname = CERT_GetOrgUnitName(&cert->subject);
+    }
 
-	org = CERT_GetOrgName(&cert->issuer);
+    org = CERT_GetOrgName(&cert->issuer);
+    if (org == NULL) {
+	org = CERT_GetDomainComponentName(&cert->issuer);
 	if (org == NULL) {
-	    org = CERT_GetDomainComponentName(&cert->issuer);
-	    if (org == NULL) {
-		if (firstname) {
-		    org = firstname;
-		    firstname = NULL;
-		} else {
-		    org = PORT_Strdup("Unknown CA");
-		}
-	    }
-	}
-
-	/* can only fail if PORT_Strdup fails, in which case
-	 * we're having memory problems. */
-	if (org == NULL) {
-	    goto loser;
-	}
-
-    
-	count = 1;
-	while ( 1 ) {
-
-	    if ( firstname ) {
-		if ( count == 1 ) {
-		    nickname = PR_smprintf("%s - %s", firstname, org);
-		} else {
-		    nickname = PR_smprintf("%s - %s #%d", firstname, org, count);
-		}
+	    if (firstname) {
+		org = firstname;
+		firstname = NULL;
 	    } else {
-		if ( count == 1 ) {
-		    nickname = PR_smprintf("%s", org);
-		} else {
-		    nickname = PR_smprintf("%s #%d", org, count);
-		}
+		org = PORT_Strdup("Unknown CA");
 	    }
-	    if ( nickname == NULL ) {
-		goto loser;
-	    }
-
-	    /* look up the nickname to make sure it isn't in use already */
-	    dummycert = CERT_FindCertByNickname(handle, nickname);
-
-	    if ( dummycert == NULL ) {
-		goto done;
-	    }
-	
-	    /* found a cert, destroy it and loop */
-	    CERT_DestroyCertificate(dummycert);
-
-	    /* free the nickname */
-	    PORT_Free(nickname);
-
-	    count++;
 	}
     }
-loser:
-    if ( nickname ) {
-	PORT_Free(nickname);
+
+    /* can only fail if PORT_Strdup fails, in which case
+     * we're having memory problems. */
+    if (org == NULL) {
+	goto done;
     }
 
-    nickname = "";
     
+    count = 1;
+    while ( 1 ) {
+
+	if ( firstname ) {
+	    if ( count == 1 ) {
+		nickname = PR_smprintf("%s - %s", firstname, org);
+	    } else {
+		nickname = PR_smprintf("%s - %s #%d", firstname, org, count);
+	    }
+	} else {
+	    if ( count == 1 ) {
+		nickname = PR_smprintf("%s", org);
+	    } else {
+		nickname = PR_smprintf("%s #%d", org, count);
+	    }
+	}
+	if ( nickname == NULL ) {
+	    goto done;
+	}
+
+	/* look up the nickname to make sure it isn't in use already */
+	dummycert = CERT_FindCertByNickname(cert->dbhandle, nickname);
+
+	if ( dummycert == NULL ) {
+	    goto done;
+	}
+	
+	/* found a cert, destroy it and loop */
+	CERT_DestroyCertificate(dummycert);
+
+	/* free the nickname */
+	PORT_Free(nickname);
+
+	count++;
+    }
+
 done:
     if ( firstname ) {
 	PORT_Free(firstname);
@@ -2152,7 +2057,7 @@ cert_ComputeTrustOverrides(CERTCertificate *cert, unsigned int cType)
 		  trust->emailFlags |
 		  trust->objectSigningFlags)) {
 
-	if (trust->sslFlags & (CERTDB_VALID_PEER|CERTDB_TRUSTED)) 
+	if (trust->sslFlags & (CERTDB_TERMINAL_RECORD|CERTDB_TRUSTED)) 
 	    cType |= NS_CERT_TYPE_SSL_SERVER|NS_CERT_TYPE_SSL_CLIENT;
 	if (trust->sslFlags & (CERTDB_VALID_CA|CERTDB_TRUSTED_CA)) 
 	    cType |= NS_CERT_TYPE_SSL_CA;
@@ -2161,7 +2066,7 @@ cert_ComputeTrustOverrides(CERTCertificate *cert, unsigned int cType)
 	    cType &= ~(NS_CERT_TYPE_SSL_SERVER|NS_CERT_TYPE_SSL_CLIENT|
 	               NS_CERT_TYPE_SSL_CA);
 #endif
-	if (trust->emailFlags & (CERTDB_VALID_PEER|CERTDB_TRUSTED)) 
+	if (trust->emailFlags & (CERTDB_TERMINAL_RECORD|CERTDB_TRUSTED)) 
 	    cType |= NS_CERT_TYPE_EMAIL;
 	if (trust->emailFlags & (CERTDB_VALID_CA|CERTDB_TRUSTED_CA)) 
 	    cType |= NS_CERT_TYPE_EMAIL_CA;
@@ -2169,7 +2074,7 @@ cert_ComputeTrustOverrides(CERTCertificate *cert, unsigned int cType)
 	if (trust->emailFlags & CERTDB_NOT_TRUSTED) 
 	    cType &= ~(NS_CERT_TYPE_EMAIL|NS_CERT_TYPE_EMAIL_CA);
 #endif
-	if (trust->objectSigningFlags & (CERTDB_VALID_PEER|CERTDB_TRUSTED)) 
+	if (trust->objectSigningFlags & (CERTDB_TERMINAL_RECORD|CERTDB_TRUSTED)) 
 	    cType |= NS_CERT_TYPE_OBJECT_SIGNING;
 	if (trust->objectSigningFlags & (CERTDB_VALID_CA|CERTDB_TRUSTED_CA)) 
 	    cType |= NS_CERT_TYPE_OBJECT_SIGNING_CA;
@@ -2206,10 +2111,9 @@ CERT_IsCACert(CERTCertificate *cert, unsigned int *rettype)
 	} 
     }
 
-    /* finally check if it's an X.509 v1 root or FORTEZZA V1 CA */
+    /* finally check if it's an X.509 v1 root CA */
     if (!ret && 
-        ((cert->isRoot && cert_Version(cert) < SEC_CERTIFICATE_VERSION_3) ||
-    	 fortezzaIsCA(cert) )) {
+        (cert->isRoot && cert_Version(cert) < SEC_CERTIFICATE_VERSION_3)) {
 	ret = PR_TRUE;
 	cType |= (NS_CERT_TYPE_SSL_CA | NS_CERT_TYPE_EMAIL_CA);
     }
@@ -2420,11 +2324,11 @@ CERT_DecodeTrustString(CERTCertTrust *trust, const char *trusts)
     for (i=0; i < PORT_Strlen(trusts); i++) {
 	switch (trusts[i]) {
 	  case 'p':
-	      *pflags = *pflags | CERTDB_VALID_PEER;
+	      *pflags = *pflags | CERTDB_TERMINAL_RECORD;
 	      break;
 
 	  case 'P':
-	      *pflags = *pflags | CERTDB_TRUSTED | CERTDB_VALID_PEER;
+	      *pflags = *pflags | CERTDB_TRUSTED | CERTDB_TERMINAL_RECORD;
 	      break;
 
 	  case 'w':
@@ -2476,7 +2380,7 @@ EncodeFlags(char *trusts, unsigned int flags)
 	if (!(flags & CERTDB_TRUSTED_CA) &&
 	    !(flags & CERTDB_TRUSTED_CLIENT_CA))
 	    PORT_Strcat(trusts, "c");
-    if (flags & CERTDB_VALID_PEER)
+    if (flags & CERTDB_TERMINAL_RECORD)
 	if (!(flags & CERTDB_TRUSTED))
 	    PORT_Strcat(trusts, "p");
     if (flags & CERTDB_TRUSTED_CA)
@@ -2544,24 +2448,32 @@ CERT_ImportCerts(CERTCertDBHandle *certdb, SECCertUsage usage,
 	                                            NULL,
 	                                            PR_FALSE,
 	                                            PR_TRUE);
-	    if (certs[fcerts]) fcerts++;
+	    if (certs[fcerts]) {
+		SECItem subjKeyID = {siBuffer, NULL, 0};
+		if (CERT_FindSubjectKeyIDExtension(certs[fcerts],
+		                                   &subjKeyID) == SECSuccess) {
+		    if (subjKeyID.data) {
+			cert_AddSubjectKeyIDMapping(&subjKeyID, certs[fcerts]);
+		    }
+		    SECITEM_FreeItem(&subjKeyID, PR_FALSE);
+		}
+		fcerts++;
+	    }
 	}
 
 	if ( keepCerts ) {
 	    for ( i = 0; i < fcerts; i++ ) {
                 char* canickname = NULL;
-                PRBool freeNickname = PR_FALSE;
+                PRBool isCA;
 
 		SECKEY_UpdateCertPQG(certs[i]);
                 
-                if ( CERT_IsCACert(certs[i], NULL) ) {
+                isCA = CERT_IsCACert(certs[i], NULL);
+                if ( isCA ) {
                     canickname = CERT_MakeCANickname(certs[i]);
-                    if ( canickname != NULL ) {
-                        freeNickname = PR_TRUE;
-                    }
                 }
 
-		if(CERT_IsCACert(certs[i], NULL) && (fcerts > 1)) {
+		if(isCA && (fcerts > 1)) {
 		    /* if we are importing only a single cert and specifying
 		     * a nickname, we want to use that nickname if it a CA,
 		     * otherwise if there are more than one cert, we don't
@@ -2574,9 +2486,7 @@ CERT_ImportCerts(CERTCertDBHandle *certdb, SECCertUsage usage,
                                                 nickname?nickname:canickname, NULL);
 		}
 
-                if (PR_TRUE == freeNickname) {
-                    PORT_Free(canickname);
-                }
+                PORT_Free(canickname);
 		/* don't care if it fails - keep going */
 	    }
 	}
@@ -3011,6 +2921,7 @@ cert_InitLocks(void)
         PORT_Assert(certTrustLock != NULL);
         if (!certTrustLock) {
             PZ_DestroyLock(certRefCountLock);
+            certRefCountLock = NULL;
             return SECFailure;
         }
     }    
@@ -3085,6 +2996,8 @@ CERT_SetStatusConfig(CERTCertDBHandle *handle, CERTStatusConfig *statusConfig)
 
 static PLHashTable *gSubjKeyIDHash = NULL;
 static PRLock      *gSubjKeyIDLock = NULL;
+static PLHashTable *gSubjKeyIDSlotCheckHash = NULL;
+static PRLock      *gSubjKeyIDSlotCheckLock = NULL;
 
 static void *cert_AllocTable(void *pool, PRSize size)
 {
@@ -3115,6 +3028,31 @@ static PLHashAllocOps cert_AllocOps = {
 };
 
 SECStatus
+cert_CreateSubjectKeyIDSlotCheckHash(void)
+{
+    /*
+     * This hash is used to remember the series of a slot
+     * when we last checked for user certs
+     */
+    gSubjKeyIDSlotCheckHash = PL_NewHashTable(0, SECITEM_Hash,
+                                             SECITEM_HashCompare,
+                                             SECITEM_HashCompare,
+                                             &cert_AllocOps, NULL);
+    if (!gSubjKeyIDSlotCheckHash) {
+        PORT_SetError(SEC_ERROR_NO_MEMORY);
+        return SECFailure;
+    }
+    gSubjKeyIDSlotCheckLock = PR_NewLock();
+    if (!gSubjKeyIDSlotCheckLock) {
+        PL_HashTableDestroy(gSubjKeyIDSlotCheckHash);
+        gSubjKeyIDSlotCheckHash = NULL;
+        PORT_SetError(SEC_ERROR_NO_MEMORY);
+        return SECFailure;
+    }
+    return SECSuccess;
+}
+
+SECStatus
 cert_CreateSubjectKeyIDHashTable(void)
 {
     gSubjKeyIDHash = PL_NewHashTable(0, SECITEM_Hash, SECITEM_HashCompare,
@@ -3131,8 +3069,12 @@ cert_CreateSubjectKeyIDHashTable(void)
         PORT_SetError(SEC_ERROR_NO_MEMORY);
         return SECFailure;
     }
+    /* initialize the companion hash (for remembering slot series) */
+    if (cert_CreateSubjectKeyIDSlotCheckHash() != SECSuccess) {
+	cert_DestroySubjectKeyIDHashTable();
+	return SECFailure;
+    }
     return SECSuccess;
-
 }
 
 SECStatus
@@ -3191,6 +3133,93 @@ cert_RemoveSubjectKeyIDMapping(SECItem *subjKeyID)
 }
 
 SECStatus
+cert_UpdateSubjectKeyIDSlotCheck(SECItem *slotid, int series)
+{
+    SECItem *oldSeries, *newSlotid, *newSeries;
+    SECStatus rv = SECFailure;
+
+    if (!gSubjKeyIDSlotCheckLock) {
+	return rv;
+    }
+
+    newSlotid = SECITEM_DupItem(slotid);
+    newSeries = SECITEM_AllocItem(NULL, NULL, sizeof(int));
+    if (!newSlotid || !newSeries ) {
+        PORT_SetError(SEC_ERROR_NO_MEMORY);
+        goto loser;
+    }
+    PORT_Memcpy(newSeries->data, &series, sizeof(int));
+
+    PR_Lock(gSubjKeyIDSlotCheckLock);
+    oldSeries = (SECItem *)PL_HashTableLookup(gSubjKeyIDSlotCheckHash, slotid);
+    if (oldSeries) {
+	/* 
+	 * make sure we don't leak the key of an existing entry
+	 * (similar to cert_AddSubjectKeyIDMapping, see comment there)
+	 */
+        PL_HashTableRemove(gSubjKeyIDSlotCheckHash, slotid);
+    }
+    rv = (PL_HashTableAdd(gSubjKeyIDSlotCheckHash, newSlotid, newSeries)) ?
+         SECSuccess : SECFailure;
+    PR_Unlock(gSubjKeyIDSlotCheckLock);
+    if (rv == SECSuccess) {
+	return rv;
+    }
+
+loser:
+    if (newSlotid) {
+        SECITEM_FreeItem(newSlotid, PR_TRUE);
+    }
+    if (newSeries) {
+        SECITEM_FreeItem(newSeries, PR_TRUE);
+    }
+    return rv;
+}
+
+int
+cert_SubjectKeyIDSlotCheckSeries(SECItem *slotid)
+{
+    SECItem *seriesItem = NULL;
+    int series;
+
+    if (!gSubjKeyIDSlotCheckLock) {
+	PORT_SetError(SEC_ERROR_NOT_INITIALIZED);
+	return -1;
+    }
+
+    PR_Lock(gSubjKeyIDSlotCheckLock);
+    seriesItem = (SECItem *)PL_HashTableLookup(gSubjKeyIDSlotCheckHash, slotid);
+    PR_Unlock(gSubjKeyIDSlotCheckLock);
+     /* getting a null series just means we haven't registered one yet, 
+      * just return 0 */
+    if (seriesItem == NULL) {
+	return 0;
+    }
+    /* if we got a series back, assert if it's not the proper length. */
+    PORT_Assert(seriesItem->len == sizeof(int));
+    if (seriesItem->len != sizeof(int)) {
+	PORT_SetError(SEC_ERROR_LIBRARY_FAILURE);
+	return -1;
+    }
+    PORT_Memcpy(&series, seriesItem->data, sizeof(int));
+    return series;
+}
+
+SECStatus
+cert_DestroySubjectKeyIDSlotCheckHash(void)
+{
+    if (gSubjKeyIDSlotCheckHash) {
+        PR_Lock(gSubjKeyIDSlotCheckLock);
+        PL_HashTableDestroy(gSubjKeyIDSlotCheckHash);
+        gSubjKeyIDSlotCheckHash = NULL;
+        PR_Unlock(gSubjKeyIDSlotCheckLock);
+        PR_DestroyLock(gSubjKeyIDSlotCheckLock);
+        gSubjKeyIDSlotCheckLock = NULL;
+    }
+    return SECSuccess;
+}
+
+SECStatus
 cert_DestroySubjectKeyIDHashTable(void)
 {
     if (gSubjKeyIDHash) {
@@ -3201,6 +3230,7 @@ cert_DestroySubjectKeyIDHashTable(void)
         PR_DestroyLock(gSubjKeyIDLock);
         gSubjKeyIDLock = NULL;
     }
+    cert_DestroySubjectKeyIDSlotCheckHash();
     return SECSuccess;
 }
 

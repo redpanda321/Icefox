@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Douglas Stebila <douglas@stebila.ca>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef _PK11PUB_H_
 #define _PK11PUB_H_
 #include "plarena.h"
@@ -180,9 +147,14 @@ PRBool PK11_IsPresent(PK11SlotInfo *slot);
 PRBool PK11_DoesMechanism(PK11SlotInfo *slot, CK_MECHANISM_TYPE type);
 PK11SlotList * PK11_GetAllTokens(CK_MECHANISM_TYPE type,PRBool needRW,
 					PRBool loadCerts, void *wincx);
-PK11SlotInfo *PK11_GetBestSlotMultiple(CK_MECHANISM_TYPE *type, int count,
-							void *wincx);
+PK11SlotInfo *PK11_GetBestSlotMultipleWithAttributes(CK_MECHANISM_TYPE *type, 
+		CK_FLAGS *mechFlag, unsigned int *keySize, 
+		unsigned int count, void *wincx);
+PK11SlotInfo *PK11_GetBestSlotMultiple(CK_MECHANISM_TYPE *type, 
+					unsigned int count, void *wincx);
 PK11SlotInfo *PK11_GetBestSlot(CK_MECHANISM_TYPE type, void *wincx);
+PK11SlotInfo *PK11_GetBestSlotWithAttributes(CK_MECHANISM_TYPE type, 
+		CK_FLAGS mechFlag, unsigned int keySize, void *wincx);
 CK_MECHANISM_TYPE PK11_GetBestWrapMechanism(PK11SlotInfo *slot);
 int PK11_GetBestKeyLength(PK11SlotInfo *slot, CK_MECHANISM_TYPE type);
 
@@ -334,6 +306,19 @@ PK11SymKey *PK11_TokenKeyGenWithFlags(PK11SlotInfo *slot,
 				CK_MECHANISM_TYPE type, SECItem *param,
 				int keySize, SECItem *keyid, CK_FLAGS opFlags,
 				PK11AttrFlags attrFlags, void *wincx);
+/* Generates a key using the exact template supplied by the caller. The other
+ * PK11_[Token]KeyGen mechanisms should be used instead of this one whenever
+ * they work because they include/exclude the CKA_VALUE_LEN template value
+ * based on the mechanism type as required by many tokens.
+ * 
+ * keyGenType should be PK11_GetKeyGenWithSize(type, <key size>) or it should
+ * be equal to type if PK11_GetKeyGenWithSize cannot be used (e.g. because
+ * pk11wrap does not know about the mechanisms).
+ */
+PK11SymKey *PK11_KeyGenWithTemplate(PK11SlotInfo *slot, CK_MECHANISM_TYPE type,
+                                    CK_MECHANISM_TYPE keyGenType,
+                                    SECItem *param, CK_ATTRIBUTE * attrs,
+                                    unsigned int attrsCount, void *wincx);
 PK11SymKey * PK11_ListFixedKeysInSlot(PK11SlotInfo *slot, char *nickname,
 								void *wincx);
 PK11SymKey *PK11_GetNextSymKey(PK11SymKey *symKey);
@@ -403,6 +388,12 @@ PK11SymKey * PK11_DeriveWithFlagsPerm( PK11SymKey *baseKey,
 	CK_MECHANISM_TYPE derive, 
 	SECItem *param, CK_MECHANISM_TYPE target, CK_ATTRIBUTE_TYPE operation, 
 	int keySize, CK_FLAGS flags, PRBool isPerm);
+PK11SymKey *
+PK11_DeriveWithTemplate( PK11SymKey *baseKey, CK_MECHANISM_TYPE derive, 
+	SECItem *param, CK_MECHANISM_TYPE target, CK_ATTRIBUTE_TYPE operation, 
+	int keySize, CK_ATTRIBUTE *userAttr, unsigned int numAttrs,
+							 PRBool isPerm);
+
 
 PK11SymKey *PK11_PubDerive( SECKEYPrivateKey *privKey, 
  SECKEYPublicKey *pubKey, PRBool isSender, SECItem *randomA, SECItem *randomB,
@@ -552,6 +543,11 @@ SECStatus PK11_ImportEncryptedPrivateKeyInfo(PK11SlotInfo *slot,
 		SECItem *nickname, SECItem *publicValue, PRBool isPerm,
 		PRBool isPrivate, KeyType type, 
 		unsigned int usage, void *wincx);
+SECStatus PK11_ImportEncryptedPrivateKeyInfoAndReturnKey(PK11SlotInfo *slot, 
+		SECKEYEncryptedPrivateKeyInfo *epki, SECItem *pwitem, 
+		SECItem *nickname, SECItem *publicValue, PRBool isPerm,
+		PRBool isPrivate, KeyType type, 
+		unsigned int usage, SECKEYPrivateKey** privk, void *wincx);
 SECKEYPrivateKeyInfo *PK11_ExportPrivateKeyInfo(
 		CERTCertificate *cert, void *wincx);
 SECKEYEncryptedPrivateKeyInfo *PK11_ExportEncryptedPrivKeyInfo(
@@ -604,6 +600,7 @@ SECStatus PK11_TraverseSlotCerts(
      SECStatus(* callback)(CERTCertificate*,SECItem *,void *),
                                                 void *arg, void *wincx);
 CERTCertificate * PK11_FindCertFromNickname(const char *nickname, void *wincx);
+CERTCertList * PK11_FindCertsFromEmailAddress(const char *email, void *wincx);
 CERTCertList * PK11_FindCertsFromNickname(const char *nickname, void *wincx);
 CERTCertificate *PK11_GetCertFromPrivateKey(SECKEYPrivateKey *privKey);
 SECStatus PK11_ImportCert(PK11SlotInfo *slot, CERTCertificate *cert,
@@ -632,7 +629,7 @@ SECStatus PK11_TraverseCertsForSubjectInSlot(CERTCertificate *cert,
 CERTCertificate *PK11_FindCertFromDERCert(PK11SlotInfo *slot, 
 					  CERTCertificate *cert, void *wincx);
 CERTCertificate *PK11_FindCertFromDERCertItem(PK11SlotInfo *slot,
-                                          SECItem *derCert, void *wincx);
+                                          const SECItem *derCert, void *wincx);
 SECStatus PK11_ImportCertForKeyToSlot(PK11SlotInfo *slot, CERTCertificate *cert,
 					char *nickname, PRBool addUsage,
 					void *wincx);
@@ -661,11 +658,12 @@ CERTSignedCrl* PK11_ImportCRL(PK11SlotInfo * slot, SECItem *derCRL, char *url,
  */
 int PK11_SignatureLen(SECKEYPrivateKey *key);
 PK11SlotInfo * PK11_GetSlotFromPrivateKey(SECKEYPrivateKey *key);
-SECStatus PK11_Sign(SECKEYPrivateKey *key, SECItem *sig, SECItem *hash);
-SECStatus PK11_VerifyRecover(SECKEYPublicKey *key, SECItem *sig,
-						 SECItem *dsig, void * wincx);
-SECStatus PK11_Verify(SECKEYPublicKey *key, SECItem *sig, 
-						SECItem *hash, void *wincx);
+SECStatus PK11_Sign(SECKEYPrivateKey *key, SECItem *sig,
+		    const SECItem *hash);
+SECStatus PK11_VerifyRecover(SECKEYPublicKey *key, const SECItem *sig,
+			     SECItem *dsig, void * wincx);
+SECStatus PK11_Verify(SECKEYPublicKey *key, const SECItem *sig,
+		      const SECItem *hash, void *wincx);
 
 
 
@@ -682,12 +680,12 @@ SECStatus PK11_DigestBegin(PK11Context *cx);
  * The output buffer 'out' must be big enough to hold the output of
  * the hash algorithm 'hashAlg'.
  */
-SECStatus PK11_HashBuf(SECOidTag hashAlg, unsigned char *out, unsigned char *in,
-					PRInt32 len);
+SECStatus PK11_HashBuf(SECOidTag hashAlg, unsigned char *out,
+		       const unsigned char *in, PRInt32 len);
 SECStatus PK11_DigestOp(PK11Context *context, const unsigned char *in, 
                         unsigned len);
 SECStatus PK11_CipherOp(PK11Context *context, unsigned char * out, int *outlen, 
-				int maxout, unsigned char *in, int inlen);
+			int maxout, const unsigned char *in, int inlen);
 SECStatus PK11_Finalize(PK11Context *context);
 SECStatus PK11_DigestFinal(PK11Context *context, unsigned char *data, 
 				unsigned int *outLen, unsigned int length);

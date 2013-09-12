@@ -1,99 +1,5 @@
 include protocol PTestDataStructuresSub;
-
-using mozilla::null_t;
-using nsIntRegion;
-
-namespace mozilla {
-namespace _foo {
-
-union IntDouble {
-    int;
-    double;
-};
-
-struct SIntDouble {
-    int i;
-    double d;
-};
-
-union IntDoubleArrays {
-    int;
-    int[];
-    double[];
-};
-
-struct SIntDoubleArrays {
-    int i;
-    int[] ai;
-    double[] ad;
-};
-
-union Actors {
-    int;
-    int[];
-    PTestDataStructuresSub[];
-};
-
-struct SActors {
-    int i;
-    int[] ai;
-    PTestDataStructuresSub[] ap;
-};
-
-union Unions {
-    int;
-    int[];
-    PTestDataStructuresSub[];
-    Actors[];
-};
-
-struct Structs {
-    int i;
-    int[] ai;
-    PTestDataStructuresSub[] ap;
-    SActors[] aa;
-};
-
-union WithStructs {
-    int;
-    int[];
-    PTestDataStructuresSub[];
-    SActors[];
-    Structs[];
-};
-
-struct WithUnions {
-    int i;
-    int[] ai;
-    PTestDataStructuresSub[] ap;
-    Actors[] aa;
-    Unions[] au;
-};
-
-struct CommonAttrs { bool dummy; };
-struct FooAttrs { int dummy; };
-struct BarAttrs { float dummy; };
-union SpecificAttrs {
-    FooAttrs;
-    BarAttrs;
-};
-struct Attrs {
-    CommonAttrs common;
-    SpecificAttrs specific;
-};
-struct SetAttrs {
-    PTestDataStructuresSub x;
-    Attrs attrs;
-};
-union Op { null_t; SetAttrs; };
-
-struct ShmemStruct {
-    int i;
-    Shmem mem;
-};
-
-} // namespace _foo
-} // namespace mozilla
+include PTestDataStructuresCommon;
 
 namespace mozilla {
 namespace _ipdltest {
@@ -132,6 +38,9 @@ parent:
 
     sync Test6(IntDoubleArrays[] i1)
         returns (IntDoubleArrays[] o1);
+
+    sync Test7_0(ActorWrapper a1)
+        returns (ActorWrapper o1);
 
     sync Test7(Actors i1,
                Actors i2,
@@ -187,6 +96,8 @@ parent:
     // nsTArray's incorrect memmove() semantics works properly
     // (nsIntRegion isn't memmove()able)
     sync Test18(nsIntRegion[] ops);
+
+    sync Dummy(ShmemUnion su) returns (ShmemUnion rsu);
 
 state CONSTRUCTING:
     send PTestDataStructuresSub goto CONSTRUCTING;

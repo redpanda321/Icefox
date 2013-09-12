@@ -1,53 +1,19 @@
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# The Initial Developer of the Original Code is
-# Mozilla Foundation.
-# Portions created by the Initial Developer are Copyright (C) 2007
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either of the GNU General Public License Version 2 or later (the "GPL"),
-# or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH		= ../../../..
+DEPTH		= @DEPTH@
 topsrcdir	= @top_srcdir@
 srcdir		= @srcdir@
 VPATH		= @srcdir@
-relativesrcdir	= dom/tests/mochitest/dom-level2-core
+relativesrcdir	= @relativesrcdir@
 
 include $(DEPTH)/config/autoconf.mk
 
 DIRS = files
 
-include $(topsrcdir)/config/rules.mk
-
-_TEST_FILES_A	= \
+MOCHITEST_FILES_A	= \
 		DOMTestCase.js \
 		exclusions.js \
 		test_attrgetownerelement01.html \
@@ -96,7 +62,7 @@ _TEST_FILES_A	= \
 		test_documentgetelementsbytagnameNS05.html \
 		$(NULL)
 
-_TEST_FILES_B	= \
+MOCHITEST_FILES_B	= \
 		test_documentimportnode01.html \
 		test_documentimportnode02.html \
 		test_documentimportnode03.html \
@@ -131,10 +97,9 @@ _TEST_FILES_B	= \
 		test_domimplementationfeaturecore.html \
 		test_domimplementationfeaturexmlversion2.html \
 		test_domimplementationhasfeature01.html \
-		test_domimplementationhasfeature02.html \
 		$(NULL)
 
-_TEST_FILES_C	= \
+MOCHITEST_FILES_C	= \
 		test_elementgetattributenodens01.html \
 		test_elementgetattributenodens02.html \
 		test_elementgetattributenodens03.html \
@@ -181,7 +146,7 @@ _TEST_FILES_C	= \
 		test_getElementsByTagNameNS07.html \
 		$(NULL)
 
-_TEST_FILES_D	= \
+MOCHITEST_FILES_D	= \
 		test_getElementsByTagNameNS08.html \
 		test_getElementsByTagNameNS09.html \
 		test_getElementsByTagNameNS10.html \
@@ -225,8 +190,6 @@ _TEST_FILES_D	= \
 		test_importNode16.html \
 		test_importNode17.html \
 		test_internalSubset01.html \
-		test_isSupported01.html \
-		test_isSupported02.html \
 		test_isSupported04.html \
 		test_isSupported05.html \
 		test_isSupported06.html \
@@ -239,7 +202,7 @@ _TEST_FILES_D	= \
 		test_isSupported14.html \
 		$(NULL)
 
-_TEST_FILES_E	= \
+MOCHITEST_FILES_E	= \
 		test_localName01.html \
 		test_localName02.html \
 		test_localName03.html \
@@ -285,22 +248,11 @@ _TEST_FILES_E	= \
 		test_nodehasattributes04.html \
 		test_nodeissupported01.html \
 		test_nodeissupported02.html \
-		test_nodeissupported03.html \
 		test_nodeissupported04.html \
-		test_nodeissupported05.html \
 		$(NULL)
 
-_TEST_FILES_F	= \
+MOCHITEST_FILES_F	= \
 		test_nodenormalize01.html \
-		test_nodesetprefix01.html \
-		test_nodesetprefix02.html \
-		test_nodesetprefix03.html \
-		test_nodesetprefix04.html \
-		test_nodesetprefix05.html \
-		test_nodesetprefix06.html \
-		test_nodesetprefix07.html \
-		test_nodesetprefix08.html \
-		test_nodesetprefix09.html \
 		test_normalize01.html \
 		test_ownerDocument01.html \
 		test_ownerElement01.html \
@@ -309,13 +261,6 @@ _TEST_FILES_F	= \
 		test_prefix02.html \
 		test_prefix03.html \
 		test_prefix04.html \
-		test_prefix05.html \
-		test_prefix06.html \
-		test_prefix07.html \
-		test_prefix08.html \
-		test_prefix09.html \
-		test_prefix10.html \
-		test_prefix11.html \
 		test_publicId01.html \
 		test_removeAttributeNS01.html \
 		test_removeAttributeNS02.html \
@@ -344,21 +289,6 @@ _TEST_FILES_F	= \
 		test_systemId01.html \
 		$(NULL)
 
-# work around nsinstall limits on windows by splitting into groups
-libs:: 	$(_TEST_FILES_A)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
+MOCHITEST_FILES_PARTS := $(foreach part,A B C D E F,MOCHITEST_FILES_$(part))
 
-libs::	$(_TEST_FILES_B)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
-
-libs::	$(_TEST_FILES_C)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
-
-libs:: 	$(_TEST_FILES_D)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
-
-libs::	$(_TEST_FILES_E)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
-
-libs::	$(_TEST_FILES_F)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
+include $(topsrcdir)/config/rules.mk

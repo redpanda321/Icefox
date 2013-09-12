@@ -5,11 +5,11 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=333198
 -->
 <head>
   <title>Test for Bug 333198</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
 </head>
-<body>
+<!-- setTimeout so that the test starts after paint suppression ends -->
+<body onload="setTimeout(runTest,0);">
 <iframe id="ifr"></iframe><br>
 <a target="_blank" href="https://bugzilla.mozilla.org/show_bug.cgi?id=333198">Mozilla Bug 333198</a>
 <p id="display"></p>
@@ -30,22 +30,15 @@ function clickHandler() {
 }
 
 function suppressEvents(suppress) {
-  netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-  window.QueryInterface(Components.interfaces.nsIInterfaceRequestor)
-        .getInterface(Components.interfaces.nsIDOMWindowUtils)
-        .suppressEventHandling(suppress);
+  SpecialPowers.DOMWindowUtils.suppressEventHandling(suppress);
 }
 
 function sendEvents() {
-  netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-  windowUtils = window.QueryInterface(Components.interfaces.nsIInterfaceRequestor)
-                      .getInterface(Components.interfaces.nsIDOMWindowUtils);
+  windowUtils = SpecialPowers.getDOMWindowUtils(window);
   windowUtils.sendMouseEvent("mousedown", 1, 1, 0, 1, 0);
   windowUtils.sendMouseEvent("mouseup", 1, 1, 0, 1, 0);
 
-  iframeUtils = document.getElementById("ifr").contentWindow
-                        .QueryInterface(Components.interfaces.nsIInterfaceRequestor)
-                        .getInterface(Components.interfaces.nsIDOMWindowUtils);
+  iframeUtils = SpecialPowers.getDOMWindowUtils(document.getElementById("ifr").contentWindow);
   iframeUtils.sendMouseEvent("mousedown", 1, 1, 0, 1, 0);
   iframeUtils.sendMouseEvent("mouseup", 1, 1, 0, 1, 0);
 }
@@ -83,7 +76,6 @@ function runTest() {
 }
 
 SimpleTest.waitForExplicitFinish();
-addLoadEvent(runTest);
 
 </script>
 </pre>

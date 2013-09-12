@@ -1,52 +1,27 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-#include "nsIDOMHTMLHRElement.h"
-#include "nsIDOMNSHTMLHRElement.h"
-#include "nsIDOMEventTarget.h"
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "mozilla/Util.h"
+
 #include "nsGenericHTMLElement.h"
+#include "nsIDOMHTMLHRElement.h"
+
+#include "nsIDOMEventTarget.h"
 #include "nsGkAtoms.h"
 #include "nsStyleConsts.h"
 #include "nsPresContext.h"
 #include "nsMappedAttributes.h"
+#include "nsAttrValueInlines.h"
 #include "nsRuleData.h"
+#include "nsCSSProps.h"
+
+using namespace mozilla;
+using namespace mozilla::dom;
 
 class nsHTMLHRElement : public nsGenericHTMLElement,
-                        public nsIDOMHTMLHRElement,
-                        public nsIDOMNSHTMLHRElement
+                        public nsIDOMHTMLHRElement
 {
 public:
   nsHTMLHRElement(already_AddRefed<nsINodeInfo> aNodeInfo);
@@ -56,28 +31,26 @@ public:
   NS_DECL_ISUPPORTS_INHERITED
 
   // nsIDOMNode
-  NS_FORWARD_NSIDOMNODE(nsGenericHTMLElement::)
+  NS_FORWARD_NSIDOMNODE_TO_NSINODE
 
   // nsIDOMElement
-  NS_FORWARD_NSIDOMELEMENT(nsGenericHTMLElement::)
+  NS_FORWARD_NSIDOMELEMENT_TO_GENERIC
 
   // nsIDOMHTMLElement
-  NS_FORWARD_NSIDOMHTMLELEMENT(nsGenericHTMLElement::)
+  NS_FORWARD_NSIDOMHTMLELEMENT_TO_GENERIC
 
   // nsIDOMHTMLHRElement
   NS_DECL_NSIDOMHTMLHRELEMENT
 
-  // nsIDOMNSHTMLHRElement
-  NS_DECL_NSIDOMNSHTMLHRELEMENT
-
-  virtual PRBool ParseAttribute(PRInt32 aNamespaceID,
+  virtual bool ParseAttribute(int32_t aNamespaceID,
                                 nsIAtom* aAttribute,
                                 const nsAString& aValue,
                                 nsAttrValue& aResult);
-  NS_IMETHOD_(PRBool) IsAttributeMapped(const nsIAtom* aAttribute) const;
+  NS_IMETHOD_(bool) IsAttributeMapped(const nsIAtom* aAttribute) const;
   virtual nsMapRuleToAttributesFunc GetAttributeMappingFunction() const;
   virtual nsresult Clone(nsINodeInfo *aNodeInfo, nsINode **aResult) const;
   virtual nsXPCClassInfo* GetClassInfo();
+  virtual nsIDOMNode* AsDOMNode() { return this; }
 };
 
 
@@ -94,17 +67,16 @@ nsHTMLHRElement::~nsHTMLHRElement()
 }
 
 
-NS_IMPL_ADDREF_INHERITED(nsHTMLHRElement, nsGenericElement) 
-NS_IMPL_RELEASE_INHERITED(nsHTMLHRElement, nsGenericElement) 
+NS_IMPL_ADDREF_INHERITED(nsHTMLHRElement, Element)
+NS_IMPL_RELEASE_INHERITED(nsHTMLHRElement, Element)
 
 
 DOMCI_NODE_DATA(HTMLHRElement, nsHTMLHRElement)
 
 // QueryInterface implementation for nsHTMLHRElement
 NS_INTERFACE_TABLE_HEAD(nsHTMLHRElement)
-  NS_HTML_CONTENT_INTERFACE_TABLE2(nsHTMLHRElement,
-                                   nsIDOMHTMLHRElement,
-                                   nsIDOMNSHTMLHRElement)
+  NS_HTML_CONTENT_INTERFACE_TABLE1(nsHTMLHRElement,
+                                   nsIDOMHTMLHRElement)
   NS_HTML_CONTENT_INTERFACE_TABLE_TO_MAP_SEGUE(nsHTMLHRElement,
                                                nsGenericHTMLElement)
 NS_HTML_CONTENT_INTERFACE_TABLE_TAIL_CLASSINFO(HTMLHRElement)
@@ -126,21 +98,21 @@ static const nsAttrValue::EnumTable kAlignTable[] = {
   { 0 }
 };
 
-PRBool
-nsHTMLHRElement::ParseAttribute(PRInt32 aNamespaceID,
+bool
+nsHTMLHRElement::ParseAttribute(int32_t aNamespaceID,
                                 nsIAtom* aAttribute,
                                 const nsAString& aValue,
                                 nsAttrValue& aResult)
 {
   if (aNamespaceID == kNameSpaceID_None) {
     if (aAttribute == nsGkAtoms::width) {
-      return aResult.ParseSpecialIntValue(aValue, PR_TRUE);
+      return aResult.ParseSpecialIntValue(aValue);
     }
     if (aAttribute == nsGkAtoms::size) {
       return aResult.ParseIntWithBounds(aValue, 1, 1000);
     }
     if (aAttribute == nsGkAtoms::align) {
-      return aResult.ParseEnumValue(aValue, kAlignTable, PR_FALSE);
+      return aResult.ParseEnumValue(aValue, kAlignTable, false);
     }
     if (aAttribute == nsGkAtoms::color) {
       return aResult.ParseColor(aValue);
@@ -155,16 +127,16 @@ static void
 MapAttributesIntoRule(const nsMappedAttributes* aAttributes,
                       nsRuleData* aData)
 {
-  PRBool noshade = PR_FALSE;
+  bool noshade = false;
 
   const nsAttrValue* colorValue = aAttributes->GetAttr(nsGkAtoms::color);
   nscolor color;
-  PRBool colorIsSet = colorValue && colorValue->GetColorValue(color);
+  bool colorIsSet = colorValue && colorValue->GetColorValue(color);
 
   if (aData->mSIDs & (NS_STYLE_INHERIT_BIT(Position) |
                       NS_STYLE_INHERIT_BIT(Border))) {
     if (colorIsSet) {
-      noshade = PR_TRUE;
+      noshade = true;
     } else {
       noshade = !!aAttributes->GetAttr(nsGkAtoms::noshade);
     }
@@ -175,45 +147,48 @@ MapAttributesIntoRule(const nsMappedAttributes* aAttributes,
     const nsAttrValue* value = aAttributes->GetAttr(nsGkAtoms::align);
     if (value && value->Type() == nsAttrValue::eEnum) {
       // Map align attribute into auto side margins
-      nsCSSRect& margin = aData->mMarginData->mMargin;
+      nsCSSValue* marginLeft = aData->ValueForMarginLeftValue();
+      nsCSSValue* marginRight = aData->ValueForMarginRightValue();
       switch (value->GetEnumValue()) {
       case NS_STYLE_TEXT_ALIGN_LEFT:
-        if (margin.mLeft.GetUnit() == eCSSUnit_Null)
-          margin.mLeft.SetFloatValue(0.0f, eCSSUnit_Pixel);
-        if (margin.mRight.GetUnit() == eCSSUnit_Null)
-          margin.mRight.SetAutoValue();
+        if (marginLeft->GetUnit() == eCSSUnit_Null)
+          marginLeft->SetFloatValue(0.0f, eCSSUnit_Pixel);
+        if (marginRight->GetUnit() == eCSSUnit_Null)
+          marginRight->SetAutoValue();
         break;
       case NS_STYLE_TEXT_ALIGN_RIGHT:
-        if (margin.mLeft.GetUnit() == eCSSUnit_Null)
-          margin.mLeft.SetAutoValue();
-        if (margin.mRight.GetUnit() == eCSSUnit_Null)
-          margin.mRight.SetFloatValue(0.0f, eCSSUnit_Pixel);
+        if (marginLeft->GetUnit() == eCSSUnit_Null)
+          marginLeft->SetAutoValue();
+        if (marginRight->GetUnit() == eCSSUnit_Null)
+          marginRight->SetFloatValue(0.0f, eCSSUnit_Pixel);
         break;
       case NS_STYLE_TEXT_ALIGN_CENTER:
-        if (margin.mLeft.GetUnit() == eCSSUnit_Null)
-          margin.mLeft.SetAutoValue();
-        if (margin.mRight.GetUnit() == eCSSUnit_Null)
-          margin.mRight.SetAutoValue();
+        if (marginLeft->GetUnit() == eCSSUnit_Null)
+          marginLeft->SetAutoValue();
+        if (marginRight->GetUnit() == eCSSUnit_Null)
+          marginRight->SetAutoValue();
         break;
       }
     }
   }
   if (aData->mSIDs & NS_STYLE_INHERIT_BIT(Position)) {
     // width: integer, percent
-    if (aData->mPositionData->mWidth.GetUnit() == eCSSUnit_Null) {
+    nsCSSValue* width = aData->ValueForWidth();
+    if (width->GetUnit() == eCSSUnit_Null) {
       const nsAttrValue* value = aAttributes->GetAttr(nsGkAtoms::width);
       if (value && value->Type() == nsAttrValue::eInteger) {
-        aData->mPositionData->mWidth.SetFloatValue((float)value->GetIntegerValue(), eCSSUnit_Pixel);
+        width->SetFloatValue((float)value->GetIntegerValue(), eCSSUnit_Pixel);
       } else if (value && value->Type() == nsAttrValue::ePercent) {
-        aData->mPositionData->mWidth.SetPercentValue(value->GetPercentValue());
+        width->SetPercentValue(value->GetPercentValue());
       }
     }
 
-    if (aData->mPositionData->mHeight.GetUnit() == eCSSUnit_Null) {
+    nsCSSValue* height = aData->ValueForHeight();
+    if (height->GetUnit() == eCSSUnit_Null) {
       // size: integer
       if (noshade) {
         // noshade case: size is set using the border
-        aData->mPositionData->mHeight.SetAutoValue();
+        height->SetAutoValue();
       } else {
         // normal case
         // the height includes the top and bottom borders that are initially 1px.
@@ -221,7 +196,7 @@ MapAttributesIntoRule(const nsMappedAttributes* aAttributes,
         // removing all but the top border.
         const nsAttrValue* value = aAttributes->GetAttr(nsGkAtoms::size);
         if (value && value->Type() == nsAttrValue::eInteger) {
-          aData->mPositionData->mHeight.SetFloatValue((float)value->GetIntegerValue(), eCSSUnit_Pixel);
+          height->SetFloatValue((float)value->GetIntegerValue(), eCSSUnit_Pixel);
         } // else use default value from html.css
       }
     }
@@ -230,7 +205,7 @@ MapAttributesIntoRule(const nsMappedAttributes* aAttributes,
     // size: integer
     // if a size is set, use half of it per side, otherwise, use 1px per side
     float sizePerSide;
-    PRBool allSides = PR_TRUE;
+    bool allSides = true;
     const nsAttrValue* value = aAttributes->GetAttr(nsGkAtoms::size);
     if (value && value->Type() == nsAttrValue::eInteger) {
       sizePerSide = (float)value->GetIntegerValue() / 2.0f;
@@ -239,54 +214,62 @@ MapAttributesIntoRule(const nsMappedAttributes* aAttributes,
         // subpixel borders should be removed.
         // In the meantime, this makes http://www.microsoft.com/ look right.
         sizePerSide = 1.0f;
-        allSides = PR_FALSE;
+        allSides = false;
       }
     } else {
       sizePerSide = 1.0f; // default to a 2px high line
     }
-    nsCSSRect& borderWidth = aData->mMarginData->mBorderWidth;
-    if (borderWidth.mTop.GetUnit() == eCSSUnit_Null) {
-      borderWidth.mTop.SetFloatValue(sizePerSide, eCSSUnit_Pixel);
+    nsCSSValue* borderTopWidth = aData->ValueForBorderTopWidth();
+    if (borderTopWidth->GetUnit() == eCSSUnit_Null) {
+      borderTopWidth->SetFloatValue(sizePerSide, eCSSUnit_Pixel);
     }
     if (allSides) {
-      if (borderWidth.mRight.GetUnit() == eCSSUnit_Null) {
-        borderWidth.mRight.SetFloatValue(sizePerSide, eCSSUnit_Pixel);
+      nsCSSValue* borderRightWidth = aData->ValueForBorderRightWidthValue();
+      if (borderRightWidth->GetUnit() == eCSSUnit_Null) {
+        borderRightWidth->SetFloatValue(sizePerSide, eCSSUnit_Pixel);
       }
-      if (borderWidth.mBottom.GetUnit() == eCSSUnit_Null) {
-        borderWidth.mBottom.SetFloatValue(sizePerSide, eCSSUnit_Pixel);
+      nsCSSValue* borderBottomWidth = aData->ValueForBorderBottomWidth();
+      if (borderBottomWidth->GetUnit() == eCSSUnit_Null) {
+        borderBottomWidth->SetFloatValue(sizePerSide, eCSSUnit_Pixel);
       }
-      if (borderWidth.mLeft.GetUnit() == eCSSUnit_Null) {
-        borderWidth.mLeft.SetFloatValue(sizePerSide, eCSSUnit_Pixel);
+      nsCSSValue* borderLeftWidth = aData->ValueForBorderLeftWidthValue();
+      if (borderLeftWidth->GetUnit() == eCSSUnit_Null) {
+        borderLeftWidth->SetFloatValue(sizePerSide, eCSSUnit_Pixel);
       }
     }
 
-    nsCSSRect& borderStyle = aData->mMarginData->mBorderStyle;
-    if (borderStyle.mTop.GetUnit() == eCSSUnit_Null) {
-      borderStyle.mTop.SetIntValue(NS_STYLE_BORDER_STYLE_SOLID,
-                                   eCSSUnit_Enumerated);
+    nsCSSValue* borderTopStyle = aData->ValueForBorderTopStyle();
+    if (borderTopStyle->GetUnit() == eCSSUnit_Null) {
+      borderTopStyle->SetIntValue(NS_STYLE_BORDER_STYLE_SOLID,
+                                  eCSSUnit_Enumerated);
     }
     if (allSides) {
-      if (borderStyle.mRight.GetUnit() == eCSSUnit_Null) {
-        borderStyle.mRight.SetIntValue(NS_STYLE_BORDER_STYLE_SOLID,
+      nsCSSValue* borderRightStyle = aData->ValueForBorderRightStyleValue();
+      if (borderRightStyle->GetUnit() == eCSSUnit_Null) {
+        borderRightStyle->SetIntValue(NS_STYLE_BORDER_STYLE_SOLID,
+                                      eCSSUnit_Enumerated);
+      }
+      nsCSSValue* borderBottomStyle = aData->ValueForBorderBottomStyle();
+      if (borderBottomStyle->GetUnit() == eCSSUnit_Null) {
+        borderBottomStyle->SetIntValue(NS_STYLE_BORDER_STYLE_SOLID,
                                        eCSSUnit_Enumerated);
       }
-      if (borderStyle.mBottom.GetUnit() == eCSSUnit_Null) {
-        borderStyle.mBottom.SetIntValue(NS_STYLE_BORDER_STYLE_SOLID,
-                                        eCSSUnit_Enumerated);
-      }
-      if (borderStyle.mLeft.GetUnit() == eCSSUnit_Null) {
-        borderStyle.mLeft.SetIntValue(NS_STYLE_BORDER_STYLE_SOLID,
-                                      eCSSUnit_Enumerated);
+      nsCSSValue* borderLeftStyle = aData->ValueForBorderLeftStyleValue();
+      if (borderLeftStyle->GetUnit() == eCSSUnit_Null) {
+        borderLeftStyle->SetIntValue(NS_STYLE_BORDER_STYLE_SOLID,
+                                     eCSSUnit_Enumerated);
       }
 
       // If it would be noticeable, set the border radius to
-      // 100% on all corners
-      nsCSSCornerSizes& corners = aData->mMarginData->mBorderRadius;
-
-      NS_FOR_CSS_FULL_CORNERS(c) {
-        nsCSSValue& dimen = corners.GetCorner(c);
-        if (dimen.GetUnit() == eCSSUnit_Null) {
-          dimen.SetPercentValue(1.0f);
+      // 10000px on all corners; this triggers the clamping to make
+      // circular ends.  This assumes the <hr> isn't larger than
+      // that in *both* dimensions.
+      for (const nsCSSProperty* props =
+            nsCSSProps::SubpropertyEntryFor(eCSSProperty_border_radius);
+           *props != eCSSProperty_UNKNOWN; ++props) {
+        nsCSSValue* dimen = aData->ValueFor(*props);
+        if (dimen->GetUnit() == eCSSUnit_Null) {
+          dimen->SetFloatValue(10000.0f, eCSSUnit_Pixel);
         }
       }
     }
@@ -294,17 +277,18 @@ MapAttributesIntoRule(const nsMappedAttributes* aAttributes,
   if (aData->mSIDs & NS_STYLE_INHERIT_BIT(Color)) {
     // color: a color
     // (we got the color attribute earlier)
+    nsCSSValue* colorValue = aData->ValueForColor();
     if (colorIsSet &&
-        aData->mColorData->mColor.GetUnit() == eCSSUnit_Null &&
+        colorValue->GetUnit() == eCSSUnit_Null &&
         aData->mPresContext->UseDocumentColors()) {
-      aData->mColorData->mColor.SetColorValue(color);
+      colorValue->SetColorValue(color);
     }
   }
 
   nsGenericHTMLElement::MapCommonAttributesInto(aAttributes, aData);
 }
 
-NS_IMETHODIMP_(PRBool)
+NS_IMETHODIMP_(bool)
 nsHTMLHRElement::IsAttributeMapped(const nsIAtom* aAttribute) const
 {
   static const MappedAttributeEntry attributes[] = {
@@ -313,7 +297,7 @@ nsHTMLHRElement::IsAttributeMapped(const nsIAtom* aAttribute) const
     { &nsGkAtoms::size },
     { &nsGkAtoms::color },
     { &nsGkAtoms::noshade },
-    { nsnull },
+    { nullptr },
   };
   
   static const MappedAttributeEntry* const map[] = {
@@ -321,7 +305,7 @@ nsHTMLHRElement::IsAttributeMapped(const nsIAtom* aAttribute) const
     sCommonAttributeMap,
   };
 
-  return FindAttributeDependence(aAttribute, map, NS_ARRAY_LENGTH(map));
+  return FindAttributeDependence(aAttribute, map);
 }
 
 

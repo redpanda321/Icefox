@@ -8,16 +8,14 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=420863
   <link rel="stylesheet" type="text/css" href="chrome://mochikit/content/tests/SimpleTest/test.css" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js"></script>
+          src="common.js"></script>
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/events.js"></script>
+          src="events.js"></script>
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/actions.js"></script>
+          src="actions.js"></script>
 
   <script type="application/javascript">
     var gClickHandler = null;
@@ -35,7 +33,7 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=420863
         return;
       }
 
-      is(td1Acc.numActions, 0,
+      is(td1Acc.actionCount, 0,
            "Simple table cell shouldn't have any actions");
 
       //////////////////////////////////////////////////////////////////////////
@@ -69,7 +67,7 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=420863
             this.ID.removeEventListener("click", gClickHandler, false);
 
             // check actions
-            is(getAccessible(this.ID).numActions, 0,
+            is(getAccessible(this.ID).actionCount, 0,
                "td3 shouldn't have actions");
           }
         }

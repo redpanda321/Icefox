@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 4 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Novell code.
- *
- * The Initial Developer of the Original Code is Novell.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   rocallahan@novell.com
- *   Vladimir Vukicevic <vladimir@pobox.com>
- *   Karl Tomlinson <karlt+@karlt.net>, Mozilla Corporation
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "gfxXlibNativeRenderer.h"
 
@@ -88,28 +54,28 @@
 */
 
 static cairo_bool_t
-_convert_coord_to_int (double coord, PRInt32 *v)
+_convert_coord_to_int (double coord, int32_t *v)
 {
-    *v = (PRInt32)coord;
+    *v = (int32_t)coord;
     /* XXX allow some tolerance here? */
     return *v == coord;
 }
 
-static PRBool
+static bool
 _get_rectangular_clip (cairo_t *cr,
                        const nsIntRect& bounds,
-                       PRBool *need_clip,
+                       bool *need_clip,
                        nsIntRect *rectangles, int max_rectangles,
                        int *num_rectangles)
 {
     cairo_rectangle_list_t *cliplist;
     cairo_rectangle_t *clips;
     int i;
-    PRBool retval = PR_TRUE;
+    bool retval = true;
 
     cliplist = cairo_copy_clip_rectangle_list (cr);
     if (cliplist->status != CAIRO_STATUS_SUCCESS) {
-        retval = PR_FALSE;
+        retval = false;
         NATIVE_DRAWING_NOTE("FALLBACK: non-rectangular clip");
         goto FINISH;
     }
@@ -125,14 +91,14 @@ _get_rectangular_clip (cairo_t *cr,
             !_convert_coord_to_int (clips[i].width, &rect.width) ||
             !_convert_coord_to_int (clips[i].height, &rect.height))
         {
-            retval = PR_FALSE;
+            retval = false;
             NATIVE_DRAWING_NOTE("FALLBACK: non-integer clip");
             goto FINISH;
         }
 
-        if (rect == bounds) {
+        if (rect.IsEqualInterior(bounds)) {
             /* the bounds are entirely inside the clip region so we don't need to clip. */
-            *need_clip = PR_FALSE;
+            *need_clip = false;
             goto FINISH;
         }            
 
@@ -140,7 +106,7 @@ _get_rectangular_clip (cairo_t *cr,
                      "Was expecting to be clipped to bounds");
 
         if (i >= max_rectangles) {
-            retval = PR_FALSE;
+            retval = false;
             NATIVE_DRAWING_NOTE("FALLBACK: unsupported clip rectangle count");
             goto FINISH;
         }
@@ -148,7 +114,7 @@ _get_rectangular_clip (cairo_t *cr,
         rectangles[i] = rect;
     }
   
-    *need_clip = PR_TRUE;
+    *need_clip = true;
     *num_rectangles = cliplist->num_rectangles;
 
 FINISH:
@@ -163,9 +129,9 @@ FINISH:
  * Try the direct path.
  * @return True if we took the direct path
  */
-PRBool
+bool
 gfxXlibNativeRenderer::DrawDirect(gfxContext *ctx, nsIntSize size,
-                                  PRUint32 flags,
+                                  uint32_t flags,
                                   Screen *screen, Visual *visual)
 {
     cairo_t *cr = ctx->GetCairo();
@@ -174,42 +140,9 @@ gfxXlibNativeRenderer::DrawDirect(gfxContext *ctx, nsIntSize size,
     cairo_surface_t *target = cairo_get_group_target (cr);
     if (cairo_surface_get_type (target) != CAIRO_SURFACE_TYPE_XLIB) {
         NATIVE_DRAWING_NOTE("FALLBACK: non-X surface");
-        return PR_FALSE;
+        return false;
     }
     
-    /* Check that the screen is supported.
-       Visuals belong to screens, so, if alternate visuals are not supported,
-       then alternate screens cannot be supported. */  
-    PRBool supports_alternate_visual =
-        (flags & DRAW_SUPPORTS_ALTERNATE_VISUAL) != 0;
-    PRBool supports_alternate_screen = supports_alternate_visual &&
-        (flags & DRAW_SUPPORTS_ALTERNATE_SCREEN);
-    if (!supports_alternate_screen &&
-        cairo_xlib_surface_get_screen (target) != screen) {
-        NATIVE_DRAWING_NOTE("FALLBACK: non-default screen");
-        return PR_FALSE;
-    }
-        
-    /* Check that there is a visual */
-    Visual *target_visual = cairo_xlib_surface_get_visual (target);
-    if (!target_visual) {
-        NATIVE_DRAWING_NOTE("FALLBACK: no Visual for surface");
-        return PR_FALSE;
-    }        
-    /* Check that the visual is supported */
-    if (!supports_alternate_visual && target_visual != visual) {
-        // Only the format of the visual is important (not the GLX properties)
-        // for Xlib or XRender drawing.
-        XRenderPictFormat *target_format =
-            cairo_xlib_surface_get_xrender_format (target);
-        if (!target_format ||
-            (target_format !=
-             XRenderFindVisualFormat (DisplayOfScreen(screen), visual))) {
-            NATIVE_DRAWING_NOTE("FALLBACK: unsupported Visual");
-            return PR_FALSE;
-        }
-    }
-  
     cairo_matrix_t matrix;
     cairo_get_matrix (cr, &matrix);
     double device_offset_x, device_offset_y;
@@ -218,8 +151,8 @@ gfxXlibNativeRenderer::DrawDirect(gfxContext *ctx, nsIntSize size,
     /* Draw() checked that the matrix contained only a very-close-to-integer
        translation.  Here (and in several other places and thebes) device
        offsets are assumed to be integer. */
-    NS_ASSERTION(PRUint32(device_offset_x) == device_offset_x &&
-                 PRUint32(device_offset_y) == device_offset_y,
+    NS_ASSERTION(int32_t(device_offset_x) == device_offset_x &&
+                 int32_t(device_offset_y) == device_offset_y,
                  "Expected integer device offsets");
     nsIntPoint offset(NS_lroundf(matrix.x0 + device_offset_x),
                       NS_lroundf(matrix.y0 + device_offset_y));
@@ -240,9 +173,9 @@ gfxXlibNativeRenderer::DrawDirect(gfxContext *ctx, nsIntSize size,
                                    cairo_xlib_surface_get_width(target),
                                    cairo_xlib_surface_get_height(target)));
 
-    PRBool needs_clip;
+    bool needs_clip = true;
     nsIntRect rectangles[MAX_STATIC_CLIP_RECTANGLES];
-    int rect_count;
+    int rect_count = 0;
 
     /* Check that the clip is rectangular and aligned on unit boundaries. */
     /* Temporarily set the matrix for _get_rectangular_clip. It's basically
@@ -250,17 +183,50 @@ gfxXlibNativeRenderer::DrawDirect(gfxContext *ctx, nsIntSize size,
        offset-rect is in device coordinates. */
     cairo_identity_matrix (cr);
     cairo_translate (cr, -device_offset_x, -device_offset_y);
-    PRBool have_rectangular_clip =
+    bool have_rectangular_clip =
         _get_rectangular_clip (cr, bounds, &needs_clip,
                                rectangles, max_rectangles, &rect_count);
     cairo_set_matrix (cr, &matrix);
     if (!have_rectangular_clip)
-        return PR_FALSE;
+        return false;
 
-    /* Draw only calls this function when the clip region is not empty. */
-    NS_ASSERTION(!needs_clip || rect_count != 0,
-                 "Where did the clip region go?");
+    /* Stop now if everything is clipped out */
+    if (needs_clip && rect_count == 0)
+        return true;
       
+    /* Check that the screen is supported.
+       Visuals belong to screens, so, if alternate visuals are not supported,
+       then alternate screens cannot be supported. */  
+    bool supports_alternate_visual =
+        (flags & DRAW_SUPPORTS_ALTERNATE_VISUAL) != 0;
+    bool supports_alternate_screen = supports_alternate_visual &&
+        (flags & DRAW_SUPPORTS_ALTERNATE_SCREEN);
+    if (!supports_alternate_screen &&
+        cairo_xlib_surface_get_screen (target) != screen) {
+        NATIVE_DRAWING_NOTE("FALLBACK: non-default screen");
+        return false;
+    }
+        
+    /* Check that there is a visual */
+    Visual *target_visual = cairo_xlib_surface_get_visual (target);
+    if (!target_visual) {
+        NATIVE_DRAWING_NOTE("FALLBACK: no Visual for surface");
+        return false;
+    }        
+    /* Check that the visual is supported */
+    if (!supports_alternate_visual && target_visual != visual) {
+        // Only the format of the visual is important (not the GLX properties)
+        // for Xlib or XRender drawing.
+        XRenderPictFormat *target_format =
+            cairo_xlib_surface_get_xrender_format (target);
+        if (!target_format ||
+            (target_format !=
+             XRenderFindVisualFormat (DisplayOfScreen(screen), visual))) {
+            NATIVE_DRAWING_NOTE("FALLBACK: unsupported Visual");
+            return false;
+        }
+    }
+  
     /* we're good to go! */
     NATIVE_DRAWING_NOTE("TAKING FAST PATH\n");
     cairo_surface_flush (target);
@@ -270,12 +236,12 @@ gfxXlibNativeRenderer::DrawDirect(gfxContext *ctx, nsIntSize size,
                                needs_clip ? rect_count : 0);
     if (NS_SUCCEEDED(rv)) {
         cairo_surface_mark_dirty (target);
-        return PR_TRUE;
+        return true;
     }
-    return PR_FALSE;
+    return false;
 }
 
-static PRBool
+static bool
 VisualHasAlpha(Screen *screen, Visual *visual) {
     // There may be some other visuals format with alpha but usually this is
     // the only one we care about.
@@ -289,19 +255,19 @@ VisualHasAlpha(Screen *screen, Visual *visual) {
 
 // Returns whether pixel conversion between visual and format is exact (in
 // both directions).
-static PRBool
+static bool
 FormatConversionIsExact(Screen *screen, Visual *visual, XRenderPictFormat *format) {
     if (!format ||
         visual->c_class != TrueColor ||
         format->type != PictTypeDirect ||
         gfxXlibSurface::DepthOfVisual(screen, visual) != format->depth)
-        return PR_FALSE;
+        return false;
 
     XRenderPictFormat *visualFormat =
         XRenderFindVisualFormat(DisplayOfScreen(screen), visual);
 
     if (visualFormat->type != PictTypeDirect )
-        return PR_FALSE;
+        return false;
 
     const XRenderDirectFormat& a = visualFormat->direct;
     const XRenderDirectFormat& b = format->direct;
@@ -320,14 +286,14 @@ enum DrawingMethod {
 
 static already_AddRefed<gfxXlibSurface>
 CreateTempXlibSurface (gfxASurface *destination, nsIntSize size,
-                       PRBool canDrawOverBackground,
-                       PRUint32 flags, Screen *screen, Visual *visual,
+                       bool canDrawOverBackground,
+                       uint32_t flags, Screen *screen, Visual *visual,
                        DrawingMethod *method)
 {
-    PRBool drawIsOpaque = (flags & gfxXlibNativeRenderer::DRAW_IS_OPAQUE) != 0;
-    PRBool supportsAlternateVisual =
+    bool drawIsOpaque = (flags & gfxXlibNativeRenderer::DRAW_IS_OPAQUE) != 0;
+    bool supportsAlternateVisual =
         (flags & gfxXlibNativeRenderer::DRAW_SUPPORTS_ALTERNATE_VISUAL) != 0;
-    PRBool supportsAlternateScreen = supportsAlternateVisual &&
+    bool supportsAlternateScreen = supportsAlternateVisual &&
         (flags & gfxXlibNativeRenderer::DRAW_SUPPORTS_ALTERNATE_SCREEN);
 
     cairo_surface_t *target = destination->CairoSurface();
@@ -341,7 +307,7 @@ CreateTempXlibSurface (gfxASurface *destination, nsIntSize size,
     // channel anyway, so there is no need to copy the background.  If
     // doCopyBackground is set here, we'll also need to check below that the
     // background can copied without any loss in format conversions.
-    PRBool doCopyBackground = !drawIsOpaque && canDrawOverBackground &&
+    bool doCopyBackground = !drawIsOpaque && canDrawOverBackground &&
         target_content == CAIRO_CONTENT_COLOR;
 
     if (supportsAlternateScreen && screen != target_screen && drawIsOpaque) {
@@ -367,7 +333,7 @@ CreateTempXlibSurface (gfxASurface *destination, nsIntSize size,
             target_visual = gfxXlibSurface::FindVisual(screen, imageFormat);
             Display *dpy = DisplayOfScreen(screen);
             if (target_visual) {
-                target_format = XRenderFindVisualFormat(dpy, visual);
+                target_format = XRenderFindVisualFormat(dpy, target_visual);
             } else {
                 target_format =
                     gfxXlibSurface::FindRenderFormat(dpy, imageFormat);
@@ -392,7 +358,7 @@ CreateTempXlibSurface (gfxASurface *destination, nsIntSize size,
 
         if (doCopyBackground && visual != target_visual &&
             !FormatConversionIsExact(screen, visual, target_format)) {
-            doCopyBackground = PR_FALSE;
+            doCopyBackground = false;
         }
     }
 
@@ -446,7 +412,7 @@ CreateTempXlibSurface (gfxASurface *destination, nsIntSize size,
     return surface.forget();
 }
 
-PRBool
+bool
 gfxXlibNativeRenderer::DrawOntoTempSurface(gfxXlibSurface *tempXlibSurface,
                                            nsIntPoint offset)
 {
@@ -475,24 +441,24 @@ CopyXlibSurfaceToImage(gfxXlibSurface *tempXlibSurface,
 
 void
 gfxXlibNativeRenderer::Draw(gfxContext* ctx, nsIntSize size,
-                            PRUint32 flags, Screen *screen, Visual *visual,
+                            uint32_t flags, Screen *screen, Visual *visual,
                             DrawOutput* result)
 {
     if (result) {
         result->mSurface = NULL;
-        result->mUniformAlpha = PR_FALSE;
-        result->mUniformColor = PR_FALSE;
+        result->mUniformAlpha = false;
+        result->mUniformColor = false;
     }
 
-    PRBool drawIsOpaque = (flags & DRAW_IS_OPAQUE) != 0;
+    bool drawIsOpaque = (flags & DRAW_IS_OPAQUE) != 0;
     gfxMatrix matrix = ctx->CurrentMatrix();
 
     // We can only draw direct or onto a copied background if pixels align and
     // native drawing is compatible with the current operator.  (The matrix is
     // actually also pixel-exact for flips and right-angle rotations, which
     // would permit copying the background but not drawing direct.)
-    PRBool matrixIsIntegerTranslation = !matrix.HasNonIntegerTranslation();
-    PRBool canDrawOverBackground = matrixIsIntegerTranslation &&
+    bool matrixIsIntegerTranslation = !matrix.HasNonIntegerTranslation();
+    bool canDrawOverBackground = matrixIsIntegerTranslation &&
         ctx->CurrentOperator() == gfxContext::OPERATOR_OVER;
 
     // The padding of 0.5 for non-pixel-exact transformations used here is
@@ -502,7 +468,7 @@ gfxXlibNativeRenderer::Draw(gfxContext* ctx, nsIntSize size,
     if (!matrixIsIntegerTranslation) {
         // The filter footprint means that the affected rectangle is a
         // little larger than the drawingRect;
-        affectedRect.Outset(filterRadius);
+        affectedRect.Inflate(filterRadius);
 
         NATIVE_DRAWING_NOTE("FALLBACK: matrix not integer translation");
     } else if (!canDrawOverBackground) {
@@ -531,14 +497,14 @@ gfxXlibNativeRenderer::Draw(gfxContext* ctx, nsIntSize size,
     if (!matrixIsIntegerTranslation) {
         // The source surface may need to be a little larger than the clip
         // extents due to the filter footprint.
-        clipExtents.Outset(filterRadius);
+        clipExtents.Inflate(filterRadius);
     }
     clipExtents.RoundOut();
 
-    nsIntRect intExtents(PRInt32(clipExtents.X()),
-                         PRInt32(clipExtents.Y()),
-                         PRInt32(clipExtents.Width()),
-                         PRInt32(clipExtents.Height()));
+    nsIntRect intExtents(int32_t(clipExtents.X()),
+                         int32_t(clipExtents.Y()),
+                         int32_t(clipExtents.Width()),
+                         int32_t(clipExtents.Height()));
     drawingRect.IntersectRect(drawingRect, intExtents);
     gfxPoint offset(drawingRect.x, drawingRect.y);
 
@@ -587,7 +553,7 @@ gfxXlibNativeRenderer::Draw(gfxContext* ctx, nsIntSize size,
             result->mSurface = tempXlibSurface;
             /* fill in the result with what we know, which is really just what our
                assumption was */
-            result->mUniformAlpha = PR_TRUE;
+            result->mUniformAlpha = true;
             result->mColor.a = 1.0;
         }
         return;
@@ -604,10 +570,10 @@ gfxXlibNativeRenderer::Draw(gfxContext* ctx, nsIntSize size,
         CopyXlibSurfaceToImage(tempXlibSurface, gfxASurface::ImageFormatRGB24);
   
     if (blackImage->CairoStatus() == CAIRO_STATUS_SUCCESS &&
-        blackImage->CairoStatus() == CAIRO_STATUS_SUCCESS) {
+        whiteImage->CairoStatus() == CAIRO_STATUS_SUCCESS) {
         gfxAlphaRecovery::Analysis analysis;
         if (!gfxAlphaRecovery::RecoverAlpha(blackImage, whiteImage,
-                                            result ? &analysis : nsnull))
+                                            result ? &analysis : nullptr))
             return;
 
         ctx->SetSource(blackImage, offset);
@@ -620,11 +586,11 @@ gfxXlibNativeRenderer::Draw(gfxContext* ctx, nsIntSize size,
            alpha). */
         if (result) {
             if (analysis.uniformAlpha) {
-                result->mUniformAlpha = PR_TRUE;
+                result->mUniformAlpha = true;
                 result->mColor.a = analysis.alpha;
             }
             if (analysis.uniformColor) {
-                result->mUniformColor = PR_TRUE;
+                result->mUniformColor = true;
                 result->mColor.r = analysis.r;
                 result->mColor.g = analysis.g;
                 result->mColor.b = analysis.b;

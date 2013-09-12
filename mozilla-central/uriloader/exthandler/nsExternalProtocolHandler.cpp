@@ -1,43 +1,9 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  * vim:set ts=2 sts=2 sw=2 et cin:
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org Code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Scott MacGregor <mscott@netscape.com>
- *   Dan Mosedale <dmose@mozilla.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsIURI.h"
 #include "nsIURL.h"
@@ -84,7 +50,7 @@ private:
     nsCOMPtr<nsIURI> mOriginalURI;
     nsresult mStatus;
     nsLoadFlags mLoadFlags;
-    PRBool mWasOpened;
+    bool mWasOpened;
     
     nsCOMPtr<nsIInterfaceRequestor> mCallbacks;
     nsCOMPtr<nsILoadGroup> mLoadGroup;
@@ -100,7 +66,7 @@ NS_INTERFACE_MAP_BEGIN(nsExtProtocolChannel)
 NS_INTERFACE_MAP_END_THREADSAFE
 
 nsExtProtocolChannel::nsExtProtocolChannel() : mStatus(NS_OK), 
-                                               mWasOpened(PR_FALSE)
+                                               mWasOpened(false)
 {
 }
 
@@ -134,7 +100,7 @@ NS_IMETHODIMP nsExtProtocolChannel::SetNotificationCallbacks(nsIInterfaceRequest
 NS_IMETHODIMP 
 nsExtProtocolChannel::GetSecurityInfo(nsISupports * *aSecurityInfo)
 {
-  *aSecurityInfo = nsnull;
+  *aSecurityInfo = nullptr;
   return NS_OK;
 }
 
@@ -172,9 +138,9 @@ nsresult nsExtProtocolChannel::OpenURL()
   if (extProtService)
   {
 #ifdef DEBUG
-    nsCAutoString urlScheme;
+    nsAutoCString urlScheme;
     mUrl->GetScheme(urlScheme);
-    PRBool haveHandler = PR_FALSE;
+    bool haveHandler = false;
     extProtService->ExternalProtocolHandlerExists(urlScheme.get(), &haveHandler);
     NS_ASSERTION(haveHandler, "Why do we have a channel for this url if we don't support the protocol?");
 #endif
@@ -210,7 +176,7 @@ NS_IMETHODIMP nsExtProtocolChannel::AsyncOpen(nsIStreamListener *listener, nsISu
   NS_ENSURE_ARG_POINTER(listener);
   NS_ENSURE_TRUE(!mWasOpened, NS_ERROR_ALREADY_OPENED);
 
-  mWasOpened = PR_TRUE;
+  mWasOpened = true;
 
   return OpenURL();
 }
@@ -247,20 +213,39 @@ NS_IMETHODIMP nsExtProtocolChannel::SetContentCharset(const nsACString &aContent
   return NS_ERROR_NOT_IMPLEMENTED;
 }
 
-NS_IMETHODIMP nsExtProtocolChannel::GetContentDisposition(nsACString &aContentDisposition)
+NS_IMETHODIMP nsExtProtocolChannel::GetContentDisposition(uint32_t *aContentDisposition)
 {
-  aContentDisposition.Truncate();
-  return NS_OK;
+  return NS_ERROR_NOT_AVAILABLE;
 }
 
-NS_IMETHODIMP nsExtProtocolChannel::GetContentLength(PRInt64 * aContentLength)
+NS_IMETHODIMP nsExtProtocolChannel::SetContentDisposition(uint32_t aContentDisposition)
+{
+  return NS_ERROR_NOT_AVAILABLE;
+}
+
+NS_IMETHODIMP nsExtProtocolChannel::GetContentDispositionFilename(nsAString &aContentDispositionFilename)
+{
+  return NS_ERROR_NOT_AVAILABLE;
+}
+
+NS_IMETHODIMP nsExtProtocolChannel::SetContentDispositionFilename(const nsAString &aContentDispositionFilename)
+{
+  return NS_ERROR_NOT_AVAILABLE;
+}
+
+NS_IMETHODIMP nsExtProtocolChannel::GetContentDispositionHeader(nsACString &aContentDispositionHeader)
+{
+  return NS_ERROR_NOT_AVAILABLE;
+}
+
+NS_IMETHODIMP nsExtProtocolChannel::GetContentLength(int64_t * aContentLength)
 {
   *aContentLength = -1;
   return NS_OK;
 }
 
 NS_IMETHODIMP
-nsExtProtocolChannel::SetContentLength(PRInt64 aContentLength)
+nsExtProtocolChannel::SetContentLength(int64_t aContentLength)
 {
   NS_NOTREACHED("SetContentLength");
   return NS_ERROR_NOT_IMPLEMENTED;
@@ -287,9 +272,9 @@ NS_IMETHODIMP nsExtProtocolChannel::GetName(nsACString &result)
   return mUrl->GetSpec(result);
 }
 
-NS_IMETHODIMP nsExtProtocolChannel::IsPending(PRBool *result)
+NS_IMETHODIMP nsExtProtocolChannel::IsPending(bool *result)
 {
-  *result = PR_FALSE;
+  *result = false;
   return NS_OK; 
 }
 
@@ -346,35 +331,36 @@ NS_IMETHODIMP nsExternalProtocolHandler::GetScheme(nsACString &aScheme)
   return NS_OK;
 }
 
-NS_IMETHODIMP nsExternalProtocolHandler::GetDefaultPort(PRInt32 *aDefaultPort)
+NS_IMETHODIMP nsExternalProtocolHandler::GetDefaultPort(int32_t *aDefaultPort)
 {
   *aDefaultPort = 0;
     return NS_OK;
 }
 
 NS_IMETHODIMP 
-nsExternalProtocolHandler::AllowPort(PRInt32 port, const char *scheme, PRBool *_retval)
+nsExternalProtocolHandler::AllowPort(int32_t port, const char *scheme, bool *_retval)
 {
     // don't override anything.  
-    *_retval = PR_FALSE;
+    *_retval = false;
     return NS_OK;
 }
 // returns TRUE if the OS can handle this protocol scheme and false otherwise.
-PRBool nsExternalProtocolHandler::HaveExternalProtocolHandler(nsIURI * aURI)
+bool nsExternalProtocolHandler::HaveExternalProtocolHandler(nsIURI * aURI)
 {
-  PRBool haveHandler = PR_FALSE;
+  bool haveHandler = false;
   if (aURI)
   {
-    nsCAutoString scheme;
+    nsAutoCString scheme;
     aURI->GetScheme(scheme);
-    if (gExtProtSvc)
-      gExtProtSvc->ExternalProtocolHandlerExists(scheme.get(), &haveHandler);
+    nsCOMPtr<nsIExternalProtocolService> extProtSvc(do_GetService(NS_EXTERNALPROTOCOLSERVICE_CONTRACTID));
+    if (extProtSvc)
+      extProtSvc->ExternalProtocolHandlerExists(scheme.get(), &haveHandler);
   }
 
   return haveHandler;
 }
 
-NS_IMETHODIMP nsExternalProtocolHandler::GetProtocolFlags(PRUint32 *aUritype)
+NS_IMETHODIMP nsExternalProtocolHandler::GetProtocolFlags(uint32_t *aUritype)
 {
     // Make it norelative since it is a simple uri
     *aUritype = URI_NORELATIVE | URI_NOAUTH | URI_LOADABLE_BY_ANYONE |
@@ -404,7 +390,7 @@ NS_IMETHODIMP nsExternalProtocolHandler::NewChannel(nsIURI *aURI, nsIChannel **_
   // nsOSHelperAppService::LoadUriInternal relies on this to check trustedness
   // for some platforms at least.  (win uses ::ShellExecute and unix uses
   // gnome_url_show.)
-  PRBool haveExternalHandler = HaveExternalProtocolHandler(aURI);
+  bool haveExternalHandler = HaveExternalProtocolHandler(aURI);
   if (haveExternalHandler)
   {
     nsCOMPtr<nsIChannel> channel = new nsExtProtocolChannel();
@@ -427,13 +413,14 @@ NS_IMETHODIMP nsExternalProtocolHandler::NewChannel(nsIURI *aURI, nsIChannel **_
 ///////////////////////////////////////////////////////////////////////
 // External protocol handler interface implementation
 //////////////////////////////////////////////////////////////////////
-NS_IMETHODIMP nsExternalProtocolHandler::ExternalAppExistsForScheme(const nsACString& aScheme, PRBool *_retval)
+NS_IMETHODIMP nsExternalProtocolHandler::ExternalAppExistsForScheme(const nsACString& aScheme, bool *_retval)
 {
-  if (gExtProtSvc)
-    return gExtProtSvc->ExternalProtocolHandlerExists(
+  nsCOMPtr<nsIExternalProtocolService> extProtSvc(do_GetService(NS_EXTERNALPROTOCOLSERVICE_CONTRACTID));
+  if (extProtSvc)
+    return extProtSvc->ExternalProtocolHandlerExists(
       PromiseFlatCString(aScheme).get(), _retval);
 
   // In case we don't have external protocol service.
-  *_retval = PR_FALSE;
+  *_retval = false;
   return NS_OK;
 }

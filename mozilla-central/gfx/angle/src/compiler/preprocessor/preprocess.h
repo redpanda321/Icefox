@@ -1,8 +1,3 @@
-//
-// Copyright (c) 2002-2010 The ANGLE Project Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-//
 /****************************************************************************\
 Copyright (c) 2002, NVIDIA Corporation.
 
@@ -47,10 +42,9 @@ TORT (INCLUDING NEGLIGENCE), STRICT LIABILITY OR OTHERWISE, EVEN IF
 NVIDIA HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 \****************************************************************************/
 
-# include "compiler/preprocessor/slglobals.h"
+#include "compiler/preprocessor/slglobals.h"
 extern CPPStruct *cpp;
 int InitCPPStruct(void);
 int InitScanner(CPPStruct *cpp);
 int InitAtomTable(AtomTable *atable, int htsize);
-int ScanFromString(char *s);
 char* GetStringOfAtom(AtomTable *atable, int atom);

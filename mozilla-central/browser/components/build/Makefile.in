@@ -1,4 +1,8 @@
-DEPTH=../../..
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+DEPTH=@DEPTH@
 topsrcdir=@top_srcdir@
 srcdir=@srcdir@
 VPATH=@srcdir@
@@ -12,12 +16,7 @@ IS_COMPONENT = 1
 MODULE_NAME = nsBrowserCompsModule
 FORCE_SHARED_LIB = 1
 
-# Because we are an application component, link against the CRT statically
-# (on Windows, but only if we're not building our own CRT for jemalloc)
-ifndef MOZ_MEMORY
 USE_STATIC_LIBS = 1
-endif
-
 
 EXPORTS = nsBrowserCompsCID.h
 
@@ -25,13 +24,12 @@ CPPSRCS = nsModule.cpp \
           $(NULL)
 
 ifeq ($(OS_ARCH),WINNT)
-OS_LIBS	+= $(call EXPAND_LIBNAME,ole32 shell32)
+OS_LIBS	+= $(call EXPAND_LIBNAME,ole32 shell32 shlwapi)
 endif
 
 LOCAL_INCLUDES = \
 	-I$(srcdir)/../shell/src \
 	-I$(srcdir)/../feeds/src \
-	-I$(srcdir)/../places/src \
 	-I$(srcdir)/../privatebrowsing/src \
 	-I$(srcdir)/../about \
 	-I$(srcdir)/../dirprovider \
@@ -52,22 +50,18 @@ ifneq (,$(filter windows cocoa gtk2, $(MOZ_WIDGET_TOOLKIT)))
 SHARED_LIBRARY_LIBS += ../shell/src/$(LIB_PREFIX)shellservice_s.$(LIB_SUFFIX)
 endif
 
-EXTRA_DSO_LDOPTS += $(call EXPAND_LIBNAME_PATH,unicharutil_external_s,$(LIBXUL_DIST)/lib)
-
-# migration requires mozreg, which doesn't build on WINCE; only include
-# it on non-CE
-ifeq (,$(filter WINCE uikit,$(MOZ_WIDGET_TOOLKIT)))
-LOCAL_INCLUDES += -I$(srcdir)/../migration/src
-SHARED_LIBRARY_LIBS += ../migration/src/$(LIB_PREFIX)migration_s.$(LIB_SUFFIX)
-EXTRA_DSO_LDOPTS += $(LIBXUL_DIST)/lib/$(LIB_PREFIX)mozreg_s.$(LIB_SUFFIX)
-endif
-
-# This has to come after the above chunk, because mozreg_s has dependencies on
-# stuff in MOZ_COMPONENT_LIBS.
 EXTRA_DSO_LDOPTS += \
-	$(LIBXUL_DIST)/lib/$(LIB_PREFIX)xpcomglue_s.$(LIB_SUFFIX) \
+	$(call EXPAND_LIBNAME_PATH,unicharutil_external_s,$(LIBXUL_DIST)/lib) \
+	$(XPCOM_STATICRUNTIME_GLUE_LDOPTS) \
 	$(MOZ_COMPONENT_LIBS) \
 	$(NULL)
+
+ifdef JS_SHARED_LIBRARY
+EXTRA_DSO_LDOPTS += $(MOZ_JS_LIBS)
+endif
+
+LOCAL_INCLUDES += -I$(srcdir)/../migration/src
+SHARED_LIBRARY_LIBS += ../migration/src/$(LIB_PREFIX)migration_s.$(LIB_SUFFIX)
 
 # Mac: Need to link with CoreFoundation for Mac Migrators (PList reading code)
 # GTK2: Need to link with glib for GNOME shell service
@@ -77,12 +71,7 @@ EXTRA_DSO_LDOPTS += \
   $(NULL)
 endif
 
-ifndef MOZ_ENABLE_LIBXUL
-ifeq ($(MOZ_WIDGET_TOOLKIT),windows)
-# Doesn't work, couldn't figure out why
-#EXTRA_DSO_LIBS += thebes
-EXTRA_DSO_LDOPTS += $(LIBXUL_DIST)/lib/$(LIB_PREFIX)thebes.$(IMPORT_LIB_SUFFIX)
-endif
-endif
-
 include $(topsrcdir)/config/rules.mk
+
+# Ensure that we don't embed a manifest referencing the CRT.
+EMBED_MANIFEST_AT =

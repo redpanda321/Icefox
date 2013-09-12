@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=345339
 -->
 <head>
   <title>Test for Bug 345339</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -22,6 +21,8 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=345339
 /** Test for Bug 345339 **/
 SimpleTest.waitForExplicitFinish();
 
+var filePath;
+
 function afterLoad() {
     var iframeDoc = $("testframe").contentDocument;
 
@@ -31,8 +32,14 @@ function afterLoad() {
     iframeDoc.getElementById("password").value = "123456";
     iframeDoc.getElementById("hidden").value = "gecko";
 
-    netscape.security.PrivilegeManager.enablePrivilege("UniversalFileRead");
-    iframeDoc.getElementById("file").value = "dummyfile.txt";
+    var file = SpecialPowers.Cc["@mozilla.org/file/directory_service;1"]
+             .getService(SpecialPowers.Ci.nsIProperties)
+             .get("TmpD", SpecialPowers.Ci.nsILocalFile);
+    file.append("345339_test.file");
+    file.createUnique(SpecialPowers.Ci.nsIFile.NORMAL_FILE_TYPE, 0666);
+    filePath = file.path;
+
+    SpecialPowers.wrap(iframeDoc).getElementById("file").value = filePath;
 
     /* Reload the page */
     $("testframe").setAttribute("onload", "afterReload()");
@@ -54,8 +61,7 @@ function afterReload() {
        "password field value forgotten");
     is(iframeDoc.getElementById("hidden").value, "gecko",
        "hidden field value preserved");
-    netscape.security.PrivilegeManager.enablePrivilege("UniversalFileRead");
-    is(iframeDoc.getElementById("file").value, "dummyfile.txt",
+    is(SpecialPowers.wrap(iframeDoc).getElementById("file").value, filePath,
        "file field value preserved");
 
     SimpleTest.finish();

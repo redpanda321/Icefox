@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #include "nsWebShellWindow.h"
@@ -42,7 +9,7 @@
 #include "nsLayoutCID.h"
 #include "nsContentCID.h"
 #include "nsIWeakReference.h"
-
+#include "nsIContentViewer.h"
 #include "nsIComponentManager.h"
 #include "nsIServiceManager.h"
 #include "nsIURL.h"
@@ -55,9 +22,6 @@
 #include "nsEscape.h"
 #include "nsPIDOMWindow.h"
 #include "nsIDOMEventTarget.h"
-#include "nsIPrivateDOMEvent.h"
-#include "nsIEventListenerManager.h"
-#include "nsIDOMFocusListener.h"
 #include "nsIWebNavigation.h"
 #include "nsIWindowWatcher.h"
 
@@ -66,9 +30,7 @@
 #include "nsGUIEvent.h"
 #include "nsWidgetsCID.h"
 #include "nsIWidget.h"
-#include "nsIAppShell.h"
-
-#include "nsIAppShellService.h"
+#include "nsIWidgetListener.h"
 
 #include "nsIDOMCharacterData.h"
 #include "nsIDOMNodeList.h"
@@ -76,8 +38,6 @@
 #include "nsITimer.h"
 #include "nsXULPopupManager.h"
 
-#include "prmem.h"
-#include "prlock.h"
 
 #include "nsIDOMXULDocument.h"
 
@@ -86,7 +46,6 @@
 #include "nsIWebProgress.h"
 #include "nsIWebProgressListener.h"
 
-#include "nsIDocumentViewer.h"
 #include "nsIDocument.h"
 #include "nsIDOMDocument.h"
 #include "nsIDOMNode.h"
@@ -95,10 +54,13 @@
 #include "nsIObserverService.h"
 #include "prprf.h"
 
+#include "nsIScreenManager.h"
+#include "nsIScreen.h"
+
 #include "nsIContent.h" // for menus
+#include "nsIScriptSecurityManager.h"
 
 // For calculating size
-#include "nsIFrame.h"
 #include "nsIPresShell.h"
 #include "nsPresContext.h"
 
@@ -107,39 +69,32 @@
 #include "nsIDocShellTreeNode.h"
 
 #include "nsIMarkupDocumentViewer.h"
+#include "mozilla/Attributes.h"
 
-#ifdef MOZ_WIDGET_COCOA
+#ifdef XP_MACOSX
 #include "nsINativeMenuService.h"
 #define USE_NATIVE_MENUS
 #endif
+
+using namespace mozilla;
 
 /* Define Class IDs */
 static NS_DEFINE_CID(kWindowCID,           NS_WINDOW_CID);
 
 #define SIZE_PERSISTENCE_TIMEOUT 500 // msec
 
-nsWebShellWindow::nsWebShellWindow(PRUint32 aChromeFlags)
+nsWebShellWindow::nsWebShellWindow(uint32_t aChromeFlags)
   : nsXULWindow(aChromeFlags)
+  , mSPTimerLock("nsWebShellWindow.mSPTimerLock")
 {
-  mSPTimerLock = PR_NewLock();
 }
 
 
 nsWebShellWindow::~nsWebShellWindow()
 {
-  if (mWindow) {
-    mWindow->SetClientData(0);
-    mWindow->Destroy();
-    mWindow = nsnull; // Force release here.
-  }
-
-  if (mSPTimerLock) {
-    PR_Lock(mSPTimerLock);
-    if (mSPTimer)
-      mSPTimer->Cancel();
-    PR_Unlock(mSPTimerLock);
-    PR_DestroyLock(mSPTimerLock);
-  }
+  MutexAutoLock lock(mSPTimerLock);
+  if (mSPTimer)
+    mSPTimer->Cancel();
 }
 
 NS_IMPL_ADDREF_INHERITED(nsWebShellWindow, nsXULWindow)
@@ -151,10 +106,10 @@ NS_INTERFACE_MAP_END_INHERITING(nsXULWindow)
 
 nsresult nsWebShellWindow::Initialize(nsIXULWindow* aParent,
                                       nsIXULWindow* aOpener,
-                                      nsIAppShell* aShell, nsIURI* aUrl,
-                                      PRInt32 aInitialWidth,
-                                      PRInt32 aInitialHeight,
-                                      PRBool aIsHiddenWindow,
+                                      nsIURI* aUrl,
+                                      int32_t aInitialWidth,
+                                      int32_t aInitialHeight,
+                                      bool aIsHiddenWindow,
                                       nsWidgetInitData& widgetInitData)
 {
   nsresult rv;
@@ -162,6 +117,7 @@ nsresult nsWebShellWindow::Initialize(nsIXULWindow* aParent,
 
   mIsHiddenWindow = aIsHiddenWindow;
 
+  int32_t initialX = 0, initialY = 0;
   nsCOMPtr<nsIBaseWindow> base(do_QueryInterface(aOpener));
   if (base) {
     rv = base->GetPositionAndSize(&mOpenerScreenRect.x,
@@ -169,13 +125,24 @@ nsresult nsWebShellWindow::Initialize(nsIXULWindow* aParent,
                                   &mOpenerScreenRect.width,
                                   &mOpenerScreenRect.height);
     if (NS_FAILED(rv)) {
-      mOpenerScreenRect.Empty();
+      mOpenerScreenRect.SetEmpty();
+    } else {
+      double scale;
+      if (NS_SUCCEEDED(base->GetUnscaledDevicePixelsPerCSSPixel(&scale))) {
+        mOpenerScreenRect.x = NSToIntRound(mOpenerScreenRect.x / scale);
+        mOpenerScreenRect.y = NSToIntRound(mOpenerScreenRect.y / scale);
+        mOpenerScreenRect.width = NSToIntRound(mOpenerScreenRect.width / scale);
+        mOpenerScreenRect.height = NSToIntRound(mOpenerScreenRect.height / scale);
+      }
+      initialX = mOpenerScreenRect.x;
+      initialY = mOpenerScreenRect.y;
+      ConstrainToOpenerScreen(&initialX, &initialY);
     }
   }
 
   // XXX: need to get the default window size from prefs...
   // Doesn't come from prefs... will come from CSS/XUL/RDF
-  nsIntRect r(mOpenerScreenRect.x, mOpenerScreenRect.y, aInitialWidth, aInitialHeight);
+  nsIntRect r(initialX, initialY, aInitialWidth, aInitialHeight);
   
   // Create top level window
   mWindow = do_CreateInstance(kWindowCID, &rv);
@@ -200,17 +167,16 @@ nsresult nsWebShellWindow::Initialize(nsIXULWindow* aParent,
     mParentWindow = do_GetWeakReference(aParent);
   }
 
-  mWindow->SetClientData(this);
+  mWindow->SetWidgetListener(this);
   mWindow->Create((nsIWidget *)parentWidget,          // Parent nsIWidget
-                  nsnull,                             // Native parent widget
+                  nullptr,                            // Native parent widget
                   r,                                  // Widget dimensions
-                  nsWebShellWindow::HandleEvent,      // Event handler function
-                  nsnull,                             // Device context
-                  aShell,                             // Application shell
-                  nsnull,                             // nsIToolkit
+                  nullptr,                            // Device context
                   &widgetInitData);                   // Widget initialization data
   mWindow->GetClientBounds(r);
-  mWindow->SetBackgroundColor(NS_RGB(192,192,192));
+  // Match the default background color of content. Important on windows
+  // since we no longer use content child widgets.
+  mWindow->SetBackgroundColor(NS_RGB(255,255,255));
 
   // Create web shell
   mDocShell = do_CreateInstance("@mozilla.org/docshell;1");
@@ -227,7 +193,7 @@ nsresult nsWebShellWindow::Initialize(nsIXULWindow* aParent,
 
   r.x = r.y = 0;
   nsCOMPtr<nsIBaseWindow> docShellAsWin(do_QueryInterface(mDocShell));
-  NS_ENSURE_SUCCESS(docShellAsWin->InitWindow(nsnull, mWindow, 
+  NS_ENSURE_SUCCESS(docShellAsWin->InitWindow(nullptr, mWindow, 
    r.x, r.y, r.width, r.height), NS_ERROR_FAILURE);
   NS_ENSURE_SUCCESS(docShellAsWin->Create(), NS_ERROR_FAILURE);
 
@@ -237,7 +203,27 @@ nsresult nsWebShellWindow::Initialize(nsIXULWindow* aParent,
     webProgress->AddProgressListener(this, nsIWebProgress::NOTIFY_STATE_NETWORK);
   }
 
-  if (nsnull != aUrl)  {
+  // Eagerly create an about:blank content viewer with the right principal here,
+  // rather than letting it happening in the upcoming call to
+  // SetInitialPrincipalToSubject. This avoids creating the about:blank document
+  // and then blowing it away with a second one, which can cause problems for the
+  // top-level chrome window case. See bug 789773.
+  nsCOMPtr<nsIScriptSecurityManager> ssm =
+    do_GetService(NS_SCRIPTSECURITYMANAGER_CONTRACTID, &rv);
+  if (ssm) { // Sometimes this happens really early  See bug 793370.
+    nsCOMPtr<nsIPrincipal> principal;
+    ssm->GetSubjectPrincipal(getter_AddRefs(principal));
+    if (!principal) {
+      ssm->GetSystemPrincipal(getter_AddRefs(principal));
+    }
+    rv = mDocShell->CreateAboutBlankContentViewer(principal);
+    NS_ENSURE_SUCCESS(rv, rv);
+    nsCOMPtr<nsIDocument> doc = do_GetInterface(mDocShell);
+    NS_ENSURE_TRUE(!!doc, NS_ERROR_FAILURE);
+    doc->SetIsInitialDocument(true);
+  }
+
+  if (nullptr != aUrl)  {
     nsCString tmpStr;
 
     rv = aUrl->GetSpec(tmpStr);
@@ -248,237 +234,190 @@ nsresult nsWebShellWindow::Initialize(nsIXULWindow* aParent,
     NS_ENSURE_TRUE(webNav, NS_ERROR_FAILURE);
     rv = webNav->LoadURI(urlString.get(),
                          nsIWebNavigation::LOAD_FLAGS_NONE,
-                         nsnull,
-                         nsnull,
-                         nsnull);
+                         nullptr,
+                         nullptr,
+                         nullptr);
     NS_ENSURE_SUCCESS(rv, rv);
   }
                      
   return rv;
 }
 
-
-/*
- * Toolbar
- */
-nsresult
-nsWebShellWindow::Toolbar()
+nsIPresShell*
+nsWebShellWindow::GetPresShell()
 {
-    nsCOMPtr<nsIXULWindow> kungFuDeathGrip(this);
-    nsCOMPtr<nsIWebBrowserChrome> wbc(do_GetInterface(kungFuDeathGrip));
-    if (!wbc)
-      return NS_ERROR_UNEXPECTED;
+  if (!mDocShell)
+    return nullptr;
 
-    // rjc: don't use "nsIWebBrowserChrome::CHROME_EXTRA"
-    //      due to components with multiple sidebar components
-    //      (such as Mail/News, Addressbook, etc)... and frankly,
-    //      Mac IE, OmniWeb, and other Mac OS X apps all work this way
-
-    PRUint32    chromeMask = (nsIWebBrowserChrome::CHROME_TOOLBAR |
-                              nsIWebBrowserChrome::CHROME_LOCATIONBAR |
-                              nsIWebBrowserChrome::CHROME_PERSONAL_TOOLBAR);
-
-    PRUint32    chromeFlags, newChromeFlags = 0;
-    wbc->GetChromeFlags(&chromeFlags);
-    newChromeFlags = chromeFlags & chromeMask;
-    if (!newChromeFlags)    chromeFlags |= chromeMask;
-    else                    chromeFlags &= (~newChromeFlags);
-    wbc->SetChromeFlags(chromeFlags);
-    return NS_OK;
+  nsCOMPtr<nsIPresShell> presShell;
+  mDocShell->GetPresShell(getter_AddRefs(presShell));
+  return presShell.get();
 }
 
-
-/*
- * Event handler function...
- *
- * This function is called to process events for the nsIWidget of the 
- * nsWebShellWindow...
- */
-nsEventStatus
-nsWebShellWindow::HandleEvent(nsGUIEvent *aEvent)
+bool
+nsWebShellWindow::WindowMoved(nsIWidget* aWidget, int32_t x, int32_t y)
 {
-  nsEventStatus result = nsEventStatus_eIgnore;
-  nsIDocShell* docShell = nsnull;
-  nsWebShellWindow *eventWindow = nsnull;
-
-  // Get the WebShell instance...
-  if (nsnull != aEvent->widget) {
-    void* data;
-
-    aEvent->widget->GetClientData(data);
-    if (data != nsnull) {
-      eventWindow = reinterpret_cast<nsWebShellWindow *>(data);
-      docShell = eventWindow->mDocShell;
-    }
+  nsXULPopupManager* pm = nsXULPopupManager::GetInstance();
+  if (pm) {
+    nsCOMPtr<nsPIDOMWindow> window = do_GetInterface(mDocShell);
+    pm->AdjustPopupsOnWindowChange(window);
   }
 
-  if (docShell) {
-    switch(aEvent->message) {
-      /*
-       * For size events, the DocShell must be resized to fill the entire
-       * client area of the window...
-       */
-      case NS_MOVE: {
-        // Adjust any child popups so that their widget offsets and coordinates
-        // are correct with respect to the new position of the window
-        nsCOMPtr<nsIMenuRollup> pm =
-          do_GetService("@mozilla.org/xul/xul-popup-manager;1");
-        if (pm) {
-          nsCOMPtr<nsPIDOMWindow> window = do_GetInterface(docShell);
-          pm->AdjustPopupsOnWindowChange(window);
-        }
+  // Persist position, but not immediately, in case this OS is firing
+  // repeated move events as the user drags the window
+  SetPersistenceTimer(PAD_POSITION);
+  return false;
+}
 
-        // persist position, but not immediately, in case this OS is firing
-        // repeated move events as the user drags the window
-        eventWindow->SetPersistenceTimer(PAD_POSITION);
-        break;
-      }
-      case NS_SIZE: {
-        nsCOMPtr<nsIMenuRollup> pm =
-          do_GetService("@mozilla.org/xul/xul-popup-manager;1");
-        if (pm) {
-          nsCOMPtr<nsPIDOMWindow> window = do_GetInterface(docShell);
-          pm->AdjustPopupsOnWindowChange(window);
-        }
- 
-        nsSizeEvent* sizeEvent = (nsSizeEvent*)aEvent;
-        nsCOMPtr<nsIBaseWindow> shellAsWin(do_QueryInterface(docShell));
-        shellAsWin->SetPositionAndSize(0, 0, sizeEvent->windowSize->width, 
-          sizeEvent->windowSize->height, PR_FALSE);  
-        // persist size, but not immediately, in case this OS is firing
-        // repeated size events as the user drags the sizing handle
-        if (!eventWindow->IsLocked())
-          eventWindow->SetPersistenceTimer(PAD_POSITION | PAD_SIZE | PAD_MISC);
-        result = nsEventStatus_eConsumeNoDefault;
-        break;
-      }
-      case NS_SIZEMODE: {
-        nsSizeModeEvent* modeEvent = (nsSizeModeEvent*)aEvent;
-
-        // an alwaysRaised (or higher) window will hide any newly opened
-        // normal browser windows. here we just drop a raised window
-        // to the normal zlevel if it's maximized. we make no provision
-        // for automatically re-raising it when restored.
-        if (modeEvent->mSizeMode == nsSizeMode_Maximized ||
-            modeEvent->mSizeMode == nsSizeMode_Fullscreen) {
-          PRUint32 zLevel;
-          eventWindow->GetZLevel(&zLevel);
-          if (zLevel > nsIXULWindow::normalZ)
-            eventWindow->SetZLevel(nsIXULWindow::normalZ);
-        }
-
-        aEvent->widget->SetSizeMode(modeEvent->mSizeMode);
-
-        // persist mode, but not immediately, because in many (all?)
-        // cases this will merge with the similar call in NS_SIZE and
-        // write the attribute values only once.
-        eventWindow->SetPersistenceTimer(PAD_MISC);
-        result = nsEventStatus_eConsumeDoDefault;
-
-        // min, max, and normal are all the same to apps, but for
-        // fullscreen we need to let them know so they can update
-        // their ui. 
-        if (modeEvent->mSizeMode == nsSizeMode_Fullscreen) {
-          nsCOMPtr<nsIDOMWindowInternal> ourWindow = do_GetInterface(docShell);
-          if (ourWindow)
-            ourWindow->SetFullScreen(PR_TRUE);
-        }
-
-        // Note the current implementation of SetSizeMode just stores
-        // the new state; it doesn't actually resize. So here we store
-        // the state and pass the event on to the OS. The day is coming
-        // when we'll handle the event here, and the return result will
-        // then need to be different.
-        break;
-      }
-      case NS_OS_TOOLBAR: {
-        nsCOMPtr<nsIXULWindow> kungFuDeathGrip(eventWindow);
-        eventWindow->Toolbar();
-        break;
-      }
-      case NS_XUL_CLOSE: {
-        // Calling ExecuteCloseHandler may actually close the window
-        // (it probably shouldn't, but you never know what the users JS 
-        // code will do).  Therefore we add a death-grip to the window
-        // for the duration of the close handler.
-        nsCOMPtr<nsIXULWindow> kungFuDeathGrip(eventWindow);
-        if (!eventWindow->ExecuteCloseHandler())
-          eventWindow->Destroy();
-        break;
-      }
-      /*
-       * Notify the ApplicationShellService that the window is being closed...
-       */
-      case NS_DESTROY: {
-        eventWindow->Destroy();
-        break;
-      }
-
-      case NS_UISTATECHANGED: {
-        nsCOMPtr<nsPIDOMWindow> window = do_GetInterface(docShell);
-        if (window) {
-          nsUIStateChangeEvent* event = (nsUIStateChangeEvent*)aEvent;
-          window->SetKeyboardIndicators(event->showAccelerators, event->showFocusRings);
-        }
-        break;
-      }
-
-      case NS_SETZLEVEL: {
-        nsZLevelEvent *zEvent = (nsZLevelEvent *) aEvent;
-
-        zEvent->mAdjusted = eventWindow->ConstrainToZLevel(zEvent->mImmediate,
-                              &zEvent->mPlacement,
-                              zEvent->mReqBelow, &zEvent->mActualBelow);
-        break;
-      }
-
-      case NS_ACTIVATE: {
-#if defined(DEBUG_saari) || defined(DEBUG_smaug)
-        printf("nsWebShellWindow::NS_ACTIVATE\n");
-#endif
-        // focusing the window could cause it to close, so keep a reference to it
-        nsCOMPtr<nsIXULWindow> kungFuDeathGrip(eventWindow);
-
-        nsCOMPtr<nsIDOMWindow> window = do_GetInterface(docShell);
-        nsCOMPtr<nsIFocusManager> fm = do_GetService(FOCUSMANAGER_CONTRACTID);
-        if (fm && window)
-          fm->WindowRaised(window);
-
-        if (eventWindow->mChromeLoaded) {
-          eventWindow->PersistentAttributesDirty(
-                             PAD_POSITION | PAD_SIZE | PAD_MISC);
-          eventWindow->SavePersistentAttributes();
-        }
-
-        break;
-      }
-
-      case NS_DEACTIVATE: {
-#if defined(DEBUG_saari) || defined(DEBUG_smaug)
-        printf("nsWebShellWindow::NS_DEACTIVATE\n");
-#endif
-
-        nsCOMPtr<nsIDOMWindow> window = do_GetInterface(docShell);
-        nsCOMPtr<nsIFocusManager> fm = do_GetService(FOCUSMANAGER_CONTRACTID);
-        if (fm && window)
-          fm->WindowLowered(window);
-        break;
-      }
-      
-      case NS_GETACCESSIBLE: {
-        nsCOMPtr<nsIPresShell> presShell;
-        docShell->GetPresShell(getter_AddRefs(presShell));
-        if (presShell) {
-          presShell->HandleEventWithTarget(aEvent, nsnull, nsnull, &result);
-        }
-        break;
-      }
-      default:
-        break;
-
-    }
+bool
+nsWebShellWindow::WindowResized(nsIWidget* aWidget, int32_t aWidth, int32_t aHeight)
+{
+  nsXULPopupManager* pm = nsXULPopupManager::GetInstance();
+  if (pm) {
+    nsCOMPtr<nsPIDOMWindow> window = do_GetInterface(mDocShell);
+    pm->AdjustPopupsOnWindowChange(window);
   }
-  return result;
+
+  nsCOMPtr<nsIBaseWindow> shellAsWin(do_QueryInterface(mDocShell));
+  if (shellAsWin) {
+    shellAsWin->SetPositionAndSize(0, 0, aWidth, aHeight, false);
+  }
+  // Persist size, but not immediately, in case this OS is firing
+  // repeated size events as the user drags the sizing handle
+  if (!IsLocked())
+    SetPersistenceTimer(PAD_POSITION | PAD_SIZE | PAD_MISC);
+  return true;
+}
+
+bool
+nsWebShellWindow::RequestWindowClose(nsIWidget* aWidget)
+{
+  // Maintain a reference to this as it is about to get destroyed.
+  nsCOMPtr<nsIXULWindow> xulWindow(this);
+
+  nsCOMPtr<nsPIDOMWindow> window(do_GetInterface(mDocShell));
+  nsCOMPtr<nsIDOMEventTarget> eventTarget = do_QueryInterface(window);
+
+  nsCOMPtr<nsIPresShell> presShell;
+  mDocShell->GetPresShell(getter_AddRefs(presShell));
+
+  if (eventTarget) {
+    nsRefPtr<nsPresContext> presContext = presShell->GetPresContext();
+
+    nsEventStatus status = nsEventStatus_eIgnore;
+    nsMouseEvent event(true, NS_XUL_CLOSE, nullptr, nsMouseEvent::eReal);
+    if (NS_SUCCEEDED(eventTarget->DispatchDOMEvent(&event, nullptr, presContext, &status)) &&
+        status == nsEventStatus_eConsumeNoDefault)
+      return false;
+  }
+
+  Destroy();
+  return false;
+}
+
+void
+nsWebShellWindow::SizeModeChanged(nsSizeMode sizeMode)
+{
+  // An alwaysRaised (or higher) window will hide any newly opened normal
+  // browser windows, so here we just drop a raised window to the normal
+  // zlevel if it's maximized. We make no provision for automatically
+  // re-raising it when restored.
+  if (sizeMode == nsSizeMode_Maximized || sizeMode == nsSizeMode_Fullscreen) {
+    uint32_t zLevel;
+    GetZLevel(&zLevel);
+    if (zLevel > nsIXULWindow::normalZ)
+      SetZLevel(nsIXULWindow::normalZ);
+  }
+  mWindow->SetSizeMode(sizeMode);
+
+  // Persist mode, but not immediately, because in many (all?)
+  // cases this will merge with the similar call in NS_SIZE and
+  // write the attribute values only once.
+  SetPersistenceTimer(PAD_MISC);
+  nsCOMPtr<nsPIDOMWindow> ourWindow = do_GetInterface(mDocShell);
+  if (ourWindow) {
+    // Let the application know if it's in fullscreen mode so it
+    // can update its UI.
+    if (sizeMode == nsSizeMode_Fullscreen) {
+      ourWindow->SetFullScreen(true);
+    }
+    else if (sizeMode != nsSizeMode_Minimized) {
+      ourWindow->SetFullScreen(false);
+    }
+
+    // And always fire a user-defined sizemodechange event on the window
+    ourWindow->DispatchCustomEvent("sizemodechange");
+  }
+
+  // Note the current implementation of SetSizeMode just stores
+  // the new state; it doesn't actually resize. So here we store
+  // the state and pass the event on to the OS. The day is coming
+  // when we'll handle the event here, and the return result will
+  // then need to be different.
+}
+
+void
+nsWebShellWindow::OSToolbarButtonPressed()
+{
+  // Keep a reference as setting the chrome flags can fire events.
+  nsCOMPtr<nsIXULWindow> xulWindow(this);
+
+  // rjc: don't use "nsIWebBrowserChrome::CHROME_EXTRA"
+  //      due to components with multiple sidebar components
+  //      (such as Mail/News, Addressbook, etc)... and frankly,
+  //      Mac IE, OmniWeb, and other Mac OS X apps all work this way
+  uint32_t    chromeMask = (nsIWebBrowserChrome::CHROME_TOOLBAR |
+                            nsIWebBrowserChrome::CHROME_LOCATIONBAR |
+                            nsIWebBrowserChrome::CHROME_PERSONAL_TOOLBAR);
+
+  nsCOMPtr<nsIWebBrowserChrome> wbc(do_GetInterface(xulWindow));
+  if (!wbc)
+    return;
+
+  uint32_t    chromeFlags, newChromeFlags = 0;
+  wbc->GetChromeFlags(&chromeFlags);
+  newChromeFlags = chromeFlags & chromeMask;
+  if (!newChromeFlags)    chromeFlags |= chromeMask;
+  else                    chromeFlags &= (~newChromeFlags);
+  wbc->SetChromeFlags(chromeFlags);
+}
+
+bool
+nsWebShellWindow::ZLevelChanged(bool aImmediate, nsWindowZ *aPlacement,
+                                nsIWidget* aRequestBelow, nsIWidget** aActualBelow)
+{
+  if (aActualBelow)
+    *aActualBelow = nullptr;
+
+  return ConstrainToZLevel(aImmediate, aPlacement, aRequestBelow, aActualBelow);
+}
+
+void
+nsWebShellWindow::WindowActivated()
+{
+  nsCOMPtr<nsIXULWindow> xulWindow(this);
+
+  // focusing the window could cause it to close, so keep a reference to it
+  nsCOMPtr<nsIDOMWindow> window = do_GetInterface(mDocShell);
+  nsCOMPtr<nsIFocusManager> fm = do_GetService(FOCUSMANAGER_CONTRACTID);
+  if (fm && window)
+    fm->WindowRaised(window);
+
+  if (mChromeLoaded) {
+    PersistentAttributesDirty(PAD_POSITION | PAD_SIZE | PAD_MISC);
+    SavePersistentAttributes();
+   }
+}
+
+void
+nsWebShellWindow::WindowDeactivated()
+{
+  nsCOMPtr<nsIXULWindow> xulWindow(this);
+
+  nsCOMPtr<nsPIDOMWindow> window = do_GetInterface(mDocShell);
+  nsCOMPtr<nsIFocusManager> fm = do_GetService(FOCUSMANAGER_CONTRACTID);
+  if (fm && window)
+    fm->WindowLowered(window);
 }
 
 #ifdef USE_NATIVE_MENUS
@@ -504,35 +443,63 @@ static void LoadNativeMenus(nsIDOMDocument *aDOMDoc, nsIWidget *aParentWindow)
 }
 #endif
 
-void
-nsWebShellWindow::SetPersistenceTimer(PRUint32 aDirtyFlags)
-{
-  if (!mSPTimerLock)
-    return;
+namespace mozilla {
 
-  PR_Lock(mSPTimerLock);
+class WebShellWindowTimerCallback MOZ_FINAL : public nsITimerCallback
+{
+public:
+  WebShellWindowTimerCallback(nsWebShellWindow* aWindow)
+    : mWindow(aWindow)
+  {}
+
+  NS_DECL_ISUPPORTS
+
+  NS_IMETHOD Notify(nsITimer* aTimer)
+  {
+    // Although this object participates in a refcount cycle (this -> mWindow
+    // -> mSPTimer -> this), mSPTimer is a one-shot timer and releases this
+    // after it fires.  So we don't need to release mWindow here.
+
+    mWindow->FirePersistenceTimer();
+    return NS_OK;
+  }
+
+private:
+  nsRefPtr<nsWebShellWindow> mWindow;
+};
+
+NS_IMPL_THREADSAFE_ADDREF(WebShellWindowTimerCallback)
+NS_IMPL_THREADSAFE_RELEASE(WebShellWindowTimerCallback)
+NS_IMPL_THREADSAFE_QUERY_INTERFACE1(WebShellWindowTimerCallback,
+                                    nsITimerCallback)
+
+} // namespace mozilla
+
+void
+nsWebShellWindow::SetPersistenceTimer(uint32_t aDirtyFlags)
+{
+  MutexAutoLock lock(mSPTimerLock);
   if (!mSPTimer) {
-    nsresult rv;
-    mSPTimer = do_CreateInstance("@mozilla.org/timer;1", &rv);
-    if (NS_SUCCEEDED(rv)) {
-      NS_ADDREF_THIS(); // for the timer, which holds a reference to this window
+    mSPTimer = do_CreateInstance("@mozilla.org/timer;1");
+    if (!mSPTimer) {
+      NS_WARNING("Couldn't create @mozilla.org/timer;1 instance?");
+      return;
     }
   }
-  mSPTimer->InitWithFuncCallback(FirePersistenceTimer, this,
-                                 SIZE_PERSISTENCE_TIMEOUT, nsITimer::TYPE_ONE_SHOT);
+
+  nsRefPtr<WebShellWindowTimerCallback> callback =
+    new WebShellWindowTimerCallback(this);
+  mSPTimer->InitWithCallback(callback, SIZE_PERSISTENCE_TIMEOUT,
+                             nsITimer::TYPE_ONE_SHOT);
+
   PersistentAttributesDirty(aDirtyFlags);
-  PR_Unlock(mSPTimerLock);
 }
 
 void
-nsWebShellWindow::FirePersistenceTimer(nsITimer *aTimer, void *aClosure)
+nsWebShellWindow::FirePersistenceTimer()
 {
-  nsWebShellWindow *win = static_cast<nsWebShellWindow *>(aClosure);
-  if (!win->mSPTimerLock)
-    return;
-  PR_Lock(win->mSPTimerLock);
-  win->SavePersistentAttributes();
-  PR_Unlock(win->mSPTimerLock);
+  MutexAutoLock lock(mSPTimerLock);
+  SavePersistentAttributes();
 }
 
 
@@ -542,10 +509,10 @@ nsWebShellWindow::FirePersistenceTimer(nsITimer *aTimer, void *aClosure)
 NS_IMETHODIMP
 nsWebShellWindow::OnProgressChange(nsIWebProgress *aProgress,
                                    nsIRequest *aRequest,
-                                   PRInt32 aCurSelfProgress,
-                                   PRInt32 aMaxSelfProgress,
-                                   PRInt32 aCurTotalProgress,
-                                   PRInt32 aMaxTotalProgress)
+                                   int32_t aCurSelfProgress,
+                                   int32_t aMaxSelfProgress,
+                                   int32_t aCurTotalProgress,
+                                   int32_t aMaxTotalProgress)
 {
   NS_NOTREACHED("notification excluded in AddProgressListener(...)");
   return NS_OK;
@@ -554,7 +521,7 @@ nsWebShellWindow::OnProgressChange(nsIWebProgress *aProgress,
 NS_IMETHODIMP
 nsWebShellWindow::OnStateChange(nsIWebProgress *aProgress,
                                 nsIRequest *aRequest,
-                                PRUint32 aStateFlags,
+                                uint32_t aStateFlags,
                                 nsresult aStatus)
 {
   // If the notification is not about a document finishing, then just
@@ -577,16 +544,20 @@ nsWebShellWindow::OnStateChange(nsIWebProgress *aProgress,
       return NS_OK;
   }
 
-  mChromeLoaded = PR_TRUE;
-  mLockedUntilChromeLoad = PR_FALSE;
+  mChromeLoaded = true;
+  mLockedUntilChromeLoad = false;
 
 #ifdef USE_NATIVE_MENUS
   ///////////////////////////////
   // Find the Menubar DOM  and Load the menus, hooking them up to the loaded commands
   ///////////////////////////////
-  nsCOMPtr<nsIDOMDocument> menubarDOMDoc(GetNamedDOMDoc(NS_LITERAL_STRING("this"))); // XXX "this" is a small kludge for code reused
-  if (menubarDOMDoc)
-    LoadNativeMenus(menubarDOMDoc, mWindow);
+  nsCOMPtr<nsIContentViewer> cv;
+  mDocShell->GetContentViewer(getter_AddRefs(cv));
+  if (cv) {
+    nsCOMPtr<nsIDOMDocument> menubarDOMDoc(do_QueryInterface(cv->GetDocument()));
+    if (menubarDOMDoc)
+      LoadNativeMenus(menubarDOMDoc, mWindow);
+  }
 #endif // USE_NATIVE_MENUS
 
   OnChromeLoaded();
@@ -598,7 +569,8 @@ nsWebShellWindow::OnStateChange(nsIWebProgress *aProgress,
 NS_IMETHODIMP
 nsWebShellWindow::OnLocationChange(nsIWebProgress *aProgress,
                                    nsIRequest *aRequest,
-                                   nsIURI *aURI)
+                                   nsIURI *aURI,
+                                   uint32_t aFlags)
 {
   NS_NOTREACHED("notification excluded in AddProgressListener(...)");
   return NS_OK;
@@ -617,43 +589,12 @@ nsWebShellWindow::OnStatusChange(nsIWebProgress* aWebProgress,
 NS_IMETHODIMP
 nsWebShellWindow::OnSecurityChange(nsIWebProgress *aWebProgress,
                                    nsIRequest *aRequest,
-                                   PRUint32 state)
+                                   uint32_t state)
 {
   NS_NOTREACHED("notification excluded in AddProgressListener(...)");
   return NS_OK;
 }
 
-
-//----------------------------------------
-nsCOMPtr<nsIDOMDocument> nsWebShellWindow::GetNamedDOMDoc(const nsAString & aDocShellName)
-{
-  nsCOMPtr<nsIDOMDocument> domDoc; // result == nsnull;
-
-  // first get the toolbar child docShell
-  nsCOMPtr<nsIDocShell> childDocShell;
-  if (aDocShellName.EqualsLiteral("this")) { // XXX small kludge for code reused
-    childDocShell = mDocShell;
-  } else {
-    nsCOMPtr<nsIDocShellTreeItem> docShellAsItem;
-    nsCOMPtr<nsIDocShellTreeNode> docShellAsNode(do_QueryInterface(mDocShell));
-    docShellAsNode->FindChildWithName(PromiseFlatString(aDocShellName).get(), 
-      PR_TRUE, PR_FALSE, nsnull, nsnull, getter_AddRefs(docShellAsItem));
-    childDocShell = do_QueryInterface(docShellAsItem);
-    if (!childDocShell)
-      return domDoc;
-  }
-  
-  nsCOMPtr<nsIContentViewer> cv;
-  childDocShell->GetContentViewer(getter_AddRefs(cv));
-  if (!cv)
-    return domDoc;
- 
-  nsIDocument* doc = cv->GetDocument();
-  if (doc)
-    return nsCOMPtr<nsIDOMDocument>(do_QueryInterface(doc));
-
-  return domDoc;
-} // nsWebShellWindow::GetNamedDOMDoc
 
 //----------------------------------------
 
@@ -675,7 +616,7 @@ void nsWebShellWindow::LoadContentAreas() {
 
       nsCOMPtr<nsIURL> url = do_QueryInterface(mainURL);
       if (url) {
-        nsCAutoString search;
+        nsAutoCString search;
         url->GetQuery(search);
 
         AppendUTF8toUTF16(search, searchSpec);
@@ -686,14 +627,14 @@ void nsWebShellWindow::LoadContentAreas() {
   // content URLs are specified in the search part of the URL
   // as <contentareaID>=<escapedURL>[;(repeat)]
   if (!searchSpec.IsEmpty()) {
-    PRInt32     begPos,
+    int32_t     begPos,
                 eqPos,
                 endPos;
     nsString    contentAreaID,
                 contentURL;
     char        *urlChar;
     nsresult rv;
-    for (endPos = 0; endPos < (PRInt32)searchSpec.Length(); ) {
+    for (endPos = 0; endPos < (int32_t)searchSpec.Length(); ) {
       // extract contentAreaID and URL substrings
       begPos = endPos;
       eqPos = searchSpec.FindChar('=', begPos);
@@ -719,9 +660,9 @@ void nsWebShellWindow::LoadContentAreas() {
             contentURL.AssignWithConversion(urlChar);
             webNav->LoadURI(contentURL.get(),
                           nsIWebNavigation::LOAD_FLAGS_NONE,
-                          nsnull,
-                          nsnull,
-                          nsnull);
+                          nullptr,
+                          nullptr,
+                          nullptr);
             nsMemory::Free(urlChar);
           }
         }
@@ -732,9 +673,9 @@ void nsWebShellWindow::LoadContentAreas() {
 
 /**
  * ExecuteCloseHandler - Run the close handler, if any.
- * @return PR_TRUE iff we found a close handler to run.
+ * @return true iff we found a close handler to run.
  */
-PRBool nsWebShellWindow::ExecuteCloseHandler()
+bool nsWebShellWindow::ExecuteCloseHandler()
 {
   /* If the event handler closes this window -- a likely scenario --
      things get deleted out of order without this death grip.
@@ -744,31 +685,56 @@ PRBool nsWebShellWindow::ExecuteCloseHandler()
   nsCOMPtr<nsIXULWindow> kungFuDeathGrip(this);
 
   nsCOMPtr<nsPIDOMWindow> window(do_GetInterface(mDocShell));
-  nsCOMPtr<nsPIDOMEventTarget> eventTarget = do_QueryInterface(window);
+  nsCOMPtr<nsIDOMEventTarget> eventTarget = do_QueryInterface(window);
 
   if (eventTarget) {
     nsCOMPtr<nsIContentViewer> contentViewer;
     mDocShell->GetContentViewer(getter_AddRefs(contentViewer));
-    nsCOMPtr<nsIDocumentViewer> docViewer(do_QueryInterface(contentViewer));
-
-    if (docViewer) {
+    if (contentViewer) {
       nsRefPtr<nsPresContext> presContext;
-      docViewer->GetPresContext(getter_AddRefs(presContext));
+      contentViewer->GetPresContext(getter_AddRefs(presContext));
 
       nsEventStatus status = nsEventStatus_eIgnore;
-      nsMouseEvent event(PR_TRUE, NS_XUL_CLOSE, nsnull,
+      nsMouseEvent event(true, NS_XUL_CLOSE, nullptr,
                          nsMouseEvent::eReal);
 
       nsresult rv =
-        eventTarget->DispatchDOMEvent(&event, nsnull, presContext, &status);
+        eventTarget->DispatchDOMEvent(&event, nullptr, presContext, &status);
       if (NS_SUCCEEDED(rv) && status == nsEventStatus_eConsumeNoDefault)
-        return PR_TRUE;
-      // else fall through and return PR_FALSE
+        return true;
+      // else fall through and return false
     }
   }
 
-  return PR_FALSE;
+  return false;
 } // ExecuteCloseHandler
+
+void nsWebShellWindow::ConstrainToOpenerScreen(int32_t* aX, int32_t* aY)
+{
+  if (mOpenerScreenRect.IsEmpty()) {
+    *aX = *aY = 0;
+    return;
+  }
+
+  int32_t left, top, width, height;
+  // Constrain initial positions to the same screen as opener
+  nsCOMPtr<nsIScreenManager> screenmgr = do_GetService("@mozilla.org/gfx/screenmanager;1");
+  if (screenmgr) {
+    nsCOMPtr<nsIScreen> screen;
+    screenmgr->ScreenForRect(mOpenerScreenRect.x, mOpenerScreenRect.y,
+                             mOpenerScreenRect.width, mOpenerScreenRect.height,
+                             getter_AddRefs(screen));
+    if (screen) {
+      screen->GetAvailRectDisplayPix(&left, &top, &width, &height);
+      if (*aX < left || *aX > left + width) {
+        *aX = left;
+      }
+      if (*aY < top || *aY > top + height) {
+        *aY = top;
+      }
+    }
+  }
+}
 
 // nsIBaseWindow
 NS_IMETHODIMP nsWebShellWindow::Destroy()
@@ -780,17 +746,13 @@ NS_IMETHODIMP nsWebShellWindow::Destroy()
   }
 
   nsCOMPtr<nsIXULWindow> kungFuDeathGrip(this);
-  if (mSPTimerLock) {
-  PR_Lock(mSPTimerLock);
-  if (mSPTimer) {
-    mSPTimer->Cancel();
-    SavePersistentAttributes();
-    mSPTimer = nsnull;
-    NS_RELEASE_THIS(); // the timer held a reference to us
-  }
-  PR_Unlock(mSPTimerLock);
-  PR_DestroyLock(mSPTimerLock);
-  mSPTimerLock = nsnull;
+  {
+    MutexAutoLock lock(mSPTimerLock);
+    if (mSPTimer) {
+      mSPTimer->Cancel();
+      SavePersistentAttributes();
+      mSPTimer = nullptr;
+    }
   }
   return nsXULWindow::Destroy();
 }

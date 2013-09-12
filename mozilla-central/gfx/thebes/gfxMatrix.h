@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 4 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Oracle Corporation code.
- *
- * The Initial Developer of the Original Code is Oracle Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Stuart Parmenter <pavlov@pavlov.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef GFX_MATRIX_H
 #define GFX_MATRIX_H
@@ -97,11 +65,32 @@ public:
         return gfxMatrix(*this).Multiply(m);
     }
 
+    /* Returns true if the other matrix is fuzzy-equal to this matrix.
+     * Note that this isn't a cheap comparison!
+     */
+    bool operator==(const gfxMatrix& other) const
+    {
+      return FuzzyEqual(xx, other.xx) && FuzzyEqual(yx, other.yx) &&
+             FuzzyEqual(xy, other.xy) && FuzzyEqual(yy, other.yy) &&
+             FuzzyEqual(x0, other.x0) && FuzzyEqual(y0, other.y0);
+    }
+
+    bool operator!=(const gfxMatrix& other) const
+    {
+      return !(*this == other);
+    }
+
     // matrix operations
     /**
      * Resets this matrix to the identity matrix.
      */
     const gfxMatrix& Reset();
+
+    bool IsIdentity() const {
+       return xx == 1.0 && yx == 0.0 &&
+              xy == 0.0 && yy == 1.0 &&
+              x0 == 0.0 && y0 == 0.0;
+    }
 
     /**
      * Inverts this matrix, if possible. Otherwise, the matrix is left
@@ -115,7 +104,7 @@ public:
     /**
      * Check if matrix is singular (no inverse exists).
      */
-    PRBool IsSingular() const {
+    bool IsSingular() const {
         // if the determinant (ad - bc) is zero it's singular
         return (xx * yy) == (yx * xy);
     }
@@ -186,26 +175,33 @@ public:
      * Returns true if the matrix is anything other than a straight
      * translation by integers.
      */
-    PRBool HasNonIntegerTranslation() const {
+    bool HasNonIntegerTranslation() const {
         return HasNonTranslation() ||
-            !FuzzyEqual(x0, NS_floor(x0 + 0.5)) ||
-            !FuzzyEqual(y0, NS_floor(y0 + 0.5));
+            !FuzzyEqual(x0, floor(x0 + 0.5)) ||
+            !FuzzyEqual(y0, floor(y0 + 0.5));
     }
 
     /**
      * Returns true if the matrix has any transform other
      * than a straight translation
      */
-    PRBool HasNonTranslation() const {
+    bool HasNonTranslation() const {
         return !FuzzyEqual(xx, 1.0) || !FuzzyEqual(yy, 1.0) ||
                !FuzzyEqual(xy, 0.0) || !FuzzyEqual(yx, 0.0);
+    }
+
+    /**
+     * Returns true if the matrix only has an integer translation.
+     */
+    bool HasOnlyIntegerTranslation() const {
+        return !HasNonIntegerTranslation();
     }
 
     /**
      * Returns true if the matrix has any transform other
      * than a translation or a -1 y scale (y axis flip)
      */
-    PRBool HasNonTranslationOrFlip() const {
+    bool HasNonTranslationOrFlip() const {
         return !FuzzyEqual(xx, 1.0) ||
                (!FuzzyEqual(yy, 1.0) && !FuzzyEqual(yy, -1.0)) ||
                !FuzzyEqual(xy, 0.0) || !FuzzyEqual(yx, 0.0);
@@ -216,7 +212,7 @@ public:
      * than a translation or scale; this is, if there is
      * no rotation.
      */
-    PRBool HasNonAxisAlignedTransform() const {
+    bool HasNonAxisAlignedTransform() const {
         return !FuzzyEqual(xy, 0.0) || !FuzzyEqual(yx, 0.0);
     }
 
@@ -232,14 +228,13 @@ public:
      * The xMajor parameter indicates if the larger scale is
      * to be assumed to be in the X direction or not.
      */
-    gfxSize ScaleFactors(PRBool xMajor) const {
+    gfxSize ScaleFactors(bool xMajor) const {
         double det = Determinant();
 
         if (det == 0.0)
             return gfxSize(0.0, 0.0);
 
-        gfxSize sz((xMajor != 0 ? 1.0 : 0.0),
-                        (xMajor != 0 ? 0.0 : 1.0));
+        gfxSize sz = xMajor ? gfxSize(1.0, 0.0) : gfxSize(0.0, 1.0);
         sz = Transform(sz);
 
         double major = sqrt(sz.width * sz.width + sz.height * sz.height);
@@ -258,8 +253,32 @@ public:
         return gfxSize(minor, major);
     }
 
+    /**
+     * Snap matrix components that are close to integers
+     * to integers. In particular, components that are integral when
+     * converted to single precision are set to those integers.
+     */
+    void NudgeToIntegers(void);
+
+    /**
+     * Returns true if matrix is multiple of 90 degrees rotation with flipping,
+     * scaling and translation.
+     */
+    bool PreservesAxisAlignedRectangles() const {
+        return ((FuzzyEqual(xx, 0.0) && FuzzyEqual(yy, 0.0))
+            || (FuzzyEqual(xy, 0.0) && FuzzyEqual(yx, 0.0)));
+    }
+
+    /**
+     * Returns true if the matrix has non-integer scale
+     */
+    bool HasNonIntegerScale() const {
+        return !FuzzyEqual(xx, floor(xx + 0.5)) ||
+               !FuzzyEqual(yy, floor(yy + 0.5));
+    }
+
 private:
-    static PRBool FuzzyEqual(gfxFloat aV1, gfxFloat aV2) {
+    static bool FuzzyEqual(gfxFloat aV1, gfxFloat aV2) {
         return fabs(aV2 - aV1) < 1e-6;
     }
 };

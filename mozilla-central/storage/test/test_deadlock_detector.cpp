@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  * vim: sw=4 ts=4 et :
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Chris Jones <jones.chris.g@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  * Note: This file is a copy of xpcom/tests/TestDeadlockDetector.cpp, but all
@@ -50,7 +17,7 @@
 #include "nsMemory.h"
 
 #include "mozilla/CondVar.h"
-#include "mozilla/Monitor.h"
+#include "mozilla/ReentrantMonitor.h"
 #include "SQLiteMutex.h"
 
 #include "TestHarness.h"
@@ -106,14 +73,13 @@ spawn(void (*run)(void*), void* arg)
     do {                                        \
         passed(__FUNCTION__);                   \
         return NS_OK;                           \
-    } while (0);
-
+    } while (0)
 
 #define FAIL(why)                               \
     do {                                        \
-        fail(why);                              \
+        fail("%s | %s - %s", __FILE__, __FUNCTION__, why); \
         return NS_ERROR_FAILURE;                \
-    } while (0);
+    } while (0)
 
 //-----------------------------------------------------------------------------
 
@@ -124,7 +90,7 @@ class Subprocess
 {
 public:
     // not available until process finishes
-    PRInt32 mExitCode;
+    int32_t mExitCode;
     nsCString mStdout;
     nsCString mStderr;
 
@@ -139,19 +105,19 @@ public:
 
         NS_ASSERTION(PR_SUCCESS == PR_CreatePipe(&readStdin, &writeStdin),
                      "couldn't create child stdin pipe");
-        NS_ASSERTION(PR_SUCCESS == PR_SetFDInheritable(readStdin, PR_TRUE),
+        NS_ASSERTION(PR_SUCCESS == PR_SetFDInheritable(readStdin, true),
                      "couldn't set child stdin inheritable");
         PR_ProcessAttrSetStdioRedirect(pattr, PR_StandardInput, readStdin);
 
         NS_ASSERTION(PR_SUCCESS == PR_CreatePipe(&readStdout, &writeStdout),
                      "couldn't create child stdout pipe");
-        NS_ASSERTION(PR_SUCCESS == PR_SetFDInheritable(writeStdout, PR_TRUE),
+        NS_ASSERTION(PR_SUCCESS == PR_SetFDInheritable(writeStdout, true),
                      "couldn't set child stdout inheritable");
         PR_ProcessAttrSetStdioRedirect(pattr, PR_StandardOutput, writeStdout);
 
         NS_ASSERTION(PR_SUCCESS == PR_CreatePipe(&readStderr, &writeStderr),
                      "couldn't create child stderr pipe");
-        NS_ASSERTION(PR_SUCCESS == PR_SetFDInheritable(writeStderr, PR_TRUE),
+        NS_ASSERTION(PR_SUCCESS == PR_SetFDInheritable(writeStderr, true),
                      "couldn't set child stderr inheritable");
         PR_ProcessAttrSetStdioRedirect(pattr, PR_StandardError, writeStderr);
 
@@ -186,15 +152,15 @@ public:
         PR_DestroyProcessAttr(pattr);
     }
 
-    void RunToCompletion(PRUint32 aWaitMs)
+    void RunToCompletion(uint32_t aWaitMs)
     {
         PR_Close(mStdinfd);
 
         PRPollDesc pollfds[2];
-        PRInt32 nfds;
-        PRBool stdoutOpen = PR_TRUE, stderrOpen = PR_TRUE;
+        int32_t nfds;
+        bool stdoutOpen = true, stderrOpen = true;
         char buf[4096];
-        PRInt32 len;
+        int32_t len;
 
         PRIntervalTime now = PR_IntervalNow();
         PRIntervalTime deadline = now + PR_MillisecondsToInterval(aWaitMs);
@@ -214,20 +180,20 @@ public:
                 ++nfds;
             }
 
-            PRInt32 rv = PR_Poll(pollfds, nfds, deadline - now);
+            int32_t rv = PR_Poll(pollfds, nfds, deadline - now);
             NS_ASSERTION(0 <= rv, PR_ErrorToName(PR_GetError()));
 
             if (0 == rv) {      // timeout
                 fputs("(timed out!)\n", stderr);
-                Finish(PR_FALSE); // abnormal
+                Finish(false); // abnormal
                 return;
             }
 
-            for (PRInt32 i = 0; i < nfds; ++i) {
+            for (int32_t i = 0; i < nfds; ++i) {
                 if (!pollfds[i].out_flags)
                     continue;
 
-                PRBool isStdout = mStdoutfd == pollfds[i].fd;
+                bool isStdout = mStdoutfd == pollfds[i].fd;
                 
                 if (PR_POLL_READ & pollfds[i].out_flags) {
                     len = PR_Read(pollfds[i].fd, buf, sizeof(buf) - 1);
@@ -248,10 +214,10 @@ public:
                         mStderr += buf;
                 }
                 else if (isStdout) {
-                    stdoutOpen = PR_FALSE;
+                    stdoutOpen = false;
                 }
                 else {
-                    stderrOpen = PR_FALSE;
+                    stderrOpen = false;
                 }
             }
 
@@ -269,11 +235,11 @@ public:
     }
 
 private:
-    void Finish(PRBool normalExit) {
+    void Finish(bool normalExit) {
         if (!normalExit) {
             PR_KillProcess(mProc);
             mExitCode = -1;
-            PRInt32 dummy;
+            int32_t dummy;
             PR_WaitProcess(mProc, &dummy);
         }
         else {
@@ -296,16 +262,16 @@ bool
 CheckForDeadlock(const char* test, const char* const* findTokens)
 {
     Subprocess proc(test);
-    proc.RunToCompletion(1000);
+    proc.RunToCompletion(5000);
 
     if (0 == proc.mExitCode)
         return false;
 
-    PRInt32 idx = 0;
+    int32_t idx = 0;
     for (const char* const* tp = findTokens; *tp; ++tp) {
         const char* const token = *tp;
 #ifdef MOZILLA_INTERNAL_API
-        idx = proc.mStderr.Find(token, PR_FALSE, idx);
+        idx = proc.mStderr.Find(token, false, idx);
 #else
         nsCString tokenCString(token);
         idx = proc.mStderr.Find(tokenCString, idx);
@@ -327,7 +293,7 @@ CheckForDeadlock(const char* test, const char* const* findTokens)
 // Single-threaded sanity tests
 
 // Stupidest possible deadlock.
-nsresult
+int
 Sanity_Child()
 {
     TestMutex m1("dd.sanity.m1");
@@ -355,7 +321,7 @@ Sanity()
 }
 
 // Slightly less stupid deadlock.
-nsresult
+int
 Sanity2_Child()
 {
     TestMutex m1("dd.sanity2.m1");
@@ -386,7 +352,7 @@ Sanity2()
 }
 
 
-nsresult
+int
 Sanity3_Child()
 {
     TestMutex m1("dd.sanity3.m1");
@@ -429,10 +395,10 @@ Sanity3()
 }
 
 
-nsresult
+int
 Sanity4_Child()
 {
-    mozilla::Monitor m1("dd.sanity4.m1");
+    mozilla::ReentrantMonitor m1("dd.sanity4.m1");
     TestMutex m2("dd.sanity4.m2");
     m1.Enter();
     m2.Lock();
@@ -444,11 +410,11 @@ nsresult
 Sanity4()
 {
     const char* const tokens[] = {
-        "Re-entering Monitor after acquiring other resources",
+        "Re-entering ReentrantMonitor after acquiring other resources",
         "###!!! ERROR: Potential deadlock detected",
-        "=== Cyclical dependency starts at\n--- Monitor : dd.sanity4.m1",
+        "=== Cyclical dependency starts at\n--- ReentrantMonitor : dd.sanity4.m1",
         "--- Next dependency:\n--- Mutex : dd.sanity4.m2",
-        "=== Cycle completed at\n--- Monitor : dd.sanity4.m1",
+        "=== Cycle completed at\n--- ReentrantMonitor : dd.sanity4.m1",
         "###!!! ASSERTION: Potential deadlock detected",
         0
     };
@@ -468,7 +434,7 @@ TestMutex* ttM2;
 static void
 TwoThreads_thread(void* arg)
 {
-    PRInt32 m1First = NS_PTR_TO_INT32(arg);
+    int32_t m1First = NS_PTR_TO_INT32(arg);
     if (m1First) {
         ttM1->Lock();
         ttM2->Lock();
@@ -483,7 +449,7 @@ TwoThreads_thread(void* arg)
     }
 }
 
-nsresult
+int
 TwoThreads_Child()
 {
     ttM1 = new TestMutex("dd.twothreads.m1");
@@ -521,39 +487,39 @@ TwoThreads()
 
 
 TestMutex* cndMs[4];
-const PRUint32 K = 100000;
+const uint32_t K = 100000;
 
 static void
 ContentionNoDeadlock_thread(void* arg)
 {
-    PRInt32 starti = NS_PTR_TO_INT32(arg);
+    int32_t starti = NS_PTR_TO_INT32(arg);
 
-    for (PRUint32 k = 0; k < K; ++k) {
-        for (PRInt32 i = starti; i < (PRInt32) NS_ARRAY_LENGTH(cndMs); ++i)
+    for (uint32_t k = 0; k < K; ++k) {
+        for (int32_t i = starti; i < (int32_t) ArrayLength(cndMs); ++i)
             cndMs[i]->Lock();
         // comment out the next two lines for deadlocking fun!
-        for (PRInt32 i = NS_ARRAY_LENGTH(cndMs) - 1; i >= starti; --i)
+        for (int32_t i = ArrayLength(cndMs) - 1; i >= starti; --i)
             cndMs[i]->Unlock();
 
         starti = (starti + 1) % 3;
     }
 }
 
-nsresult
+int
 ContentionNoDeadlock_Child()
 {
     PRThread* threads[3];
 
-    for (PRUint32 i = 0; i < NS_ARRAY_LENGTH(cndMs); ++i)
+    for (uint32_t i = 0; i < ArrayLength(cndMs); ++i)
         cndMs[i] = new TestMutex("dd.cnd.ms");
 
-    for (PRInt32 i = 0; i < (PRInt32) NS_ARRAY_LENGTH(threads); ++i)
+    for (int32_t i = 0; i < (int32_t) ArrayLength(threads); ++i)
         threads[i] = spawn(ContentionNoDeadlock_thread, NS_INT32_TO_PTR(i));
 
-    for (PRUint32 i = 0; i < NS_ARRAY_LENGTH(threads); ++i)
+    for (uint32_t i = 0; i < ArrayLength(threads); ++i)
         PR_JoinThread(threads[i]);
 
-    for (PRUint32 i = 0; i < NS_ARRAY_LENGTH(cndMs); ++i)
+    for (uint32_t i = 0; i < ArrayLength(cndMs); ++i)
         delete cndMs[i];
 
     return 0;
@@ -608,10 +574,11 @@ main(int argc, char** argv)
         if (!strcmp("ContentionNoDeadlock", test))
             return ContentionNoDeadlock_Child();
 
-        FAIL("unknown child test");
+        fail("%s | %s - unknown child test", __FILE__, __FUNCTION__);
+        return 1;
     }
 
-    ScopedXPCOM xpcom("Deadlock detector correctness");
+    ScopedXPCOM xpcom("Storage deadlock detector correctness (" __FILE__ ")");
     if (xpcom.failed())
         return 1;
 

@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Scott Collins <scc@mozilla.org>: |do_QueryElementAt|
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include <string.h>
 #include "prbit.h"
@@ -125,8 +91,8 @@ nsQueryElementAt::operator()( const nsIID& aIID, void** aResult ) const
     return status;
   }
 
-static const PRInt32 kGrowArrayBy = 8;
-static const PRInt32 kLinearThreshold = 16 * sizeof(nsISupports *);
+static const int32_t kGrowArrayBy = 8;
+static const int32_t kLinearThreshold = 16 * sizeof(nsISupports *);
 
 nsSupportsArray::nsSupportsArray()
 {
@@ -146,7 +112,7 @@ nsSupportsArray::~nsSupportsArray()
   DeleteArray();
 }
 
-PRBool nsSupportsArray::GrowArrayBy(PRInt32 aGrowBy)
+void nsSupportsArray::GrowArrayBy(int32_t aGrowBy)
 {
   // We have to grow the array. Grow by kGrowArrayBy slots if we're smaller
   // than kLinearThreshold bytes, or a power of two if we're larger.
@@ -155,16 +121,16 @@ PRBool nsSupportsArray::GrowArrayBy(PRInt32 aGrowBy)
   if (aGrowBy < kGrowArrayBy)
     aGrowBy = kGrowArrayBy;
 
-  PRUint32 newCount = mArraySize + aGrowBy;  // Minimum increase
-  PRUint32 newSize = sizeof(mArray[0]) * newCount;
+  uint32_t newCount = mArraySize + aGrowBy;  // Minimum increase
+  uint32_t newSize = sizeof(mArray[0]) * newCount;
 
-  if (newSize >= (PRUint32) kLinearThreshold)
+  if (newSize >= (uint32_t) kLinearThreshold)
   {
     // newCount includes enough space for at least kGrowArrayBy new slots.
     // Select the next power-of-two size in bytes above that if newSize is
     // not a power of two.
     if (newSize & (newSize - 1))
-      newSize = PR_BIT(PR_CeilingLog2(newSize));
+      newSize = 1u << PR_CeilingLog2(newSize);
 
     newCount = newSize / sizeof(mArray[0]);
   }
@@ -173,10 +139,6 @@ PRBool nsSupportsArray::GrowArrayBy(PRInt32 aGrowBy)
   nsISupports** oldArray = mArray;
 
   mArray = new nsISupports*[newCount];
-  if (!mArray) {                    // ran out of memory
-    mArray = oldArray;
-    return PR_FALSE;
-  }
   mArraySize = newCount;
 
 #if DEBUG_SUPPORTSARRAY
@@ -199,8 +161,6 @@ PRBool nsSupportsArray::GrowArrayBy(PRInt32 aGrowBy)
       delete[] oldArray;
     }
   }
-
-  return PR_TRUE;
 }
 
 nsresult
@@ -210,8 +170,6 @@ nsSupportsArray::Create(nsISupports *aOuter, REFNSIID aIID, void **aResult)
     return NS_ERROR_NO_AGGREGATION;
 
   nsCOMPtr<nsISupportsArray> it = new nsSupportsArray();
-  if (!it)
-    return NS_ERROR_OUT_OF_MEMORY;
 
   return it->QueryInterface(aIID, aResult);
 }
@@ -223,7 +181,7 @@ nsSupportsArray::Read(nsIObjectInputStream *aStream)
 {
   nsresult rv;
 
-  PRUint32 newArraySize;
+  uint32_t newArraySize;
   rv = aStream->Read32(&newArraySize);
 
   if (newArraySize <= kAutoArraySize) {
@@ -240,8 +198,6 @@ nsSupportsArray::Read(nsIObjectInputStream *aStream)
     }
     else {
       nsISupports** array = new nsISupports*[newArraySize];
-      if (!array)
-        return NS_ERROR_OUT_OF_MEMORY;
       if (mArray != mAutoArray)
         delete[] mArray;
       mArray = array;
@@ -256,8 +212,8 @@ nsSupportsArray::Read(nsIObjectInputStream *aStream)
   if (mCount > mArraySize)
     mCount = mArraySize;
 
-  for (PRUint32 i = 0; i < mCount; i++) {
-    rv = aStream->ReadObject(PR_TRUE, &mArray[i]);
+  for (uint32_t i = 0; i < mCount; i++) {
+    rv = aStream->ReadObject(true, &mArray[i]);
     if (NS_FAILED(rv)) return rv;
   }
 
@@ -275,8 +231,8 @@ nsSupportsArray::Write(nsIObjectOutputStream *aStream)
   rv = aStream->Write32(mCount);
   if (NS_FAILED(rv)) return rv;
 
-  for (PRUint32 i = 0; i < mCount; i++) {
-    rv = aStream->WriteObject(mArray[i], PR_TRUE);
+  for (uint32_t i = 0; i < mCount; i++) {
+    rv = aStream->WriteObject(mArray[i], true);
     if (NS_FAILED(rv)) return rv;
   }
 
@@ -294,51 +250,50 @@ void nsSupportsArray::DeleteArray(void)
 }
 
 
-NS_IMETHODIMP_(PRBool)
+NS_IMETHODIMP_(bool)
 nsSupportsArray::Equals(const nsISupportsArray* aOther)
 {
   if (aOther) {
-    PRUint32 countOther;
+    uint32_t countOther;
     nsISupportsArray* other = const_cast<nsISupportsArray*>(aOther);
     nsresult rv = other->Count(&countOther);
     if (NS_FAILED( rv ))
-      return PR_FALSE;
+      return false;
 
     if (mCount == countOther) {
-      PRUint32 index = mCount;
+      uint32_t index = mCount;
       nsCOMPtr<nsISupports> otherElem;
       while (index--) {
         if (NS_FAILED(other->GetElementAt(index, getter_AddRefs(otherElem))))
-          return PR_FALSE;
+          return false;
         if (mArray[index] != otherElem)
-          return PR_FALSE;
+          return false;
       }
-      return PR_TRUE;
+      return true;
     }
   }
-  return PR_FALSE;
+  return false;
 }
 
-NS_IMETHODIMP_(nsISupports*)
-nsSupportsArray::ElementAt(PRUint32 aIndex)
+NS_IMETHODIMP
+nsSupportsArray::GetElementAt(uint32_t aIndex, nsISupports **aOutPtr)
 {
+  *aOutPtr = nullptr;
   if (aIndex < mCount) {
-    nsISupports*  element = mArray[aIndex];
-    NS_IF_ADDREF(element);
-    return element;
+    NS_IF_ADDREF(*aOutPtr = mArray[aIndex]);
   }
-  return 0;
+  return NS_OK;
 }
 
-NS_IMETHODIMP_(PRInt32)
+NS_IMETHODIMP_(int32_t)
 nsSupportsArray::IndexOf(const nsISupports* aPossibleElement)
 {
   return IndexOfStartingAt(aPossibleElement, 0);
 }
 
-NS_IMETHODIMP_(PRInt32)
+NS_IMETHODIMP_(int32_t)
 nsSupportsArray::IndexOfStartingAt(const nsISupports* aPossibleElement,
-                                   PRUint32 aStartIndex)
+                                   uint32_t aStartIndex)
 {
   if (aStartIndex < mCount) {
     const nsISupports** start = (const nsISupports**)mArray;  // work around goofy compiler behavior
@@ -354,7 +309,7 @@ nsSupportsArray::IndexOfStartingAt(const nsISupports* aPossibleElement,
   return -1;
 }
 
-NS_IMETHODIMP_(PRInt32)
+NS_IMETHODIMP_(int32_t)
 nsSupportsArray::LastIndexOf(const nsISupports* aPossibleElement)
 {
   if (0 < mCount) {
@@ -369,19 +324,18 @@ nsSupportsArray::LastIndexOf(const nsISupports* aPossibleElement)
   return -1;
 }
 
-NS_IMETHODIMP_(PRBool)
-nsSupportsArray::InsertElementAt(nsISupports* aElement, PRUint32 aIndex)
+NS_IMETHODIMP_(bool)
+nsSupportsArray::InsertElementAt(nsISupports* aElement, uint32_t aIndex)
 {
   if (aIndex <= mCount) {
     if (mArraySize < (mCount + 1)) {
       // need to grow the array
-      if (!GrowArrayBy(1))
-        return PR_FALSE;
+      GrowArrayBy(1);
     }
 
     // Could be slightly more efficient if GrowArrayBy knew about the
     // split, but the difference is trivial.
-    PRUint32 slide = (mCount - aIndex);
+    uint32_t slide = (mCount - aIndex);
     if (0 < slide) {
       ::memmove(mArray + aIndex + 1, mArray + aIndex, slide * sizeof(nsISupports*));
     }
@@ -392,125 +346,124 @@ nsSupportsArray::InsertElementAt(nsISupports* aElement, PRUint32 aIndex)
 
 #if DEBUG_SUPPORTSARRAY
     if (mCount > mMaxCount &&
-        mCount < (PRInt32)(sizeof(MaxElements)/sizeof(MaxElements[0])))
+        mCount < (int32_t)(sizeof(MaxElements)/sizeof(MaxElements[0])))
     {
       MaxElements[mCount]++;
       MaxElements[mMaxCount]--;
       mMaxCount = mCount;
     }
 #endif
-    return PR_TRUE;
+    return true;
   }
-  return PR_FALSE;
+  return false;
 }
 
-NS_IMETHODIMP_(PRBool)
-nsSupportsArray::InsertElementsAt(nsISupportsArray* aElements, PRUint32 aIndex)
+NS_IMETHODIMP_(bool)
+nsSupportsArray::InsertElementsAt(nsISupportsArray* aElements, uint32_t aIndex)
 {
   if (!aElements) {
-    return PR_FALSE;
+    return false;
   }
-  PRUint32 countElements;
+  uint32_t countElements;
   if (NS_FAILED( aElements->Count( &countElements ) ))
-    return PR_FALSE;
+    return false;
 
   if (aIndex <= mCount) {
     if (mArraySize < (mCount + countElements)) {
       // need to grow the array
-      if (!GrowArrayBy(countElements))
-        return PR_FALSE;
+      GrowArrayBy(countElements);
     }
 
     // Could be slightly more efficient if GrowArrayBy knew about the
     // split, but the difference is trivial.
-    PRUint32 slide = (mCount - aIndex);
+    uint32_t slide = (mCount - aIndex);
     if (0 < slide) {
       ::memmove(mArray + aIndex + countElements, mArray + aIndex,
                 slide * sizeof(nsISupports*));
     }
 
-    for (PRUint32 i = 0; i < countElements; ++i, ++mCount) {
+    for (uint32_t i = 0; i < countElements; ++i, ++mCount) {
       // use GetElementAt to copy and do AddRef for us
       if (NS_FAILED( aElements->GetElementAt( i, mArray + aIndex + i) ))
-        return PR_FALSE;
+        return false;
     }
 
 #if DEBUG_SUPPORTSARRAY
     if (mCount > mMaxCount &&
-        mCount < (PRInt32)(sizeof(MaxElements)/sizeof(MaxElements[0])))
+        mCount < (int32_t)(sizeof(MaxElements)/sizeof(MaxElements[0])))
     {
       MaxElements[mCount]++;
       MaxElements[mMaxCount]--;
       mMaxCount = mCount;
     }
 #endif
-    return PR_TRUE;
+    return true;
   }
-  return PR_FALSE;
+  return false;
 }
 
-NS_IMETHODIMP_(PRBool)
-nsSupportsArray::ReplaceElementAt(nsISupports* aElement, PRUint32 aIndex)
+NS_IMETHODIMP_(bool)
+nsSupportsArray::ReplaceElementAt(nsISupports* aElement, uint32_t aIndex)
 {
   if (aIndex < mCount) {
     NS_IF_ADDREF(aElement);  // addref first in case it's the same object!
     NS_IF_RELEASE(mArray[aIndex]);
     mArray[aIndex] = aElement;
-    return PR_TRUE;
+    return true;
   }
-  return PR_FALSE;
+  return false;
 }
 
-NS_IMETHODIMP_(PRBool)
-nsSupportsArray::RemoveElementsAt(PRUint32 aIndex, PRUint32 aCount)
+NS_IMETHODIMP_(bool)
+nsSupportsArray::RemoveElementsAt(uint32_t aIndex, uint32_t aCount)
 {
   if (aIndex + aCount <= mCount) {
-    for (PRUint32 i = 0; i < aCount; i++)
+    for (uint32_t i = 0; i < aCount; i++)
       NS_IF_RELEASE(mArray[aIndex+i]);
     mCount -= aCount;
-    PRInt32 slide = (mCount - aIndex);
+    int32_t slide = (mCount - aIndex);
     if (0 < slide) {
       ::memmove(mArray + aIndex, mArray + aIndex + aCount,
                 slide * sizeof(nsISupports*));
     }
-    return PR_TRUE;
+    return true;
   }
-  return PR_FALSE;
+  return false;
 }
 
-NS_IMETHODIMP_(PRBool)
-nsSupportsArray::RemoveElement(const nsISupports* aElement, PRUint32 aStartIndex)
+NS_IMETHODIMP_(bool)
+nsSupportsArray::RemoveElement(const nsISupports* aElement, uint32_t aStartIndex)
 {
-  PRInt32 theIndex = IndexOfStartingAt(aElement,aStartIndex);
+  int32_t theIndex = IndexOfStartingAt(aElement,aStartIndex);
   if (theIndex >= 0)
     return RemoveElementAt(theIndex);
 
-  return PR_FALSE;
+  return false;
 }
 
-NS_IMETHODIMP_(PRBool)
+NS_IMETHODIMP_(bool)
 nsSupportsArray::RemoveLastElement(const nsISupports* aElement)
 {
-  PRInt32 theIndex = LastIndexOf(aElement);
+  int32_t theIndex = LastIndexOf(aElement);
   if (theIndex >= 0)
     return RemoveElementAt(theIndex);
 
-  return PR_FALSE;
+  return false;
 }
 
-NS_IMETHODIMP_(PRBool)
-nsSupportsArray::MoveElement(PRInt32 aFrom, PRInt32 aTo)
+NS_IMETHODIMP_(bool)
+nsSupportsArray::MoveElement(int32_t aFrom, int32_t aTo)
 {
   nsISupports *tempElement;
 
   if (aTo == aFrom)
-    return PR_TRUE;
+    return true;
 
   if (aTo < 0 || aFrom < 0 ||
-      (PRUint32) aTo >= mCount || (PRUint32) aFrom >= mCount)
+      (uint32_t) aTo >= mCount || (uint32_t) aFrom >= mCount)
   {
     // can't extend the array when moving an element.  Also catches mImpl = null
-    return PR_FALSE;
+    return false;
   }
   tempElement = mArray[aFrom];
 
@@ -529,7 +482,7 @@ nsSupportsArray::MoveElement(PRInt32 aFrom, PRInt32 aTo)
     mArray[aTo] = tempElement;
   }
 
-  return PR_TRUE;
+  return true;
 }
 
 NS_IMETHODIMP
@@ -548,7 +501,7 @@ NS_IMETHODIMP
 nsSupportsArray::Compact(void)
 {
 #if DEBUG_SUPPORTSARRAY
-  PRUint32 oldArraySize = mArraySize;
+  uint32_t oldArraySize = mArraySize;
 #endif
   if ((mArraySize != mCount) && (kAutoArraySize < mArraySize)) {
     nsISupports** oldArray = mArray;
@@ -577,21 +530,21 @@ nsSupportsArray::Compact(void)
   return NS_OK;
 }
 
-NS_IMETHODIMP_(PRBool)
-nsSupportsArray::SizeTo(PRInt32 aSize)
+NS_IMETHODIMP_(bool)
+nsSupportsArray::SizeTo(int32_t aSize)
 {
 #if DEBUG_SUPPORTSARRAY
-  PRUint32 oldArraySize = mArraySize;
+  uint32_t oldArraySize = mArraySize;
 #endif
   NS_ASSERTION(aSize >= 0, "negative aSize!");
 
   // XXX for aSize < mCount we could resize to mCount
-  if (mArraySize == (PRUint32) aSize || (PRUint32) aSize < mCount)
-    return PR_TRUE;     // nothing to do
+  if (mArraySize == (uint32_t) aSize || (uint32_t) aSize < mCount)
+    return true;     // nothing to do
 
   // switch back to autoarray if possible
   nsISupports** oldArray = mArray;
-  if ((PRUint32) aSize <= kAutoArraySize) {
+  if ((uint32_t) aSize <= kAutoArraySize) {
     mArray = mAutoArray;
     mArraySize = kAutoArraySize;
   }
@@ -599,7 +552,7 @@ nsSupportsArray::SizeTo(PRInt32 aSize)
     mArray = new nsISupports*[aSize];
     if (!mArray) {
       mArray = oldArray;
-      return PR_FALSE;
+      return false;
     }
     mArraySize = aSize;
   }
@@ -614,31 +567,7 @@ nsSupportsArray::SizeTo(PRInt32 aSize)
   if (oldArray != mAutoArray)
     delete[] oldArray;
 
-  return PR_TRUE;
-}
-
-NS_IMETHODIMP_(PRBool)
-nsSupportsArray::EnumerateForwards(nsISupportsArrayEnumFunc aFunc, void* aData)
-{
-  PRInt32 aIndex = -1;
-  PRBool  running = PR_TRUE;
-
-  while (running && (++aIndex < (PRInt32)mCount)) {
-    running = (*aFunc)(mArray[aIndex], aData);
-  }
-  return running;
-}
-
-NS_IMETHODIMP_(PRBool)
-nsSupportsArray::EnumerateBackwards(nsISupportsArrayEnumFunc aFunc, void* aData)
-{
-  PRUint32 aIndex = mCount;
-  PRBool  running = PR_TRUE;
-
-  while (running && (0 < aIndex--)) {
-    running = (*aFunc)(mArray[aIndex], aData);
-  }
-  return running;
+  return true;
 }
 
 NS_IMETHODIMP
@@ -652,120 +581,30 @@ nsSupportsArray::Enumerate(nsIEnumerator* *result)
   return NS_OK;
 }
 
-static PRBool
-CopyElement(nsISupports* aElement, void *aData)
-{
-  nsresult rv;
-  nsISupportsArray* newArray = (nsISupportsArray*)aData;
-  rv = newArray->AppendElement(aElement);
-  return NS_SUCCEEDED(rv);
-}
-
 NS_IMETHODIMP
-nsSupportsArray::Clone(nsISupportsArray* *result)
+nsSupportsArray::Clone(nsISupportsArray** aResult)
 {
-  nsresult rv;
-  nsISupportsArray* newArray;
-  rv = NS_NewISupportsArray(&newArray);
-  PRBool ok = EnumerateForwards(CopyElement, newArray);
-  if (!ok) return NS_ERROR_OUT_OF_MEMORY;
-  *result = newArray;
+  nsCOMPtr<nsISupportsArray> newArray;
+  nsresult rv = NS_NewISupportsArray(getter_AddRefs(newArray));
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  uint32_t count = 0;
+  Count(&count);
+  for (uint32_t i = 0; i < count; i++) {
+    if (!newArray->InsertElementAt(mArray[i], i)) {
+      return NS_ERROR_OUT_OF_MEMORY;
+    }
+  }
+
+  newArray.forget(aResult);
   return NS_OK;
 }
 
-NS_COM nsresult
+nsresult
 NS_NewISupportsArray(nsISupportsArray** aInstancePtrResult)
 {
   nsresult rv;
   rv = nsSupportsArray::Create(NULL, NS_GET_IID(nsISupportsArray),
                                (void**)aInstancePtrResult);
   return rv;
-}
-
-class nsArrayEnumerator : public nsISimpleEnumerator
-{
-public:
-    // nsISupports interface
-    NS_DECL_ISUPPORTS
-
-    // nsISimpleEnumerator interface
-    NS_IMETHOD HasMoreElements(PRBool* aResult);
-    NS_IMETHOD GetNext(nsISupports** aResult);
-
-    // nsArrayEnumerator methods
-    nsArrayEnumerator(nsISupportsArray* aValueArray);
-
-private:
-    ~nsArrayEnumerator(void);
-
-protected:
-    nsISupportsArray* mValueArray;
-    PRInt32 mIndex;
-};
-
-nsArrayEnumerator::nsArrayEnumerator(nsISupportsArray* aValueArray)
-    : mValueArray(aValueArray),
-      mIndex(0)
-{
-    NS_IF_ADDREF(mValueArray);
-}
-
-nsArrayEnumerator::~nsArrayEnumerator(void)
-{
-    NS_IF_RELEASE(mValueArray);
-}
-
-NS_IMPL_ISUPPORTS1(nsArrayEnumerator, nsISimpleEnumerator)
-
-NS_IMETHODIMP
-nsArrayEnumerator::HasMoreElements(PRBool* aResult)
-{
-    NS_PRECONDITION(aResult != 0, "null ptr");
-    if (! aResult)
-        return NS_ERROR_NULL_POINTER;
-
-    if (!mValueArray) {
-        *aResult = PR_FALSE;
-        return NS_OK;
-    }
-
-    PRUint32 cnt;
-    nsresult rv = mValueArray->Count(&cnt);
-    if (NS_FAILED(rv)) return rv;
-    *aResult = (mIndex < (PRInt32) cnt);
-    return NS_OK;
-}
-
-NS_IMETHODIMP
-nsArrayEnumerator::GetNext(nsISupports** aResult)
-{
-    NS_PRECONDITION(aResult != 0, "null ptr");
-    if (! aResult)
-        return NS_ERROR_NULL_POINTER;
-
-    if (!mValueArray) {
-        *aResult = nsnull;
-        return NS_OK;
-    }
-
-    PRUint32 cnt;
-    nsresult rv = mValueArray->Count(&cnt);
-    if (NS_FAILED(rv)) return rv;
-    if (mIndex >= (PRInt32) cnt)
-        return NS_ERROR_UNEXPECTED;
-
-    *aResult = mValueArray->ElementAt(mIndex++);
-    return NS_OK;
-}
-
-nsresult
-NS_NewArrayEnumerator(nsISimpleEnumerator* *result,
-                      nsISupportsArray* array)
-{
-    nsArrayEnumerator* enumer = new nsArrayEnumerator(array);
-    if (enumer == nsnull)
-        return NS_ERROR_OUT_OF_MEMORY;
-    *result = enumer; 
-    NS_ADDREF(*result);
-    return NS_OK;
 }

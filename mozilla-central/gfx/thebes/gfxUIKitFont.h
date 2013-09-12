@@ -50,7 +50,7 @@ class gfxUIKitFont : public gfxFont
 {
 public:
     gfxUIKitFont(UIKitFontEntry *aFontEntry, const gfxFontStyle *aFontStyle,
-               PRBool aNeedsBold);
+               bool aNeedsBold);
 
     virtual ~gfxUIKitFont();
 
@@ -65,12 +65,15 @@ public:
         return mSpaceGlyph;
     }
 
-    virtual PRBool SetupCairoFont(gfxContext *aContext);
+    virtual bool SetupCairoFont(gfxContext *aContext);
 
     // override gfxFont table access function to bypass gfxFontEntry cache,
     // use CGFontRef API to get direct access to system font data
     //TODO: should we take this?
     //virtual hb_blob_t *GetFontTable(PRUint32 aTag);
+
+    virtual FontType GetType() const { return FONT_TYPE_IOS; }
+
 protected:
     virtual void CreatePlatformShaper();
 

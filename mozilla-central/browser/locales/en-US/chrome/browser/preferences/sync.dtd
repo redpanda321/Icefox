@@ -1,11 +1,13 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 <!-- The page shown when not logged in... -->
 <!ENTITY setupButton.label          "Set Up &syncBrand.fullName.label;">
 <!ENTITY setupButton.accesskey      "S">
 <!ENTITY weaveDesc.label            "&syncBrand.fullName.label; lets you access your history, bookmarks, passwords and open tabs across all your devices.">
 
 <!-- The page shown when logged in... -->
-<!ENTITY accountGroupboxCaption.label "&syncBrand.fullName.label; Account">
-<!ENTITY currentUser.label            "Current User:">
 
 <!-- Login error feedback -->
 <!ENTITY updatePass.label             "Update">
@@ -13,31 +15,32 @@
 
 <!-- Manage Account -->
 <!ENTITY manageAccount.label          "Manage Account">
-<!ENTITY manageAccount.accesskey      "A">
-<!ENTITY changePassword.label         "Change Password">
-<!ENTITY changePassphrase.label       "Change Secret Phrase">
-<!ENTITY resetSync.label              "Reset Sync">
-<!ENTITY differentAccount.label       "Use a Different Account">
+<!ENTITY manageAccount.accesskey      "n">
+<!ENTITY viewQuota.label              "View Quota">
+<!ENTITY changePassword2.label        "Change Password…">
+<!ENTITY myRecoveryKey.label          "My Recovery Key">
+<!ENTITY resetSync2.label             "Reset Sync…">
 
-<!-- Sync Settings -->
-<!ENTITY syncPrefsCaption.label       "Browser Sync">
-<!ENTITY syncComputerName.label       "Computer Name:">
-<!ENTITY syncComputerName.accesskey   "c">
-<!ENTITY syncModeSwitchDesc.label     "&brandShortName; will: ">
-<!ENTITY syncModeSwitchDesc.accesskey "w">
-<!ENTITY syncEverything.label         "Sync Everything">
-<!ENTITY customSync.label             "Use my custom settings">
-<!ENTITY syncEverythingDescription.label  "Your bookmarks, history, passwords, preferences, and tabs will be synced.">
-<!ENTITY syncItem.bookmarks.label     "Sync Bookmarks">
-<!ENTITY syncItem.bookmarks.accesskey "m">
-<!ENTITY syncItem.tabs.label          "Sync Tabs">
-<!ENTITY syncItem.tabs.accesskey      "T">
-<!ENTITY syncItem.history.label       "Sync History">
-<!ENTITY syncItem.history.accesskey   "r">
-<!ENTITY syncItem.passwords.label     "Sync Passwords">
-<!ENTITY syncItem.passwords.accesskey "P">
-<!ENTITY syncItem.prefs.label         "Sync Preferences">
-<!ENTITY syncItem.prefs.accesskey     "S">
+<!ENTITY pairDevice.label             "Pair a Device">
+
+<!ENTITY syncMy.label               "Sync My">
+<!ENTITY engine.bookmarks.label     "Bookmarks">
+<!ENTITY engine.bookmarks.accesskey "m">
+<!ENTITY engine.tabs.label          "Tabs">
+<!ENTITY engine.tabs.accesskey      "T">
+<!ENTITY engine.history.label       "History">
+<!ENTITY engine.history.accesskey   "r">
+<!ENTITY engine.passwords.label     "Passwords">
+<!ENTITY engine.passwords.accesskey "P">
+<!ENTITY engine.prefs.label         "Preferences">
+<!ENTITY engine.prefs.accesskey     "S">
+<!ENTITY engine.addons.label        "Add-ons">
+<!ENTITY engine.addons.accesskey    "A">
+
+<!-- Device Settings -->
+<!ENTITY syncDeviceName.label       "Device Name:">
+<!ENTITY syncDeviceName.accesskey   "c">
+<!ENTITY unlinkDevice.label           "Unlink This Device">
 
 <!-- Footer stuff -->
 <!ENTITY prefs.tosLink.label        "Terms of Service">

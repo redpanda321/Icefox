@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * Initialize the PCKS 11 subsystem
  */
@@ -45,7 +13,7 @@
 #include "pki3hack.h"
 #include "secerr.h"
 #include "dev.h"
-#include "pkcs11ni.h"
+#include "utilpars.h"
 
 /* these are for displaying error messages */
 
@@ -483,12 +451,24 @@ SECMOD_DeleteInternalModule(const char *name)
 				NULL, SECMOD_FIPS_FLAGS);
 	}
 	if (newModule) {
+	    PK11SlotInfo *slot;
 	    newModule->libraryParams = 
 	     PORT_ArenaStrdup(newModule->arena,mlp->module->libraryParams);
+	    /* if an explicit internal key slot has been set, reset it */
+	    slot = pk11_SwapInternalKeySlot(NULL);
+	    if (slot) {
+		secmod_SetInternalKeySlotFlag(newModule, PR_TRUE);
+	    }
 	    rv = SECMOD_AddModule(newModule);
 	    if (rv != SECSuccess) {
+		/* load failed, restore the internal key slot */
+		pk11_SetInternalKeySlot(slot);
 		SECMOD_DestroyModule(newModule);
 		newModule = NULL;
+	    }
+	    /* free the old explicit internal key slot, we now have a new one */
+	    if (slot) {
+		PK11_FreeSlot(slot);
 	    }
 	}
 	if (newModule == NULL) {
@@ -1102,7 +1082,7 @@ secmod_HandleWaitForSlotEvent(SECMODModule *mod,  unsigned long flags,
 	}
 	SECMOD_ReleaseReadLock(moduleLock);
 	/* if everything was perm modules, don't lock up forever */
-	if (!removableSlotsFound) {
+	if ((mod->slotCount !=0) && !removableSlotsFound) {
 	    error =SEC_ERROR_NO_SLOT_SELECTED;
 	    PZ_Lock(mod->refLock);
 	    break;
@@ -1271,6 +1251,9 @@ SECMOD_HasRemovableSlots(SECMODModule *mod)
 	ret = PR_TRUE;
 	break;
     }
+    if (mod->slotCount == 0 ) {
+	ret = PR_TRUE;
+    }
     SECMOD_ReleaseReadLock(moduleLock);
     return ret;
 }
@@ -1388,7 +1371,7 @@ SECMOD_OpenNewSlot(SECMODModule *mod, const char *moduleSpec)
     }
 
     /* we've found the slot, now build the moduleSpec */
-    escSpec = secmod_DoubleEscape(moduleSpec, '>', ']');
+    escSpec = NSSUTIL_DoubleEscape(moduleSpec, '>', ']');
     if (escSpec == NULL) {
 	PK11_FreeSlot(slot);
 	return NULL;
@@ -1409,7 +1392,17 @@ SECMOD_OpenNewSlot(SECMODModule *mod, const char *moduleSpec)
 	return NULL;
     }
 
-    return SECMOD_FindSlotByID(mod, slotID);
+    slot = SECMOD_FindSlotByID(mod, slotID);
+    if (slot) {
+	/* if we are in the delay period for the "isPresent" call, reset
+	 * the delay since we know things have probably changed... */
+	if (slot->nssToken && slot->nssToken->slot) {
+	    nssSlot_ResetDelay(slot->nssToken->slot);
+	}
+	/* force the slot info structures to properly reset */
+	(void)PK11_IsPresent(slot);
+    }
+    return slot;
 }
 
 /*
@@ -1503,4 +1496,83 @@ SECMOD_CloseUserDB(PK11SlotInfo *slot)
     rv = secmod_UserDBOp(slot, CKO_NETSCAPE_DELSLOT, sendSpec);
     PR_smprintf_free(sendSpec);
     return rv;
+}
+
+/*
+ * Restart PKCS #11 modules after a fork(). See secmod.h for more information.
+ */
+SECStatus
+SECMOD_RestartModules(PRBool force)
+{
+    SECMODModuleList *mlp;
+    SECStatus rrv = SECSuccess;
+    int lastError = 0;
+
+    if (!moduleLock) {
+    	PORT_SetError(SEC_ERROR_NOT_INITIALIZED);
+	return SECFailure;
+    }
+
+    /* Only need to restart the PKCS #11 modules that were initialized */
+    SECMOD_GetReadLock(moduleLock);
+    for (mlp = modules; mlp != NULL; mlp = mlp->next) {
+	SECMODModule *mod = mlp->module;
+	CK_ULONG count;
+	SECStatus rv;
+	int i;
+
+	/* If the module needs to be reset, do so */
+	if (force  || (PK11_GETTAB(mod)->
+			C_GetSlotList(CK_FALSE, NULL, &count) != CKR_OK)) {
+            PRBool alreadyLoaded;
+	    /* first call Finalize. This is not required by PKCS #11, but some
+             * older modules require it, and it doesn't hurt (compliant modules
+             * will return CKR_NOT_INITIALIZED */
+	    (void) PK11_GETTAB(mod)->C_Finalize(NULL);
+	    /* now initialize the module, this function reinitializes
+	     * a module in place, preserving existing slots (even if they
+	     * no longer exist) */
+	    rv = secmod_ModuleInit(mod, NULL, &alreadyLoaded);
+	    if (rv != SECSuccess) {
+		/* save the last error code */
+		lastError = PORT_GetError();
+		rrv = rv;
+		/* couldn't reinit the module, disable all its slots */
+		for (i=0; i < mod->slotCount; i++) {
+		    mod->slots[i]->disabled = PR_TRUE;
+		    mod->slots[i]->reason = PK11_DIS_COULD_NOT_INIT_TOKEN;
+		}
+		continue;
+	    }
+	    for (i=0; i < mod->slotCount; i++) {
+		/* get new token sessions, bump the series up so that
+		 * we refresh other old sessions. This will tell much of
+		 * NSS to flush cached handles it may hold as well */
+		rv = PK11_InitToken(mod->slots[i],PR_TRUE);
+		/* PK11_InitToken could fail if the slot isn't present.
+		 * If it is present, though, something is wrong and we should
+		 * disable the slot and let the caller know. */
+		if (rv != SECSuccess && PK11_IsPresent(mod->slots[i])) {
+		    /* save the last error code */
+		    lastError = PORT_GetError();
+		    rrv = rv;
+		    /* disable the token */
+		    mod->slots[i]->disabled = PR_TRUE;
+		    mod->slots[i]->reason = PK11_DIS_COULD_NOT_INIT_TOKEN;
+		}
+	    }
+	}
+    }
+    SECMOD_ReleaseReadLock(moduleLock);
+
+    /*
+     * on multiple failures, we are only returning the lastError. The caller
+     * can determine which slots are bad by calling PK11_IsDisabled().
+     */
+    if (rrv != SECSuccess) {
+	/* restore the last error code */
+	PORT_SetError(lastError);
+    }
+
+    return rrv;
 }

@@ -1,47 +1,9 @@
 /* -*- Mode: C++; tab-width: 40; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * the Mozilla Foundation <http://www.mozilla.org/>
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Karl Tomlinson <karlt+@karlt.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsX11ErrorHandler.h"
-
-#ifdef MOZ_IPC
-#include "mozilla/plugins/PluginProcessChild.h"
-using mozilla::plugins::PluginProcessChild;
-#endif
 
 #include "prenv.h"
 #include "nsXULAppAPI.h"
@@ -55,49 +17,61 @@ using mozilla::plugins::PluginProcessChild;
 
 extern "C" {
 static int
-IgnoreError(Display *display, XErrorEvent *event) {
-  return 0; // This return value is ignored.
-}
-
-static int
 X11Error(Display *display, XErrorEvent *event) {
-  nsCAutoString notes;
-  char buffer[BUFSIZE];
-
   // Get an indication of how long ago the request that caused the error was
-  // made.  Do this before querying extensions etc below.
+  // made.
   unsigned long age = NextRequest(display) - event->serial;
 
-  // Ignore subsequent errors, which may get processed during the extension
-  // queries below for example.
-  XSetErrorHandler(IgnoreError);
-
   // Get a string to represent the request that caused the error.
-  nsCAutoString message;
+  nsAutoCString message;
   if (event->request_code < 128) {
     // Core protocol request
     message.AppendInt(event->request_code);
   } else {
     // Extension request
-    int nExts;
-    char** extNames = XListExtensions(display, &nExts);
-    if (extNames) {
-      for (int i = 0; i < nExts; ++i) {
-        int major_opcode, first_event, first_error;
-        if (XQueryExtension(display, extNames[i],
-                            &major_opcode, &first_event, &first_error)
-            && major_opcode == event->request_code) {
-          message.Append(extNames[i]);
-          message.Append('.');
-          message.AppendInt(event->minor_code);
-          break;
-        }
-      }
 
-      XFreeExtensionList(extNames);
+    // man XSetErrorHandler says "the error handler should not call any
+    // functions (directly or indirectly) on the display that will generate
+    // protocol requests or that will look for input events" so we use another
+    // temporary Display to request extension information.  This assumes on
+    // the DISPLAY environment variable has been set and matches what was used
+    // to open |display|.
+    Display *tmpDisplay = XOpenDisplay(NULL);
+    if (tmpDisplay) {
+      int nExts;
+      char** extNames = XListExtensions(tmpDisplay, &nExts);
+      int first_error;
+      if (extNames) {
+        for (int i = 0; i < nExts; ++i) {
+          int major_opcode, first_event;
+          if (XQueryExtension(tmpDisplay, extNames[i],
+                              &major_opcode, &first_event, &first_error)
+              && major_opcode == event->request_code) {
+            message.Append(extNames[i]);
+            message.Append('.');
+            message.AppendInt(event->minor_code);
+            break;
+          }
+        }
+
+        XFreeExtensionList(extNames);
+      }
+      XCloseDisplay(tmpDisplay);
+
+#ifdef MOZ_WIDGET_GTK2
+      // GDK2 calls XCloseDevice the devices that it opened on startup, but
+      // the XI protocol no longer ensures that the devices will still exist.
+      // If they have been removed, then a BadDevice error results.  Ignore
+      // this error.
+      if (message.EqualsLiteral("XInputExtension.4") &&
+          event->error_code == first_error + 0) {
+        return 0;
+      }
+#endif
     }
   }
 
+  char buffer[BUFSIZE];
   if (message.IsEmpty()) {
     buffer[0] = '\0';
   } else {
@@ -105,6 +79,7 @@ X11Error(Display *display, XErrorEvent *event) {
                           buffer, sizeof(buffer));
   }
 
+  nsAutoCString notes;
   if (buffer[0]) {
     notes.Append(buffer);
   } else {
@@ -137,7 +112,7 @@ X11Error(Display *display, XErrorEvent *event) {
       notes.Append("; sync");
     } else {
       notes.Append("; ");
-      notes.AppendInt(PRUint32(age));
+      notes.AppendInt(uint32_t(age));
       notes.Append(" requests ago");
     }
   }
@@ -145,18 +120,10 @@ X11Error(Display *display, XErrorEvent *event) {
 #ifdef MOZ_CRASHREPORTER
   switch (XRE_GetProcessType()) {
   case GeckoProcessType_Default:
+  case GeckoProcessType_Plugin:
+  case GeckoProcessType_Content:
     CrashReporter::AppendAppNotesToCrashReport(notes);
     break;
-#ifdef MOZ_IPC
-  case GeckoProcessType_Plugin:
-    if (CrashReporter::GetEnabled()) {
-      // This is assuming that X operations are performed on the plugin
-      // thread.  If plugins are using X on another thread, then we'll need to
-      // handle that differently.
-      PluginProcessChild::AppendNotesToCrashReport(notes);
-    }
-    break;
-#endif
   default: 
     ; // crash report notes not supported.
   }
@@ -166,7 +133,7 @@ X11Error(Display *display, XErrorEvent *event) {
   // The resource id is unlikely to be useful in a crash report without
   // context of other ids, but add it to the debug console output.
   notes.Append("; id=0x");
-  notes.AppendInt(PRUint32(event->resourceid), 16);
+  notes.AppendInt(uint32_t(event->resourceid), 16);
 #ifdef MOZ_X11
   // Actually, for requests where Xlib gets the reply synchronously,
   // MOZ_X_SYNC=1 will not be necessary, but we don't have a table to tell us

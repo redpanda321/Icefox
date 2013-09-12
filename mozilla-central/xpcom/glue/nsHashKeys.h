@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is C++ hashtable templates.
- *
- * The Initial Developer of the Original Code is
- * Benjamin Smedberg.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsTHashKeys_h__
 #define nsTHashKeys_h__
@@ -47,9 +15,30 @@
 
 #include "nsStringGlue.h"
 #include "nsCRTGlue.h"
+#include "nsUnicharUtils.h"
 
 #include <stdlib.h>
 #include <string.h>
+
+#include "mozilla/HashFunctions.h"
+
+namespace mozilla {
+
+// These are defined analogously to the HashString overloads in mfbt.
+
+inline uint32_t
+HashString(const nsAString& aStr)
+{
+  return HashString(aStr.BeginReading(), aStr.Length());
+}
+
+inline uint32_t
+HashString(const nsACString& aStr)
+{
+  return HashString(aStr.BeginReading(), aStr.Length());
+}
+
+} // namespace mozilla
 
 /** @file nsHashKeys.h
  * standard HashKey classes for nsBaseHashtable and relatives. Each of these
@@ -59,6 +48,8 @@
  * nsStringHashKey
  * nsCStringHashKey
  * nsUint32HashKey
+ * nsUint64HashKey
+ * nsFloatHashKey
  * nsPtrHashkey
  * nsClearingPtrHashKey
  * nsVoidPtrHashKey
@@ -70,11 +61,6 @@
  * nsUnicharPtrHashKey
  * nsHashableHashKey
  */
-
-NS_COM_GLUE PRUint32 HashString(const nsAString& aStr);
-NS_COM_GLUE PRUint32 HashString(const nsACString& aStr);
-NS_COM_GLUE PRUint32 HashString(const char* aKey);
-NS_COM_GLUE PRUint32 HashString(const PRUnichar* aKey);
 
 /**
  * hashkey wrapper using nsAString KeyType
@@ -92,7 +78,7 @@ public:
   ~nsStringHashKey() { }
 
   KeyType GetKey() const { return mStr; }
-  PRBool KeyEquals(const KeyTypePointer aKey) const
+  bool KeyEquals(const KeyTypePointer aKey) const
   {
     return mStr.Equals(*aKey);
   }
@@ -100,13 +86,54 @@ public:
   static KeyTypePointer KeyToPointer(KeyType aKey) { return &aKey; }
   static PLDHashNumber HashKey(const KeyTypePointer aKey)
   {
-    return HashString(*aKey);
+    return mozilla::HashString(*aKey);
   }
-  enum { ALLOW_MEMMOVE = PR_TRUE };
+  enum { ALLOW_MEMMOVE = true };
 
 private:
   const nsString mStr;
 };
+
+#ifdef MOZILLA_INTERNAL_API
+
+/**
+ * hashkey wrapper using nsAString KeyType
+ *
+ * This is internal-API only because nsCaseInsensitiveStringComparator is
+ * internal-only.
+ *
+ * @see nsTHashtable::EntryType for specification
+ */
+class nsStringCaseInsensitiveHashKey : public PLDHashEntryHdr
+{
+public:
+  typedef const nsAString& KeyType;
+  typedef const nsAString* KeyTypePointer;
+
+  nsStringCaseInsensitiveHashKey(KeyTypePointer aStr) : mStr(*aStr) { } //take it easy just deal HashKey
+  nsStringCaseInsensitiveHashKey(const nsStringCaseInsensitiveHashKey& toCopy) : mStr(toCopy.mStr) { }
+  ~nsStringCaseInsensitiveHashKey() { }
+
+  KeyType GetKey() const { return mStr; }
+  bool KeyEquals(const KeyTypePointer aKey) const
+  {
+    return mStr.Equals(*aKey, nsCaseInsensitiveStringComparator());
+  }
+
+  static KeyTypePointer KeyToPointer(KeyType aKey) { return &aKey; }
+  static PLDHashNumber HashKey(const KeyTypePointer aKey)
+  {
+      nsAutoString tmKey(*aKey);
+      ToLowerCase(tmKey);
+      return mozilla::HashString(tmKey);
+  }
+  enum { ALLOW_MEMMOVE = true };
+
+private:
+  const nsString mStr;
+};
+
+#endif
 
 /**
  * hashkey wrapper using nsACString KeyType
@@ -125,43 +152,95 @@ public:
 
   KeyType GetKey() const { return mStr; }
 
-  PRBool KeyEquals(KeyTypePointer aKey) const { return mStr.Equals(*aKey); }
+  bool KeyEquals(KeyTypePointer aKey) const { return mStr.Equals(*aKey); }
 
   static KeyTypePointer KeyToPointer(KeyType aKey) { return &aKey; }
   static PLDHashNumber HashKey(KeyTypePointer aKey)
   {
-    return HashString(*aKey);
+    return mozilla::HashString(*aKey);
   }
-  enum { ALLOW_MEMMOVE = PR_TRUE };
+  enum { ALLOW_MEMMOVE = true };
 
 private:
   const nsCString mStr;
 };
 
 /**
- * hashkey wrapper using PRUint32 KeyType
+ * hashkey wrapper using uint32_t KeyType
  *
  * @see nsTHashtable::EntryType for specification
  */
 class nsUint32HashKey : public PLDHashEntryHdr
 {
 public:
-  typedef const PRUint32& KeyType;
-  typedef const PRUint32* KeyTypePointer;
+  typedef const uint32_t& KeyType;
+  typedef const uint32_t* KeyTypePointer;
   
   nsUint32HashKey(KeyTypePointer aKey) : mValue(*aKey) { }
   nsUint32HashKey(const nsUint32HashKey& toCopy) : mValue(toCopy.mValue) { }
   ~nsUint32HashKey() { }
 
   KeyType GetKey() const { return mValue; }
-  PRBool KeyEquals(KeyTypePointer aKey) const { return *aKey == mValue; }
+  bool KeyEquals(KeyTypePointer aKey) const { return *aKey == mValue; }
 
   static KeyTypePointer KeyToPointer(KeyType aKey) { return &aKey; }
   static PLDHashNumber HashKey(KeyTypePointer aKey) { return *aKey; }
-  enum { ALLOW_MEMMOVE = PR_TRUE };
+  enum { ALLOW_MEMMOVE = true };
 
 private:
-  const PRUint32 mValue;
+  const uint32_t mValue;
+};
+
+/**
+ * hashkey wrapper using uint64_t KeyType
+ *
+ * @see nsTHashtable::EntryType for specification
+ */
+class nsUint64HashKey : public PLDHashEntryHdr
+{
+public:
+  typedef const uint64_t& KeyType;
+  typedef const uint64_t* KeyTypePointer;
+  
+  nsUint64HashKey(KeyTypePointer aKey) : mValue(*aKey) { }
+  nsUint64HashKey(const nsUint64HashKey& toCopy) : mValue(toCopy.mValue) { }
+  ~nsUint64HashKey() { }
+
+  KeyType GetKey() const { return mValue; }
+  bool KeyEquals(KeyTypePointer aKey) const { return *aKey == mValue; }
+
+  static KeyTypePointer KeyToPointer(KeyType aKey) { return &aKey; }
+  static PLDHashNumber HashKey(KeyTypePointer aKey) { return PLDHashNumber(*aKey); }
+  enum { ALLOW_MEMMOVE = true };
+
+private:
+  const uint64_t mValue;
+};
+
+/**
+ * hashkey wrapper using float KeyType
+ *
+ * @see nsTHashtable::EntryType for specification
+ */
+class nsFloatHashKey : public PLDHashEntryHdr
+{
+public:
+  typedef const float& KeyType;
+  typedef const float* KeyTypePointer;
+
+  nsFloatHashKey(KeyTypePointer aKey) : mValue(*aKey) { }
+  nsFloatHashKey(const nsFloatHashKey& toCopy) : mValue(toCopy.mValue) { }
+  ~nsFloatHashKey() { }
+
+  KeyType GetKey() const { return mValue; }
+  bool KeyEquals(KeyTypePointer aKey) const { return *aKey == mValue; }
+
+  static KeyTypePointer KeyToPointer(KeyType aKey) { return &aKey; }
+  static PLDHashNumber HashKey(KeyTypePointer aKey) { return *reinterpret_cast<const uint32_t*>(aKey); }
+  enum { ALLOW_MEMMOVE = true };
+
+private:
+  const float mValue;
 };
 
 /**
@@ -183,17 +262,50 @@ public:
 
   KeyType GetKey() const { return mSupports; }
   
-  PRBool KeyEquals(KeyTypePointer aKey) const { return aKey == mSupports; }
+  bool KeyEquals(KeyTypePointer aKey) const { return aKey == mSupports; }
 
   static KeyTypePointer KeyToPointer(KeyType aKey) { return aKey; }
   static PLDHashNumber HashKey(KeyTypePointer aKey)
   {
     return NS_PTR_TO_INT32(aKey) >>2;
   }
-  enum { ALLOW_MEMMOVE = PR_TRUE };
+  enum { ALLOW_MEMMOVE = true };
 
 private:
   nsCOMPtr<nsISupports> mSupports;
+};
+
+/**
+ * hashkey wrapper using refcounted * KeyType
+ *
+ * @see nsTHashtable::EntryType for specification
+ */
+template<class T>
+class nsRefPtrHashKey : public PLDHashEntryHdr
+{
+public:
+  typedef T* KeyType;
+  typedef const T* KeyTypePointer;
+
+  nsRefPtrHashKey(const T* key) :
+    mKey(const_cast<T*>(key)) { }
+  nsRefPtrHashKey(const nsRefPtrHashKey& toCopy) :
+    mKey(toCopy.mKey) { }
+  ~nsRefPtrHashKey() { }
+
+  KeyType GetKey() const { return mKey; }
+  
+  bool KeyEquals(KeyTypePointer aKey) const { return aKey == mKey; }
+
+  static KeyTypePointer KeyToPointer(KeyType aKey) { return aKey; }
+  static PLDHashNumber HashKey(KeyTypePointer aKey)
+  {
+    return NS_PTR_TO_INT32(aKey) >>2;
+  }
+  enum { ALLOW_MEMMOVE = true };
+
+private:
+  nsRefPtr<T> mKey;
 };
 
 /**
@@ -214,14 +326,14 @@ class nsPtrHashKey : public PLDHashEntryHdr
 
   KeyType GetKey() const { return mKey; }
 
-  PRBool KeyEquals(KeyTypePointer key) const { return key == mKey; }
+  bool KeyEquals(KeyTypePointer key) const { return key == mKey; }
 
   static KeyTypePointer KeyToPointer(KeyType key) { return key; }
   static PLDHashNumber HashKey(KeyTypePointer key)
   {
     return NS_PTR_TO_INT32(key) >> 2;
   }
-  enum { ALLOW_MEMMOVE = PR_TRUE };
+  enum { ALLOW_MEMMOVE = true };
 
  protected:
   T *mKey;
@@ -242,7 +354,7 @@ class nsClearingPtrHashKey : public nsPtrHashKey<T>
   nsClearingPtrHashKey(const T *key) : nsPtrHashKey<T>(key) {}
   nsClearingPtrHashKey(const nsClearingPtrHashKey<T> &toCopy) :
     nsPtrHashKey<T>(toCopy) {}
-  ~nsClearingPtrHashKey() { nsPtrHashKey<T>::mKey = nsnull; }
+  ~nsClearingPtrHashKey() { nsPtrHashKey<T>::mKey = nullptr; }
 };
 
 typedef nsPtrHashKey<const void> nsVoidPtrHashKey; 
@@ -265,11 +377,16 @@ public:
 
   KeyType GetKey() const { return mID; }
 
-  PRBool KeyEquals(KeyTypePointer aKey) const { return aKey->Equals(mID); }
+  bool KeyEquals(KeyTypePointer aKey) const { return aKey->Equals(mID); }
 
   static KeyTypePointer KeyToPointer(KeyType aKey) { return &aKey; }
-  static PLDHashNumber HashKey(KeyTypePointer aKey);
-  enum { ALLOW_MEMMOVE = PR_TRUE };
+  static PLDHashNumber HashKey(KeyTypePointer aKey)
+  {
+    // Hash the nsID object's raw bytes.
+    return mozilla::HashBytes(aKey, sizeof(KeyType));
+  }
+
+  enum { ALLOW_MEMMOVE = true };
 
 private:
   const nsID mID;
@@ -296,14 +413,14 @@ public:
   ~nsDepCharHashKey() { }
 
   const char* GetKey() const { return mKey; }
-  PRBool KeyEquals(const char* aKey) const
+  bool KeyEquals(const char* aKey) const
   {
     return !strcmp(mKey, aKey);
   }
 
   static const char* KeyToPointer(const char* aKey) { return aKey; }
-  static PLDHashNumber HashKey(const char* aKey) { return HashString(aKey); }
-  enum { ALLOW_MEMMOVE = PR_TRUE };
+  static PLDHashNumber HashKey(const char* aKey) { return mozilla::HashString(aKey); }
+  enum { ALLOW_MEMMOVE = true };
 
 private:
   const char* mKey;
@@ -325,15 +442,15 @@ public:
   ~nsCharPtrHashKey() { if (mKey) free(const_cast<char *>(mKey)); }
 
   const char* GetKey() const { return mKey; }
-  PRBool KeyEquals(KeyTypePointer aKey) const
+  bool KeyEquals(KeyTypePointer aKey) const
   {
     return !strcmp(mKey, aKey);
   }
 
   static KeyTypePointer KeyToPointer(KeyType aKey) { return aKey; }
-  static PLDHashNumber HashKey(KeyTypePointer aKey) { return HashString(aKey); }
+  static PLDHashNumber HashKey(KeyTypePointer aKey) { return mozilla::HashString(aKey); }
 
-  enum { ALLOW_MEMMOVE = PR_TRUE };
+  enum { ALLOW_MEMMOVE = true };
 
 private:
   const char* mKey;
@@ -355,15 +472,15 @@ public:
   ~nsUnicharPtrHashKey() { if (mKey) NS_Free(const_cast<PRUnichar *>(mKey)); }
 
   const PRUnichar* GetKey() const { return mKey; }
-  PRBool KeyEquals(KeyTypePointer aKey) const
+  bool KeyEquals(KeyTypePointer aKey) const
   {
     return !NS_strcmp(mKey, aKey);
   }
 
   static KeyTypePointer KeyToPointer(KeyType aKey) { return aKey; }
-  static PLDHashNumber HashKey(KeyTypePointer aKey) { return HashString(aKey); }
+  static PLDHashNumber HashKey(KeyTypePointer aKey) { return mozilla::HashString(aKey); }
 
-  enum { ALLOW_MEMMOVE = PR_TRUE };
+  enum { ALLOW_MEMMOVE = true };
 
 private:
   const PRUnichar* mKey;
@@ -386,18 +503,18 @@ public:
 
     nsIHashable* GetKey() const { return mKey; }
 
-    PRBool KeyEquals(const nsIHashable* aKey) const {
-        PRBool eq;
+    bool KeyEquals(const nsIHashable* aKey) const {
+        bool eq;
         if (NS_SUCCEEDED(mKey->Equals(const_cast<nsIHashable*>(aKey), &eq))) {
             return eq;
         }
-        return PR_FALSE;
+        return false;
     }
 
     static const nsIHashable* KeyToPointer(nsIHashable* aKey) { return aKey; }
     static PLDHashNumber HashKey(const nsIHashable* aKey) {
-        PRUint32 code = 8888; // magic number if GetHashCode fails :-(
-#ifdef NS_DEBUG
+        uint32_t code = 8888; // magic number if GetHashCode fails :-(
+#ifdef DEBUG
         nsresult rv =
 #endif
         const_cast<nsIHashable*>(aKey)->GetHashCode(&code);
@@ -405,7 +522,7 @@ public:
         return code;
     }
     
-    enum { ALLOW_MEMMOVE = PR_TRUE };
+    enum { ALLOW_MEMMOVE = true };
 
 private:
     nsCOMPtr<nsIHashable> mKey;

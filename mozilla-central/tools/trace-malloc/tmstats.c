@@ -1,42 +1,8 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is tmstats.c code, released
- * Oct 25, 2002.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Garrett Arch Blythe, 25-October-2002
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,7 +20,7 @@
 
 
 #define COST_RESOLUTION 1000
-#define COST_PRINTABLE(cost) ((PRFloat64)(cost) / (PRFloat64)COST_RESOLUTION)
+#define COST_PRINTABLE(cost) ((double)(cost) / (double)COST_RESOLUTION)
 
 
 typedef struct __struct_Options
@@ -130,8 +96,8 @@ typedef struct _struct_VarianceState
 */
 {
     unsigned mCount;
-    PRUint64 mSum;
-    PRUint64 mSquaredSum;
+    uint64_t mSum;
+    uint64_t mSquaredSum;
 }
 VarianceState;
 
@@ -447,88 +413,83 @@ void addVariance(VarianceState* inVariance, unsigned inValue)
 **  Add a value to a variance state.
 */
 {
-    PRUint64 squared;
-    PRUint64 bigValue;
-    
-    LL_UI2L(bigValue, inValue);
+    uint64_t squared;
+    uint64_t bigValue;
 
-    LL_ADD(inVariance->mSum, inVariance->mSum, bigValue);
+    bigValue = inValue;
+    inVariance->mSum += bigValue;
 
-    LL_MUL(squared, bigValue, bigValue);
-    LL_ADD(inVariance->mSquaredSum, inVariance->mSquaredSum, squared);
+    squared = bigValue * bigValue;
+    inVariance->mSquaredSum += squared;
 
     inVariance->mCount++;
 }
 
 
-PRFloat64 getAverage(VarianceState* inVariance)
+double getAverage(VarianceState* inVariance)
 /*
 **  Determine the mean/average based on the given state.
 */
 {
-    PRFloat64 retval = 0.0;
+    double retval = 0.0;
 
     if(NULL != inVariance && 0 < inVariance->mCount)
     {
-        PRFloat64 count;
-        PRFloat64 sum;
-        PRInt64 isum;
+        double count;
+        int64_t isum;
 
         /*
         **  Avoids a compiler error (not impl) under MSVC.
         */
         isum = inVariance->mSum;
 
-        count = (PRFloat64)inVariance->mCount;
-        LL_L2F(sum, isum);
+        count = (double)inVariance->mCount;
 
-        retval = sum / count;
+        retval = (double)isum / count;
     }
 
     return retval;
 }
 
 
-PRFloat64 getVariance(VarianceState* inVariance)
+double getVariance(VarianceState* inVariance)
 /*
 **  Determine the variance based on the given state.
 */
 {
-    PRFloat64 retval = 0.0;
+    double retval = 0.0;
 
     if(NULL != inVariance && 1 < inVariance->mCount)
     {
-        PRFloat64 count;
-        PRFloat64 squaredSum;
-        PRFloat64 avg;
-        PRFloat64 squaredAvg;
-        PRInt64 isquaredSum;
+        double count;
+        double avg;
+        double squaredAvg;
+        int64_t isquaredSum;
 
         /*
         **  Avoids a compiler error (not impl) under MSVC.
         */
         isquaredSum = inVariance->mSquaredSum;
 
-        count = (PRFloat64)inVariance->mCount;
-        LL_L2F(squaredSum, isquaredSum);
+        count = (double)inVariance->mCount;
 
         avg = getAverage(inVariance);
         squaredAvg = avg * avg;
 
-        retval = (squaredSum - (count * squaredAvg)) / (count - 1.0);
+        retval = ((double)isquaredSum - (count * squaredAvg)) / (count - 1.0);
     }
 
     return retval;
 }
 
 
-PRFloat64 getStdDev(VarianceState* inVariance)
+double getStdDev(VarianceState* inVariance)
 /*
 **  Determine the standard deviation based on the given state.
 */
 {
-    PRFloat64 retval = 0.0;
-    PRFloat64 variance;
+    double retval = 0.0;
+    double variance;
 
     variance = getVariance(inVariance);
     retval = sqrt(variance);
@@ -560,24 +521,13 @@ unsigned actualByteSize(Options* inOptions, unsigned retval)
 }
 
 
-PRUint32 ticks2xsec(tmreader* aReader, PRUint32 aTicks, PRUint32 aResolution)
+uint32_t ticks2xsec(tmreader* aReader, uint32_t aTicks, uint32_t aResolution)
 /*
 ** Convert platform specific ticks to second units
 ** Returns 0 on success.
 */
 {
-    PRUint32 retval = 0;
-    PRUint64 bigone;
-    PRUint64 tmp64;
-
-    LL_UI2L(bigone, aResolution);
-    LL_UI2L(tmp64, aTicks);
-    LL_MUL(bigone, bigone, tmp64);
-    LL_UI2L(tmp64, aReader->ticksPerSec);
-    LL_DIV(bigone, bigone, tmp64);
-    LL_L2UI(retval, bigone);
-
-    return retval;
+    return (uint32_t)((aResolution * aTicks) / aReader->ticksPerSec);
 }
 #define ticks2msec(reader, ticks) ticks2xsec((reader), (ticks), 1000)
 
@@ -595,7 +545,7 @@ void tmEventHandler(tmreader* inReader, tmevent* inEvent)
     unsigned size = inEvent->u.alloc.size;
     unsigned actualSize = 0;
     unsigned actualOldSize = 0;
-    PRUint32 interval = 0;
+    uint32_t interval = 0;
 
     /*
     **  To match spacetrace stats, reallocs of size zero are frees.
@@ -744,7 +694,7 @@ int report_stats(Options* inOptions, TMStats* inStats)
     fprintf(inOptions->mOutput, "Objects Leaked:                      %11d\n", inStats->uObjectsInUse);
     if(0 != inOptions->mAverages && 0 != inStats->uObjectsInUse)
     {
-        fprintf(inOptions->mOutput, "Average Leaked Object Size:          %11.4f\n", (PRFloat64)inStats->uMemoryInUse / (PRFloat64)inStats->uObjectsInUse);
+        fprintf(inOptions->mOutput, "Average Leaked Object Size:          %11.4f\n", (double)inStats->uMemoryInUse / (double)inStats->uObjectsInUse);
     }
     fprintf(inOptions->mOutput, "\n");
 

@@ -1,53 +1,31 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998-1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "SetDocTitleTxn.h"
-#include "nsIDOMNode.h"
-#include "nsIDOMNodeList.h"
-#include "nsIDOMDocument.h"
-#include "nsIDOMHTMLDocument.h"
-#include "nsIDOMText.h"
-#include "nsIDOMElement.h"
+#include "mozilla/dom/Element.h"        // for Element
+#include "nsAString.h"
+#include "nsCOMPtr.h"                   // for nsCOMPtr, getter_AddRefs, etc
+#include "nsDebug.h"                    // for NS_ENSURE_SUCCESS, etc
+#include "nsError.h"                    // for NS_OK, NS_ERROR_FAILURE, etc
+#include "nsIDOMCharacterData.h"        // for nsIDOMCharacterData
+#include "nsIDOMDocument.h"             // for nsIDOMDocument
+#include "nsIDOMElement.h"              // for nsIDOMElement
+#include "nsIDOMNode.h"                 // for nsIDOMNode
+#include "nsIDOMNodeList.h"             // for nsIDOMNodeList
+#include "nsIDOMText.h"                 // for nsIDOMText
+#include "nsIDocument.h"                // for nsIDocument
+#include "nsIEditor.h"                  // for nsIEditor
+#include "nsIHTMLEditor.h"              // for nsIHTMLEditor
+#include "nsLiteralString.h"            // for NS_LITERAL_STRING
+
+using namespace mozilla;
 
 // note that aEditor is not refcounted
 SetDocTitleTxn::SetDocTitleTxn()
   : EditTxn()
-, mIsTransient(PR_FALSE)
+, mIsTransient(false)
 {
 }
 
@@ -95,7 +73,7 @@ nsresult SetDocTitleTxn::SetDomTitle(const nsAString& aTitle)
 
   // First assume we will NOT really do anything
   // (transaction will not be pushed on stack)
-  mIsTransient = PR_TRUE;
+  mIsTransient = true;
 
   nsCOMPtr<nsIDOMNode>titleNode;
   if(titleList)
@@ -129,20 +107,17 @@ nsresult SetDocTitleTxn::SetDomTitle(const nsAString& aTitle)
   }
 
   // We didn't return above, thus we really will be changing the title
-  mIsTransient = PR_FALSE;
+  mIsTransient = false;
 
   // Get the <HEAD> node, create a <TITLE> and insert it under the HEAD
-  nsCOMPtr<nsIDOMNodeList> headList;
-  res = domDoc->GetElementsByTagName(NS_LITERAL_STRING("head"),getter_AddRefs(headList));
-  NS_ENSURE_SUCCESS(res, res);
-  NS_ENSURE_TRUE(headList, NS_ERROR_FAILURE);
-  
-  nsCOMPtr<nsIDOMNode>headNode;
-  headList->Item(0, getter_AddRefs(headNode));
-  NS_ENSURE_TRUE(headNode, NS_ERROR_FAILURE);
+  nsCOMPtr<nsIDocument> document = do_QueryInterface(domDoc);
+  NS_ENSURE_STATE(document);
 
-  PRBool   newTitleNode = PR_FALSE;
-  PRUint32 newTitleIndex = 0;
+  dom::Element* head = document->GetHeadElement();
+  NS_ENSURE_STATE(head);
+
+  bool     newTitleNode = false;
+  uint32_t newTitleIndex = 0;
 
   if (!titleNode)
   {
@@ -153,15 +128,10 @@ nsresult SetDocTitleTxn::SetDomTitle(const nsAString& aTitle)
     NS_ENSURE_TRUE(titleElement, NS_ERROR_FAILURE);
 
     titleNode = do_QueryInterface(titleElement);
-    newTitleNode = PR_TRUE;
+    newTitleNode = true;
 
-    // Get index so we append new title node 
-    // after all existing HEAD children
-    nsCOMPtr<nsIDOMNodeList> children;
-    res = headNode->GetChildNodes(getter_AddRefs(children));
-    NS_ENSURE_SUCCESS(res, res);
-    if (children)
-      children->GetLength(&newTitleIndex);
+    // Get index so we append new title node after all existing HEAD children.
+    newTitleIndex = head->GetChildCount();
   }
 
   // Append a text node under the TITLE
@@ -191,7 +161,7 @@ nsresult SetDocTitleTxn::SetDomTitle(const nsAString& aTitle)
   if (newTitleNode)
   {
     // Undoable transaction to insert title+text together
-    res = editor->InsertNode(titleNode, headNode, newTitleIndex);
+    res = editor->InsertNode(titleNode, head->AsDOMNode(), newTitleIndex);
   }
   return res;
 }
@@ -203,7 +173,7 @@ NS_IMETHODIMP SetDocTitleTxn::GetTxnDescription(nsAString& aString)
   return NS_OK;
 }
 
-NS_IMETHODIMP SetDocTitleTxn::GetIsTransient(PRBool *aIsTransient)
+NS_IMETHODIMP SetDocTitleTxn::GetIsTransient(bool *aIsTransient)
 {
   NS_ENSURE_TRUE(aIsTransient, NS_ERROR_NULL_POINTER);  
   *aIsTransient = mIsTransient;

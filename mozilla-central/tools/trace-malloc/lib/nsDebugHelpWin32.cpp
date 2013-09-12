@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   John Bandhauer <jband@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #if defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
@@ -57,19 +24,19 @@
 /***************************************************************************/
 
 
-PRLock*           DHWImportHooker::gLock  = nsnull;
-DHWImportHooker*  DHWImportHooker::gHooks = nsnull;
-GETPROCADDRESS    DHWImportHooker::gRealGetProcAddress = nsnull;
+PRLock*           DHWImportHooker::gLock  = nullptr;
+DHWImportHooker*  DHWImportHooker::gHooks = nullptr;
+GETPROCADDRESS    DHWImportHooker::gRealGetProcAddress = nullptr;
 
 
-static PRBool
+static bool
 dhwEnsureImageHlpInitialized()
 {
-  static PRBool gInitialized = PR_FALSE;
-  static PRBool gTried       = PR_FALSE;
+  static bool gInitialized = false;
+  static bool gTried       = false;
 
   if (!gInitialized && !gTried) {
-    gTried = PR_TRUE;
+    gTried = true;
     HMODULE module = ::LoadLibrary("DBGHELP.DLL");
     if (!module) {
       DWORD dw = GetLastError();
@@ -77,12 +44,12 @@ dhwEnsureImageHlpInitialized()
              "                 This DLL is needed for succeessfully implementing trace-malloc.\n"
              "                 This dll ships by default on Win2k. Disabling trace-malloc functionality.\n"
              , dw);
-      return PR_FALSE;
+      return false;
     }
 
 #define INIT_PROC(typename_, name_) \
     dhw##name_ = (typename_) ::GetProcAddress(module, #name_); \
-    if(!dhw##name_) return PR_FALSE;
+    if(!dhw##name_) return false;
 
 #ifdef _WIN64
     INIT_PROC(ENUMERATELOADEDMODULES64, EnumerateLoadedModules64);
@@ -93,7 +60,7 @@ dhwEnsureImageHlpInitialized()
 
 #undef INIT_PROC
 
-    gInitialized = PR_TRUE;
+    gInitialized = true;
   }
 
   return gInitialized;
@@ -146,20 +113,20 @@ static HMODULE ThisModule()
 {
     MEMORY_BASIC_INFORMATION info;
     return VirtualQuery(ThisModule, &info, sizeof(info)) ? 
-                            (HMODULE) info.AllocationBase : nsnull;
+                            (HMODULE) info.AllocationBase : nullptr;
 }
 
 DHWImportHooker::DHWImportHooker(const char* aModuleName,
                                  const char* aFunctionName,
                                  PROC aHook,
-                                 PRBool aExcludeOurModule /* = PR_FALSE */)
-    :   mNext(nsnull),
+                                 bool aExcludeOurModule /* = false */)
+    :   mNext(nullptr),
         mModuleName(aModuleName),
         mFunctionName(aFunctionName),
-        mOriginal(nsnull),
+        mOriginal(nullptr),
         mHook(aHook),
-        mIgnoreModule(aExcludeOurModule ? ThisModule() : nsnull),
-        mHooking(PR_TRUE)
+        mIgnoreModule(aExcludeOurModule ? ThisModule() : nullptr),
+        mHooking(true)
 {
     //printf("DHWImportHooker hooking %s, function %s\n",aModuleName, aFunctionName);
 
@@ -187,7 +154,7 @@ DHWImportHooker::~DHWImportHooker()
 {
     PR_Lock(gLock);
 
-    mHooking = PR_FALSE;
+    mHooking = false;
     PatchAllModules();
 
     for (DHWImportHooker **cur = &gHooks;
@@ -204,7 +171,7 @@ DHWImportHooker::~DHWImportHooker()
     if(!gHooks)
     {
         PRLock* theLock = gLock;
-        gLock = nsnull;
+        gLock = nullptr;
         PR_Unlock(theLock);
         PR_DestroyLock(theLock);
     }
@@ -230,7 +197,7 @@ static BOOL CALLBACK ModuleEnumCallback(PCSTR ModuleName,
     return self->PatchOneModule(aModule, ModuleName);
 }
 
-PRBool 
+bool 
 DHWImportHooker::PatchAllModules()
 {
     // Need to cast to PENUMLOADED_MODULES_CALLBACK because the
@@ -246,26 +213,26 @@ DHWImportHooker::PatchAllModules()
 #endif
 }    
                                 
-PRBool 
+bool 
 DHWImportHooker::PatchOneModule(HMODULE aModule, const char* name)
 {
     if(aModule == mIgnoreModule)
     {
-        return PR_TRUE;
+        return true;
     }
 
     // do the fun stuff...
 
     PIMAGE_IMPORT_DESCRIPTOR desc;
-    uint32 size;
+    ULONG size;
 
     desc = (PIMAGE_IMPORT_DESCRIPTOR) 
-        dhwImageDirectoryEntryToData(aModule, PR_TRUE, 
+        dhwImageDirectoryEntryToData(aModule, true, 
                                      IMAGE_DIRECTORY_ENTRY_IMPORT, &size);
 
     if(!desc)
     {
-        return PR_TRUE;
+        return true;
     }
 
     for(; desc->Name; desc++)
@@ -278,7 +245,7 @@ DHWImportHooker::PatchOneModule(HMODULE aModule, const char* name)
 
     if(!desc->Name)
     {
-        return PR_TRUE;
+        return true;
     }
 
     PIMAGE_THUNK_DATA thunk = (PIMAGE_THUNK_DATA)
@@ -306,12 +273,12 @@ DHWImportHooker::PatchOneModule(HMODULE aModule, const char* name)
             DWORD dwDummy;
             VirtualProtect(ppfn, sizeof(ppfn), PAGE_EXECUTE_READWRITE, &dwDummy);
             BOOL result = WriteProcessMemory(GetCurrentProcess(), 
-                               ppfn, &replacement, sizeof(replacement), nsnull);
+                               ppfn, &replacement, sizeof(replacement), nullptr);
             if (!result) //failure
             {
               printf("failure name %s  func %x\n",name,*ppfn);
               DWORD error = GetLastError();
-              return PR_TRUE;
+              return true;
             }
             else
             {
@@ -322,10 +289,10 @@ DHWImportHooker::PatchOneModule(HMODULE aModule, const char* name)
         }
 
     }
-    return PR_TRUE;
+    return true;
 }
 
-PRBool 
+bool 
 DHWImportHooker::ModuleLoaded(HMODULE aModule, DWORD flags)
 {
     //printf("ModuleLoaded\n");
@@ -338,7 +305,7 @@ DHWImportHooker::ModuleLoaded(HMODULE aModule, DWORD flags)
             cur->PatchAllModules();
         PR_Unlock(gLock);
     }
-    return PR_TRUE;
+    return true;
 }
 
 // static 

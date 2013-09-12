@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@netscape.com> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsHttpTransaction_h__
 #define nsHttpTransaction_h__
@@ -44,15 +11,16 @@
 #include "nsAHttpTransaction.h"
 #include "nsAHttpConnection.h"
 #include "nsCOMPtr.h"
-#include "nsInt64.h"
 
 #include "nsIPipe.h"
 #include "nsIInputStream.h"
+#include "nsILoadGroup.h"
 #include "nsIOutputStream.h"
 #include "nsIInterfaceRequestor.h"
 #include "nsISocketTransportService.h"
 #include "nsITransport.h"
 #include "nsIEventTarget.h"
+#include "TimingStruct.h"
 
 //-----------------------------------------------------------------------------
 
@@ -61,6 +29,7 @@ class nsHttpRequestHead;
 class nsHttpResponseHead;
 class nsHttpChunkedDecoder;
 class nsIHttpActivityObserver;
+class UpdateSecurityCallbacks;
 
 //-----------------------------------------------------------------------------
 // nsHttpTransaction represents a single HTTP transaction.  It is thread-safe,
@@ -102,70 +71,112 @@ public:
     //        wait on this input stream for data.  on first notification,
     //        headers should be available (check transaction status).
     //
-    nsresult Init(PRUint8                caps,
+    nsresult Init(uint32_t               caps,
                   nsHttpConnectionInfo  *connInfo,
                   nsHttpRequestHead     *reqHeaders,
                   nsIInputStream        *reqBody,
-                  PRBool                 reqBodyIncludesHeaders,
+                  bool                   reqBodyIncludesHeaders,
                   nsIEventTarget        *consumerTarget,
                   nsIInterfaceRequestor *callbacks,
                   nsITransportEventSink *eventsink,
                   nsIAsyncInputStream  **responseBody);
 
     // attributes
-    PRUint8                Caps()           { return mCaps; }
     nsHttpConnectionInfo  *ConnectionInfo() { return mConnInfo; }
-    nsHttpRequestHead     *RequestHead()    { return mRequestHead; }
-    nsHttpResponseHead    *ResponseHead()   { return mHaveAllHeaders ? mResponseHead : nsnull; }
+    nsHttpResponseHead    *ResponseHead()   { return mHaveAllHeaders ? mResponseHead : nullptr; }
     nsISupports           *SecurityInfo()   { return mSecurityInfo; }
 
-    nsIInterfaceRequestor *Callbacks()      { return mCallbacks; } 
     nsIEventTarget        *ConsumerTarget() { return mConsumerTarget; }
-    nsAHttpConnection     *Connection()     { return mConnection; }
+
+    void SetSecurityCallbacks(nsIInterfaceRequestor* aCallbacks);
 
     // Called to take ownership of the response headers; the transaction
     // will drop any reference to the response headers after this call.
     nsHttpResponseHead *TakeResponseHead();
 
     // Called to find out if the transaction generated a complete response.
-    PRBool ResponseIsComplete() { return mResponseIsComplete; }
+    bool ResponseIsComplete() { return mResponseIsComplete; }
 
-    void   SetSSLConnectFailed() { mSSLConnectFailed = PR_TRUE; }
-    PRBool    SSLConnectFailed() { return mSSLConnectFailed; }
+    bool      ProxyConnectFailed() { return mProxyConnectFailed; }
 
-    // These methods may only be used by the connection manager.
-    void    SetPriority(PRInt32 priority) { mPriority = priority; }
-    PRInt32    Priority()                 { return mPriority; }
+    // SetPriority() may only be used by the connection manager.
+    void    SetPriority(int32_t priority) { mPriority = priority; }
+    int32_t    Priority()                 { return mPriority; }
+
+    const TimingStruct& Timings() const { return mTimings; }
+    enum Classifier Classification() { return mClassification; }
+
+    void PrintDiagnostics(nsCString &log);
+
+    // Sets mPendingTime to the current time stamp or to a null time stamp (if now is false)
+    void SetPendingTime(bool now = true) { mPendingTime = now ? mozilla::TimeStamp::Now() : mozilla::TimeStamp(); }
+    const mozilla::TimeStamp GetPendingTime() { return mPendingTime; }
+    bool UsesPipelining() const { return mCaps & NS_HTTP_ALLOW_PIPELINING; }
+
+    void SetLoadGroupConnectionInfo(nsILoadGroupConnectionInfo *aLoadGroupCI) { mLoadGroupCI = aLoadGroupCI; } 
+    nsILoadGroupConnectionInfo *LoadGroupConnectionInfo() { return mLoadGroupCI.get(); }
+    void DispatchedAsBlocking();
+    void RemoveDispatchedAsBlocking();
 
 private:
     nsresult Restart();
-    void     ParseLine(char *line);
-    nsresult ParseLineSegment(char *seg, PRUint32 len);
-    nsresult ParseHead(char *, PRUint32 count, PRUint32 *countRead);
+    nsresult RestartInProgress();
+    char    *LocateHttpStart(char *buf, uint32_t len,
+                             bool aAllowPartialMatch);
+    nsresult ParseLine(char *line);
+    nsresult ParseLineSegment(char *seg, uint32_t len);
+    nsresult ParseHead(char *, uint32_t count, uint32_t *countRead);
     nsresult HandleContentStart();
-    nsresult HandleContent(char *, PRUint32 count, PRUint32 *contentRead, PRUint32 *contentRemaining);
-    nsresult ProcessData(char *, PRUint32, PRUint32 *);
+    nsresult HandleContent(char *, uint32_t count, uint32_t *contentRead, uint32_t *contentRemaining);
+    nsresult ProcessData(char *, uint32_t, uint32_t *);
     void     DeleteSelfOnConsumerThread();
+    void     ReleaseBlockingTransaction();
+
+    Classifier Classify();
+    void       CancelPipeline(uint32_t reason);
 
     static NS_METHOD ReadRequestSegment(nsIInputStream *, void *, const char *,
-                                        PRUint32, PRUint32, PRUint32 *);
+                                        uint32_t, uint32_t, uint32_t *);
     static NS_METHOD WritePipeSegment(nsIOutputStream *, void *, char *,
-                                      PRUint32, PRUint32, PRUint32 *);
+                                      uint32_t, uint32_t, uint32_t *);
+
+    bool TimingEnabled() const { return mCaps & NS_HTTP_TIMING_ENABLED; }
 
 private:
+    class UpdateSecurityCallbacks : public nsRunnable
+    {
+      public:
+        UpdateSecurityCallbacks(nsHttpTransaction* aTrans,
+                                nsIInterfaceRequestor* aCallbacks)
+        : mTrans(aTrans), mCallbacks(aCallbacks) {}
+
+        NS_IMETHOD Run()
+        {
+            if (mTrans->mConnection)
+                mTrans->mConnection->SetSecurityCallbacks(mCallbacks);
+            return NS_OK;
+        }
+      private:
+        nsRefPtr<nsHttpTransaction> mTrans;
+        nsCOMPtr<nsIInterfaceRequestor> mCallbacks;
+    };
+
+    mozilla::Mutex mCallbacksLock;
+
     nsCOMPtr<nsIInterfaceRequestor> mCallbacks;
     nsCOMPtr<nsITransportEventSink> mTransportSink;
     nsCOMPtr<nsIEventTarget>        mConsumerTarget;
     nsCOMPtr<nsISupports>           mSecurityInfo;
     nsCOMPtr<nsIAsyncInputStream>   mPipeIn;
     nsCOMPtr<nsIAsyncOutputStream>  mPipeOut;
+    nsCOMPtr<nsILoadGroupConnectionInfo> mLoadGroupCI;
 
     nsCOMPtr<nsISupports>             mChannel;
     nsCOMPtr<nsIHttpActivityObserver> mActivityDistributor;
 
     nsCString                       mReqHeaderBuf;    // flattened request headers
     nsCOMPtr<nsIInputStream>        mRequestStream;
-    PRUint32                        mRequestSize;
+    uint64_t                        mRequestSize;
 
     nsAHttpConnection              *mConnection;      // hard ref
     nsHttpConnectionInfo           *mConnInfo;        // hard ref
@@ -177,36 +188,127 @@ private:
 
     nsCString                       mLineBuf;         // may contain a partial line
 
-    nsInt64                         mContentLength;   // equals -1 if unknown
-    nsInt64                         mContentRead;     // count of consumed content bytes
+    int64_t                         mContentLength;   // equals -1 if unknown
+    int64_t                         mContentRead;     // count of consumed content bytes
+
+    // After a 304/204 or other "no-content" style response we will skip over
+    // up to MAX_INVALID_RESPONSE_BODY_SZ bytes when looking for the next
+    // response header to deal with servers that actually sent a response
+    // body where they should not have. This member tracks how many bytes have
+    // so far been skipped.
+    uint32_t                        mInvalidResponseBytesRead;
 
     nsHttpChunkedDecoder           *mChunkedDecoder;
 
+    TimingStruct                    mTimings;
+
     nsresult                        mStatus;
 
-    PRInt16                         mPriority;
+    int16_t                         mPriority;
 
-    PRUint16                        mRestartCount;        // the number of times this transaction has been restarted
-    PRUint8                         mCaps;
+    uint16_t                        mRestartCount;        // the number of times this transaction has been restarted
+    uint32_t                        mCaps;
+    enum Classifier                 mClassification;
+    int32_t                         mPipelinePosition;
+    int64_t                         mMaxPipelineObjectSize;
 
-    // state flags
-    PRUint32                        mClosed             : 1;
-    PRUint32                        mConnected          : 1;
-    PRUint32                        mHaveStatusLine     : 1;
-    PRUint32                        mHaveAllHeaders     : 1;
-    PRUint32                        mTransactionDone    : 1;
-    PRUint32                        mResponseIsComplete : 1;
-    PRUint32                        mDidContentStart    : 1;
-    PRUint32                        mNoContent          : 1; // expecting an empty entity body
-    PRUint32                        mSentData           : 1;
-    PRUint32                        mReceivedData       : 1;
-    PRUint32                        mStatusEventPending : 1;
-    PRUint32                        mHasRequestBody     : 1;
-    PRUint32                        mSSLConnectFailed   : 1;
+    nsHttpVersion                   mHttpVersion;
+
+    // state flags, all logically boolean, but not packed together into a
+    // bitfield so as to avoid bitfield-induced races.  See bug 560579.
+    bool                            mClosed;
+    bool                            mConnected;
+    bool                            mHaveStatusLine;
+    bool                            mHaveAllHeaders;
+    bool                            mTransactionDone;
+    bool                            mResponseIsComplete;
+    bool                            mDidContentStart;
+    bool                            mNoContent; // expecting an empty entity body
+    bool                            mSentData;
+    bool                            mReceivedData;
+    bool                            mStatusEventPending;
+    bool                            mHasRequestBody;
+    bool                            mProxyConnectFailed;
+    bool                            mHttpResponseMatched;
+    bool                            mPreserveStream;
+    bool                            mDispatchedAsBlocking;
 
     // mClosed           := transaction has been explicitly closed
     // mTransactionDone  := transaction ran to completion or was interrupted
     // mResponseComplete := transaction ran to completion
+
+    // For Restart-In-Progress Functionality
+    bool                            mReportedStart;
+    bool                            mReportedResponseHeader;
+
+    // protected by nsHttp::GetLock()
+    nsHttpResponseHead             *mForTakeResponseHead;
+    bool                            mResponseHeadTaken;
+
+    // The time when the transaction was submitted to the Connection Manager
+    mozilla::TimeStamp              mPendingTime;
+
+    class RestartVerifier 
+    {
+
+        // When a idemptotent transaction has received part of its response body
+        // and incurs an error it can be restarted. To do this we mark the place
+        // where we stopped feeding the body to the consumer and start the
+        // network call over again. If everything we track (headers, length, etc..)
+        // matches up to the place where we left off then the consumer starts being
+        // fed data again with the new information. This can be done N times up
+        // to the normal restart (i.e. with no response info) limit.
+
+    public:
+        RestartVerifier()
+            : mContentLength(-1)
+            , mAlreadyProcessed(0)
+            , mToReadBeforeRestart(0)
+            , mSetup(false)
+        {}
+        ~RestartVerifier() {}
+        
+        void Set(int64_t contentLength, nsHttpResponseHead *head);
+        bool Verify(int64_t contentLength, nsHttpResponseHead *head);
+        bool IsDiscardingContent() { return mToReadBeforeRestart != 0; }
+        bool IsSetup() { return mSetup; }
+        int64_t AlreadyProcessed() { return mAlreadyProcessed; }
+        void SetAlreadyProcessed(int64_t val) {
+            mAlreadyProcessed = val;
+            mToReadBeforeRestart = val;
+        }
+        int64_t ToReadBeforeRestart() { return mToReadBeforeRestart; }
+        void HaveReadBeforeRestart(uint32_t amt)
+        {
+            NS_ABORT_IF_FALSE(amt <= mToReadBeforeRestart,
+                              "too large of a HaveReadBeforeRestart deduction");
+            mToReadBeforeRestart -= amt;
+        }
+
+    private:
+        // This is the data from the first complete response header
+        // used to make sure that all subsequent response headers match
+
+        int64_t                         mContentLength;
+        nsCString                       mETag;
+        nsCString                       mLastModified;
+        nsCString                       mContentRange;
+        nsCString                       mContentEncoding;
+        nsCString                       mTransferEncoding;
+
+        // This is the amount of data that has been passed to the channel
+        // from previous iterations of the transaction and must therefore
+        // be skipped in the new one.
+        int64_t                         mAlreadyProcessed;
+
+        // The amount of data that must be discarded in the current iteration
+        // (where iteration > 0) to reach the mAlreadyProcessed high water
+        // mark.
+        int64_t                         mToReadBeforeRestart;
+
+        // true when ::Set has been called with a response header
+        bool                            mSetup;
+    } mRestartInProgressVerifier;
 };
 
 #endif // nsHttpTransaction_h__

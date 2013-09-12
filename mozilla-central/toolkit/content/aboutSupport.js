@@ -1,265 +1,275 @@
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is aboutSupport.xhtml.
-#
-# The Initial Developer of the Original Code is
-# Mozilla Foundation
-# Portions created by the Initial Developer are Copyright (C) 2009
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Curtis Bartley <cbartley@mozilla.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-const Cc = Components.classes;
-const Ci = Components.interfaces;
+const { classes: Cc, interfaces: Ci, utils: Cu } = Components;
 
-let gPrefService = Cc["@mozilla.org/preferences-service;1"]
-                     .getService(Ci.nsIPrefService)
-                     .QueryInterface(Ci.nsIPrefBranch2);
+Components.utils.import("resource://gre/modules/Services.jsm");
+Components.utils.import("resource://gre/modules/Troubleshoot.jsm");
 
-const ELLIPSIS = gPrefService.getComplexValue("intl.ellipsis",
-                                              Ci.nsIPrefLocalizedString).data;
+window.addEventListener("load", function onload(event) {
+  window.removeEventListener("load", onload, false);
+  Troubleshoot.snapshot(function (snapshot) {
+    for (let prop in snapshotFormatters)
+      snapshotFormatters[prop](snapshot[prop]);
+  });
+  populateResetBox();
+}, false);
 
-// We use a preferences whitelist to make sure we only show preferences that
-// are useful for support and won't compromise the user's privacy.  Note that
-// entries are *prefixes*: for example, "accessibility." applies to all prefs
-// under the "accessibility.*" branch.
-const PREFS_WHITELIST = [
-  "accessibility.",
-  "browser.fixup.",
-  "browser.history_expire_",
-  "browser.link.open_newwindow",
-  "browser.mousewheel.",
-  "browser.places.",
-  "browser.startup.homepage",
-  "browser.tabs.",
-  "browser.zoom.",
-  "dom.",
-  "extensions.checkCompatibility",
-  "extensions.lastAppVersion",
-  "font.",
-  "general.useragent.",
-  "gfx.color_management.mode",
-  "javascript.",
-  "keyword.",
-  "layout.css.dpi",
-  "network.",
-  "places.",
-  "print.",
-  "privacy.",
-  "security."
-];
+// Each property in this object corresponds to a property in Troubleshoot.jsm's
+// snapshot data.  Each function is passed its property's corresponding data,
+// and it's the function's job to update the page with it.
+let snapshotFormatters = {
 
-// The blacklist, unlike the whitelist, is a list of regular expressions.
-const PREFS_BLACKLIST = [
-  /^network[.]proxy[.]/,
-  /[.]print_to_filename$/,
-];
+  application: function application(data) {
+    $("application-box").textContent = data.name;
+    $("useragent-box").textContent = data.userAgent;
+    $("supportLink").href = data.supportURL;
+    let version = data.version;
+    if (data.vendor)
+      version += " (" + data.vendor + ")";
+    $("version-box").textContent = version;
+  },
 
-window.onload = function () {
-  // Get the support URL.
-  let urlFormatter = Cc["@mozilla.org/toolkit/URLFormatterService;1"]
-                       .getService(Ci.nsIURLFormatter);
-  let supportUrl = urlFormatter.formatURLPref("app.support.baseURL");
-
-  // Update the application basics section.
-  document.getElementById("application-box").textContent = Application.name;
-  document.getElementById("version-box").textContent = Application.version;
-  document.getElementById("supportLink").href = supportUrl;
-
-  // Update the other sections.
-  populatePreferencesSection();
-  populateExtensionsSection();
-  populateGraphicsSection();
-}
-
-function populateExtensionsSection() {
-  Application.getExtensions(function (extensions) {
-    let all = extensions.all;
-    let trExtensions = [];
-    for (let i = 0; i < all.length; i++) {
-      let extension = all[i];
-      let tr = createParentElement("tr", [
-        createElement("td", extension.name),
-        createElement("td", extension.version),
-        createElement("td", extension.enabled),
-        createElement("td", extension.id),
+  extensions: function extensions(data) {
+    $.append($("extensions-tbody"), data.map(function (extension) {
+      return $.new("tr", [
+        $.new("td", extension.name),
+        $.new("td", extension.version),
+        $.new("td", extension.isActive),
+        $.new("td", extension.id),
       ]);
-      trExtensions.push(tr);
+    }));
+  },
+
+  modifiedPreferences: function modifiedPreferences(data) {
+    $.append($("prefs-tbody"), sortedArrayFromObject(data).map(
+      function ([name, value]) {
+        return $.new("tr", [
+          $.new("td", name, "pref-name"),
+          // Very long preference values can cause users problems when they
+          // copy and paste them into some text editors.  Long values generally
+          // aren't useful anyway, so truncate them to a reasonable length.
+          $.new("td", String(value).substr(0, 120), "pref-value"),
+        ]);
+      }
+    ));
+  },
+
+  graphics: function graphics(data) {
+    // graphics-info-properties tbody
+    if ("info" in data) {
+      let trs = sortedArrayFromObject(data.info).map(function ([prop, val]) {
+        return $.new("tr", [
+          $.new("th", prop, "column"),
+          $.new("td", String(val)),
+        ]);
+      });
+      $.append($("graphics-info-properties"), trs);
+      delete data.info;
     }
-    appendChildren(document.getElementById("extensions-tbody"), trExtensions);
-  });
+
+    // graphics-failures-tbody tbody
+    if ("failures" in data) {
+      $.append($("graphics-failures-tbody"), data.failures.map(function (val) {
+        return $.new("tr", [$.new("td", val)]);
+      }));
+      delete data.failures;
+    }
+
+    // graphics-tbody tbody
+
+    function localizedMsg(msgArray) {
+      let nameOrMsg = msgArray.shift();
+      try {
+        return strings.formatStringFromName(nameOrMsg, msgArray,
+                                            msgArray.length);
+      }
+      catch (err) {}
+      return nameOrMsg;
+    }
+
+    let out = Object.create(data);
+    let strings = stringBundle();
+
+    out.acceleratedWindows =
+      data.numAcceleratedWindows + "/" + data.numTotalWindows;
+    if (data.windowLayerManagerType)
+      out.acceleratedWindows += " " + data.windowLayerManagerType;
+    if (data.numAcceleratedWindowsMessage)
+      out.acceleratedWindows +=
+        " " + localizedMsg(data.numAcceleratedWindowsMessage);
+    delete data.numAcceleratedWindows;
+    delete data.numTotalWindows;
+    delete data.windowLayerManagerType;
+    delete data.numAcceleratedWindowsMessage;
+
+    if ("direct2DEnabledMessage" in data) {
+      out.direct2DEnabled = localizedMsg(data.direct2DEnabledMessage);
+      delete data.direct2DEnabledMessage;
+      delete data.direct2DEnabled;
+    }
+
+    if ("directWriteEnabled" in data) {
+      out.directWriteEnabled = data.directWriteEnabled;
+      if ("directWriteVersion" in data)
+        out.directWriteEnabled += " (" + data.directWriteVersion + ")";
+      delete data.directWriteEnabled;
+      delete data.directWriteVersion;
+    }
+
+    if ("webglRendererMessage" in data) {
+      out.webglRenderer = localizedMsg(data.webglRendererMessage);
+      delete data.webglRendererMessage;
+      delete data.webglRenderer;
+    }
+
+    let localizedOut = {};
+    for (let prop in out) {
+      let val = out[prop];
+      if (typeof(val) == "string" && !val)
+        // Ignore properties that are empty strings.
+        continue;
+      try {
+        var localizedName = strings.GetStringFromName(prop);
+      }
+      catch (err) {
+        // This shouldn't happen, but if there's a reported graphics property
+        // that isn't in the string bundle, don't let it break the page.
+        localizedName = prop;
+      }
+      localizedOut[localizedName] = val;
+    }
+    let trs = sortedArrayFromObject(localizedOut).map(function ([prop, val]) {
+      return $.new("tr", [
+        $.new("th", prop, "column"),
+        $.new("td", val),
+      ]);
+    });
+    $.append($("graphics-tbody"), trs);
+  },
+
+  javaScript: function javaScript(data) {
+    $("javascript-incremental-gc").textContent = data.incrementalGCEnabled;
+  },
+
+  accessibility: function accessibility(data) {
+    $("a11y-activated").textContent = data.isActive;
+    $("a11y-force-disabled").textContent = data.forceDisabled || 0;
+  },
+
+  libraryVersions: function libraryVersions(data) {
+    let strings = stringBundle();
+    let trs = [
+      $.new("tr", [
+        $.new("th", ""),
+        $.new("th", strings.GetStringFromName("minLibVersions")),
+        $.new("th", strings.GetStringFromName("loadedLibVersions")),
+      ])
+    ];
+    sortedArrayFromObject(data).forEach(
+      function ([name, val]) {
+        trs.push($.new("tr", [
+          $.new("td", name),
+          $.new("td", val.minVersion),
+          $.new("td", val.version),
+        ]));
+      }
+    );
+    $.append($("libversions-tbody"), trs);
+  },
+
+  userJS: function userJS(data) {
+    if (!data.exists)
+      return;
+    let userJSFile = Services.dirsvc.get("PrefD", Ci.nsIFile);
+    userJSFile.append("user.js");
+    $("prefs-user-js-link").href = Services.io.newFileURI(userJSFile).spec;
+    $("prefs-user-js-section").style.display = "";
+    // Clear the no-copy class
+    $("prefs-user-js-section").className = "";
+  },
+};
+
+let $ = document.getElementById.bind(document);
+
+$.new = function $_new(tag, textContentOrChildren, className) {
+  let elt = document.createElement(tag);
+  if (className)
+    elt.className = className;
+  if (Array.isArray(textContentOrChildren))
+    this.append(elt, textContentOrChildren);
+  else
+    elt.textContent = String(textContentOrChildren);
+  return elt;
+};
+
+$.append = function $_append(parent, children) {
+  children.forEach(function (c) parent.appendChild(c));
+};
+
+function stringBundle() {
+  return Services.strings.createBundle(
+           "chrome://global/locale/aboutSupport.properties");
 }
 
-function populatePreferencesSection() {
-  let modifiedPrefs = getModifiedPrefs();
-
-  function comparePrefs(pref1, pref2) {
-    if (pref1.name < pref2.name)
-      return -1;
-    if (pref1.name > pref2.name)
-      return 1;
-    return 0;
-  }
-
-  let sortedPrefs = modifiedPrefs.sort(comparePrefs);
-
-  let trPrefs = [];
-  sortedPrefs.forEach(function (pref) {
-    let tdName = createElement("td", pref.name, "pref-name");
-    let tdValue = createElement("td", formatPrefValue(pref.value), "pref-value");
-    let tr = createParentElement("tr", [tdName, tdValue]);
-    trPrefs.push(tr);
-  });
-
-  appendChildren(document.getElementById("prefs-tbody"), trPrefs);
+function sortedArrayFromObject(obj) {
+  let tuples = [];
+  for (let prop in obj)
+    tuples.push([prop, obj[prop]]);
+  tuples.sort(function ([prop1, v1], [prop2, v2]) prop1.localeCompare(prop2));
+  return tuples;
 }
 
-function populateGraphicsSection() {
-  function createHeader(name)
-  {
-    let elem = createElement("th", name);
-    elem.className = "column";
-    return elem;
-  }
-  
+function copyRawDataToClipboard(button) {
+  if (button)
+    button.disabled = true;
   try {
-    // nsIGfxInfo is currently only implemented on Windows
-    let gfxInfo = Cc["@mozilla.org/gfx/info;1"].getService(Ci.nsIGfxInfo);
-    let trGraphics = [];
-    var SBS = Cc["@mozilla.org/intl/stringbundle;1"].getService(Ci.nsIStringBundleService);
-    var bundle = SBS.createBundle("chrome://global/locale/aboutSupport.properties");
-    trGraphics.push(createParentElement("tr", [
-      createHeader(bundle.GetStringFromName("adapterDescription")),
-      createElement("td", gfxInfo.adapterDescription),
-    ]));
-    trGraphics.push(createParentElement("tr", [
-      createHeader(bundle.GetStringFromName("adapterVendorID")),
-      // pad with zeros. (printf would be nicer)
-      createElement("td", String('0000'+gfxInfo.adapterVendorID.toString(16)).slice(-4)),
-    ]));
-    trGraphics.push(createParentElement("tr", [
-      createHeader(bundle.GetStringFromName("adapterDeviceID")),
-      // pad with zeros. (printf would be nicer)
-      createElement("td", String('0000'+gfxInfo.adapterDeviceID.toString(16)).slice(-4)),
-    ]));
-    trGraphics.push(createParentElement("tr", [
-      createHeader(bundle.GetStringFromName("adapterRAM")),
-      createElement("td", gfxInfo.adapterRAM),
-    ]));
-    trGraphics.push(createParentElement("tr", [
-      createHeader(bundle.GetStringFromName("adapterDrivers")),
-      createElement("td", gfxInfo.adapterDriver),
-    ]));
-    trGraphics.push(createParentElement("tr", [
-      createHeader(bundle.GetStringFromName("driverVersion")),
-      createElement("td", gfxInfo.adapterDriverVersion),
-    ]));
-    trGraphics.push(createParentElement("tr", [
-      createHeader(bundle.GetStringFromName("driverDate")),
-      createElement("td", gfxInfo.adapterDriverDate),
-    ]));
-    trGraphics.push(createParentElement("tr", [
-      createHeader(bundle.GetStringFromName("direct2DEnabled")),
-      createElement("td", gfxInfo.D2DEnabled),
-    ]));
-    trGraphics.push(createParentElement("tr", [
-      createHeader(bundle.GetStringFromName("directWriteEnabled")),
-      createElement("td", gfxInfo.DWriteEnabled),
-    ]));
-
-    appendChildren(document.getElementById("graphics-tbody"), trGraphics);
-
-  } catch (e) {
+    Troubleshoot.snapshot(function (snapshot) {
+      if (button)
+        button.disabled = false;
+      let str = Cc["@mozilla.org/supports-string;1"].
+                createInstance(Ci.nsISupportsString);
+      str.data = JSON.stringify(snapshot, undefined, 2);
+      let transferable = Cc["@mozilla.org/widget/transferable;1"].
+                         createInstance(Ci.nsITransferable);
+      transferable.init(getLoadContext());
+      transferable.addDataFlavor("text/unicode");
+      transferable.setTransferData("text/unicode", str, str.data.length * 2);
+      Cc["@mozilla.org/widget/clipboard;1"].
+        getService(Ci.nsIClipboard).
+        setData(transferable, null, Ci.nsIClipboard.kGlobalClipboard);
+#ifdef ANDROID
+      // Present a toast notification.
+      let message = {
+        gecko: {
+          type: "Toast:Show",
+          message: stringBundle().GetStringFromName("rawDataCopied"),
+          duration: "short"
+        }
+      };
+      Cc["@mozilla.org/android/bridge;1"].
+        getService(Ci.nsIAndroidBridge).
+        handleGeckoMessage(JSON.stringify(message));
+#endif
+    });
   }
-
+  catch (err) {
+    if (button)
+      button.disabled = false;
+    throw err;
+  }
 }
 
-
-function formatPrefValue(prefValue) {
-  // Some pref values are really long and don't have spaces.  This can cause
-  // problems when copying and pasting into some WYSIWYG editors.  In general
-  // the exact contents of really long pref values aren't particularly useful,
-  // so we truncate them to some reasonable length.
-  let maxPrefValueLen = 120;
-  let text = "" + prefValue;
-  if (text.length > maxPrefValueLen)
-    text = text.substring(0, maxPrefValueLen) + ELLIPSIS;
-  return text;
-}
-
-function getModifiedPrefs() {
-  // We use the low-level prefs API to identify prefs that have been
-  // modified, rather that Application.prefs.all since the latter is
-  // much, much slower.  Application.prefs.all also gets slower each
-  // time it's called.  See bug 517312.
-  let prefNames = getWhitelistedPrefNames();
-  let prefs = [Application.prefs.get(prefName)
-                      for each (prefName in prefNames)
-                          if (gPrefService.prefHasUserValue(prefName)
-                            && !isBlacklisted(prefName))];
-  return prefs;
-}
-
-function getWhitelistedPrefNames() {
-  let results = [];
-  PREFS_WHITELIST.forEach(function (prefStem) {
-    let prefNames = gPrefService.getChildList(prefStem);
-    results = results.concat(prefNames);
-  });
-  return results;
-}
-
-function isBlacklisted(prefName) {
-  return PREFS_BLACKLIST.some(function (re) re.test(prefName));
-}
-
-function createParentElement(tagName, childElems) {
-  let elem = document.createElement(tagName);
-  appendChildren(elem, childElems);
-  return elem;
-}
-
-function createElement(tagName, textContent, opt_class) {
-  let elem = document.createElement(tagName);
-  elem.textContent = textContent;
-  elem.className = opt_class || "";
-  return elem;
-}
-
-function appendChildren(parentElem, childNodes) {
-  for (let i = 0; i < childNodes.length; i++)
-    parentElem.appendChild(childNodes[i]);
+function getLoadContext() {
+  return window.QueryInterface(Ci.nsIInterfaceRequestor)
+               .getInterface(Ci.nsIWebNavigation)
+               .QueryInterface(Ci.nsILoadContext);
 }
 
 function copyContentsToClipboard() {
   // Get the HTML and text representations for the important part of the page.
-  let contentsDiv = document.getElementById("contents");
+  let contentsDiv = $("contents");
   let dataHtml = contentsDiv.innerHTML;
   let dataText = createTextForElement(contentsDiv);
 
@@ -270,6 +280,7 @@ function copyContentsToClipboard() {
 
   let transferable = Cc["@mozilla.org/widget/transferable;1"]
                        .createInstance(Ci.nsITransferable);
+  transferable.init(getLoadContext());
 
   // Add the HTML flavor.
   transferable.addDataFlavor("text/html");
@@ -285,6 +296,20 @@ function copyContentsToClipboard() {
   let clipboard = Cc["@mozilla.org/widget/clipboard;1"]
                     .getService(Ci.nsIClipboard);
   clipboard.setData(transferable, null, clipboard.kGlobalClipboard);
+
+#ifdef ANDROID
+  // Present a toast notification.
+  let message = {
+    gecko: {
+      type: "Toast:Show",
+      message: stringBundle().GetStringFromName("textCopied"),
+      duration: "short"
+    }
+  };
+  Cc["@mozilla.org/android/bridge;1"].
+    getService(Ci.nsIAndroidBridge).
+    handleGeckoMessage(JSON.stringify(message));
+#endif
 }
 
 // Return the plain text representation of an element.  Do a little bit
@@ -309,6 +334,9 @@ function createTextForElement(elem) {
 }
 
 function generateTextForElement(elem, indent, textFragmentAccumulator) {
+  if (elem.classList.contains("no-copy"))
+    return;
+
   // Add a little extra spacing around most elements.
   if (elem.tagName != "td")
     textFragmentAccumulator.push("\n");
@@ -346,13 +374,44 @@ function generateTextForTextNode(node, indent, textFragmentAccumulator) {
 
 function openProfileDirectory() {
   // Get the profile directory.
-  let propertiesService = Cc["@mozilla.org/file/directory_service;1"]
-                            .getService(Ci.nsIProperties);
-  let currProfD = propertiesService.get("ProfD", Ci.nsIFile);
+  let currProfD = Services.dirsvc.get("ProfD", Ci.nsIFile);
   let profileDir = currProfD.path;
 
   // Show the profile directory.
   let nsLocalFile = Components.Constructor("@mozilla.org/file/local;1",
                                            "nsILocalFile", "initWithPath");
   new nsLocalFile(profileDir).reveal();
+}
+
+/**
+ * Profile reset is only supported for the default profile if the appropriate migrator exists.
+ */
+function populateResetBox() {
+  if (resetSupported())
+    $("reset-box").style.visibility = "visible";
+}
+
+/**
+ * Restart the application to reset the profile.
+ */
+function resetProfileAndRestart() {
+  let branding = Services.strings.createBundle("chrome://branding/locale/brand.properties");
+  let brandShortName = branding.GetStringFromName("brandShortName");
+
+  // Prompt the user to confirm.
+  let retVals = {
+    reset: false,
+  };
+  window.openDialog("chrome://global/content/resetProfile.xul", null,
+                    "chrome,modal,centerscreen,titlebar,dialog=yes", retVals);
+  if (!retVals.reset)
+    return;
+
+  // Set the reset profile environment variable.
+  let env = Cc["@mozilla.org/process/environment;1"]
+              .getService(Ci.nsIEnvironment);
+  env.set("MOZ_RESET_PROFILE_RESTART", "1");
+
+  let appStartup = Cc["@mozilla.org/toolkit/app-startup;1"].getService(Ci.nsIAppStartup);
+  appStartup.quit(Ci.nsIAppStartup.eForceQuit | Ci.nsIAppStartup.eRestart);
 }

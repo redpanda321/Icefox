@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=512367
 -->
 <head>
   <title>Test for Bug 512367</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
@@ -25,21 +24,19 @@ var frame = document.getElementById("i");
 
 SimpleTest.waitForExplicitFinish();
 addLoadEvent(function() {
-  netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
   var viewer =
-    frame.contentWindow
-         .QueryInterface(Components.interfaces.nsIInterfaceRequestor)
-         .getInterface(Components.interfaces.nsIWebNavigation)
-         .QueryInterface(Components.interfaces.nsIDocShell)
-         .contentViewer
-         .QueryInterface(Components.interfaces.nsIMarkupDocumentViewer);
+    SpecialPowers.wrap(frame.contentWindow
+                 .QueryInterface(SpecialPowers.Ci.nsIInterfaceRequestor))
+                 .getInterface(SpecialPowers.Ci.nsIWebNavigation)
+                 .QueryInterface(SpecialPowers.Ci.nsIDocShell)
+                 .contentViewer
+                 .QueryInterface(SpecialPowers.Ci.nsIMarkupDocumentViewer);
 
   viewer.fullZoom = 1.5;
 
   setTimeout(function() {
     synthesizeMouse(frame, 30, 30, {});
 
-    netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
     is(viewer.fullZoom, 1.5, "Zoom in the image frame should not have been reset");
 
     SimpleTest.finish();

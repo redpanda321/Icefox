@@ -33,7 +33,9 @@
 #include "base/message_pump.h"
 
 #include <CoreFoundation/CoreFoundation.h>
+#ifdef XP_MACOSX
 #include <IOKit/IOKitLib.h>
+#endif
 
 #if defined(__OBJC__)
 @class NSAutoreleasePool;
@@ -139,11 +141,13 @@ class MessagePumpCFRunLoopBase : public MessagePump {
   // the basis of run loops starting and stopping.
   virtual void EnterExitRunLoop(CFRunLoopActivity activity);
 
+#ifdef XP_MACOSX
   // IOKit power state change notification callback, called when the system
   // enters and leaves the sleep state.
   static void PowerStateNotification(void* info, io_service_t service,
                                      uint32_t message_type,
                                      void* message_argument);
+#endif
 
   // The thread's run loop.
   CFRunLoopRef run_loop_;
@@ -159,10 +163,12 @@ class MessagePumpCFRunLoopBase : public MessagePump {
   CFRunLoopObserverRef pre_source_observer_;
   CFRunLoopObserverRef enter_exit_observer_;
 
+#ifdef XP_MACOSX
   // Objects used for power state notification.  See PowerStateNotification.
   io_connect_t root_power_domain_;
   IONotificationPortRef power_notification_port_;
   io_object_t power_notification_object_;
+#endif
 
   // (weak) Delegate passed as an argument to the innermost Run call.
   Delegate* delegate_;
@@ -244,8 +250,10 @@ class MessagePumpNSApplication : public MessagePumpCFRunLoopBase {
   virtual void Quit();
 
  protected:
+#ifdef XP_MACOSX
   // Returns nil if NSApp is currently in the middle of calling -sendEvent.
   virtual NSAutoreleasePool* CreateAutoreleasePool();
+#endif
 
  private:
   // False after Quit is called.

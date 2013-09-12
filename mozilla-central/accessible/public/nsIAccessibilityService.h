@@ -1,42 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla browser.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Eric Vaughan <evaughan@netscape.com> (original author)
- *   Alexander Surkov <surkov.alexander@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef _nsIAccessibilityService_h_
 #define _nsIAccessibilityService_h_
@@ -46,18 +12,24 @@
 
 #include "nsAutoPtr.h"
 
-class nsAccessible;
+namespace mozilla {
+namespace a11y {
+
+class Accessible;
+
+} // namespace a11y
+} // namespace mozilla
+
 class nsINode;
 class nsIContent;
-class nsIDocument;
 class nsIFrame;
 class nsIPresShell;
 class nsObjectFrame;
 
 // 10ff6dca-b219-4b64-9a4c-67a62b86edce
 #define NS_IACCESSIBILITYSERVICE_IID \
-{ 0x10ff6dca, 0xb219, 0x4b64, \
- { 0x9a, 0x4c, 0x67, 0xa6, 0x2b, 0x86, 0xed, 0xce } }
+{ 0x84dd9182, 0x6639, 0x4377, \
+ { 0xa4, 0x13, 0xad, 0xe1, 0xae, 0x4e, 0x52, 0xdd } }
 
 class nsIAccessibilityService : public nsIAccessibleRetrieval
 {
@@ -65,104 +37,24 @@ public:
   NS_DECLARE_STATIC_IID_ACCESSOR(NS_IACCESSIBILITYSERVICE_IID)
 
   /**
-   * Return an accessible object for a DOM node in the given pres shell.
+   * Return root document accessible that is or contains a document accessible
+   * for the given presshell.
    *
-   * @param  aNode      [in] the DOM node to get an accessible for
-   * @param  aPresShell [in] the presentation shell which contains layout info
-   *                         for the DOM node
+   * @param aPresShell  [in] the presshell
+   * @param aCanCreate  [in] points whether the root document accessible
+   *                        should be returned from the cache or can be created
    */
-  virtual nsAccessible* GetAccessibleInShell(nsINode* aNode,
-                                             nsIPresShell* aPresShell) = 0;
+  virtual mozilla::a11y::Accessible*
+    GetRootDocumentAccessible(nsIPresShell* aPresShell, bool aCanCreate) = 0;
 
-  /**
-   * Creates accessible for the given DOM node or frame.
-   */
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLBRAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTML4ButtonAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLButtonAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLCaptionAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLCheckboxAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLComboboxAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLGroupboxAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLHRAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLImageAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLLabelAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLLIAccessible(nsIContent* aContent, nsIPresShell* aPresShell,
-                           const nsAString& aBulletText) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLListboxAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLMediaAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLObjectFrameAccessible(nsObjectFrame* aFrame, nsIContent* aContent,
-                                    nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLRadioButtonAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLTableAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLTableCellAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLTextAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHTMLTextFieldAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateHyperTextAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-  virtual already_AddRefed<nsAccessible>
-    CreateOuterDocAccessible(nsIContent* aContent, nsIPresShell* aPresShell) = 0;
-
-  /**
+   /**
    * Adds/remove ATK root accessible for gtk+ native window to/from children
    * of the application accessible.
    */
-  virtual nsAccessible* AddNativeRootAccessible(void* aAtkAccessible) = 0;
-  virtual void RemoveNativeRootAccessible(nsAccessible* aRootAccessible) = 0;
-
-  /**
-   * Used to describe sort of changes leading to accessible tree invalidation.
-   */
-  enum {
-    NODE_APPEND = 0x01,
-    NODE_REMOVE = 0x02,
-    NODE_SIGNIFICANT_CHANGE = 0x03,
-    FRAME_SHOW = 0x04,
-    FRAME_HIDE = 0x05,
-    FRAME_SIGNIFICANT_CHANGE = 0x06
-  };
-
-  /**
-   * Invalidate the accessible tree when DOM tree or frame tree is changed.
-   *
-   * @param aPresShell   [in] the presShell where changes occurred
-   * @param aContent     [in] the affected DOM content
-   * @param aChangeType  [in] the change type (see constants declared above)
-   */
-  virtual nsresult InvalidateSubtreeFor(nsIPresShell *aPresShell,
-                                        nsIContent *aContent,
-                                        PRUint32 aChangeType) = 0;
-
-  /**
-   * Notify accessibility that anchor jump has been accomplished to the given
-   * target. Used by layout.
-   */
-  virtual void NotifyOfAnchorJumpTo(nsIContent *aTarget) = 0;
-
-  /**
-   * Notify the accessibility service that the given presshell is
-   * being destroyed.
-   */
-  virtual void PresShellDestroyed(nsIPresShell *aPresShell) = 0;
+  virtual mozilla::a11y::Accessible*
+    AddNativeRootAccessible(void* aAtkAccessible) = 0;
+  virtual void
+    RemoveNativeRootAccessible(mozilla::a11y::Accessible* aRootAccessible) = 0;
 
   /**
    * Fire accessible event of the given type for the given target.
@@ -170,8 +62,8 @@ public:
    * @param aEvent   [in] accessible event type
    * @param aTarget  [in] target of accessible event
    */
-  virtual nsresult FireAccessibleEvent(PRUint32 aEvent,
-                                       nsIAccessible *aTarget) = 0;
+  virtual void FireAccessibleEvent(uint32_t aEvent,
+                                   mozilla::a11y::Accessible* aTarget) = 0;
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsIAccessibilityService,

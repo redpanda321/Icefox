@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+
+<window
+  id    = "simple"
+  title = "Simple Browser"
+  width  = "768"
+  height = "1024"
+  xmlns = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+  <script src="zoomcontroller.js"/>
+  <script src="mousecontroller.js"/>
+  <script src="simple.js"/>
+  <button id="go" label="GO" oncommand="go();"/>
+  <browser id="browser" width="400" height="500"  type="content-primary" flex="1" src="http://gopherwoodstudios.com/sandtrap/sand-trap.htm"
+           disablehistory="true" disablesecurity="true" remote="true"/>
+</window>

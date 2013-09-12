@@ -1,7 +1,6 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <title>Test for getSimpleDuration Behavior </title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -69,6 +68,8 @@ function checkForException(anim, descr) {
   try {
     var dur = anim.getSimpleDuration();
   } catch(e) {
+    is (e.name, "NotSupportedError",
+        "Wrong exception from getSimpleDuration");
     is (e.code, DOMException.NOT_SUPPORTED_ERR,
         "Wrong exception from getSimpleDuration");
     gotException = true;

@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set ts=2 sw=2 et tw=80: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
        
   
 #include "nsIAtom.h"
@@ -123,17 +90,17 @@ void nsEntryStack::Empty(void) {
  * 
  * @update  gess 04/22/99
  */
-void nsEntryStack::EnsureCapacityFor(PRInt32 aNewMax,PRInt32 aShiftOffset) {
+void nsEntryStack::EnsureCapacityFor(int32_t aNewMax,int32_t aShiftOffset) {
   if(mCapacity<aNewMax){ 
 
     const int kDelta=16;
 
-    PRInt32 theSize = kDelta * ((aNewMax / kDelta) + 1);
+    int32_t theSize = kDelta * ((aNewMax / kDelta) + 1);
     nsTagEntry* temp=new nsTagEntry[theSize]; 
     mCapacity=theSize;
 
     if(temp){ 
-      PRInt32 index=0; 
+      int32_t index=0; 
       for(index=0;index<mCount;++index) {
         temp[aShiftOffset+index]=mEntries[index];
       }
@@ -152,7 +119,7 @@ void nsEntryStack::EnsureCapacityFor(PRInt32 aNewMax,PRInt32 aShiftOffset) {
  */
 void nsEntryStack::Push(nsCParserNode* aNode,
                         nsEntryStack* aStyleStack, 
-                        PRBool aRefCntNode) 
+                        bool aRefCntNode) 
 {
   if(aNode) {
     EnsureCapacityFor(mCount+1);
@@ -171,8 +138,8 @@ void nsEntryStack::PushTag(eHTMLTags aTag)
 {
   EnsureCapacityFor(mCount + 1);
   mEntries[mCount].mTag = aTag;
-  mEntries[mCount].mParent = nsnull;
-  mEntries[mCount].mStyles = nsnull;
+  mEntries[mCount].mParent = nullptr;
+  mEntries[mCount].mStyles = nullptr;
   ++mCount;
 }
 
@@ -184,11 +151,11 @@ void nsEntryStack::PushTag(eHTMLTags aTag)
  */
 void nsEntryStack::PushFront(nsCParserNode* aNode,
                              nsEntryStack* aStyleStack, 
-                             PRBool aRefCntNode) 
+                             bool aRefCntNode) 
 {
   if(aNode) {
     if(mCount<mCapacity) {
-      PRInt32 index=0; 
+      int32_t index=0; 
       for(index=mCount;index>0;index--) {
         mEntries[index]=mEntries[index-1];
       }
@@ -215,11 +182,11 @@ void nsEntryStack::PushFront(nsCParserNode* aNode,
 void nsEntryStack::Append(nsEntryStack *aStack) {
   if(aStack) {
 
-    PRInt32 theCount=aStack->mCount;
+    int32_t theCount=aStack->mCount;
 
     EnsureCapacityFor(mCount+aStack->mCount,0);
 
-    PRInt32 theIndex=0;
+    int32_t theIndex=0;
     for(theIndex=0;theIndex<theCount;++theIndex){
       mEntries[mCount]=aStack->mEntries[theIndex];
       mEntries[mCount++].mParent=0;
@@ -240,7 +207,7 @@ void nsEntryStack::Append(nsEntryStack *aStack) {
  * aTag: the id of the tag to be removed
  * @update  gess 02/25/00
  */
-nsCParserNode* nsEntryStack::Remove(PRInt32 anIndex,
+nsCParserNode* nsEntryStack::Remove(int32_t anIndex,
                                     eHTMLTags aTag) 
 {
   nsCParserNode* result = 0;
@@ -248,7 +215,7 @@ nsCParserNode* nsEntryStack::Remove(PRInt32 anIndex,
     result = mEntries[anIndex].mNode;
     if (result)
       result->mUseCount--;
-    PRInt32 theIndex = 0;
+    int32_t theIndex = 0;
     mCount -= 1;
     for( theIndex = anIndex; theIndex < mCount; ++theIndex){
       mEntries[theIndex] = mEntries[theIndex+1];
@@ -259,15 +226,15 @@ nsCParserNode* nsEntryStack::Remove(PRInt32 anIndex,
     if (theStyleStack) {
       //now we have to tell the residual style stack where this tag
       //originated that it's no longer in use.
-      PRUint32 scount = theStyleStack->mCount;
+      uint32_t scount = theStyleStack->mCount;
 #ifdef DEBUG_mrbkap
       NS_ASSERTION(scount != 0, "RemoveStyles has a bad style stack");
 #endif
       nsTagEntry *theStyleEntry = theStyleStack->mEntries;
-      for (PRUint32 sindex = scount-1;; --sindex) {            
+      for (uint32_t sindex = scount-1;; --sindex) {            
         if (theStyleEntry->mTag == aTag) {
           // This tells us that the style is not open at any level.
-          theStyleEntry->mParent = nsnull;
+          theStyleEntry->mParent = nullptr;
           break;
         }
         if (sindex == 0) {
@@ -301,7 +268,7 @@ nsCParserNode* nsEntryStack::Pop(void)
     if (theStyleStack) {
       //now we have to tell the residual style stack where this tag
       //originated that it's no longer in use.
-      PRUint32 scount = theStyleStack->mCount;
+      uint32_t scount = theStyleStack->mCount;
 
       // XXX If this NS_ENSURE_TRUE fails, it means that the style stack was
       //     empty before we were removed.
@@ -311,10 +278,10 @@ nsCParserNode* nsEntryStack::Pop(void)
       NS_ENSURE_TRUE(scount != 0, result);
 
       nsTagEntry *theStyleEntry = theStyleStack->mEntries;
-      for (PRUint32 sindex = scount - 1;; --sindex) {
+      for (uint32_t sindex = scount - 1;; --sindex) {
         if (theStyleEntry->mTag == mEntries[mCount].mTag) {
           // This tells us that the style is not open at any level
-          theStyleEntry->mParent = nsnull;
+          theStyleEntry->mParent = nullptr;
           break;
         }
         if (sindex == 0) {
@@ -349,7 +316,7 @@ eHTMLTags nsEntryStack::First() const
  * @update  harishd 04/04/99
  * @update  gess 04/21/99
  */
-nsCParserNode* nsEntryStack::NodeAt(PRInt32 anIndex) const 
+nsCParserNode* nsEntryStack::NodeAt(int32_t anIndex) const 
 {
   nsCParserNode* result=0;
   if((0<mCount) && (anIndex<mCount)) {
@@ -363,7 +330,7 @@ nsCParserNode* nsEntryStack::NodeAt(PRInt32 anIndex) const
  * @update  harishd 04/04/99
  * @update  gess 04/21/99
  */
-eHTMLTags nsEntryStack::TagAt(PRInt32 anIndex) const 
+eHTMLTags nsEntryStack::TagAt(int32_t anIndex) const 
 {
   eHTMLTags result=eHTMLTag_unknown;
   if((0<mCount) && (anIndex<mCount)) {
@@ -376,7 +343,7 @@ eHTMLTags nsEntryStack::TagAt(PRInt32 anIndex) const
  * 
  * @update  gess 04/21/99
  */
-nsTagEntry* nsEntryStack::EntryAt(PRInt32 anIndex) const 
+nsTagEntry* nsEntryStack::EntryAt(int32_t anIndex) const 
 {
   nsTagEntry *result=0;
   if((0<mCount) && (anIndex<mCount)) {
@@ -391,7 +358,7 @@ nsTagEntry* nsEntryStack::EntryAt(PRInt32 anIndex) const
  * @update  harishd 04/04/99
  * @update  gess 04/21/99
  */
-eHTMLTags nsEntryStack::operator[](PRInt32 anIndex) const 
+eHTMLTags nsEntryStack::operator[](int32_t anIndex) const 
 {
   eHTMLTags result=eHTMLTag_unknown;
   if((0<mCount) && (anIndex<mCount)) {
@@ -424,7 +391,7 @@ nsEntryStack::PopEntry()
 }
 
 void nsEntryStack::PushEntry(nsTagEntry* aEntry, 
-                             PRBool aRefCntNode) 
+                             bool aRefCntNode) 
 {
   if (aEntry) {
     EnsureCapacityFor(mCount+1);
@@ -476,9 +443,9 @@ nsDTDContext::~nsDTDContext()
  * 
  * @update  gess7/9/98
  */
-PRBool nsDTDContext::HasOpenContainer(eHTMLTags aTag) const {
-  PRInt32 theIndex=mStack.LastOf(aTag);
-  return PRBool(-1<theIndex);
+bool nsDTDContext::HasOpenContainer(eHTMLTags aTag) const {
+  int32_t theIndex=mStack.LastOf(aTag);
+  return bool(-1<theIndex);
 }
 
 /**
@@ -487,9 +454,9 @@ PRBool nsDTDContext::HasOpenContainer(eHTMLTags aTag) const {
  */
 void nsDTDContext::Push(nsCParserNode* aNode,
                         nsEntryStack* aStyleStack, 
-                        PRBool aRefCntNode) {
+                        bool aRefCntNode) {
   if(aNode) {
-#ifdef  NS_DEBUG
+#ifdef  DEBUG
     eHTMLTags theTag = (eHTMLTags)aNode->GetNodeType();
     int size = mStack.mCount;
     if (size < eMaxTags)
@@ -501,7 +468,7 @@ void nsDTDContext::Push(nsCParserNode* aNode,
 
 void nsDTDContext::PushTag(eHTMLTags aTag)
 {
-#ifdef NS_DEBUG
+#ifdef DEBUG
   if (mStack.mCount < eMaxTags) {
     mXTags[mStack.mCount] = aTag;
   }
@@ -513,9 +480,9 @@ void nsDTDContext::PushTag(eHTMLTags aTag)
 nsTagEntry*
 nsDTDContext::PopEntry()
 {
-  PRInt32 theSize = mStack.mCount;
+  int32_t theSize = mStack.mCount;
   if(0<theSize) {
-#ifdef  NS_DEBUG
+#ifdef  DEBUG
     if (theSize <= eMaxTags)
       mXTags[theSize-1]=eHTMLTag_unknown;
 #endif
@@ -525,9 +492,9 @@ nsDTDContext::PopEntry()
 }
 
 void nsDTDContext::PushEntry(nsTagEntry* aEntry, 
-                             PRBool aRefCntNode)
+                             bool aRefCntNode)
 {
-#ifdef  NS_DEBUG
+#ifdef  DEBUG
     int size=mStack.mCount;
     if(size< eMaxTags && aEntry)
       mXTags[size]=aEntry->mTag;
@@ -535,19 +502,19 @@ void nsDTDContext::PushEntry(nsTagEntry* aEntry,
     mStack.PushEntry(aEntry, aRefCntNode);
 }
 
-/* This method will move the top entires, in the entry-stack, into dest context.
+/* This method will move the top entries, in the entry-stack, into dest context.
  * @param aDest  - Destination context for the entries.
  * @param aCount - Number of entries, on top of the entry-stack, to be moved.
  */
 void 
 nsDTDContext::MoveEntries(nsDTDContext& aDest,
-                          PRInt32 aCount)
+                          int32_t aCount)
 {
   NS_ASSERTION(aCount > 0 && mStack.mCount >= aCount, "cannot move entries");
   if (aCount > 0 && mStack.mCount >= aCount) {
     while (aCount) {
-      aDest.PushEntry(&mStack.mEntries[--mStack.mCount], PR_FALSE);
-#ifdef  NS_DEBUG
+      aDest.PushEntry(&mStack.mEntries[--mStack.mCount], false);
+#ifdef  DEBUG
       if (mStack.mCount < eMaxTags) {
         mXTags[mStack.mCount] = eHTMLTag_unknown;
       }
@@ -563,12 +530,12 @@ nsDTDContext::MoveEntries(nsDTDContext& aDest,
  */
 nsCParserNode* nsDTDContext::Pop(nsEntryStack *&aChildStyleStack) {
 
-  PRInt32         theSize=mStack.mCount;
+  int32_t         theSize=mStack.mCount;
   nsCParserNode*  result=0;
 
   if(0<theSize) {
 
-#ifdef  NS_DEBUG
+#ifdef  DEBUG
     if ((theSize>0) && (theSize <= eMaxTags))
       mXTags[theSize-1]=eHTMLTag_unknown;
 #endif
@@ -606,7 +573,7 @@ eHTMLTags nsDTDContext::First(void) const {
  * 
  * @update  gess7/9/98
  */
-eHTMLTags nsDTDContext::TagAt(PRInt32 anIndex) const {
+eHTMLTags nsDTDContext::TagAt(int32_t anIndex) const {
   return mStack.TagAt(anIndex);
 }
 
@@ -631,7 +598,7 @@ eHTMLTags nsDTDContext::Last() const {
  * 
  * @update  gess7/9/98
  */
-nsEntryStack* nsDTDContext::GetStylesAt(PRInt32 anIndex) const {
+nsEntryStack* nsDTDContext::GetStylesAt(int32_t anIndex) const {
   nsEntryStack* result=0;
 
   if(anIndex<mStack.mCount){
@@ -679,8 +646,8 @@ void nsDTDContext::PushStyles(nsEntryStack *aStyles){
       if(!theStyles) {
         theEntry->mStyles=aStyles;
 
-        PRUint32 scount=aStyles->mCount;
-        PRUint32 sindex=0;
+        uint32_t scount=aStyles->mCount;
+        uint32_t sindex=0;
 
         theEntry=aStyles->mEntries;
         for(sindex=0;sindex<scount;++sindex){            
@@ -731,7 +698,7 @@ nsCParserNode* nsDTDContext::PopStyle(void){
  */
 nsCParserNode* nsDTDContext::PopStyle(eHTMLTags aTag){
 
-  PRInt32 theLevel=0;
+  int32_t theLevel=0;
   nsCParserNode* result=0;
 
   for(theLevel=mStack.mCount-1;theLevel>0;theLevel--) {
@@ -760,12 +727,12 @@ nsCParserNode* nsDTDContext::PopStyle(eHTMLTags aTag){
  */
 void nsDTDContext::RemoveStyle(eHTMLTags aTag){
   
-  PRInt32 theLevel=mStack.mCount;
+  int32_t theLevel=mStack.mCount;
   
   while (theLevel) {
     nsEntryStack *theStack=GetStylesAt(--theLevel);
     if (theStack) {
-      PRInt32 index=theStack->mCount;
+      int32_t index=theStack->mCount;
       while (index){
         nsTagEntry *theEntry=theStack->EntryAt(--index);
         if (aTag==(eHTMLTags)theEntry->mNode->GetNodeType()) {
@@ -793,8 +760,8 @@ void nsDTDContext::ReleaseGlobalObjects(void){
  **************************************************************/
 
 static const size_t  kTokenBuckets[]       ={sizeof(CStartToken),sizeof(CAttributeToken),sizeof(CCommentToken),sizeof(CEndToken)};
-static const PRInt32 kNumTokenBuckets      = sizeof(kTokenBuckets) / sizeof(size_t);
-static const PRInt32 kInitialTokenPoolSize = NS_SIZE_IN_HEAP(sizeof(CToken)) * 200;
+static const int32_t kNumTokenBuckets      = sizeof(kTokenBuckets) / sizeof(size_t);
+static const int32_t kInitialTokenPoolSize = sizeof(CToken) * 200;
 
 /**
  * 
@@ -807,7 +774,7 @@ nsTokenAllocator::nsTokenAllocator() {
 
   mArenaPool.Init("TokenPool", kTokenBuckets, kNumTokenBuckets, kInitialTokenPoolSize);
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
   int i=0;
   for(i=0;i<eToken_last-1;++i) {
     mTotals[i]=0;
@@ -852,7 +819,7 @@ CToken* nsTokenAllocator::CreateTokenOfType(eHTMLTokenTypes aType,eHTMLTags aTag
 
   CToken* result=0;
 
-#ifdef  NS_DEBUG
+#ifdef  DEBUG
     mTotals[aType-1]++;
 #endif
   switch(aType){
@@ -869,7 +836,7 @@ CToken* nsTokenAllocator::CreateTokenOfType(eHTMLTokenTypes aType,eHTMLTags aTag
     case eToken_doctypeDecl:      result=new(mArenaPool) CDoctypeDeclToken(aString); break;
     case eToken_markupDecl:       result=new(mArenaPool) CMarkupDeclToken(aString); break;
       default:
-        NS_ASSERTION(PR_FALSE, "nsDTDUtils::CreateTokenOfType: illegal token type"); 
+        NS_ASSERTION(false, "nsDTDUtils::CreateTokenOfType: illegal token type"); 
         break;
   }
 
@@ -889,7 +856,7 @@ CToken* nsTokenAllocator::CreateTokenOfType(eHTMLTokenTypes aType,eHTMLTags aTag
 
   CToken* result=0;
 
-#ifdef  NS_DEBUG
+#ifdef  DEBUG
     mTotals[aType-1]++;
 #endif
   switch(aType){
@@ -906,7 +873,7 @@ CToken* nsTokenAllocator::CreateTokenOfType(eHTMLTokenTypes aType,eHTMLTags aTag
     case eToken_doctypeDecl:      result=new(mArenaPool) CDoctypeDeclToken(aTag); break;
     case eToken_markupDecl:       result=new(mArenaPool) CMarkupDeclToken(); break;
     default:
-      NS_ASSERTION(PR_FALSE, "nsDTDUtils::CreateTokenOfType: illegal token type"); 
+      NS_ASSERTION(false, "nsDTDUtils::CreateTokenOfType: illegal token type"); 
       break;
    }
 
@@ -954,8 +921,8 @@ nsNodeAllocator::nsNodeAllocator():mSharedNodes(0){
 #endif
 #else 
   static const size_t  kNodeBuckets[]       = { sizeof(nsCParserNode), sizeof(nsCParserStartNode) };
-  static const PRInt32 kNumNodeBuckets      = sizeof(kNodeBuckets) / sizeof(size_t);
-  static const PRInt32 kInitialNodePoolSize = NS_SIZE_IN_HEAP(sizeof(nsCParserNode)) * 35; // optimal size based on space-trace data
+  static const int32_t kNumNodeBuckets      = sizeof(kNodeBuckets) / sizeof(size_t);
+  static const int32_t kInitialNodePoolSize = sizeof(nsCParserNode) * 35; // optimal size based on space-trace data
 nsNodeAllocator::nsNodeAllocator() {
   mNodePool.Init("NodePool", kNodeBuckets, kNumNodeBuckets, kInitialNodePoolSize);
 #endif
@@ -973,7 +940,7 @@ nsNodeAllocator::~nsNodeAllocator() {
     RemoveNode(theNode);
 #endif
     ::operator delete(theNode); 
-    theNode=nsnull;
+    theNode=nullptr;
   }
 #ifdef DEBUG_TRACK_NODES
   if(mCount) {
@@ -1026,129 +993,3 @@ nsCParserNode* nsNodeAllocator::CreateNode(CToken* aToken,
 void DebugDumpContainmentRules(nsIDTD& theDTD,const char* aFilename,const char* aTitle) {
 }
 #endif
-
-/**************************************************************
-  This defines the topic object used by the observer service.
-  The observerService uses a list of these, 1 per topic when
-  registering tags.
- **************************************************************/
-NS_IMPL_ISUPPORTS1(nsObserverEntry, nsIObserverEntry)
-
-nsObserverEntry::nsObserverEntry(const nsAString& aTopic) : mTopic(aTopic) 
-{
-  memset(mObservers, 0, sizeof(mObservers));
-}
-
-nsObserverEntry::~nsObserverEntry() {
-  for (PRInt32 i = 0; i <= NS_HTML_TAG_MAX; ++i){
-    if (mObservers[i]) {
-      delete mObservers[i];
-    }
-  }
-}
-
-NS_IMETHODIMP
-nsObserverEntry::Notify(nsIParserNode* aNode,
-                        nsIParser* aParser,
-                        nsISupports* aDocShell,
-                        const PRUint32 aFlags) 
-{
-  NS_ENSURE_ARG_POINTER(aNode);
-  NS_ENSURE_ARG_POINTER(aParser);
-
-  nsresult result = NS_OK;
-  eHTMLTags theTag = (eHTMLTags)aNode->GetNodeType();
- 
-  if (theTag <= NS_HTML_TAG_MAX) {
-    nsCOMArray<nsIElementObserver>* theObservers = mObservers[theTag];
-    if (theObservers) {
-      PRInt32   theCharsetSource;
-      nsCAutoString      charset;
-      aParser->GetDocumentCharset(charset,theCharsetSource);
-      NS_ConvertASCIItoUTF16 theCharsetValue(charset);
-
-      PRInt32 theAttrCount = aNode->GetAttributeCount(); 
-      PRInt32 theObserversCount = theObservers->Count();
-      if (0 < theObserversCount){
-        nsTArray<nsString> keys(theAttrCount + 4), values(theAttrCount + 4);
-
-        // XXX this and the following code may be a performance issue.
-        // Every key and value is copied and added to an voidarray (causing at
-        // least 2 allocations for mImpl, usually more, plus at least 1 per
-        // string (total = 2*(keys+3) + 2(or more) array allocations )).
-        PRInt32 index;
-        for (index = 0; index < theAttrCount; ++index) {
-          keys.AppendElement(aNode->GetKeyAt(index));
-          values.AppendElement(aNode->GetValueAt(index));
-        } 
-
-        nsAutoString intValue;
-
-        keys.AppendElement(NS_LITERAL_STRING("charset")); 
-        values.AppendElement(theCharsetValue);       
-      
-        keys.AppendElement(NS_LITERAL_STRING("charsetSource")); 
-        intValue.AppendInt(PRInt32(theCharsetSource),10);
-        values.AppendElement(intValue); 
-
-        keys.AppendElement(NS_LITERAL_STRING("X_COMMAND"));
-        values.AppendElement(NS_LITERAL_STRING("text/html")); 
-
-        nsCOMPtr<nsIChannel> channel;
-        aParser->GetChannel(getter_AddRefs(channel));
-
-        for (index=0;index<theObserversCount;++index) {
-          nsIElementObserver* observer = theObservers->ObjectAt(index);
-          if (observer) {
-            result = observer->Notify(aDocShell, channel,
-                                      nsHTMLTags::GetStringValue(theTag),
-                                      &keys, &values, aFlags);
-            if (NS_FAILED(result)) {
-              break;
-            }
-
-            if (result == NS_HTMLPARSER_VALID_META_CHARSET) {
-              // Inform the parser that this meta tag contained a valid
-              // charset. See bug 272815
-              aParser->SetDocumentCharset(charset, kCharsetFromMetaTag);
-              result = NS_OK;
-            }
-          }
-        } 
-      } 
-    }
-  }
-  return result;
-}
-
-PRBool 
-nsObserverEntry::Matches(const nsAString& aString) {
-  PRBool result = aString.Equals(mTopic);
-  return result;
-}
-
-nsresult
-nsObserverEntry::AddObserver(nsIElementObserver *aObserver,
-                             eHTMLTags aTag) 
-{
-  if (aObserver) {
-    if (!mObservers[aTag]) {
-      mObservers[aTag] = new nsCOMArray<nsIElementObserver>();
-      if (!mObservers[aTag]) {
-        return NS_ERROR_OUT_OF_MEMORY;
-      }
-    }
-    mObservers[aTag]->AppendObject(aObserver);
-  }
-  return NS_OK;
-}
-
-void 
-nsObserverEntry::RemoveObserver(nsIElementObserver *aObserver)
-{
-  for (PRInt32 i=0; i <= NS_HTML_TAG_MAX; ++i){
-    if (mObservers[i]) {
-      mObservers[i]->RemoveObject(aObserver);
-    }
-  }
-}

@@ -1,39 +1,7 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* Quick arena hack for xpt. */
 
@@ -116,25 +84,25 @@ struct BLK_HDR
 struct XPTArena
 {
     BLK_HDR *first;
-    PRUint8 *next;
+    uint8_t *next;
     size_t   space;
     size_t   alignment;
     size_t   block_size;
     char    *name;
 
 #ifdef XPT_ARENA_LOGGING
-    PRUint32 LOG_MallocCallCount;
-    PRUint32 LOG_MallocTotalBytesRequested;
-    PRUint32 LOG_MallocTotalBytesUsed;
-    PRUint32 LOG_FreeCallCount;
-    PRUint32 LOG_LoadingFreeCallCount;
-    PRUint32 LOG_RealMallocCallCount;
-    PRUint32 LOG_RealMallocTotalBytesRequested;
+    uint32_t LOG_MallocCallCount;
+    uint32_t LOG_MallocTotalBytesRequested;
+    uint32_t LOG_MallocTotalBytesUsed;
+    uint32_t LOG_FreeCallCount;
+    uint32_t LOG_LoadingFreeCallCount;
+    uint32_t LOG_RealMallocCallCount;
+    uint32_t LOG_RealMallocTotalBytesRequested;
 #endif /* XPT_ARENA_LOGGING */
 };
 
 XPT_PUBLIC_API(XPTArena *)
-XPT_NewArena(PRUint32 block_size, size_t alignment, const char* name)
+XPT_NewArena(uint32_t block_size, size_t alignment, const char* name)
 {
     XPTArena *arena = calloc(1, sizeof(XPTArena));
     if (arena) {
@@ -195,7 +163,7 @@ XPT_DumpStats(XPTArena *arena)
 XPT_PUBLIC_API(void *)
 XPT_ArenaMalloc(XPTArena *arena, size_t size)
 {
-    PRUint8 *cur;
+    uint8_t *cur;
     size_t bytes;
 
     if (!size)
@@ -215,8 +183,8 @@ XPT_ArenaMalloc(XPTArena *arena, size_t size)
         size_t block_header_size = ALIGN_RND(sizeof(BLK_HDR), arena->alignment);
         size_t new_space = arena->block_size;
          
-        if (bytes > new_space - block_header_size)
-            new_space += bytes;
+        while (bytes > new_space - block_header_size)
+            new_space += arena->block_size;
 
         new_block = (BLK_HDR*) calloc(new_space/arena->alignment, 
                                       arena->alignment);
@@ -236,7 +204,7 @@ XPT_ArenaMalloc(XPTArena *arena, size_t size)
         new_block->size = new_space;
 
         /* set info for current block */
-        arena->next  = ((PRUint8*)new_block) + block_header_size;
+        arena->next  = ((uint8_t*)new_block) + block_header_size;
         arena->space = new_space - block_header_size;
 
 #ifdef DEBUG
@@ -329,10 +297,33 @@ static void xpt_DebugPrintArenaStats(XPTArena *arena)
 
 #ifdef DEBUG
 XPT_PUBLIC_API(void)
-XPT_AssertFailed(const char *s, const char *file, PRUint32 lineno)
+XPT_AssertFailed(const char *s, const char *file, uint32_t lineno)
 {
     fprintf(stderr, "Assertion failed: %s, file %s, line %d\n",
             s, file, lineno);
     abort();
 }        
 #endif
+
+XPT_PUBLIC_API(size_t)
+XPT_SizeOfArena(XPTArena *arena, xptMallocSizeOfFun mallocSizeOf)
+{
+    size_t n = mallocSizeOf(arena);
+
+    /*
+     * We don't measure arena->name separately because it's allocated out of
+     * the arena itself.
+     */
+
+    BLK_HDR* cur;
+    BLK_HDR* next;
+        
+    cur = arena->first;
+    while (cur) {
+        next = cur->next;
+        n += mallocSizeOf(cur);
+        cur = next;
+    }
+
+    return n;
+}

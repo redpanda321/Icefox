@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=440974
 -->
 <head>
   <title>Test for Bug 440974</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -27,14 +26,14 @@ function isTxResult(node)
 }
 
 var xmldoc, xsltdoc;
-[ xmldoc, xsltdoc ] = [ new DOMParser().parseFromString(String(xml), "text/xml") for each (xml in [ 
+[ xmldoc, xsltdoc ] = [ new DOMParser().parseFromString(xml, "text/xml") for (xml of [ 
 
-    <items><item><id>1</id></item><item><id>2</id></item><item><id>3</id></item></items> ,
+    '<items><item><id>1</id></item><item><id>2</id></item><item><id>3</id></item></items>' ,
 
-    <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-        <xsl:output method="xml" />
-        <xsl:template match="item"><foo id="{id}"/></xsl:template>
-    </xsl:stylesheet>
+    '<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">\n\
+        <xsl:output method="xml" />\n\
+        <xsl:template match="item"><foo id="{id}"/></xsl:template>\n\
+    </xsl:stylesheet>'
 
 ]) ];
 var processor = new XSLTProcessor;

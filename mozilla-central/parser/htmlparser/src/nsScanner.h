@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 /**
@@ -74,29 +42,15 @@ class nsScanner {
   public:
 
       /**
-       *  Use this constructor if you want i/o to be based on 
-       *  a single string you hand in during construction.
-       *  This short cut was added for Javascript.
-       *
-       *  @update  ftang 3/02/99
-       *  @param   aCharset charset
-       *  @param   aCharsetSource - where the charset info came from 
-       *  @param   aMode represents the parser mode (nav, other)
-       *  @return  
+       *  Use this constructor for the XML fragment parsing case
        */
-      nsScanner(const nsAString& anHTMLString, const nsACString& aCharset, PRInt32 aSource);
+      nsScanner(const nsAString& anHTMLString);
 
       /**
        *  Use this constructor if you want i/o to be based on 
        *  a file (therefore a stream) or just data you provide via Append().
-       *
-       *  @update  ftang 3/02/99
-       *  @param   aCharset charset
-       *  @param   aCharsetSource - where the charset info came from 
-       *  @param   aMode represents the parser mode (nav, other)
-       *  @return  
        */
-      nsScanner(nsString& aFilename,PRBool aCreateStream, const nsACString& aCharset, PRInt32 aSource);
+      nsScanner(nsString& aFilename, bool aCreateStream);
 
       ~nsScanner();
 
@@ -117,9 +71,9 @@ class nsScanner {
        *  @param   ch is the char to accept new value
        *  @return  error code reflecting read status
        */
-      nsresult Peek(PRUnichar& ch, PRUint32 aOffset=0);
+      nsresult Peek(PRUnichar& ch, uint32_t aOffset=0);
 
-      nsresult Peek(nsAString& aStr, PRInt32 aNumChars, PRInt32 aOffset = 0);
+      nsresult Peek(nsAString& aStr, int32_t aNumChars, int32_t aOffset = 0);
 
       /**
        *  Skip over chars as long as they equal given char
@@ -136,7 +90,7 @@ class nsScanner {
        *  @update  gess 3/25/98
        *  @return  error status
        */
-      nsresult SkipWhitespace(PRInt32& aNewlinesSkipped);
+      nsresult SkipWhitespace(int32_t& aNewlinesSkipped);
 
       /**
        *  Consume characters until you run into space, a '<', a '>', or a '/'.
@@ -154,13 +108,13 @@ class nsScanner {
        *  @return  error code
        */
       nsresult ReadEntityIdentifier(nsString& aString);
-      nsresult ReadNumber(nsString& aString,PRInt32 aBase);
+      nsresult ReadNumber(nsString& aString,int32_t aBase);
       nsresult ReadWhitespace(nsScannerSharedSubstring& aString, 
-                              PRInt32& aNewlinesSkipped,
-                              PRBool& aHaveCR);
+                              int32_t& aNewlinesSkipped,
+                              bool& aHaveCR);
       nsresult ReadWhitespace(nsScannerIterator& aStart, 
                               nsScannerIterator& aEnd,
-                              PRInt32& aNewlinesSkipped);
+                              int32_t& aNewlinesSkipped);
 
       /**
        *  Consume characters until you find the terminal char
@@ -173,7 +127,7 @@ class nsScanner {
        */
       nsresult ReadUntil(nsAString& aString,
                          PRUnichar aTerminal,
-                         PRBool addTerminal);
+                         bool addTerminal);
 
       /**
        *  Consume characters until you find one contained in given
@@ -187,16 +141,16 @@ class nsScanner {
        */
       nsresult ReadUntil(nsAString& aString,
                          const nsReadEndCondition& aEndCondition, 
-                         PRBool addTerminal);
+                         bool addTerminal);
 
       nsresult ReadUntil(nsScannerSharedSubstring& aString,
                          const nsReadEndCondition& aEndCondition,
-                         PRBool addTerminal);
+                         bool addTerminal);
 
       nsresult ReadUntil(nsScannerIterator& aStart,
                          nsScannerIterator& aEnd,
                          const nsReadEndCondition& aEndCondition, 
-                         PRBool addTerminal);
+                         bool addTerminal);
 
       /**
        *  Records current offset position in input stream. This allows us
@@ -207,7 +161,7 @@ class nsScanner {
        *  @param   
        *  @return  
        */
-      PRInt32 Mark(void);
+      int32_t Mark(void);
 
       /**
        *  Resets current offset position of input stream to marked position. 
@@ -229,7 +183,7 @@ class nsScanner {
        *  @param   
        *  @return  
        */
-      PRBool UngetReadable(const nsAString& aBuffer);
+      bool UngetReadable(const nsAString& aBuffer);
 
       /**
        *  
@@ -247,7 +201,7 @@ class nsScanner {
        *  @param   
        *  @return  
        */
-      nsresult Append(const char* aBuffer, PRUint32 aLen,
+      nsresult Append(const char* aBuffer, uint32_t aLen,
                       nsIRequest *aRequest);
 
       /**
@@ -280,14 +234,14 @@ class nsScanner {
        *  @param   aCharsetSource- where the charset info came from
        *  @return  
        */
-      nsresult SetDocumentCharset(const nsACString& aCharset, PRInt32 aSource);
+      nsresult SetDocumentCharset(const nsACString& aCharset, int32_t aSource);
 
       void BindSubstring(nsScannerSubstring& aSubstring, const nsScannerIterator& aStart, const nsScannerIterator& aEnd);
       void CurrentPosition(nsScannerIterator& aPosition);
       void EndReading(nsScannerIterator& aPosition);
       void SetPosition(nsScannerIterator& aPosition,
-                       PRBool aTruncate = PR_FALSE,
-                       PRBool aReverse = PR_FALSE);
+                       bool aTruncate = false,
+                       bool aReverse = false);
       void ReplaceCharacter(nsScannerIterator& aPosition,
                             PRUnichar aChar);
 
@@ -297,24 +251,18 @@ class nsScanner {
        *
        * @update  gess4/3/98
        */
-      PRBool    IsIncremental(void) {return mIncremental;}
-      void      SetIncremental(PRBool anIncrValue) {mIncremental=anIncrValue;}
+      bool      IsIncremental(void) {return mIncremental;}
+      void      SetIncremental(bool anIncrValue) {mIncremental=anIncrValue;}
 
       /**
        * Return the position of the first non-whitespace
        * character. This is only reliable before consumers start
        * reading from this scanner.
        */
-      PRInt32 FirstNonWhitespacePosition()
+      int32_t FirstNonWhitespacePosition()
       {
         return mFirstNonWhitespacePosition;
       }
-
-      void SetParser(nsParser *aParser)
-      {
-        mParser = aParser;
-      }
-
 
       /**
        * Override replacement character used by nsIUnicodeDecoder.
@@ -327,14 +275,14 @@ class nsScanner {
 
   protected:
 
-      PRBool AppendToBuffer(nsScannerString::Buffer *, nsIRequest *aRequest, PRInt32 aErrorPos = -1);
-      PRBool AppendToBuffer(const nsAString& aStr)
+      bool AppendToBuffer(nsScannerString::Buffer *, nsIRequest *aRequest, int32_t aErrorPos = -1);
+      bool AppendToBuffer(const nsAString& aStr)
       {
         nsScannerString::Buffer* buf = nsScannerString::AllocBufferFromString(aStr);
         if (!buf)
-          return PR_FALSE;
-        AppendToBuffer(buf, nsnull);
-        return PR_TRUE;
+          return false;
+        AppendToBuffer(buf, nullptr);
+        return true;
       }
 
       nsScannerString*             mSlidingBuffer;
@@ -343,16 +291,15 @@ class nsScanner {
       nsScannerIterator            mEndPosition;     // The current end of the scanner buffer
       nsScannerIterator            mFirstInvalidPosition; // The position of the first invalid character that was detected
       nsString        mFilename;
-      PRUint32        mCountRemaining; // The number of bytes still to be read
+      uint32_t        mCountRemaining; // The number of bytes still to be read
                                        // from the scanner buffer
-      PRPackedBool    mIncremental;
-      PRPackedBool    mHasInvalidCharacter;
+      bool            mIncremental;
+      bool            mHasInvalidCharacter;
       PRUnichar       mReplacementCharacter;
-      PRInt32         mFirstNonWhitespacePosition;
-      PRInt32         mCharsetSource;
+      int32_t         mFirstNonWhitespacePosition;
+      int32_t         mCharsetSource;
       nsCString       mCharset;
       nsCOMPtr<nsIUnicodeDecoder> mUnicodeDecoder;
-      nsParser        *mParser;
 
   private:
       nsScanner &operator =(const nsScanner &); // Not implemented.

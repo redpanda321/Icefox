@@ -10,8 +10,6 @@
         onload="runTest();"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
 
   <body xmlns="http://www.w3.org/1999/xhtml" style="height: 300px; overflow: auto;"/>
@@ -25,10 +23,8 @@ var consoleService = Components.classes["@mozilla.org/consoleservice;1"].
 
 function checkConsole(expectedError)
 {
-  var out = {};
-  consoleService.getMessageArray(out, {});
-  var messages = out.value || [];
-  is(messages[0].message, expectedError, "logged message " + expectedError);
+  var message = consoleService.getMessageArray()[0].message;
+  is(message, expectedError, "logged message " + expectedError);
 }
 
 // each test consists of a pre function executed before the template build, an

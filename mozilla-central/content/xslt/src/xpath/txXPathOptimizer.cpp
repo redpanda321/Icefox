@@ -1,45 +1,12 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is TransforMiiX XSLT processor.
- *
- * The Initial Developer of the Original Code is
- * IBM Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * IBM Corporation. All Rights Reserved.
- *
- * Contributor(s):
- *   IBM Corporation
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "txXPathOptimizer.h"
 #include "txExprResult.h"
 #include "nsIAtom.h"
-#include "txAtoms.h"
+#include "nsGkAtoms.h"
 #include "txXPathNode.h"
 #include "txExpr.h"
 #include "txIXPathContext.h"
@@ -53,21 +20,21 @@ public:
     }
 
     // txIEvalContext
-    nsresult getVariable(PRInt32 aNamespace, nsIAtom* aLName,
+    nsresult getVariable(int32_t aNamespace, nsIAtom* aLName,
                          txAExprResult*& aResult)
     {
         NS_NOTREACHED("shouldn't depend on this context");
         return NS_ERROR_FAILURE;
     }
-    PRBool isStripSpaceAllowed(const txXPathNode& aNode)
+    bool isStripSpaceAllowed(const txXPathNode& aNode)
     {
         NS_NOTREACHED("shouldn't depend on this context");
-        return PR_FALSE;
+        return false;
     }
     void* getPrivateContext()
     {
         NS_NOTREACHED("shouldn't depend on this context");
-        return nsnull;
+        return nullptr;
     }
     txResultRecycler* recycler()
     {
@@ -83,14 +50,14 @@ public:
         // This will return an invalid node, but we should never
         // get here so that's fine.
 
-        return *static_cast<txXPathNode*>(nsnull);
+        return *static_cast<txXPathNode*>(nullptr);
     }
-    PRUint32 size()
+    uint32_t size()
     {
         NS_NOTREACHED("shouldn't depend on this context");
         return 1;
     }
-    PRUint32 position()
+    uint32_t position()
     {
         NS_NOTREACHED("shouldn't depend on this context");
         return 1;
@@ -104,7 +71,7 @@ private:
 nsresult
 txXPathOptimizer::optimize(Expr* aInExpr, Expr** aOutExpr)
 {
-    *aOutExpr = nsnull;
+    *aOutExpr = nullptr;
     nsresult rv = NS_OK;
 
     // First check if the expression will produce the same result
@@ -132,10 +99,10 @@ txXPathOptimizer::optimize(Expr* aInExpr, Expr** aOutExpr)
     }
 
     // Then optimize sub expressions
-    PRUint32 i = 0;
+    uint32_t i = 0;
     Expr* subExpr;
     while ((subExpr = aInExpr->getSubExprAt(i))) {
-        Expr* newExpr = nsnull;
+        Expr* newExpr = nullptr;
         rv = optimize(subExpr, &newExpr);
         NS_ENSURE_SUCCESS(rv, rv);
         if (newExpr) {
@@ -171,11 +138,11 @@ txXPathOptimizer::optimizeStep(Expr* aInExpr, Expr** aOutExpr)
 
     if (step->getAxisIdentifier() == LocationStep::ATTRIBUTE_AXIS) {
         // Test for @foo type steps.
-        txNameTest* nameTest = nsnull;
+        txNameTest* nameTest = nullptr;
         if (!step->getSubExprAt(0) &&
             step->getNodeTest()->getType() == txNameTest::NAME_TEST &&
             (nameTest = static_cast<txNameTest*>(step->getNodeTest()))->
-                mLocalName != txXPathAtoms::_asterix) {
+                mLocalName != nsGkAtoms::_asterix) {
 
             *aOutExpr = new txNamedAttributeStep(nameTest->mNamespace,
                                                  nameTest->mPrefix,
@@ -206,7 +173,7 @@ txXPathOptimizer::optimizePath(Expr* aInExpr, Expr** aOutExpr)
 {
     PathExpr* path = static_cast<PathExpr*>(aInExpr);
 
-    PRUint32 i;
+    uint32_t i;
     Expr* subExpr;
     // look for steps like "//foo" that can be turned into "/descendant::foo"
     // and "//." that can be turned into "/descendant-or-self::node()"
@@ -246,7 +213,7 @@ txXPathOptimizer::optimizePath(Expr* aInExpr, Expr** aOutExpr)
                 // as resulting expression.
                 if (!path->getSubExprAt(2)) {
                     *aOutExpr = path->getSubExprAt(1);
-                    path->setSubExprAt(1, nsnull);
+                    path->setSubExprAt(1, nullptr);
 
                     return NS_OK;
                 }
@@ -269,7 +236,7 @@ txXPathOptimizer::optimizeUnion(Expr* aInExpr, Expr** aOutExpr)
     // "descendant::foo | descendant::bar"
 
     nsresult rv;
-    PRUint32 current;
+    uint32_t current;
     Expr* subExpr;
     for (current = 0; (subExpr = uni->getSubExprAt(current)); ++current) {
         if (subExpr->getType() != Expr::LOCATIONSTEP_EXPR ||
@@ -280,11 +247,11 @@ txXPathOptimizer::optimizeUnion(Expr* aInExpr, Expr** aOutExpr)
         LocationStep* currentStep = static_cast<LocationStep*>(subExpr);
         LocationStep::LocationStepType axis = currentStep->getAxisIdentifier();
 
-        txUnionNodeTest* unionTest = nsnull;
+        txUnionNodeTest* unionTest = nullptr;
 
         // Check if there are any other steps with the same axis and merge
         // them with currentStep
-        PRUint32 i;
+        uint32_t i;
         for (i = current + 1; (subExpr = uni->getSubExprAt(i)); ++i) {
             if (subExpr->getType() != Expr::LOCATIONSTEP_EXPR ||
                 subExpr->getSubExprAt(0)) {
@@ -312,7 +279,7 @@ txXPathOptimizer::optimizeUnion(Expr* aInExpr, Expr** aOutExpr)
             rv = unionTest->addNodeTest(step->getNodeTest());
             NS_ENSURE_SUCCESS(rv, rv);
 
-            step->setNodeTest(nsnull);
+            step->setNodeTest(nullptr);
 
             // Remove the step from the UnionExpr
             uni->deleteExprAt(i);
@@ -323,7 +290,7 @@ txXPathOptimizer::optimizeUnion(Expr* aInExpr, Expr** aOutExpr)
         // return the step as the new expression.
         if (unionTest && current == 0 && !uni->getSubExprAt(1)) {
             // Make sure the step doesn't get deleted when the UnionExpr is
-            uni->setSubExprAt(0, nsnull);
+            uni->setSubExprAt(0, nullptr);
             *aOutExpr = currentStep;
 
             // Return right away since we no longer have a union            

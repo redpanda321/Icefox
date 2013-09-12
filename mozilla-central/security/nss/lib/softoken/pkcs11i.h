@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * Internal data structures and functions used by pkcs11.c
  */
@@ -42,11 +10,11 @@
 #include "nssilock.h"
 #include "seccomon.h"
 #include "secoidt.h"
-#include "lowkeyti.h"
+#include "lowkeyti.h" 
 #include "pkcs11t.h"
 
-#include "sftkdbt.h"
-
+#include "sftkdbt.h" 
+#include "hasht.h"
 
 /* 
  * Configuration Defines 
@@ -98,8 +66,6 @@
 				  /* how many objects to keep on the free list
 				   * before we start freeing them */
 #define MAX_KEY_LEN 256 	  /* maximum symmetric key length in bytes */
-
-#define MULTIACCESS "multiaccess:"
 
 /*
  * LOG2_BUCKETS_PER_SESSION_LOCK must be a prime number.
@@ -266,19 +232,30 @@ typedef enum {
     SFTK_VERIFY_RECOVER
 } SFTKContextType;
 
-
+/** max block size of supported block ciphers */
 #define SFTK_MAX_BLOCK_SIZE 16
-/* currently SHA512 is the biggest hash length */
+/** currently SHA512 is the biggest hash length */
 #define SFTK_MAX_MAC_LENGTH 64
 #define SFTK_INVALID_MAC_SIZE 0xffffffff
 
+/** Particular ongoing operation in session (sign/verify/digest/encrypt/...)
+ *
+ *  Understanding sign/verify context:
+ *      multi=1 hashInfo=0   block (symmetric) cipher MACing
+ *      multi=1 hashInfo=X   PKC S/V with prior hashing
+ *      multi=0 hashInfo=0   PKC S/V one shot (w/o hashing)
+ *      multi=0 hashInfo=X   *** shouldn't happen ***
+ */
 struct SFTKSessionContextStr {
     SFTKContextType	type;
     PRBool		multi; 		/* is multipart */
+    PRBool		rsa; 		/* is rsa */
     PRBool		doPad; 		/* use PKCS padding for block ciphers */
     unsigned int	blockSize; 	/* blocksize for padding */
     unsigned int	padDataLength; 	/* length of the valid data in padbuf */
+    /** latest incomplete block of data for block cipher */
     unsigned char	padBuf[SFTK_MAX_BLOCK_SIZE];
+    /** result of MAC'ing of latest full block of data with block cipher */
     unsigned char	macBuf[SFTK_MAX_BLOCK_SIZE];
     CK_ULONG		macSize;	/* size of a general block cipher mac*/
     void		*cipherInfo;
@@ -385,11 +362,13 @@ struct SFTKSlotStr {
  */
 struct SFTKHashVerifyInfoStr {
     SECOidTag   	hashOid;
+    void		*params;
     NSSLOWKEYPublicKey	*key;
 };
 
 struct SFTKHashSignInfoStr {
     SECOidTag   	hashOid;
+    void		*params;
     NSSLOWKEYPrivateKey	*key;
 };
 
@@ -565,18 +544,9 @@ typedef struct sftk_parametersStr {
 } sftk_parameters;
 
 
-/* machine dependent path stuff used by dbinit.c and pk11db.c */
-#ifdef macintosh
-#define PATH_SEPARATOR ":"
-#define SECMOD_DB "Security Modules"
-#define CERT_DB_FMT "%sCertificates%s"
-#define KEY_DB_FMT "%sKey Database%s"
-#else
-#define PATH_SEPARATOR "/"
-#define SECMOD_DB "secmod.db"
+/* path stuff (was machine dependent) used by dbinit.c and pk11db.c */
 #define CERT_DB_FMT "%scert%s.db"
 #define KEY_DB_FMT "%skey%s.db"
-#endif
 
 SEC_BEGIN_PROTOS
 
@@ -604,8 +574,7 @@ extern SFTKAttribute *sftk_FindAttribute(SFTKObject *object,
 					 CK_ATTRIBUTE_TYPE type);
 extern void sftk_FreeAttribute(SFTKAttribute *attribute);
 extern CK_RV sftk_AddAttributeType(SFTKObject *object, CK_ATTRIBUTE_TYPE type,
-				   void *valPtr,
-				  CK_ULONG length);
+				   const void *valPtr, CK_ULONG length);
 extern CK_RV sftk_Attribute2SecItem(PLArenaPool *arena, SECItem *item,
 				    SFTKObject *object, CK_ATTRIBUTE_TYPE type);
 extern CK_RV sftk_MultipleAttribute2SecItem(PLArenaPool *arena, 
@@ -631,9 +600,9 @@ extern void sftk_nullAttribute(SFTKObject *object,CK_ATTRIBUTE_TYPE type);
 extern CK_RV sftk_GetULongAttribute(SFTKObject *object, CK_ATTRIBUTE_TYPE type,
                                                          CK_ULONG *longData);
 extern CK_RV sftk_forceAttribute(SFTKObject *object, CK_ATTRIBUTE_TYPE type,
-				 void *value, unsigned int len);
+				 const void *value, unsigned int len);
 extern CK_RV sftk_defaultAttribute(SFTKObject *object, CK_ATTRIBUTE_TYPE type,
-				   void *value, unsigned int len);
+				   const void *value, unsigned int len);
 extern unsigned int sftk_MapTrust(CK_TRUST trust, PRBool clientAuth);
 
 extern SFTKObject *sftk_NewObject(SFTKSlot *slot);
@@ -687,6 +656,13 @@ extern CK_RV sftk_MechAllowsOperation(CK_MECHANISM_TYPE type, CK_ATTRIBUTE_TYPE 
 NSSLOWKEYPrivateKey *sftk_FindKeyByPublicKey(SFTKSlot *slot, SECItem *dbKey);
 
 /*
+ * parameter parsing functions
+ */
+CK_RV sftk_parseParameters(char *param, sftk_parameters *parsed, PRBool isFIPS);
+void sftk_freeParams(sftk_parameters *params);
+
+
+/*
  * narrow objects
  */
 SFTKSessionObject * sftk_narrowToSessionObject(SFTKObject *);
@@ -701,6 +677,21 @@ PRBool sftk_poisonHandle(SFTKSlot *slot, SECItem *dbkey,
 SFTKObject * sftk_NewTokenObject(SFTKSlot *slot, SECItem *dbKey, 
 						CK_OBJECT_HANDLE handle);
 SFTKTokenObject *sftk_convertSessionToToken(SFTKObject *so);
+
+
+/* J-PAKE (jpakesftk.c) */
+extern
+CK_RV jpake_Round1(HASH_HashType hashType,
+                   CK_NSS_JPAKERound1Params * params,
+                   SFTKObject * key);
+extern
+CK_RV jpake_Round2(HASH_HashType hashType,
+                   CK_NSS_JPAKERound2Params * params,
+                   SFTKObject * sourceKey, SFTKObject * key);
+extern
+CK_RV jpake_Final(HASH_HashType hashType,
+                  const CK_NSS_JPAKEFinalParams * params,
+                  SFTKObject * sourceKey, SFTKObject * key);
 
 /****************************************
  * implement TLS Pseudo Random Function (PRF)

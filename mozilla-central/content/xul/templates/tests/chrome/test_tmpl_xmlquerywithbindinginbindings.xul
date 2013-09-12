@@ -10,11 +10,14 @@
         onload="test_template();"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
 
   <body xmlns="http://www.w3.org/1999/xhtml" style="height: 300px; overflow: auto;"/>
+
+  <data id="output">
+    <checkbox anyid="true" container="true" empty="true" label="Reptiles"/>
+    <checkbox anyid="true" container="true" empty="true" label="Birds"/>
+  </data>
 
 <script src="templates_shared.js"/>
 
@@ -28,11 +31,7 @@ var isTreeBuilder = false;
 var needsOpen = false;
 var notWorkingYet = false;
 var notWorkingYetDynamic = false;
-var expectedOutput =
-<output>
-  <checkbox anyid="true" container="true" empty="true" label="Reptiles"/>
-  <checkbox anyid="true" container="true" empty="true" label="Birds"/>
-</output>;
+var expectedOutput = document.getElementById("output");
 
 var changes = [];
 ]]>

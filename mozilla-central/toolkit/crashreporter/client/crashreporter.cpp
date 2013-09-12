@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Toolkit Crash Reporter
- *
- * The Initial Developer of the Original Code is
- *   Mozilla Corporation
- * Portions created by the Initial Developer are Copyright (C) 2006-2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Ted Mielczarek <ted.mielczarek@gmail.com>
- *  Dave Camp <dcamp@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "crashreporter.h"
 
@@ -438,6 +404,11 @@ void RewriteStrings(StringTable& queryParameters)
   gStrings[ST_CHECKSUBMIT] = buf;
 
   UI_SNPRINTF(buf, sizeof(buf),
+              gStrings[ST_CHECKEMAIL].c_str(),
+              vendor.c_str());
+  gStrings[ST_CHECKEMAIL] = buf;
+
+  UI_SNPRINTF(buf, sizeof(buf),
               gStrings[ST_RESTART].c_str(),
               product.c_str());
   gStrings[ST_RESTART] = buf;
@@ -613,10 +584,30 @@ int main(int argc, char** argv)
 }
 
 #if defined(XP_WIN) && !defined(__GNUC__)
+#include <windows.h>
+
 // We need WinMain in order to not be a console app.  This function is unused
 // if we are a console application.
 int WINAPI wWinMain( HINSTANCE, HINSTANCE, LPWSTR args, int )
 {
+  // Remove everything except close window from the context menu
+  {
+    HKEY hkApp;
+    RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\Applications", 0,
+                    NULL, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, NULL, &hkApp,
+                    NULL);
+    RegCloseKey(hkApp);
+    if (RegCreateKeyExW(HKEY_CURRENT_USER,
+                        L"Software\\Classes\\Applications\\crashreporter.exe",
+                        0, NULL, REG_OPTION_VOLATILE, KEY_SET_VALUE, NULL,
+                        &hkApp, NULL) == ERROR_SUCCESS) {
+      RegSetValueExW(hkApp, L"IsHostApp", 0, REG_NONE, 0, 0);
+      RegSetValueExW(hkApp, L"NoOpenWith", 0, REG_NONE, 0, 0);
+      RegSetValueExW(hkApp, L"NoStartPage", 0, REG_NONE, 0, 0);
+      RegCloseKey(hkApp);
+    }
+  }
+
   char** argv = static_cast<char**>(malloc(__argc * sizeof(char*)));
   for (int i = 0; i < __argc; i++) {
     argv[i] = strdup(WideToUTF8(__wargv[i]).c_str());

@@ -1,24 +1,13 @@
-// Load httpd from the add-on test harness or from xpcshell and declare Cc, etc.
-// without a var/const so they don't get hoisted and conflict with load_httpd.
-if (this.do_load_httpd_js == null) {
-  Cc = Components.classes;
-  Ci = Components.interfaces;
-  Cr = Components.results;
-  Cu = Components.utils;
-  Cu.import("resource://harness/modules/httpd.js");
-}
-else {
-  do_load_httpd_js();
-  do_get_profile();
-}
+/* Any copyright is dedicated to the Public Domain.
+   http://creativecommons.org/publicdomain/zero/1.0/ */
+
+const {classes: Cc, interfaces: Ci, results: Cr, utils: Cu} = Components;
+
+let gSyncProfile;
+
+gSyncProfile = do_get_profile();
 
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
-
-try {
-  // In the context of xpcshell tests, there won't be a default AppInfo
-  Cc["@mozilla.org/xre/app-info;1"].getService(Ci.nsIXULAppInfo);
-}
-catch(ex) {
 
 // Make sure to provide the right OS so crypto loads the right binaries
 let OS = "XPCShell";
@@ -32,7 +21,7 @@ else
 let XULAppInfo = {
   vendor: "Mozilla",
   name: "XPCShell",
-  ID: "{3e3ba16c-1675-4e88-b9c8-afef81b3d2ef}",
+  ID: "xpcshell@tests.mozilla.org",
   version: "1",
   appBuildID: "20100621",
   platformVersion: "",
@@ -41,7 +30,8 @@ let XULAppInfo = {
   logConsoleErrors: true,
   OS: OS,
   XPCOMABI: "noarch-spidermonkey",
-  QueryInterface: XPCOMUtils.generateQI([Ci.nsIXULAppInfo, Ci.nsIXULRuntime])
+  QueryInterface: XPCOMUtils.generateQI([Ci.nsIXULAppInfo, Ci.nsIXULRuntime]),
+  invalidateCachesOnRestart: function invalidateCachesOnRestart() { }
 };
 
 let XULAppInfoFactory = {
@@ -57,8 +47,16 @@ registrar.registerFactory(Components.ID("{fbfae60b-64a4-44ef-a911-08ceb70b9f31}"
                           "XULAppInfo", "@mozilla.org/xre/app-info;1",
                           XULAppInfoFactory);
 
-}
 
-// Provide resource://services-sync if it isn't already available
-let weaveService = Cc["@mozilla.org/weave/service;1"].getService();
-weaveService.wrappedJSObject.addResourceAlias();
+// Register resource aliases. Normally done in SyncComponents.manifest.
+function addResourceAlias() {
+  Cu.import("resource://gre/modules/Services.jsm");
+  const resProt = Services.io.getProtocolHandler("resource")
+                          .QueryInterface(Ci.nsIResProtocolHandler);
+  for each (let s in ["common", "sync", "crypto"]) {
+    let uri = Services.io.newURI("resource://gre/modules/services-" + s + "/", null,
+                                 null);
+    resProt.setSubstitution("services-" + s, uri);
+  }
+}
+addResourceAlias();

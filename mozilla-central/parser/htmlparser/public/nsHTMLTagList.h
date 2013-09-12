@@ -1,39 +1,9 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+// IWYU pragma: private, include "nsHTMLTags.h"
 
 /******
 
@@ -94,6 +64,7 @@ HTML_HTMLELEMENT_TAG(cite)
 HTML_HTMLELEMENT_TAG(code)
 HTML_TAG(col, TableCol)
 HTML_TAG(colgroup, TableCol)
+HTML_TAG(datalist, DataList)
 HTML_HTMLELEMENT_TAG(dd)
 HTML_TAG(del, Mod)
 HTML_HTMLELEMENT_TAG(dfn)
@@ -128,7 +99,6 @@ HTML_TAG(image, Span)
 HTML_TAG(img, Image)
 HTML_TAG(input, Input)
 HTML_TAG(ins, Mod)
-HTML_TAG(isindex, Shared)
 HTML_HTMLELEMENT_TAG(kbd)
 HTML_TAG(keygen, Span)
 HTML_TAG(label, Label)
@@ -139,8 +109,10 @@ HTML_HTMLELEMENT_TAG(listing)
 HTML_TAG(map, Map)
 HTML_HTMLELEMENT_TAG(mark)
 HTML_TAG(marquee, Div)
-HTML_TAG(menu, Shared)
+HTML_TAG(menu, Menu)
+HTML_TAG(menuitem, MenuItem)
 HTML_TAG(meta, Meta)
+HTML_TAG(meter, Meter)
 HTML_TAG(multicol, Span)
 HTML_HTMLELEMENT_TAG(nav)
 HTML_HTMLELEMENT_TAG(nobr)
@@ -156,6 +128,7 @@ HTML_TAG(p, Paragraph)
 HTML_TAG(param, Shared)
 HTML_HTMLELEMENT_TAG(plaintext)
 HTML_TAG(pre, Pre)
+HTML_TAG(progress, Progress)
 HTML_TAG(q, Shared)
 HTML_HTMLELEMENT_TAG(s)
 HTML_HTMLELEMENT_TAG(samp)

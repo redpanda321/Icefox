@@ -1,0 +1,37 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+#include "nsISupports.idl"
+
+[scriptable, uuid(9D98A42F-ABAA-48a0-BB53-CE09A29E6876)]
+
+interface nsIMetroUIUtils : nsISupports {
+  /**
+   * Loads the specified panel in the browser.
+   * @ param aPanelId The identifier of the pane to load
+  */
+  void showPanel(in AString aPanelId);
+
+  /**
+   * Obtains the current page URI
+  */
+  attribute AString currentPageURI;
+
+  /**
+   * Obtains the current page title
+  */
+  attribute AString currentPageTitle;
+
+  /**
+   * Determines if the browser has selected content
+  */
+  attribute boolean hasSelectedContent;
+
+  /**
+   * Determines the text that should be shared
+  */
+  attribute AString shareText;
+};
+

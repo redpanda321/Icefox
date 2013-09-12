@@ -100,6 +100,13 @@ function handleRequest(request, response)
      query.allowOrigin = hops[query.hop-1].allowOrigin;
      query.allowHeaders = hops[query.hop-1].allowHeaders;
   }
+
+  if (!isPreflight && query.status) {
+    response.setStatusLine(null, query.status, query.statusMessage);
+  }
+  if (isPreflight && query.preflightStatus) {
+    response.setStatusLine(null, query.preflightStatus, "preflight status");
+  }
   
   if (query.allowOrigin && (!isPreflight || !query.noAllowPreflight))
     response.setHeader("Access-Control-Allow-Origin", query.allowOrigin);
@@ -117,6 +124,17 @@ function handleRequest(request, response)
     if (query.allowMethods)
       response.setHeader("Access-Control-Allow-Methods", query.allowMethods);
   }
+  else {
+    if (query.responseHeaders) {
+      let responseHeaders = eval(query.responseHeaders);
+      for (let responseHeader in responseHeaders) {
+        response.setHeader(responseHeader, responseHeaders[responseHeader]);
+      }
+    }
+
+    if (query.exposeHeaders)
+      response.setHeader("Access-Control-Expose-Headers", query.exposeHeaders);
+  }
 
   if (query.hop && query.hop < hops.length) {
     newURL = hops[query.hop].server +
@@ -132,6 +150,10 @@ function handleRequest(request, response)
   if (!isPreflight && request.method != "HEAD") {
     response.setHeader("Content-Type", "application/xml", false);
     response.write("<res>hello pass</res>\n");
+  }
+  if (isPreflight && "preflightBody" in query) {
+    response.setHeader("Content-Type", "text/plain", false);
+    response.write(query.preflightBody);
   }
 }
 

@@ -1,43 +1,9 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  * vim:cindent:ts=8:et:sw=4:
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is nsTraceMalloc.c/bloatblame.c code, released
- * April 19, 2000.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Brendan Eich, 14-April-2000
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifdef NS_TRACE_MALLOC
  /*
   * TODO:
@@ -68,6 +34,8 @@
 #include "plstr.h"
 #include "nsStackWalk.h"
 #include "nsTraceMallocCallbacks.h"
+#include "nsTypeInfo.h"
+#include "mozilla/mozPoisonWrite.h"
 
 #if defined(XP_MACOSX)
 
@@ -128,8 +96,8 @@ struct logfile {
     char        *buf;
     int         bufsize;
     int         pos;
-    uint32      size;
-    uint32      simsize;
+    uint32_t    size;
+    uint32_t    simsize;
     logfile     *next;
     logfile     **prevp;
 };
@@ -157,12 +125,12 @@ static char      sdlogname[PATH_MAX] = ""; /* filename for shutdown leak log */
  * It must default to zero, since it can be tested by the Linux malloc
  * hooks before NS_TraceMallocStartup sets it.
  */
-static uint32 tracing_enabled = 0;
+static uint32_t tracing_enabled = 0;
 
 /*
  * Control whether we should log stacks
  */
-static uint32 stacks_enabled = 1;
+static uint32_t stacks_enabled = 1;
 
 /*
  * This lock must be held while manipulating the calltree, the
@@ -300,13 +268,13 @@ tm_get_thread(void)
 }
 
 /* We don't want more than 32 logfiles open at once, ok? */
-typedef uint32          lfd_set;
+typedef uint32_t        lfd_set;
 
 #define LFD_SET_STATIC_INITIALIZER 0
 #define LFD_SET_SIZE    32
 
 #define LFD_ZERO(s)     (*(s) = 0)
-#define LFD_BIT(i)      ((uint32)1 << (i))
+#define LFD_BIT(i)      ((uint32_t)1 << (i))
 #define LFD_TEST(i,s)   (LFD_BIT(i) & *(s))
 #define LFD_SET(i,s)    (*(s) |= LFD_BIT(i))
 #define LFD_CLR(i,s)    (*(s) &= ~LFD_BIT(i))
@@ -414,7 +382,7 @@ static void log_filename(logfile* fp, const char* filename)
     log_string(fp, filename);
 }
 
-static void log_uint32(logfile *fp, uint32 ival)
+static void log_uint32(logfile *fp, uint32_t ival)
 {
     if (ival < 0x80) {
         /* 0xxx xxxx */
@@ -444,57 +412,57 @@ static void log_uint32(logfile *fp, uint32 ival)
     }
 }
 
-static void log_event1(logfile *fp, char event, uint32 serial)
+static void log_event1(logfile *fp, char event, uint32_t serial)
 {
     log_byte(fp, event);
-    log_uint32(fp, (uint32) serial);
+    log_uint32(fp, (uint32_t) serial);
 }
 
-static void log_event2(logfile *fp, char event, uint32 serial, size_t size)
+static void log_event2(logfile *fp, char event, uint32_t serial, size_t size)
 {
     log_event1(fp, event, serial);
-    log_uint32(fp, (uint32) size);
+    log_uint32(fp, (uint32_t) size);
 }
 
-static void log_event3(logfile *fp, char event, uint32 serial, size_t oldsize,
+static void log_event3(logfile *fp, char event, uint32_t serial, size_t oldsize,
                        size_t size)
 {
     log_event2(fp, event, serial, oldsize);
-    log_uint32(fp, (uint32) size);
+    log_uint32(fp, (uint32_t) size);
 }
 
-static void log_event4(logfile *fp, char event, uint32 serial, uint32 ui2,
-                       uint32 ui3, uint32 ui4)
+static void log_event4(logfile *fp, char event, uint32_t serial, uint32_t ui2,
+                       uint32_t ui3, uint32_t ui4)
 {
     log_event3(fp, event, serial, ui2, ui3);
     log_uint32(fp, ui4);
 }
 
-static void log_event5(logfile *fp, char event, uint32 serial, uint32 ui2,
-                       uint32 ui3, uint32 ui4, uint32 ui5)
+static void log_event5(logfile *fp, char event, uint32_t serial, uint32_t ui2,
+                       uint32_t ui3, uint32_t ui4, uint32_t ui5)
 {
     log_event4(fp, event, serial, ui2, ui3, ui4);
     log_uint32(fp, ui5);
 }
 
-static void log_event6(logfile *fp, char event, uint32 serial, uint32 ui2,
-                       uint32 ui3, uint32 ui4, uint32 ui5, uint32 ui6)
+static void log_event6(logfile *fp, char event, uint32_t serial, uint32_t ui2,
+                       uint32_t ui3, uint32_t ui4, uint32_t ui5, uint32_t ui6)
 {
     log_event5(fp, event, serial, ui2, ui3, ui4, ui5);
     log_uint32(fp, ui6);
 }
 
-static void log_event7(logfile *fp, char event, uint32 serial, uint32 ui2,
-                       uint32 ui3, uint32 ui4, uint32 ui5, uint32 ui6,
-                       uint32 ui7)
+static void log_event7(logfile *fp, char event, uint32_t serial, uint32_t ui2,
+                       uint32_t ui3, uint32_t ui4, uint32_t ui5, uint32_t ui6,
+                       uint32_t ui7)
 {
     log_event6(fp, event, serial, ui2, ui3, ui4, ui5, ui6);
     log_uint32(fp, ui7);
 }
 
-static void log_event8(logfile *fp, char event, uint32 serial, uint32 ui2,
-                       uint32 ui3, uint32 ui4, uint32 ui5, uint32 ui6,
-                       uint32 ui7, uint32 ui8)
+static void log_event8(logfile *fp, char event, uint32_t serial, uint32_t ui2,
+                       uint32_t ui3, uint32_t ui4, uint32_t ui5, uint32_t ui6,
+                       uint32_t ui7, uint32_t ui8)
 {
     log_event7(fp, event, serial, ui2, ui3, ui4, ui5, ui6, ui7);
     log_uint32(fp, ui8);
@@ -504,7 +472,7 @@ typedef struct callsite callsite;
 
 struct callsite {
     void*       pc;
-    uint32      serial;
+    uint32_t      serial;
     lfd_set     lfdset;
     const char  *name;    /* pointer to string owned by methods table */
     const char  *library; /* pointer to string owned by libraries table */
@@ -515,11 +483,11 @@ struct callsite {
 };
 
 /* NB: these counters are incremented and decremented only within tmlock. */
-static uint32 library_serial_generator = 0;
-static uint32 method_serial_generator = 0;
-static uint32 callsite_serial_generator = 0;
-static uint32 tmstats_serial_generator = 0;
-static uint32 filename_serial_generator = 0;
+static uint32_t library_serial_generator = 0;
+static uint32_t method_serial_generator = 0;
+static uint32_t callsite_serial_generator = 0;
+static uint32_t tmstats_serial_generator = 0;
+static uint32_t filename_serial_generator = 0;
 
 /* Root of the tree of callsites, the sum of all (cycle-compressed) stacks. */
 static callsite calltree_root =
@@ -569,7 +537,7 @@ static void log_tmstats(logfile *fp)
     log_uint32(fp, calltree_maxstack_top ? calltree_maxstack_top->serial : 0);
 }
 
-static void *generic_alloctable(void *pool, PRSize size)
+static void *generic_alloctable(void *pool, size_t size)
 {
     return __libc_malloc(size);
 }
@@ -592,7 +560,7 @@ static PLHashEntry *lfdset_allocentry(void *pool, const void *key)
     return &le->base;
 }
 
-static void lfdset_freeentry(void *pool, PLHashEntry *he, PRUintn flag)
+static void lfdset_freeentry(void *pool, PLHashEntry *he, unsigned flag)
 {
     lfdset_entry *le;
 
@@ -625,10 +593,10 @@ calltree(void **stack, size_t num_stack_entries, tm_thread *t)
 {
     logfile *fp = logfp;
     void *pc;
-    uint32 nkids;
+    uint32_t nkids;
     callsite *parent, *site, **csp, *tmp;
     int maxstack;
-    uint32 library_serial, method_serial, filename_serial;
+    uint32_t library_serial, method_serial, filename_serial;
     const char *library, *method, *filename;
     char *slash;
     PLHashNumber hash;
@@ -750,7 +718,7 @@ calltree(void **stack, size_t num_stack_entries, tm_thread *t)
             he = *hep;
             if (he) {
                 library = (char*) he->key;
-                library_serial = (uint32) NS_PTR_TO_INT32(he->value);
+                library_serial = (uint32_t) NS_PTR_TO_INT32(he->value);
                 le = (lfdset_entry *) he;
                 if (LFD_TEST(fp->lfd, &le->lfdset)) {
                     /* We already logged an event on fp for this library. */
@@ -797,7 +765,7 @@ calltree(void **stack, size_t num_stack_entries, tm_thread *t)
         he = *hep;
         if (he) {
             filename = (char*) he->key;
-            filename_serial = (uint32) NS_PTR_TO_INT32(he->value);
+            filename_serial = (uint32_t) NS_PTR_TO_INT32(he->value);
             le = (lfdset_entry *) he;
             if (LFD_TEST(fp->lfd, &le->lfdset)) {
                 /* We already logged an event on fp for this filename. */
@@ -844,7 +812,7 @@ calltree(void **stack, size_t num_stack_entries, tm_thread *t)
         he = *hep;
         if (he) {
             method = (char*) he->key;
-            method_serial = (uint32) NS_PTR_TO_INT32(he->value);
+            method_serial = (uint32_t) NS_PTR_TO_INT32(he->value);
             le = (lfdset_entry *) he;
             if (LFD_TEST(fp->lfd, &le->lfdset)) {
                 /* We already logged an event on fp for this method. */
@@ -925,7 +893,7 @@ calltree(void **stack, size_t num_stack_entries, tm_thread *t)
  * reverse it in calltree.
  */
 static void
-stack_callback(void *pc, void *closure)
+stack_callback(void *pc, void *sp, void *closure)
 {
     stack_buffer_info *info = (stack_buffer_info*) closure;
 
@@ -957,10 +925,23 @@ backtrace(tm_thread *t, int skip, int *immediate_abort)
     t->suppress_tracing++;
 
     if (!stacks_enabled) {
+#if defined(XP_MACOSX)
+        /* Walk the stack, even if stacks_enabled is false. We do this to
+           check if we must set immediate_abort. */
+        info->entries = 0;
+        rv = NS_StackWalk(stack_callback, skip, info, 0, NULL);
+        *immediate_abort = rv == NS_ERROR_UNEXPECTED;
+        if (rv == NS_ERROR_UNEXPECTED || info->entries == 0) {
+            t->suppress_tracing--;
+            return NULL;
+        }
+#endif
+
         /*
          * Create a single fake stack frame so that all the tools get
          * data in the correct format.
          */
+        *immediate_abort = 0;
         if (info->size < 1) {
             PR_ASSERT(!info->buffer); /* !info->size == !info->buffer */
             info->buffer = __libc_malloc(1 * sizeof(void*));
@@ -983,7 +964,7 @@ backtrace(tm_thread *t, int skip, int *immediate_abort)
         /* skip == 0 means |backtrace| should show up, so don't use skip + 1 */
         /* NB: this call is repeated below if the buffer is too small */
         info->entries = 0;
-        rv = NS_StackWalk(stack_callback, skip, info);
+        rv = NS_StackWalk(stack_callback, skip, info, 0, NULL);
         *immediate_abort = rv == NS_ERROR_UNEXPECTED;
         if (rv == NS_ERROR_UNEXPECTED || info->entries == 0) {
             t->suppress_tracing--;
@@ -1007,7 +988,7 @@ backtrace(tm_thread *t, int skip, int *immediate_abort)
 
             /* and call NS_StackWalk again */
             info->entries = 0;
-            NS_StackWalk(stack_callback, skip, info);
+            NS_StackWalk(stack_callback, skip, info, 0, NULL);
 
             /* same stack */
             PR_ASSERT(info->entries * 2 == new_stack_buffer_size);
@@ -1065,14 +1046,14 @@ static PLHashEntry *alloc_allocentry(void *pool, const void *key)
     return &alloc->entry;
 }
 
-static void alloc_freeentry(void *pool, PLHashEntry *he, PRUintn flag)
+static void alloc_freeentry(void *pool, PLHashEntry *he, unsigned flag)
 {
     allocation *alloc;
 
     if (flag != HT_FREE_ENTRY)
         return;
     alloc = (allocation*) he;
-    if ((PRUptrdiff)(alloc - alloc_heap) < (PRUptrdiff)ALLOC_HEAP_SIZE) {
+    if ((ptrdiff_t)(alloc - alloc_heap) < (ptrdiff_t)ALLOC_HEAP_SIZE) {
         alloc->entry.next = &alloc_freelist->entry;
         alloc_freelist = alloc;
     } else {
@@ -1168,7 +1149,7 @@ ShutdownHooker(void)
 NS_EXTERNAL_VIS_(__ptr_t)
 malloc(size_t size)
 {
-    PRUint32 start, end;
+    uint32_t start, end;
     __ptr_t ptr;
     tm_thread *t;
 
@@ -1191,7 +1172,7 @@ malloc(size_t size)
 NS_EXTERNAL_VIS_(__ptr_t)
 calloc(size_t count, size_t size)
 {
-    PRUint32 start, end;
+    uint32_t start, end;
     __ptr_t ptr;
     tm_thread *t;
 
@@ -1214,7 +1195,7 @@ calloc(size_t count, size_t size)
 NS_EXTERNAL_VIS_(__ptr_t)
 realloc(__ptr_t oldptr, size_t size)
 {
-    PRUint32 start, end;
+    uint32_t start, end;
     __ptr_t ptr;
     tm_thread *t;
 
@@ -1238,7 +1219,7 @@ realloc(__ptr_t oldptr, size_t size)
 NS_EXTERNAL_VIS_(void*)
 valloc(size_t size)
 {
-    PRUint32 start, end;
+    uint32_t start, end;
     __ptr_t ptr;
     tm_thread *t;
 
@@ -1261,7 +1242,7 @@ valloc(size_t size)
 NS_EXTERNAL_VIS_(void*)
 memalign(size_t boundary, size_t size)
 {
-    PRUint32 start, end;
+    uint32_t start, end;
     __ptr_t ptr;
     tm_thread *t;
 
@@ -1294,7 +1275,7 @@ posix_memalign(void **memptr, size_t alignment, size_t size)
 NS_EXTERNAL_VIS_(void)
 free(__ptr_t ptr)
 {
-    PRUint32 start, end;
+    uint32_t start, end;
     tm_thread *t;
 
     if (!tracing_enabled || !PR_Initialized() ||
@@ -1334,7 +1315,7 @@ static const char magic[] = NS_TRACE_MALLOC_MAGIC;
 static void
 log_header(int logfd)
 {
-    uint32 ticksPerSec = PR_htonl(PR_TicksPerSecond());
+    uint32_t ticksPerSec = PR_htonl(PR_TicksPerSecond());
     (void) write(logfd, magic, NS_TRACE_MALLOC_MAGIC_SIZE);
     (void) write(logfd, &ticksPerSec, sizeof ticksPerSec);
 }
@@ -1348,6 +1329,9 @@ NS_TraceMallocStartup(int logfd)
     PR_ASSERT(tracing_enabled == 0);
     PR_ASSERT(logfp == &default_logfile);
     tracing_enabled = (logfd >= 0);
+
+    if (logfd >= 3)
+        MozillaRegisterDebugFD(logfd);
 
     /* stacks are disabled if this env var is set to a non-empty value */
     stack_disable_env = PR_GetEnv("NS_TRACE_MALLOC_DISABLE_STACKS");
@@ -1364,7 +1348,7 @@ NS_TraceMallocStartup(int logfd)
         log_header(logfd);
     }
 
-    atexit(NS_TraceMallocShutdown);
+    RegisterTraceMallocShutdown();
 
     tmlock = PR_NewLock();
     (void) tm_get_thread(); /* ensure index initialization while it's easy */
@@ -1547,6 +1531,7 @@ NS_TraceMallocShutdown(void)
         log_tmstats(fp);
         flush_logfile(fp);
         if (fp->fd >= 0) {
+            MozillaUnRegisterDebugFD(fp->fd);
             close(fp->fd);
             fp->fd = -1;
         }
@@ -1572,7 +1557,7 @@ NS_TraceMallocDisable(void)
 {
     tm_thread *t = tm_get_thread();
     logfile *fp;
-    uint32 sample;
+    uint32_t sample;
 
     /* Robustify in case of duplicate call. */
     PR_ASSERT(tracing_enabled);
@@ -1592,7 +1577,7 @@ PR_IMPLEMENT(void)
 NS_TraceMallocEnable(void)
 {
     tm_thread *t = tm_get_thread();
-    uint32 sample;
+    uint32_t sample;
 
     TM_SUPPRESS_TRACING_AND_ENTER_LOCK(t);
     sample = ++tracing_enabled;
@@ -1625,8 +1610,8 @@ NS_TraceMallocChangeLogFD(int fd)
     return oldfp->fd;
 }
 
-static PRIntn
-lfd_clr_enumerator(PLHashEntry *he, PRIntn i, void *arg)
+static int
+lfd_clr_enumerator(PLHashEntry *he, int i, void *arg)
 {
     lfdset_entry *le = (lfdset_entry*) he;
     logfile *fp = (logfile*) arg;
@@ -1683,6 +1668,7 @@ NS_TraceMallocCloseLogFD(int fd)
     }
 
     TM_EXIT_LOCK_AND_UNSUPPRESS_TRACING(t);
+    MozillaUnRegisterDebugFD(fd);
     close(fd);
 }
 
@@ -1705,13 +1691,13 @@ NS_TraceMallocLogTimestamp(const char *caption)
 
 #ifdef XP_UNIX
     gettimeofday(&tv, NULL);
-    log_uint32(fp, (uint32) tv.tv_sec);
-    log_uint32(fp, (uint32) tv.tv_usec);
+    log_uint32(fp, (uint32_t) tv.tv_sec);
+    log_uint32(fp, (uint32_t) tv.tv_usec);
 #endif
 #ifdef XP_WIN32
     _ftime(&tb);
-    log_uint32(fp, (uint32) tb.time);
-    log_uint32(fp, (uint32) tb.millitm);
+    log_uint32(fp, (uint32_t) tb.time);
+    log_uint32(fp, (uint32_t) tb.millitm);
 #endif
     log_string(fp, caption);
 
@@ -1730,14 +1716,13 @@ print_stack(FILE *ofp, callsite *site)
     }
 }
 
-static PRIntn
-allocation_enumerator(PLHashEntry *he, PRIntn i, void *arg)
+static int
+allocation_enumerator(PLHashEntry *he, int i, void *arg)
 {
     allocation *alloc = (allocation*) he;
     FILE *ofp = (FILE*) arg;
     callsite *site = (callsite*) he->value;
 
-    extern const char* nsGetTypeName(const void* ptr);
     unsigned long *p, *end;
 
     fprintf(ofp, "%p <%s> (%lu)\n",
@@ -1778,6 +1763,7 @@ NS_TraceMallocDumpAllocations(const char *pathname)
 {
     FILE *ofp;
     int rv;
+    int fd;
 
     tm_thread *t = tm_get_thread();
 
@@ -1785,11 +1771,13 @@ NS_TraceMallocDumpAllocations(const char *pathname)
 
     ofp = fopen(pathname, WRITE_FLAGS);
     if (ofp) {
+        MozillaRegisterDebugFD(fileno(ofp));
         if (allocations) {
             PL_HashTableEnumerateEntries(allocations, allocation_enumerator,
                                          ofp);
         }
         rv = ferror(ofp) ? -1 : 0;
+        MozillaUnRegisterDebugFILE(ofp);
         fclose(ofp);
     } else {
         rv = -1;
@@ -1838,7 +1826,7 @@ NS_TrackAllocation(void* ptr, FILE *ofp)
 }
 
 PR_IMPLEMENT(void)
-MallocCallback(void *ptr, size_t size, PRUint32 start, PRUint32 end, tm_thread *t)
+MallocCallback(void *ptr, size_t size, uint32_t start, uint32_t end, tm_thread *t)
 {
     callsite *site;
     PLHashEntry *he;
@@ -1860,7 +1848,7 @@ MallocCallback(void *ptr, size_t size, PRUint32 start, PRUint32 end, tm_thread *
         if (site) {
             log_event5(logfp, TM_EVENT_MALLOC,
                        site->serial, start, end - start,
-                       (uint32)NS_PTR_TO_INT32(ptr), size);
+                       (uint32_t)NS_PTR_TO_INT32(ptr), size);
         }
         if (get_allocations()) {
             he = PL_HashTableAdd(allocations, ptr, site);
@@ -1875,7 +1863,7 @@ MallocCallback(void *ptr, size_t size, PRUint32 start, PRUint32 end, tm_thread *
 }
 
 PR_IMPLEMENT(void)
-CallocCallback(void *ptr, size_t count, size_t size, PRUint32 start, PRUint32 end, tm_thread *t)
+CallocCallback(void *ptr, size_t count, size_t size, uint32_t start, uint32_t end, tm_thread *t)
 {
     callsite *site;
     PLHashEntry *he;
@@ -1898,7 +1886,7 @@ CallocCallback(void *ptr, size_t count, size_t size, PRUint32 start, PRUint32 en
         if (site) {
             log_event5(logfp, TM_EVENT_CALLOC,
                        site->serial, start, end - start,
-                       (uint32)NS_PTR_TO_INT32(ptr), size);
+                       (uint32_t)NS_PTR_TO_INT32(ptr), size);
         }
         if (get_allocations()) {
             he = PL_HashTableAdd(allocations, ptr, site);
@@ -1914,7 +1902,7 @@ CallocCallback(void *ptr, size_t count, size_t size, PRUint32 start, PRUint32 en
 
 PR_IMPLEMENT(void)
 ReallocCallback(void * oldptr, void *ptr, size_t size,
-                PRUint32 start, PRUint32 end, tm_thread *t)
+                uint32_t start, uint32_t end, tm_thread *t)
 {
     callsite *oldsite, *site;
     size_t oldsize;
@@ -1965,9 +1953,9 @@ ReallocCallback(void * oldptr, void *ptr, size_t size,
         if (site) {
             log_event8(logfp, TM_EVENT_REALLOC,
                        site->serial, start, end - start,
-                       (uint32)NS_PTR_TO_INT32(ptr), size,
+                       (uint32_t)NS_PTR_TO_INT32(ptr), size,
                        oldsite ? oldsite->serial : 0,
-                       (uint32)NS_PTR_TO_INT32(oldptr), oldsize);
+                       (uint32_t)NS_PTR_TO_INT32(oldptr), oldsize);
         }
         if (ptr && allocations) {
             if (ptr != oldptr) {
@@ -1999,7 +1987,7 @@ ReallocCallback(void * oldptr, void *ptr, size_t size,
 }
 
 PR_IMPLEMENT(void)
-FreeCallback(void * ptr, PRUint32 start, PRUint32 end, tm_thread *t)
+FreeCallback(void * ptr, uint32_t start, uint32_t end, tm_thread *t)
 {
     PLHashEntry **hep, *he;
     callsite *site;
@@ -2033,7 +2021,7 @@ FreeCallback(void * ptr, PRUint32 start, PRUint32 end, tm_thread *t)
                     }
                     log_event5(logfp, TM_EVENT_FREE,
                                site->serial, start, end - start,
-                               (uint32)NS_PTR_TO_INT32(ptr), alloc->size);
+                               (uint32_t)NS_PTR_TO_INT32(ptr), alloc->size);
                 }
                 PL_HashTableRawRemove(allocations, hep, he);
             }

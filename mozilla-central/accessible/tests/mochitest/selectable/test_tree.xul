@@ -2,28 +2,28 @@
 <?xml-stylesheet href="chrome://global/skin" type="text/css"?>
 <?xml-stylesheet href="chrome://mochikit/content/tests/SimpleTest/test.css"
                  type="text/css"?>
-<?xml-stylesheet href="chrome://mochikit/content/a11y/accessible/treeview.css"
+<?xml-stylesheet href="../treeview.css"
                  type="text/css"?>
 
 <window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         title="XUL tree selectable tests">
 
-  <script type="application/javascript" 
-          src="chrome://mochikit/content/MochiKit/packed.js" />
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/treeview.js" />
+          src="../treeview.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js" />
+          src="../common.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/role.js" />
+          src="../events.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/states.js" />
+          src="../role.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/events.js" />
+          src="../states.js" />
+  <script type="application/javascript"
+          src="../selectable.js" />
 
   <script type="application/javascript">
   <![CDATA[
@@ -53,7 +53,7 @@
         if (seltype != "single" && seltype != "cell" && seltype != "text")
           isTreeMultiSelectable = true;
 
-        // test SelectAllSelection correctly discerns multiselect vs single
+        // selectAllSelection
         var accSelectable = getAccessible(this.DOMNode,
                                           [nsIAccessibleSelectable]);
         ok(accSelectable, "tree is not selectable!");
@@ -62,15 +62,39 @@
              "SelectAllSelection is not correct for seltype: " + seltype);
         }
 
-        // test that the selection worked as expected
-        var rows = tree.children;
-        for (var i = 0; i < rows.length; i++) {
+        var selectedChildren = [];
+        if (isTreeMultiSelectable) {
+          var rows = tree.children;
+          for (var i = 0; i < rows.length; i++) {
           var row = rows.queryElementAt(i, nsIAccessible);
-          if (getRole(row) == (ROLE_OUTLINEITEM || ROLE_ROW)){
-            testStates(row, isTreeMultiSelectable? STATE_SELECTED : 0, 0, 0,
-                       isTreeMultiSelectable? 0: STATE_SELECTED);
+            if (getRole(row) == ROLE_OUTLINEITEM || getRole(row) == ROLE_ROW)
+              selectedChildren.push(row);
           }
         }
+        testSelectableSelection(accSelectable, selectedChildren,
+                                "selectAllSelection test. ");
+
+        // clearSelection
+        accSelectable.clearSelection();
+        testSelectableSelection(accSelectable, [], "clearSelection test. ");
+
+        // addChildToSelection
+        accSelectable.addChildToSelection(1);
+        accSelectable.addChildToSelection(3);
+
+        selectedChildren = isTreeMultiSelectable ?
+          [ accSelectable.getChildAt(2), accSelectable.getChildAt(4) ] :
+          [ accSelectable.getChildAt(2) ];
+        testSelectableSelection(accSelectable, selectedChildren,
+                                "addChildToSelection test. ");
+
+        // removeChildFromSelection
+        accSelectable.removeChildFromSelection(1);
+
+        selectedChildren = isTreeMultiSelectable ?
+          [ accSelectable.getChildAt(4) ] : [ ];
+        testSelectableSelection(accSelectable, selectedChildren,
+                                "removeChildFromSelection test. ");
       }
 
       this.getID = function getID()
@@ -83,7 +107,7 @@
 
     function doTest()
     {
-      gQueue = new eventQueue("TreeViewChanged");
+      gQueue = new eventQueue(EVENT_REORDER);
       gQueue.push(new statesChecker("tree", new nsTreeTreeView()));
       gQueue.push(new statesChecker("treesingle", new nsTreeTreeView()));
       gQueue.push(new statesChecker("treecell", new nsTreeTreeView()));
@@ -104,6 +128,11 @@
         href="https://bugzilla.mozilla.org/show_bug.cgi?id=523118"
         title="we mistake 'cell' and text' xul tree seltypes for multiselects">
        Mozilla Bug 523118
+      </a>
+      <a target="_blank"
+        href="https://bugzilla.mozilla.org/show_bug.cgi?id=624977"
+        title="Optimize nsXulTreeAccessible selectedItems()">
+       Mozilla Bug 624977
       </a><br/>
       <p id="display"></p>
       <div id="content" style="display: none">

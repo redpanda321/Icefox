@@ -1,40 +1,8 @@
 /* -*- Mode: Java; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Bug 431558 code.
- *
- * The Initial Developer of the Original Code is Mozilla Corp.
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Marco Bonardo <mak77bonardo.net> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
  /**
   * Test preventive maintenance
@@ -45,27 +13,15 @@
 // Include PlacesDBUtils module
 Components.utils.import("resource://gre/modules/PlacesDBUtils.jsm");
 
-const FINISHED_MAINTANANCE_NOTIFICATION_TOPIC = "places-maintenance-finished";
-
-const PLACES_STRING_BUNDLE_URI = "chrome://places/locale/places.properties";
+const FINISHED_MAINTENANCE_NOTIFICATION_TOPIC = "places-maintenance-finished";
 
 // Get services and database connection
-let os = Cc["@mozilla.org/observer-service;1"].
-         getService(Ci.nsIObserverService);
-let hs = Cc["@mozilla.org/browser/nav-history-service;1"].
-         getService(Ci.nsINavHistoryService);
-let bh = hs.QueryInterface(Ci.nsIBrowserHistory);
-let bs = Cc["@mozilla.org/browser/nav-bookmarks-service;1"].
-         getService(Ci.nsINavBookmarksService);
-let ts = Cc["@mozilla.org/browser/tagging-service;1"].
-         getService(Ci.nsITaggingService);
-let as = Cc["@mozilla.org/browser/annotation-service;1"].
-         getService(Ci.nsIAnnotationService);
-let fs = Cc["@mozilla.org/browser/favicon-service;1"].
-         getService(Ci.nsIFaviconService);
-let bundle = Cc["@mozilla.org/intl/stringbundle;1"].
-             getService(Ci.nsIStringBundleService).
-             createBundle(PLACES_STRING_BUNDLE_URI);
+let hs = PlacesUtils.history;
+let bh = PlacesUtils.bhistory;
+let bs = PlacesUtils.bookmarks;
+let ts = PlacesUtils.tagging;
+let as = PlacesUtils.annotations;
+let fs = PlacesUtils.favicons;
 
 let mDBConn = hs.QueryInterface(Ci.nsPIPlacesDatabase).DBConnection;
 
@@ -95,15 +51,18 @@ function addPlace(aUrl, aFavicon) {
   return mDBConn.lastInsertRowID;
 }
 
-function addBookmark(aPlaceId, aType, aParent, aKeywordId, aFolderType) {
+function addBookmark(aPlaceId, aType, aParent, aKeywordId, aFolderType, aTitle) {
   let stmt = mDBConn.createStatement(
-    "INSERT INTO moz_bookmarks (fk, type, parent, keyword_id, folder_type) " +
-    "VALUES (:place_id, :type, :parent, :keyword_id, :folder_type)");
+    "INSERT INTO moz_bookmarks (fk, type, parent, keyword_id, folder_type, "
+  +                            "title, guid) "
+  + "VALUES (:place_id, :type, :parent, :keyword_id, :folder_type, :title, "
+  +         "GENERATE_GUID())");
   stmt.params["place_id"] = aPlaceId || null;
   stmt.params["type"] = aType || bs.TYPE_BOOKMARK;
   stmt.params["parent"] = aParent || bs.unfiledBookmarksFolder;
   stmt.params["keyword_id"] = aKeywordId || null;
   stmt.params["folder_type"] = aFolderType || null;
+  stmt.params["title"] = typeof(aTitle) == "string" ? aTitle : null;
   stmt.execute();
   stmt.finalize();
   return mDBConn.lastInsertRowID;
@@ -113,12 +72,104 @@ function addBookmark(aPlaceId, aType, aParent, aKeywordId, aFolderType) {
 // Tests
 
 let tests = [];
-let current_test = null;
 
 //------------------------------------------------------------------------------
 
 tests.push({
   name: "A.1",
+  desc: "Remove obsolete annotations from moz_annos",
+
+  _obsoleteWeaveAttribute: "weave/test",
+  _placeId: null,
+
+  setup: function() {
+    // Add a place to ensure place_id = 1 is valid.
+    this._placeId = addPlace();
+    // Add an obsolete attribute.
+    let stmt = mDBConn.createStatement(
+      "INSERT INTO moz_anno_attributes (name) VALUES (:anno)"
+    );
+    stmt.params['anno'] = this._obsoleteWeaveAttribute;
+    stmt.execute();
+    stmt.finalize();
+    stmt = mDBConn.createStatement(
+      "INSERT INTO moz_annos (place_id, anno_attribute_id) "
+    + "VALUES (:place_id, "
+    +   "(SELECT id FROM moz_anno_attributes WHERE name = :anno)"
+    + ")"
+    );
+    stmt.params['place_id'] = this._placeId;
+    stmt.params['anno'] = this._obsoleteWeaveAttribute;
+    stmt.execute();
+    stmt.finalize();
+  },
+
+  check: function() {
+    // Check that the obsolete annotation has been removed.
+    let stmt = mDBConn.createStatement(
+      "SELECT id FROM moz_anno_attributes WHERE name = :anno"
+    );
+    stmt.params['anno'] = this._obsoleteWeaveAttribute;
+    do_check_false(stmt.executeStep());
+    stmt.finalize();
+  }
+});
+
+tests.push({
+  name: "A.2",
+  desc: "Remove obsolete annotations from moz_items_annos",
+
+  _obsoleteSyncAttribute: "sync/children",
+  _obsoleteGuidAttribute: "placesInternal/GUID",
+  _obsoleteWeaveAttribute: "weave/test",
+  _placeId: null,
+  _bookmarkId: null,
+
+  setup: function() {
+    // Add a place to ensure place_id = 1 is valid.
+    this._placeId = addPlace();
+    // Add a bookmark.
+    this._bookmarkId = addBookmark(this._placeId);
+    // Add an obsolete attribute.
+    let stmt = mDBConn.createStatement(
+      "INSERT INTO moz_anno_attributes (name) "
+    + "VALUES (:anno1), (:anno2), (:anno3)"
+    );
+    stmt.params['anno1'] = this._obsoleteSyncAttribute;
+    stmt.params['anno2'] = this._obsoleteGuidAttribute;
+    stmt.params['anno3'] = this._obsoleteWeaveAttribute;
+    stmt.execute();
+    stmt.finalize();
+    stmt = mDBConn.createStatement(
+      "INSERT INTO moz_items_annos (item_id, anno_attribute_id) "
+    + "SELECT :item_id, id "
+    + "FROM moz_anno_attributes "
+    + "WHERE name IN (:anno1, :anno2, :anno3)"
+    );
+    stmt.params['item_id'] = this._bookmarkId;
+    stmt.params['anno1'] = this._obsoleteSyncAttribute;
+    stmt.params['anno2'] = this._obsoleteGuidAttribute;
+    stmt.params['anno3'] = this._obsoleteWeaveAttribute;
+    stmt.execute();
+    stmt.finalize();
+  },
+
+  check: function() {
+    // Check that the obsolete annotations have been removed.
+    let stmt = mDBConn.createStatement(
+      "SELECT id FROM moz_anno_attributes "
+    + "WHERE name IN (:anno1, :anno2, :anno3)"
+    );
+    stmt.params['anno1'] = this._obsoleteSyncAttribute;
+    stmt.params['anno2'] = this._obsoleteGuidAttribute;
+    stmt.params['anno3'] = this._obsoleteWeaveAttribute;
+    do_check_false(stmt.executeStep());
+    stmt.finalize();
+  }
+});
+
+tests.push({
+  name: "A.3",
   desc: "Remove unused attributes",
 
   _usedPageAttribute: "usedPage",
@@ -153,7 +204,7 @@ tests.push({
     stmt.params['item_id'] = this._bookmarkId;
     stmt.params['anno'] = this._usedItemAttribute;
     stmt.execute();
-    stmt.finalize();    
+    stmt.finalize();
   },
 
   check: function() {
@@ -281,12 +332,9 @@ tests.push({
 
     // Remove the root.
     mDBConn.executeSimpleSQL("DELETE FROM moz_bookmarks WHERE parent = 0");
-    try {
-      bs.getFolderIdForItem(bs.placesRoot);
-      do_throw("Places root should not exist now!");
-    } catch(e) {
-      // Root has been removed so this call should throw.
-    }
+    let stmt = mDBConn.createStatement("SELECT id FROM moz_bookmarks WHERE parent = 0");
+    do_check_false(stmt.executeStep());
+    stmt.finalize();
   },
 
   check: function() {
@@ -318,13 +366,13 @@ tests.push({
     // Ensure all roots titles are correct.
     do_check_eq(bs.getItemTitle(bs.placesRoot), "");
     do_check_eq(bs.getItemTitle(bs.bookmarksMenuFolder),
-                bundle.GetStringFromName("BookmarksMenuFolderTitle"));
+                PlacesUtils.getString("BookmarksMenuFolderTitle"));
     do_check_eq(bs.getItemTitle(bs.tagsFolder),
-                bundle.GetStringFromName("TagsFolderTitle"));
+                PlacesUtils.getString("TagsFolderTitle"));
     do_check_eq(bs.getItemTitle(bs.unfiledBookmarksFolder),
-                bundle.GetStringFromName("UnsortedBookmarksFolderTitle"));
+                PlacesUtils.getString("UnsortedBookmarksFolderTitle"));
     do_check_eq(bs.getItemTitle(bs.toolbarFolder),
-                bundle.GetStringFromName("BookmarksToolbarFolderTitle"));
+                PlacesUtils.getString("BookmarksToolbarFolderTitle"));
   }
 });
 
@@ -370,7 +418,6 @@ tests.push({
   _bookmarkId: null,
   _separatorId: null,
   _folderId: null,
-  _dynamicContainerId: null,
   _placeId: null,
 
   setup: function() {
@@ -384,8 +431,6 @@ tests.push({
     this._separatorId = addBookmark(null, bs.TYPE_SEPARATOR, this._tagId);
     // Insert a folder in the tag
     this._folderId = addBookmark(null, bs.TYPE_FOLDER, this._tagId);
-    // Insert a dynamic container in the tag
-    this._dynamicContainerId = addBookmark(null, bs.TYPE_DYNAMIC_CONTAINER, this._tagId);
   },
 
   check: function() {
@@ -402,11 +447,6 @@ tests.push({
     stmt.reset();
     // Check that folder is no more there
     stmt.params["type"] = bs.TYPE_FOLDER;
-    stmt.params["parent"] = this._tagId;
-    do_check_false(stmt.executeStep());
-    stmt.reset();
-    // Check that dynamic container is no more there
-    stmt.params["type"] = bs.TYPE_DYNAMIC_CONTAINER;
     stmt.params["parent"] = this._tagId;
     do_check_false(stmt.executeStep());
     stmt.finalize();
@@ -499,7 +539,7 @@ tests.push({
     stmt.params["item_id"] = this._bookmarkId;
     stmt.params["parent"] = this._orphanFolderId;
     do_check_true(stmt.executeStep());
-    stmt.finalize();    
+    stmt.finalize();
   }
 });
 
@@ -558,7 +598,6 @@ tests.push({
 
   _separatorId: null,
   _folderId: null,
-  _dynamicContainerId: null,
   _placeId: null,
 
   setup: function() {
@@ -568,8 +607,6 @@ tests.push({
     this._separatorId = addBookmark(this._placeId, bs.TYPE_SEPARATOR);
     // Add a folder with a fk
     this._folderId = addBookmark(this._placeId, bs.TYPE_FOLDER);
-    // Add a dynamic container with a fk
-    this._dynamicContainerId = addBookmark(this._placeId, bs.TYPE_DYNAMIC_CONTAINER, null, null, "test");
   },
 
   check: function() {
@@ -580,10 +617,6 @@ tests.push({
     do_check_true(stmt.executeStep());
     stmt.reset();
     stmt.params["item_id"] = this._folderId;
-    stmt.params["type"] = bs.TYPE_BOOKMARK;
-    do_check_true(stmt.executeStep());
-    stmt.reset();
-    stmt.params["item_id"] = this._dynamicContainerId;
     stmt.params["type"] = bs.TYPE_BOOKMARK;
     do_check_true(stmt.executeStep());
     stmt.finalize();
@@ -627,46 +660,13 @@ tests.push({
 //------------------------------------------------------------------------------
 
 tests.push({
-  name: "D.8",
-  desc: "Fix wrong item types | dynamic containers",
-
-  _validDynamicContainerId: null,
-  _invalidDynamicContainerId: null,
-
-  setup: function() {
-    // Add a valid dynamic container with a folder type
-    this._validDynamicContainerId = addBookmark(null, bs.TYPE_DYNAMIC_CONTAINER, null, null, "test");
-    // Add an invalid dynamic container without a folder type
-    this._invalidDynamicContainerId = addBookmark(null, bs.TYPE_DYNAMIC_CONTAINER, null, null, null);    
-  },
-
-  check: function() {
-    // Check valid dynamic container is still there
-    let stmt = mDBConn.createStatement("SELECT id FROM moz_bookmarks WHERE id = :item_id AND type = :type");
-    stmt.params["item_id"] = this._validDynamicContainerId;
-    stmt.params["type"] = bs.TYPE_DYNAMIC_CONTAINER;
-    do_check_true(stmt.executeStep());
-    stmt.reset();
-    // Check invalid dynamic container has been converted to a normal folder
-    stmt.params["item_id"] = this._invalidDynamicContainerId;
-    stmt.params["type"] = bs.TYPE_FOLDER;
-    do_check_true(stmt.executeStep());
-    stmt.finalize();
-  }
-});
-
-//------------------------------------------------------------------------------
-
-tests.push({
   name: "D.9",
   desc: "Fix wrong parents",
 
   _bookmarkId: null,
   _separatorId: null,
-  _dynamicContainerId: null,
   _bookmarkId1: null,
   _bookmarkId2: null,
-  _bookmarkId3: null,
   _placeId: null,
 
   setup: function() {
@@ -676,12 +676,9 @@ tests.push({
     this._bookmarkId = addBookmark(this._placeId, bs.TYPE_BOOKMARK);
     // Insert a separator
     this._separatorId = addBookmark(null, bs.TYPE_SEPARATOR);
-    // Insert a dynamic container
-    this.dynamicContainerId = addBookmark(null, bs.TYPE_DYNAMIC_CONTAINER, null, null, "test");
     // Create 3 children of these items
     this._bookmarkId1 = addBookmark(this._placeId, bs.TYPE_BOOKMARK, this._bookmarkId);
     this._bookmarkId2 = addBookmark(this._placeId, bs.TYPE_BOOKMARK, this._separatorId);
-    this._bookmarkId3 = addBookmark(this._placeId, bs.TYPE_BOOKMARK, this._dynamicContainerId);
   },
 
   check: function() {
@@ -694,68 +691,144 @@ tests.push({
     stmt.params["item_id"] = this._bookmarkId2;
     stmt.params["parent"] = bs.unfiledBookmarksFolder;
     do_check_true(stmt.executeStep());
-    stmt.reset();
-    stmt.params["item_id"] = this._bookmarkId3;
-    stmt.params["parent"] = bs.unfiledBookmarksFolder;
-    do_check_true(stmt.executeStep());
-    stmt.finalize();    
+    stmt.finalize();
   }
 });
 
 //------------------------------------------------------------------------------
-//XXX TODO
+
 tests.push({
   name: "D.10",
   desc: "Recalculate positions",
 
-  setup: function() {
+  _unfiledBookmarks: [],
+  _toolbarBookmarks: [],
 
+  setup: function() {
+    const NUM_BOOKMARKS = 20;
+    bs.runInBatchMode({
+      runBatched: function (aUserData) {
+        // Add bookmarks to two folders to better perturbate the table.
+        for (let i = 0; i < NUM_BOOKMARKS; i++) {
+          bs.insertBookmark(PlacesUtils.unfiledBookmarksFolderId,
+                            NetUtil.newURI("http://example.com/"),
+                            bs.DEFAULT_INDEX, "testbookmark");
+        }
+        for (let i = 0; i < NUM_BOOKMARKS; i++) {
+          bs.insertBookmark(PlacesUtils.toolbarFolderId,
+                            NetUtil.newURI("http://example.com/"),
+                            bs.DEFAULT_INDEX, "testbookmark");
+        }
+      }
+    }, null);
+
+    function randomize_positions(aParent, aResultArray) {
+      let stmt = mDBConn.createStatement(
+        "UPDATE moz_bookmarks SET position = :rand " +
+        "WHERE id IN ( " +
+          "SELECT id FROM moz_bookmarks WHERE parent = :parent " +
+          "ORDER BY RANDOM() LIMIT 1 " +
+        ") "
+      );
+      for (let i = 0; i < (NUM_BOOKMARKS / 2); i++) {
+        stmt.params["parent"] = aParent;
+        stmt.params["rand"] = Math.round(Math.random() * (NUM_BOOKMARKS - 1));
+        stmt.execute();
+        stmt.reset();
+      }
+      stmt.finalize();
+
+      // Build the expected ordered list of bookmarks.
+      stmt = mDBConn.createStatement(
+        "SELECT id, position " +
+        "FROM moz_bookmarks WHERE parent = :parent " +
+        "ORDER BY position ASC, ROWID ASC "
+      );
+      stmt.params["parent"] = aParent;
+      while (stmt.executeStep()) {
+        aResultArray.push(stmt.row.id);
+        print(stmt.row.id + "\t" + stmt.row.position + "\t" +
+              (aResultArray.length - 1));
+      }
+      stmt.finalize();
+    }
+
+    // Set random positions for the added bookmarks.
+    randomize_positions(PlacesUtils.unfiledBookmarksFolderId,
+                        this._unfiledBookmarks);
+    randomize_positions(PlacesUtils.toolbarFolderId, this._toolbarBookmarks);
   },
 
   check: function() {
+    function check_order(aParent, aResultArray) {
+      // Build the expected ordered list of bookmarks.
+      let stmt = mDBConn.createStatement(
+        "SELECT id, position FROM moz_bookmarks WHERE parent = :parent " +
+        "ORDER BY position ASC"
+      );
+      stmt.params["parent"] = aParent;
+      let pass = true;
+      while (stmt.executeStep()) {
+        print(stmt.row.id + "\t" + stmt.row.position);
+        if (aResultArray.indexOf(stmt.row.id) != stmt.row.position) {
+          pass = false;
+        }
+      }
+      stmt.finalize();
+      if (!pass) {
+        dump_table("moz_bookmarks");
+        do_throw("Unexpected unfiled bookmarks order.");
+      }
+    }
 
+    check_order(PlacesUtils.unfiledBookmarksFolderId, this._unfiledBookmarks);
+    check_order(PlacesUtils.toolbarFolderId, this._toolbarBookmarks);
   }
 });
 
 //------------------------------------------------------------------------------
 
 tests.push({
-  name: "D.11",
-  desc: "Remove old livemarks status items",
-
-  _bookmarkId: null,
-  _livemarkLoadingStatusId: null,
-  _livemarkFailedStatusId: null,
-  _placeId: null,
-  _lmLoadingPlaceId: null,
-  _lmFailedPlaceId: null,
+  name: "D.12",
+  desc: "Fix empty-named tags",
 
   setup: function() {
     // Add a place to ensure place_id = 1 is valid
-    this._placeId = addPlace();
-
-    // Insert a bookmark
-    this._bookmarkId = addBookmark(this._placeId);
-    // Add livemark status item
-    this._lmLoadingPlaceId = addPlace("about:livemark-loading");
-    this._lmFailedPlaceId = addPlace("about:livemark-failed");
-    // Bookmark it
-    this._livemarkLoadingStatusId = addBookmark(this._lmLoadingPlaceId);
-    this._livemarkFailedStatusId = addBookmark(this._lmFailedPlaceId);
+    let placeId = addPlace();
+    // Create a empty-named tag.
+    this._untitledTagId = addBookmark(null, bs.TYPE_FOLDER, bs.tagsFolder, null, null, "");
+    // Insert a bookmark in the tag, otherwise it will be removed.
+    addBookmark(placeId, bs.TYPE_BOOKMARK, this._untitledTagId);
+    // Create a empty-named folder.
+    this._untitledFolderId = addBookmark(null, bs.TYPE_FOLDER, bs.toolbarFolder, null, null, "");
+    // Create a titled tag.
+    this._titledTagId = addBookmark(null, bs.TYPE_FOLDER, bs.tagsFolder, null, null, "titledTag");
+    // Insert a bookmark in the tag, otherwise it will be removed.
+    addBookmark(placeId, bs.TYPE_BOOKMARK, this._titledTagId);
+    // Create a titled folder.
+    this._titledFolderId = addBookmark(null, bs.TYPE_FOLDER, bs.toolbarFolder, null, null, "titledFolder");
   },
 
   check: function() {
     // Check that valid bookmark is still there
-    let stmt = mDBConn.createStatement("SELECT id FROM moz_bookmarks WHERE id = :item_id");
-    stmt.params["item_id"] = this._bookmarkId;
+    let stmt = mDBConn.createStatement(
+      "SELECT title FROM moz_bookmarks WHERE id = :id"
+    );
+    stmt.params["id"] = this._untitledTagId;
     do_check_true(stmt.executeStep());
+    do_check_eq(stmt.row.title, "(notitle)");
     stmt.reset();
-    // Check that livemark status items have been removed
-    stmt.params["item_id"] = this._livemarkLoadingStatusId;
-    do_check_false(stmt.executeStep());
+    stmt.params["id"] = this._untitledFolderId;
+    do_check_true(stmt.executeStep());
+    do_check_eq(stmt.row.title, "");
     stmt.reset();
-    stmt.params["item_id"] = this._livemarkFailedStatusId;
-    do_check_false(stmt.executeStep());
+    stmt.params["id"] = this._titledTagId;
+    do_check_true(stmt.executeStep());
+    do_check_eq(stmt.row.title, "titledTag");
+    stmt.reset();
+    stmt.params["id"] = this._titledFolderId;
+    do_check_true(stmt.executeStep());
+    do_check_eq(stmt.row.title, "titledFolder");
     stmt.finalize();
   }
 });
@@ -851,7 +924,7 @@ tests.push({
     stmt.reset();
     stmt.params["place_id"] = this._invalidPlaceId;
     stmt.params["input"] = "moz";
-    stmt.execute();    
+    stmt.execute();
     stmt.finalize();
   },
 
@@ -1054,17 +1127,127 @@ tests.push({
 });
 
 //------------------------------------------------------------------------------
-//XXX TODO
+
 tests.push({
   name: "L.2",
-  desc: "Recalculate visit_count",
+  desc: "Recalculate visit_count and last_visit_date",
 
   setup: function() {
+    function setVisitCount(aURL, aValue) {
+      let stmt = mDBConn.createStatement(
+        "UPDATE moz_places SET visit_count = :count WHERE url = :url"
+      );
+      stmt.params.count = aValue;
+      stmt.params.url = aURL;
+      stmt.execute();
+      stmt.finalize();
+    }
+    function setLastVisitDate(aURL, aValue) {
+      let stmt = mDBConn.createStatement(
+        "UPDATE moz_places SET last_visit_date = :date WHERE url = :url"
+      );
+      stmt.params.date = aValue;
+      stmt.params.url = aURL;
+      stmt.execute();
+      stmt.finalize();
+    }
 
+    let now = Date.now() * 1000;
+    // Add a page with 1 visit.
+    let url = "http://1.moz.org/";
+    yield promiseAddVisits({ uri: uri(url), visitDate: now++ });
+    // Add a page with 1 visit and set wrong visit_count.
+    url = "http://2.moz.org/";
+    yield promiseAddVisits({ uri: uri(url), visitDate: now++ });
+    setVisitCount(url, 10);
+    // Add a page with 1 visit and set wrong last_visit_date.
+    url = "http://3.moz.org/";
+    yield promiseAddVisits({ uri: uri(url), visitDate: now++ });
+    setLastVisitDate(url, now++);
+    // Add a page with 1 visit and set wrong stats.
+    url = "http://4.moz.org/";
+    yield promiseAddVisits({ uri: uri(url), visitDate: now++ });
+    setVisitCount(url, 10);
+    setLastVisitDate(url, now++);
+
+    // Add a page without visits.
+    let url = "http://5.moz.org/";
+    addPlace(url);
+    // Add a page without visits and set wrong visit_count.
+    url = "http://6.moz.org/";
+    addPlace(url);
+    setVisitCount(url, 10);
+    // Add a page without visits and set wrong last_visit_date.
+    url = "http://7.moz.org/";
+    addPlace(url);
+    setLastVisitDate(url, now++);
+    // Add a page without visits and set wrong stats.
+    url = "http://8.moz.org/";
+    addPlace(url);
+    setVisitCount(url, 10);
+    setLastVisitDate(url, now++);
   },
 
   check: function() {
+    let stmt = mDBConn.createStatement(
+      "SELECT h.id FROM moz_places h " +
+      "JOIN moz_historyvisits v ON v.place_id = h.id AND visit_type NOT IN (0,4,7,8) " +
+      "GROUP BY h.id HAVING h.visit_count <> count(*) " +
+      "UNION ALL " +
+      "SELECT h.id FROM moz_places h " +
+      "JOIN moz_historyvisits v ON v.place_id = h.id " +
+      "GROUP BY h.id HAVING h.last_visit_date <> MAX(v.visit_date) "
+    );
+    do_check_false(stmt.executeStep());
+    stmt.finalize();
+  }
+});
 
+//------------------------------------------------------------------------------
+
+tests.push({
+  name: "L.3",
+  desc: "recalculate hidden for redirects.",
+
+  setup: function() {
+    addVisits([
+      { uri: NetUtil.newURI("http://l3.moz.org/"),
+        transition: TRANSITION_TYPED },
+      { uri: NetUtil.newURI("http://l3.moz.org/redirecting/"),
+        transition: TRANSITION_TYPED },
+      { uri: NetUtil.newURI("http://l3.moz.org/redirecting2/"),
+        transition: TRANSITION_REDIRECT_TEMPORARY,
+        referrer: NetUtil.newURI("http://l3.moz.org/redirecting/") },
+      { uri: NetUtil.newURI("http://l3.moz.org/target/"),
+        transition: TRANSITION_REDIRECT_PERMANENT,
+        referrer: NetUtil.newURI("http://l3.moz.org/redirecting2/") },
+    ]);
+  },
+
+  asyncCheck: function(aCallback) {
+    let stmt = mDBConn.createAsyncStatement(
+      "SELECT h.url FROM moz_places h WHERE h.hidden = 1"
+    );
+    stmt.executeAsync({
+      _count: 0,
+      handleResult: function(aResultSet) {
+        for (let row; (row = aResultSet.getNextRow());) {
+          let url = row.getResultByIndex(0);
+          do_check_true(/redirecting/.test(url));
+          this._count++;
+        }
+      },
+      handleError: function(aError) {
+      },
+      handleCompletion: function(aReason) {
+        dump_table("moz_places");
+        dump_table("moz_historyvisits");
+        do_check_eq(aReason, Ci.mozIStorageStatementCallback.REASON_FINISHED);
+        do_check_eq(this._count, 2);
+        aCallback();
+      }
+    });
+    stmt.finalize();
   }
 });
 
@@ -1082,10 +1265,10 @@ tests.push({
 
   setup: function() {
     // use valid api calls to create a bunch of items
-    hs.addVisit(this._uri1, Date.now() * 1000, null,
-                hs.TRANSITION_TYPED, false, 0);
-    hs.addVisit(this._uri2, Date.now() * 1000, null,
-                hs.TRANSITION_TYPED, false, 0);
+    yield promiseAddVisits([
+      { uri: this._uri1 },
+      { uri: this._uri2 },
+    ]);
 
     this._folderId = bs.createFolder(bs.toolbarFolder, "testfolder",
                                      bs.DEFAULT_INDEX);
@@ -1097,18 +1280,18 @@ tests.push({
                                            bs.DEFAULT_INDEX);
     do_check_true(this._separatorId > 0);
     ts.tagURI(this._uri1, ["testtag"]);
-    fs.setFaviconUrlForPage(this._uri2,
-                            uri("http://www2.mozilla.org/favicon.ico"));
+    fs.setAndFetchFaviconForPage(this._uri2, SMALLPNG_DATA_URI, false,
+                                 PlacesUtils.favicons.FAVICON_LOAD_NON_PRIVATE);
     bs.setKeywordForBookmark(this._bookmarkId, "testkeyword");
     as.setPageAnnotation(this._uri2, "anno", "anno", 0, as.EXPIRE_NEVER);
     as.setItemAnnotation(this._bookmarkId, "anno", "anno", 0, as.EXPIRE_NEVER);
   },
 
-  check: function() {
+  asyncCheck: function (aCallback) {
     // Check that all items are correct
     do_check_true(bh.isVisited(this._uri1));
     do_check_true(bh.isVisited(this._uri2));
-    
+
     do_check_eq(bs.getBookmarkURI(this._bookmarkId).spec, this._uri1.spec);
     do_check_eq(bs.getItemIndex(this._folderId), 0);
 
@@ -1117,49 +1300,29 @@ tests.push({
 
     do_check_eq(ts.getTagsForURI(this._uri1).length, 1);
     do_check_eq(bs.getKeywordForBookmark(this._bookmarkId), "testkeyword");
-    do_check_eq(fs.getFaviconForPage(this._uri2).spec,
-                "http://www2.mozilla.org/favicon.ico");
     do_check_eq(as.getPageAnnotation(this._uri2, "anno"), "anno");
     do_check_eq(as.getItemAnnotation(this._bookmarkId, "anno"), "anno");
+
+    fs.getFaviconURLForPage(this._uri2, function (aFaviconURI) {
+        do_check_true(aFaviconURI.equals(SMALLPNG_DATA_URI));
+        aCallback();
+      });
   }
 });
 
 //------------------------------------------------------------------------------
 
-let observer = {
-  observe: function(aSubject, aTopic, aData) {
-    if (aTopic == FINISHED_MAINTANANCE_NOTIFICATION_TOPIC) {
-      try {current_test.check();}
-      catch (ex){ do_throw(ex);}
-      cleanDatabase();
-      if (tests.length) {
-        current_test = tests.shift();
-        dump("\nExecuting test: " + current_test.name + "\n" + "*** " + current_test.desc + "\n");
-        current_test.setup();
-        PlacesDBUtils.maintenanceOnIdle();
-      }
-      else {
-        os.removeObserver(this, FINISHED_MAINTANANCE_NOTIFICATION_TOPIC);
-        // Sanity check: all roots should be intact
-        do_check_eq(bs.getFolderIdForItem(bs.placesRoot), 0);
-        do_check_eq(bs.getFolderIdForItem(bs.bookmarksMenuFolder), bs.placesRoot);
-        do_check_eq(bs.getFolderIdForItem(bs.tagsFolder), bs.placesRoot);
-        do_check_eq(bs.getFolderIdForItem(bs.unfiledBookmarksFolder), bs.placesRoot);
-        do_check_eq(bs.getFolderIdForItem(bs.toolbarFolder), bs.placesRoot);
-        do_test_finished();
-      }
-    }
-  }
-}
-os.addObserver(observer, FINISHED_MAINTANANCE_NOTIFICATION_TOPIC, false);
-
-
 // main
-function run_test() {
+function run_test()
+{
+  run_next_test();
+}
+
+add_task(function test_preventive_maintenance()
+{
   // Force initialization of the bookmarks hash. This test could cause
   // it to go out of sync due to direct queries on the database.
-  hs.addVisit(uri("http://force.bookmarks.hash"), Date.now() * 1000, null,
-              hs.TRANSITION_TYPED, false, 0);
+  yield promiseAddVisits(uri("http://force.bookmarks.hash"));
   do_check_false(bs.isBookmarked(uri("http://force.bookmarks.hash")));
 
   // Get current bookmarks max ID for cleanup
@@ -1169,12 +1332,33 @@ function run_test() {
   stmt.finalize();
   do_check_true(defaultBookmarksMaxId > 0);
 
-  // Let test run till completion.
-  // Test will end in the observer when all tests have finished running.
-  do_test_pending();
+  for ([, test] in Iterator(tests)) {
+    dump("\nExecuting test: " + test.name + "\n" + "*** " + test.desc + "\n");
+    yield test.setup();
 
-  current_test = tests.shift();
-  dump("\nExecuting test: " + current_test.name + "\n" + "*** " + current_test.desc + "\n");
-  current_test.setup();
-  PlacesDBUtils.maintenanceOnIdle();
-}
+    let promiseMaintenanceFinished =
+        promiseTopicObserved(FINISHED_MAINTENANCE_NOTIFICATION_TOPIC);
+    PlacesDBUtils.maintenanceOnIdle();
+    yield promiseMaintenanceFinished;
+
+    // Check the lastMaintenance time has been saved.
+    do_check_neq(Services.prefs.getIntPref("places.database.lastMaintenance"), null);
+
+    if (test.asyncCheck) {
+      let deferred = Promise.defer();
+      test.asyncCheck(deferred.resolve);
+      yield deferred.promise;
+    } else {
+      test.check();
+    }
+
+    cleanDatabase();
+  }
+
+  // Sanity check: all roots should be intact
+  do_check_eq(bs.getFolderIdForItem(bs.placesRoot), 0);
+  do_check_eq(bs.getFolderIdForItem(bs.bookmarksMenuFolder), bs.placesRoot);
+  do_check_eq(bs.getFolderIdForItem(bs.tagsFolder), bs.placesRoot);
+  do_check_eq(bs.getFolderIdForItem(bs.unfiledBookmarksFolder), bs.placesRoot);
+  do_check_eq(bs.getFolderIdForItem(bs.toolbarFolder), bs.placesRoot);
+});

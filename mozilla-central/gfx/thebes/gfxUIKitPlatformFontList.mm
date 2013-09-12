@@ -122,8 +122,8 @@ UIKitFontEntry::UIKitFontEntry(const nsAString& aPostscriptName,
     mWeight = aWeight;
     mStretch = aStretch;
     mFixedPitch = PR_FALSE; // xxx - do we need this for downloaded fonts?
-    mItalic = (aItalicStyle & (FONT_STYLE_ITALIC | FONT_STYLE_OBLIQUE)) != 0;
-    mIsUserFont = aUserFontData != nsnull;
+    mItalic = (aItalicStyle & (NS_FONT_STYLE_ITALIC | NS_FONT_STYLE_OBLIQUE)) != 0;
+    mIsUserFont = aUserFontData != nullptr;
 }
 
 // ATSUI requires AAT-enabled fonts to render complex scripts correctly.
@@ -155,34 +155,40 @@ nsresult
 UIKitFontEntry::ReadCMAP()
 {
     // attempt this once, if errors occur leave a blank cmap
-    if (mCmapInitialized)
+    if (mCharacterMap)
         return NS_OK;
-    mCmapInitialized = PR_TRUE;
 
+    nsRefPtr<gfxCharacterMap> charmap = new gfxCharacterMap();
     PRUint32 kCMAP = TRUETYPE_TAG('c','m','a','p');
+    nsresult rv;
 
-    nsAutoTArray<PRUint8,16384> cmap;
-    if (GetFontTable(kCMAP, cmap) != NS_OK)
-        return NS_ERROR_FAILURE;
+    AutoFallibleTArray<PRUint8,16384> cmap;
+    rv = GetFontTable(kCMAP, cmap);
 
-    PRPackedBool  unicodeFont, symbolFont; // currently ignored
-    nsresult rv = gfxFontUtils::ReadCMAP(cmap.Elements(), cmap.Length(),
-                                         mCharacterMap, mUVSOffset,
-                                         unicodeFont, symbolFont);
+    bool unicodeFont = false, symbolFont = false; // currently ignored
 
-    if (NS_FAILED(rv)) {
-        mCharacterMap.reset();
-        return rv;
+    if (NS_SUCCEEDED(rv)) {
+        rv = gfxFontUtils::ReadCMAP(cmap.Elements(), cmap.Length(),
+                                    *charmap, mUVSOffset,
+                                    unicodeFont, symbolFont);
     }
 
-    PR_LOG(gFontInfoLog, PR_LOG_DEBUG, ("(fontinit-cmap) psname: %s, size: %d\n",
-                                        NS_ConvertUTF16toUTF8(mName).get(), mCharacterMap.GetSize()));
+    mHasCmapTable = NS_SUCCEEDED(rv);
+    if (mHasCmapTable) {
+        gfxPlatformFontList *pfl = gfxPlatformFontList::PlatformFontList();
+        mCharacterMap = pfl->FindCharMap(charmap);
+    } else {
+        mCharacterMap = new gfxCharacterMap();
+    }
+
+    PR_LOG(gFontInfoLog, PR_LOG_DEBUG, ("(fontinit-cmap) psname: %s\n",
+                                        NS_ConvertUTF16toUTF8(mName).get()));
 
     return rv;
 }
 
 nsresult
-UIKitFontEntry::GetFontTable(PRUint32 aTableTag, nsTArray<PRUint8>& aBuffer)
+UIKitFontEntry::GetFontTable(PRUint32 aTableTag, FallibleTArray<PRUint8>& aBuffer)
 {
     nsAutoreleasePool localPool;
 
@@ -206,7 +212,7 @@ UIKitFontEntry::GetFontTable(PRUint32 aTableTag, nsTArray<PRUint8>& aBuffer)
 }
 
 gfxFont*
-UIKitFontEntry::CreateFontInstance(const gfxFontStyle *aFontStyle, PRBool aNeedsBold)
+UIKitFontEntry::CreateFontInstance(const gfxFontStyle *aFontStyle, bool aNeedsBold)
 {
     return new gfxUIKitFont(this, aFontStyle, aNeedsBold);
 }
@@ -332,7 +338,7 @@ gfxSingleFaceMacFontFamily::ReadOtherFamilyNames(gfxPlatformFontList *aPlatformF
         return;
 
     const PRUint32 kNAME = TRUETYPE_TAG('n','a','m','e');
-    nsAutoTArray<PRUint8,8192> buffer;
+    AutoFallibleTArray<PRUint8,8192> buffer;
 
     if (fe->GetFontTable(kNAME, buffer) != NS_OK)
         return;
@@ -350,12 +356,9 @@ gfxSingleFaceMacFontFamily::ReadOtherFamilyNames(gfxPlatformFontList *aPlatformF
 gfxUIKitPlatformFontList::gfxUIKitPlatformFontList() :
     gfxPlatformFontList(PR_FALSE)
 {
-    // this should always be available (though we won't actually fail if it's missing,
-    // we'll just end up doing a search and then caching the new result instead)
-    mReplacementCharFallbackFamily = NS_LITERAL_STRING("Helvetica");
 }
 
-void
+nsresult
 gfxUIKitPlatformFontList::InitFontList()
 {
     printf("gfxUIKitPlatformFontList::InitFontList()\n");
@@ -363,7 +366,7 @@ gfxUIKitPlatformFontList::InitFontList()
 
     // reset font lists
     gfxPlatformFontList::InitFontList();
-    
+
     nsAutoString availableFamilyName;
     NSString *availableFamily = nil;
     for (availableFamily in [UIFont familyNames]) {
@@ -392,6 +395,8 @@ gfxUIKitPlatformFontList::InitFontList()
 
     // start the delayed cmap loader
     StartLoader(kDelayBeforeLoadingCmaps, kIntervalBetweenLoadingCmaps);
+
+    return NS_OK;
 }
 
 void
@@ -404,7 +409,7 @@ gfxUIKitPlatformFontList::InitSingleFaceList()
     for (PRUint32 i = 0; i < numFonts; i++) {
         PR_LOG(gFontInfoLog, PR_LOG_DEBUG, ("(fontlist-singleface) face name: %s\n",
                                             NS_ConvertUTF16toUTF8(singleFaceFonts[i]).get()));
-        gfxFontEntry *fontEntry = LookupLocalFont(nsnull, singleFaceFonts[i]);
+        gfxFontEntry *fontEntry = LookupLocalFont(nullptr, singleFaceFonts[i]);
         if (fontEntry) {
             nsAutoString familyName, key;
             familyName = singleFaceFonts[i];
@@ -413,14 +418,13 @@ gfxUIKitPlatformFontList::InitSingleFaceList()
                    NS_ConvertUTF16toUTF8(familyName).get(), NS_ConvertUTF16toUTF8(key).get()));
 
             // add only if doesn't exist already
-            PRBool found;
+            bool found;
             gfxFontFamily *familyEntry;
             if (!(familyEntry = mFontFamilies.GetWeak(key, &found))) {
                 familyEntry = new gfxSingleFaceMacFontFamily(familyName);
                 familyEntry->AddFontEntry(fontEntry);
                 familyEntry->SetHasStyles(PR_TRUE);
                 mFontFamilies.Put(key, familyEntry);
-                fontEntry->mFamily = familyEntry;
                 PR_LOG(gFontInfoLog, PR_LOG_DEBUG, ("(fontlist-singleface) added new family\n",
                        NS_ConvertUTF16toUTF8(familyName).get(), NS_ConvertUTF16toUTF8(key).get()));
             }
@@ -433,28 +437,32 @@ gfxUIKitPlatformFontList::EliminateDuplicateFaces(const nsAString& aFamilyName)
 {
 }
 
-PRBool
+bool
 gfxUIKitPlatformFontList::GetStandardFamilyName(const nsAString& aFontName, nsAString& aFamilyName)
 {
     gfxFontFamily *family = FindFamily(aFontName);
     if (family) {
         family->LocalizedName(aFamilyName);
-        return PR_TRUE;
+        return true;
     }
 
-    return PR_FALSE;
+    return false;
 }
 
-gfxFontEntry*
-gfxUIKitPlatformFontList::GetDefaultFont(const gfxFontStyle* aStyle, PRBool& aNeedsBold)
+gfxFontFamily*
+gfxUIKitPlatformFontList::GetDefaultFont(const gfxFontStyle* aStyle)
 {
+    // See https://groups.google.com/forum/?fromgroups=#!topic/rubymotion/xzzTWPRaZz0
+    // for possible fix
+    return 0;/*
     nsAutoreleasePool localPool;
 
     NSString *defaultFamily = [[UIFont systemFontOfSize:aStyle->size] familyName];
     nsAutoString familyName;
 
     GetStringForNSString(defaultFamily, familyName);
-    return FindFontForFamily(familyName, aStyle, aNeedsBold);
+    return FindFamily(familyName);
+    */
 }
 
 gfxFontEntry*
@@ -474,12 +482,12 @@ gfxUIKitPlatformFontList::LookupLocalFont(const gfxProxyFontEntry *aProxyEntry,
             new UIKitFontEntry(aFontName,
                                w, aProxyEntry->mStretch,
                                aProxyEntry->mItalic ?
-                                   FONT_STYLE_ITALIC : FONT_STYLE_NORMAL,
-                               nsnull);
+                                   NS_FONT_STYLE_ITALIC : NS_FONT_STYLE_NORMAL,
+                               nullptr);
     } else {
         newFontEntry =
             new UIKitFontEntry(aFontName,
-                               400, 0, FONT_STYLE_NORMAL, nsnull);
+                               400, 0, NS_FONT_STYLE_NORMAL, nullptr);
     }
 
     return newFontEntry;
@@ -491,6 +499,6 @@ gfxUIKitPlatformFontList::MakePlatformFont(const gfxProxyFontEntry *aProxyEntry,
                                            PRUint32 aLength)
 {
     //XXX: are there enough APIs to do this?
-    return nsnull;
+    return nullptr;
 }
 

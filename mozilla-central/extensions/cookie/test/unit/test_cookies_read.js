@@ -1,6 +1,5 @@
 /* Any copyright is dedicated to the Public Domain.
- * http://creativecommons.org/publicdomain/zero/1.0/
- */
+   http://creativecommons.org/publicdomain/zero/1.0/ */
 
 // test cookie database asynchronous read operation.
 
@@ -22,12 +21,36 @@ function do_run_test() {
   // Set up a profile.
   let profile = do_get_profile();
 
+  // Start the cookieservice, to force creation of a database.
+  Services.cookies;
+
+  // Open a database connection now, after synchronous initialization has
+  // completed. We may not be able to open one later once asynchronous writing
+  // begins.
+  do_check_true(do_get_cookie_file(profile).exists());
+  let db = new CookieDatabaseConnection(do_get_cookie_file(profile), 4);
+
   for (let i = 0; i < 3000; ++i) {
     let uri = NetUtil.newURI("http://" + i + ".com/");
     Services.cookies.setCookieString(uri, null, "oh=hai; max-age=1000", null);
   }
 
   do_check_eq(do_count_cookies(), 3000);
+
+  // Wait until all 3000 cookies have been written out to the database.
+  while (do_count_cookies_in_db(db.db) < 3000) {
+    do_execute_soon(function() {
+      do_run_generator(test_generator);
+    });
+    yield;
+  }
+
+  // Check the WAL file size. We set it to 16 pages of 32k, which means it
+  // should be around 500k.
+  let file = db.db.databaseFile;
+  do_check_true(file.exists());
+  do_check_true(file.fileSize < 1e6);
+  db.close();
 
   // fake a profile change
   do_close_profile(test_generator);

@@ -1,62 +1,30 @@
-/* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org Code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 #include <stdio.h>
-typedef short int16;
-typedef unsigned short uint16;
+#include "mozilla/StandardInteger.h"
 
 #define NOMAPPING 0xfffd
 
 typedef struct {
-		uint16 srcBegin;		/* 2 byte	*/
-		uint16 srcEnd;			/* 2 byte	*/
-		uint16 destBegin;		/* 2 byte	*/
+		uint16_t srcBegin;		/* 2 byte	*/
+		uint16_t srcEnd;		/* 2 byte	*/
+		uint16_t destBegin;		/* 2 byte	*/
 } uFormat0;
 
 typedef struct {
-		uint16 srcBegin;		/* 2 byte	*/
-		uint16 srcEnd;			/* 2 byte	*/
-		uint16	mappingOffset;	/* 2 byte	*/
+		uint16_t srcBegin;		/* 2 byte	*/
+		uint16_t srcEnd;		/* 2 byte	*/
+		uint16_t	mappingOffset;	/* 2 byte	*/
 } uFormat1;
 
 typedef struct {
-		uint16 srcBegin;		/* 2 byte	*/
-		uint16 srcEnd;			/* 2 byte	-waste	*/
-		uint16 destBegin;		/* 2 byte	*/
+		uint16_t srcBegin;		/* 2 byte	*/
+		uint16_t srcEnd;		/* 2 byte	-waste	*/
+		uint16_t destBegin;		/* 2 byte	*/
 } uFormat2;
 
 typedef struct  {
@@ -71,14 +39,14 @@ typedef struct  {
 					uTable 
 ================================================= */
 typedef struct  {
-	uint16 		itemOfList;
-	uint16		offsetToFormatArray;
-	uint16		offsetToMapCellArray;
-	uint16		offsetToMappingTable;
-	uint16		data[1];
+	uint16_t 		itemOfList;
+	uint16_t		offsetToFormatArray;
+	uint16_t		offsetToMapCellArray;
+	uint16_t		offsetToMappingTable;
+	uint16_t		data[1];
 } uTable;
 
-uint16 umap[256][256];
+uint16_t umap[256][256];
 int bInitFromOrTo = 0;
 int bGenerateFromUnicodeTable = 0;
 
@@ -86,8 +54,8 @@ int bGenerateFromUnicodeTable = 0;
 
 static int numOfItem = 0;
 uMapCell cell[MAXCELLNUM];
-uint16    format[MAXCELLNUM / 4];
-uint16   mapping[256*256];
+uint16_t    format[MAXCELLNUM / 4];
+uint16_t   mapping[256*256];
 static int mappinglen  = 0;
 static int formatcount[4] = {0,0,0,0}; 
 
@@ -116,9 +84,9 @@ void SetMapValue(short u,short c)
            fprintf(stderr, "warning- duplicate mapping %x map to both %x and %x\n", u, MAPVALUE(u), c);
         }
 }
-void AddFormat2(uint16 srcBegin)
+void AddFormat2(uint16_t srcBegin)
 {
-	uint16 destBegin = MAPVALUE(srcBegin);
+	uint16_t destBegin = MAPVALUE(srcBegin);
 	printf("Begin of Item %04X\n",numOfItem);
 	printf(" Format 2\n");
 	printf("  srcBegin = %04X\n", srcBegin);
@@ -132,9 +100,9 @@ void AddFormat2(uint16 srcBegin)
 	/*	Unmark the umap */
 	MAPVALUE(srcBegin) = NOMAPPING;
 }
-void AddFormat1(uint16 srcBegin, uint16 srcEnd)
+void AddFormat1(uint16_t srcBegin, uint16_t srcEnd)
 {
-	uint16 i;
+	uint16_t i;
 	printf("Begin of Item %04X\n",numOfItem);
 	printf(" Format 1\n");
 	printf("  srcBegin = %04X\n", srcBegin);
@@ -158,10 +126,10 @@ void AddFormat1(uint16 srcBegin, uint16 srcEnd)
 	printf("End of Item %04X \n\n",numOfItem);
 	numOfItem++;
 }
-void AddFormat0(uint16 srcBegin, uint16 srcEnd)
+void AddFormat0(uint16_t srcBegin, uint16_t srcEnd)
 {
-	uint16 i;
-	uint16 destBegin = MAPVALUE(srcBegin);
+	uint16_t i;
+	uint16_t destBegin = MAPVALUE(srcBegin);
 	printf("Begin of Item %04X\n",numOfItem);
 	printf(" Format 0\n");
 	printf("  srcBegin = %04X\n", srcBegin);
@@ -183,49 +151,17 @@ void printnpl()
 {
 printf(
 "/* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */\n"
-"/* ***** BEGIN LICENSE BLOCK *****\n"
-" * Version: MPL 1.1/GPL 2.0/LGPL 2.1\n"
-" *\n"
-" * The contents of this file are subject to the Mozilla Public License Version\n"
-" * 1.1 (the \"License\"); you may not use this file except in compliance with\n"
-" * the License. You may obtain a copy of the License at\n"
-" * http://www.mozilla.org/MPL/\n"
-" *\n"
-" * Software distributed under the License is distributed on an \"AS IS\" basis,\n"
-" * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License\n"
-" * for the specific language governing rights and limitations under the\n"
-" * License.\n"
-" *\n"
-" * The Original Code is mozilla.org code.\n"
-" *\n"
-" * The Initial Developer of the Original Code is\n"
-" * Netscape Communications Corporation.\n"
-" * Portions created by the Initial Developer are Copyright (C) 2001\n"
-" * the Initial Developer. All Rights Reserved.\n"
-" *\n"
-" * Contributor(s):\n"
-" *\n"
-" * Alternatively, the contents of this file may be used under the terms of\n"
-" * either the GNU General Public License Version 2 or later (the \"GPL\"), or\n"
-" * the GNU Lesser General Public License Version 2.1 or later (the \"LGPL\"),\n"
-" * in which case the provisions of the GPL or the LGPL are applicable instead\n"
-" * of those above. If you wish to allow use of your version of this file only\n"
-" * under the terms of either the GPL or the LGPL, and not to allow others to\n"
-" * use your version of this file under the terms of the MPL, indicate your\n"
-" * decision by deleting the provisions above and replace them with the notice\n"
-" * and other provisions required by the GPL or the LGPL. If you do not delete\n"
-" * the provisions above, a recipient may use your version of this file under\n"
-" * the terms of any one of the MPL, the GPL or the LGPL.\n"
-" *\n"
-" * ***** END LICENSE BLOCK ***** */\n");
+"/* This Source Code Form is subject to the terms of the Mozilla Public\n"
+" * License, v. 2.0. If a copy of the MPL was not distributed with this\n"
+" * file, You can obtain one at http://mozilla.org/MPL/2.0/. */\n");
 }
 void gentable()
 {
 	/*	OK! For now, we just use format 1 for each row */
 	/*	We need to chage this to use other format to save the space */
-	uint16 begin,end;
-	uint16 ss,gs,gp,state,gc;	
-	uint16 diff, lastdiff;
+	uint16_t begin,end;
+	uint16_t ss,gs,gp,state,gc;	
+	uint16_t diff, lastdiff;
 
         printnpl();
 	printf("/*========================================================\n");
@@ -346,13 +282,13 @@ void gentable()
 }
 void writetable()
 {
-	uint16 i;
-	uint16 off1,off2,off3;
-	uint16 cur = 0; 
-	uint16 formatitem = (((numOfItem)>>2) + 1);
+	uint16_t i;
+	uint16_t off1,off2,off3;
+	uint16_t cur = 0; 
+	uint16_t formatitem = (((numOfItem)>>2) + 1);
 	off1 = 4;
 	off2 = off1 + formatitem ;
-	off3 = off2 + numOfItem * sizeof(uMapCell) / sizeof(uint16);
+	off3 = off2 + numOfItem * sizeof(uMapCell) / sizeof(uint16_t);
 	/*	write itemOfList		*/
 	printf("/* Offset=0x%04X  ItemOfList */\n  0x%04X,\n", cur++, numOfItem);
 
@@ -491,7 +427,7 @@ void getinput()
 {
   char buf[256];
   short c,u;
-  for(;gets(buf)!=NULL;)
+  for (; gets(buf);)
   {
      if(buf[0]=='0' && buf[1] == 'x')
         {

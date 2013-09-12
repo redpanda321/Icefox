@@ -1,55 +1,20 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 et cindent: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Alec Flett <alecf@netscape.com>
- *   Darin Fisher <darin@netscape.com>
- *   Conrad Carlen <ccarlen@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* Mac OS X-specific local file uri parsing */
 #include "nsURLHelper.h"
 #include "nsEscape.h"
-#include "nsILocalFile.h"
+#include "nsIFile.h"
 #include "nsTArray.h"
 #include "nsReadableUtils.h"
 #include <Carbon/Carbon.h>
 
-static nsTArray<nsCString> *gVolumeList = nsnull;
+static nsTArray<nsCString> *gVolumeList = nullptr;
 
-static PRBool pathBeginsWithVolName(const nsACString& path, nsACString& firstPathComponent)
+static bool pathBeginsWithVolName(const nsACString& path, nsACString& firstPathComponent)
 {
   // Return whether the 1st path component in path (escaped) is equal to the name
   // of a mounted volume. Return the 1st path component (unescaped) in any case.
@@ -59,7 +24,7 @@ static PRBool pathBeginsWithVolName(const nsACString& path, nsACString& firstPat
   if (!gVolumeList) {
     gVolumeList = new nsTArray<nsCString>;
     if (!gVolumeList) {
-      return PR_FALSE; // out of memory
+      return false; // out of memory
     }
   }
 
@@ -90,9 +55,9 @@ static PRBool pathBeginsWithVolName(const nsACString& path, nsACString& firstPat
   nsACString::const_iterator component_end(start);
   FindCharInReadable('/', component_end, directory_end);
   
-  nsCAutoString flatComponent((Substring(start, component_end)));
+  nsAutoCString flatComponent((Substring(start, component_end)));
   NS_UnescapeURL(flatComponent);
-  PRInt32 foundIndex = gVolumeList->IndexOf(flatComponent);
+  int32_t foundIndex = gVolumeList->IndexOf(flatComponent);
   firstPathComponent = flatComponent;
   return (foundIndex != -1);
 }
@@ -101,7 +66,7 @@ void
 net_ShutdownURLHelperOSX()
 {
   delete gVolumeList;
-  gVolumeList = nsnull;
+  gVolumeList = nullptr;
 }
 
 static nsresult convertHFSPathtoPOSIX(const nsACString& hfsPath, nsACString& posixPath)
@@ -150,14 +115,14 @@ net_GetURLSpecFromActualFile(nsIFile *aFile, nsACString &result)
   // NOTE: This is identical to the implementation in nsURLHelperUnix.cpp
   
   nsresult rv;
-  nsCAutoString ePath;
+  nsAutoCString ePath;
 
   // construct URL spec from native file path
   rv = aFile->GetNativePath(ePath);
   if (NS_FAILED(rv))
     return rv;
 
-  nsCAutoString escPath;
+  nsAutoCString escPath;
   NS_NAMED_LITERAL_CSTRING(prefix, "file://");
       
   // Escape the path with the directory mask
@@ -183,13 +148,13 @@ net_GetFileFromURLSpec(const nsACString &aURL, nsIFile **result)
 
   nsresult rv;
 
-  nsCOMPtr<nsILocalFile> localFile;
-  rv = NS_NewNativeLocalFile(EmptyCString(), PR_TRUE, getter_AddRefs(localFile));
+  nsCOMPtr<nsIFile> localFile;
+  rv = NS_NewNativeLocalFile(EmptyCString(), true, getter_AddRefs(localFile));
   if (NS_FAILED(rv))
     return rv;
   
-  nsCAutoString directory, fileBaseName, fileExtension, path;
-  PRBool bHFSPath = PR_FALSE;
+  nsAutoCString directory, fileBaseName, fileExtension, path;
+  bool bHFSPath = false;
 
   rv = net_ParseFileURL(aURL, directory, fileBaseName, fileExtension);
   if (NS_FAILED(rv))
@@ -203,7 +168,7 @@ net_GetFileFromURLSpec(const nsACString &aURL, nsIFile **result)
     // But, we still encounter file URLs that use HFS paths:
     //   file:///volume-name/path-name
     // Determine that here and normalize HFS paths to POSIX.
-    nsCAutoString possibleVolName;
+    nsAutoCString possibleVolName;
     if (pathBeginsWithVolName(directory, possibleVolName)) {        
       // Though we know it begins with a volume name, it could still
       // be a valid POSIX path if the boot drive is named "Mac HD"
@@ -211,8 +176,8 @@ net_GetFileFromURLSpec(const nsACString &aURL, nsIFile **result)
       // directory doesn't exist, we'll assume this is an HFS path.
       FSRef testRef;
       possibleVolName.Insert("/", 0);
-      if (::FSPathMakeRef((UInt8*)possibleVolName.get(), &testRef, nsnull) != noErr)
-        bHFSPath = PR_TRUE;
+      if (::FSPathMakeRef((UInt8*)possibleVolName.get(), &testRef, nullptr) != noErr)
+        bHFSPath = true;
     }
 
     if (bHFSPath) {

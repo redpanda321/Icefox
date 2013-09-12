@@ -1,43 +1,12 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is TransforMiiX XSLT processor code.
- *
- * The Initial Developer of the Original Code is
- * Jonas Sicking.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Jonas Sicking <sicking@bigfoot.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "mozilla/FloatingPoint.h"
 
 #include "txXSLTNumber.h"
-#include "txAtoms.h"
+#include "nsGkAtoms.h"
 #include "txCore.h"
 #include <math.h>
 #include "txExpr.h"
@@ -76,11 +45,11 @@ nsresult txXSLTNumber::createNumber(Expr* aValueExpr, txPattern* aCountPattern,
 
     // Create resulting string
     aResult = head;
-    MBool first = MB_TRUE;
+    bool first = true;
     txListIterator valueIter(&values);
     txListIterator counterIter(&counters);
     valueIter.resetToEnd();
-    PRInt32 value;
+    int32_t value;
     txFormattedCounter* counter = 0;
     while ((value = NS_PTR_TO_INT32(valueIter.previous()))) {
         if (counterIter.hasNext()) {
@@ -92,7 +61,7 @@ nsresult txXSLTNumber::createNumber(Expr* aValueExpr, txPattern* aCountPattern,
         }
 
         counter->appendNumber(value, aResult);
-        first = MB_FALSE;
+        first = false;
     }
     
     aResult.Append(tail);
@@ -122,13 +91,13 @@ txXSLTNumber::getValueList(Expr* aValueExpr, txPattern* aCountPattern,
 
         double value = result->numberValue();
 
-        if (Double::isInfinite(value) || Double::isNaN(value) ||
+        if (MOZ_DOUBLE_IS_INFINITE(value) || MOZ_DOUBLE_IS_NaN(value) ||
             value < 0.5) {
-            Double::toString(value, aValueString);
+            txDouble::toString(value, aValueString);
             return NS_OK;
         }
         
-        aValues.add(NS_INT32_TO_PTR((PRInt32)floor(value + 0.5)));
+        aValues.add(NS_INT32_TO_PTR((int32_t)floor(value + 0.5)));
         return NS_OK;
     }
 
@@ -136,21 +105,21 @@ txXSLTNumber::getValueList(Expr* aValueExpr, txPattern* aCountPattern,
     // Otherwise use count/from/level
 
     txPattern* countPattern = aCountPattern;
-    MBool ownsCountPattern = MB_FALSE;
+    bool ownsCountPattern = false;
     const txXPathNode& currNode = aContext->getContextNode();
 
     // Parse count- and from-attributes
 
     if (!aCountPattern) {
-        ownsCountPattern = MB_TRUE;
+        ownsCountPattern = true;
         txNodeTest* nodeTest;
-        PRUint16 nodeType = txXPathNodeUtils::getNodeType(currNode);
+        uint16_t nodeType = txXPathNodeUtils::getNodeType(currNode);
         switch (nodeType) {
             case txXPathNodeType::ELEMENT_NODE:
             {
                 nsCOMPtr<nsIAtom> localName =
                     txXPathNodeUtils::getLocalName(currNode);
-                PRInt32 namespaceID = txXPathNodeUtils::getNamespaceID(currNode);
+                int32_t namespaceID = txXPathNodeUtils::getNamespaceID(currNode);
                 nodeTest = new txNameTest(0, localName, namespaceID,
                                           txXPathNodeType::ELEMENT_NODE);
                 break;
@@ -184,14 +153,14 @@ txXSLTNumber::getValueList(Expr* aValueExpr, txPattern* aCountPattern,
             {
                 // this won't match anything as we walk up the tree
                 // but it's what the spec says to do
-                nodeTest = new txNameTest(0, txXPathAtoms::_asterix, 0,
+                nodeTest = new txNameTest(0, nsGkAtoms::_asterix, 0,
                                           nodeType);
                 break;
             }
         }
         NS_ENSURE_TRUE(nodeTest, NS_ERROR_OUT_OF_MEMORY);
 
-        countPattern = new txStepPattern(nodeTest, MB_FALSE);
+        countPattern = new txStepPattern(nodeTest, false);
         if (!countPattern) {
             // XXX error reporting
             delete nodeTest;
@@ -223,7 +192,7 @@ txXSLTNumber::getValueList(Expr* aValueExpr, txPattern* aCountPattern,
         // ancestor that matches the from-pattern, so keep going to make
         // sure that there is an ancestor that does.
         if (aFromPattern && aValues.getLength()) {
-            PRBool hasParent;
+            bool hasParent;
             while ((hasParent = walker.moveToParent())) {
                 if (aFromPattern->matches(walker.getCurrentPosition(), aContext)) {
                     break;
@@ -239,12 +208,12 @@ txXSLTNumber::getValueList(Expr* aValueExpr, txPattern* aCountPattern,
     else if (aLevel == eLevelMultiple) {
         // find all ancestor-or-selfs that matches count until...
         txXPathTreeWalker walker(currNode);
-        MBool matchedFrom = MB_FALSE;
+        bool matchedFrom = false;
         do {
             if (aFromPattern && !walker.isOnNode(currNode) &&
                 aFromPattern->matches(walker.getCurrentPosition(), aContext)) {
                 //... we find one that matches from
-                matchedFrom = MB_TRUE;
+                matchedFrom = true;
                 break;
             }
 
@@ -263,14 +232,14 @@ txXSLTNumber::getValueList(Expr* aValueExpr, txPattern* aCountPattern,
     }
     // level = "any"
     else if (aLevel == eLevelAny) {
-        PRInt32 value = 0;
-        MBool matchedFrom = MB_FALSE;
+        int32_t value = 0;
+        bool matchedFrom = false;
 
         txXPathTreeWalker walker(currNode);
         do {
             if (aFromPattern && !walker.isOnNode(currNode) &&
                 aFromPattern->matches(walker.getCurrentPosition(), aContext)) {
-                matchedFrom = MB_TRUE;
+                matchedFrom = true;
                 break;
             }
 
@@ -312,14 +281,14 @@ txXSLTNumber::getCounters(Expr* aGroupSize, Expr* aGroupSeparator,
     nsresult rv = NS_OK;
 
     nsAutoString groupSeparator;
-    PRInt32 groupSize = 0;
+    int32_t groupSize = 0;
     if (aGroupSize && aGroupSeparator) {
         nsAutoString sizeStr;
         rv = aGroupSize->evaluateToString(aContext, sizeStr);
         NS_ENSURE_SUCCESS(rv, rv);
 
-        double size = Double::toDouble(sizeStr);
-        groupSize = (PRInt32)size;
+        double size = txDouble::toDouble(sizeStr);
+        groupSize = (int32_t)size;
         if ((double)groupSize != size) {
             groupSize = 0;
         }
@@ -334,8 +303,8 @@ txXSLTNumber::getCounters(Expr* aGroupSize, Expr* aGroupSeparator,
         NS_ENSURE_SUCCESS(rv, rv);
     }
 
-    PRUint32 formatLen = format.Length();
-    PRUint32 formatPos = 0;
+    uint32_t formatLen = format.Length();
+    uint32_t formatPos = 0;
     PRUnichar ch = 0;
 
     // start with header
@@ -424,12 +393,12 @@ txXSLTNumber::getCounters(Expr* aGroupSize, Expr* aGroupSeparator,
     return NS_OK;
 }
 
-PRInt32
+int32_t
 txXSLTNumber::getSiblingCount(txXPathTreeWalker& aWalker,
                               txPattern* aCountPattern,
                               txIMatchContext* aContext)
 {
-    PRInt32 value = 1;
+    int32_t value = 1;
     while (aWalker.moveToPreviousSibling()) {
         if (aCountPattern->matches(aWalker.getCurrentPosition(), aContext)) {
             ++value;
@@ -438,24 +407,24 @@ txXSLTNumber::getSiblingCount(txXPathTreeWalker& aWalker,
     return value;
 }
 
-PRBool
+bool
 txXSLTNumber::getPrevInDocumentOrder(txXPathTreeWalker& aWalker)
 {
     if (aWalker.moveToPreviousSibling()) {
         while (aWalker.moveToLastChild()) {
             // do nothing
         }
-        return PR_TRUE;
+        return true;
     }
     return aWalker.moveToParent();
 }
 
-#define TX_CHAR_RANGE(ch, a, b) if (ch < a) return MB_FALSE; \
-    if (ch <= b) return MB_TRUE
-#define TX_MATCH_CHAR(ch, a) if (ch < a) return MB_FALSE; \
-    if (ch == a) return MB_TRUE
+#define TX_CHAR_RANGE(ch, a, b) if (ch < a) return false; \
+    if (ch <= b) return true
+#define TX_MATCH_CHAR(ch, a) if (ch < a) return false; \
+    if (ch == a) return true
 
-MBool txXSLTNumber::isAlphaNumeric(PRUnichar ch)
+bool txXSLTNumber::isAlphaNumeric(PRUnichar ch)
 {
     TX_CHAR_RANGE(ch, 0x0030, 0x0039);
     TX_CHAR_RANGE(ch, 0x0041, 0x005A);
@@ -747,5 +716,5 @@ MBool txXSLTNumber::isAlphaNumeric(PRUnichar ch)
     TX_CHAR_RANGE(ch, 0xFFC2, 0xFFC7);
     TX_CHAR_RANGE(ch, 0xFFCA, 0xFFCF);
     TX_CHAR_RANGE(ch, 0xFFD2, 0xFFD7);
-    return MB_FALSE;
+    return false;
 }

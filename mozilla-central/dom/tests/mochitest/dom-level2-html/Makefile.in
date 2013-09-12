@@ -1,53 +1,19 @@
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# The Initial Developer of the Original Code is
-# Mozilla Foundation.
-# Portions created by the Initial Developer are Copyright (C) 2007
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either of the GNU General Public License Version 2 or later (the "GPL"),
-# or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH		= ../../../..
+DEPTH		= @DEPTH@
 topsrcdir	= @top_srcdir@
 srcdir		= @srcdir@
 VPATH		= @srcdir@
-relativesrcdir	= dom/tests/mochitest/dom-level2-html
+relativesrcdir	= @relativesrcdir@
 
 include $(DEPTH)/config/autoconf.mk
 
 DIRS = files
 
-include $(topsrcdir)/config/rules.mk
-
-_TEST_FILES_A	= \
+MOCHITEST_FILES_A	= \
 		DOMTestCase.js \
 		test_anchor01.html \
 		test_anchor02.html \
@@ -133,7 +99,7 @@ _TEST_FILES_A	= \
 # This test is failing on all platforms -- bug 471139
 #		test_HTMLDocument12.html \
 #
-_TEST_FILES_B	= \
+MOCHITEST_FILES_B	= \
 		test_HTMLDirectoryElement01.html \
 		test_HTMLDivElement01.html \
 		test_HTMLDlistElement01.html \
@@ -308,7 +274,7 @@ _TEST_FILES_B	= \
 		test_HTMLElement98.html \
 		test_HTMLElement99.html \
 		$(NULL)
-_TEST_FILES_C	= \
+MOCHITEST_FILES_C	= \
 		test_HTMLFieldSetElement01.html \
 		test_HTMLFieldSetElement02.html \
 		test_HTMLFontElement01.html \
@@ -423,7 +389,7 @@ _TEST_FILES_C	= \
 		test_HTMLModElement04.html \
 		$(NULL)
 
-_TEST_FILES_D	= \
+MOCHITEST_FILES_D	= \
 		test_HTMLObjectElement01.html \
 		test_HTMLObjectElement02.html \
 		test_HTMLObjectElement03.html \
@@ -657,7 +623,7 @@ _TEST_FILES_D	= \
 		test_HTMLUListElement01.html \
 		test_HTMLUListElement02.html \
 		$(NULL)
-_TEST_FILES_E	= \
+MOCHITEST_FILES_E	= \
 		test_object01.html \
 		test_object02.html \
 		test_object03.html \
@@ -729,7 +695,7 @@ _TEST_FILES_E	= \
 		test_hasFeature06.html \
 		$(NULL)
 
-_TEST_FILES_F	= \
+MOCHITEST_FILES_F	= \
 		test_HTMLAppletElement01.html \
 		test_HTMLAppletElement02.html \
 		test_HTMLAppletElement03.html \
@@ -743,16 +709,6 @@ _TEST_FILES_F	= \
 		test_HTMLAppletElement11.html \
 		$(NULL)
 
-# work around nsinstall limits on windows by splitting into groups
-libs:: 	$(_TEST_FILES_A)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
-libs:: 	$(_TEST_FILES_B)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
-libs:: 	$(_TEST_FILES_C)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
-libs:: 	$(_TEST_FILES_D)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
-libs:: 	$(_TEST_FILES_E)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
-#libs:: 	$(_TEST_FILES_F)
-#	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
+MOCHITEST_FILES_PARTS := $(foreach part,A B C D E,MOCHITEST_FILES_$(part))
+
+include $(topsrcdir)/config/rules.mk

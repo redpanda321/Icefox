@@ -7,10 +7,14 @@
 
 #include <mach/mach.h>
 #include <mach/message.h>
-#include <servers/bootstrap.h>
 #include <sys/types.h>
 
+#ifdef XP_MACOSX
 #include <CoreServices/CoreServices.h>
+#include <servers/bootstrap.h>
+#else
+#include <Endian.h>
+#endif
 
 #include "base/basictypes.h"
 
@@ -109,12 +113,6 @@ class MachMsgPortDescriptor : public mach_msg_port_descriptor_t {
 
   mach_msg_type_name_t GetDisposition() const {
     return disposition;
-  }
-
-  // We're just a simple wrapper for mach_msg_port_descriptor_t
-  // and have the same memory layout
-  operator mach_msg_port_descriptor_t&() {
-    return *this;
   }
 
   // For convenience

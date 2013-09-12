@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=432225
 -->
 <head>
   <title>Test for Bug 432225</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
   <script type="text/javascript" src="/tests/SimpleTest/EventUtils.js"></script>  
@@ -35,12 +34,12 @@ function editDoc() {
 }
 
 function getSpellCheckSelection() {
-  var Ci = Components.interfaces;
+  var Ci = SpecialPowers.Ci;
   var win = editDoc().defaultView;
-  var editingSession = win.QueryInterface(Ci.nsIInterfaceRequestor)
-                          .getInterface(Ci.nsIWebNavigation)
-                          .QueryInterface(Ci.nsIInterfaceRequestor)
-                          .getInterface(Ci.nsIEditingSession);
+  var editingSession = SpecialPowers.wrap(win.QueryInterface(Ci.nsIInterfaceRequestor))
+                                    .getInterface(Ci.nsIWebNavigation)
+                                    .QueryInterface(Ci.nsIInterfaceRequestor)
+                                    .getInterface(Ci.nsIEditingSession);
   var editor = editingSession.getEditorForWindow(win);
   var selcon = editor.selectionController;
   return selcon.getSelection(selcon.SELECTION_SPELLCHECK);  
@@ -52,19 +51,13 @@ function runTest() {
 }  
  
 function addWords(aLimit) {
-  netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
   if (aLimit == 0) {
     is(isSpellingCheckOk(), true, "All misspellings accounted for.");
     SimpleTest.finish();
     return;
   }
   getEdit().focus();
-  sendChar('a', editDoc());
-  sendChar('a', editDoc());
-  sendChar(' ', editDoc());
-  sendChar('O', editDoc());
-  sendChar('K', editDoc());
-  sendChar(' ', editDoc());
+  sendString('aa OK ');
   gMisspeltWords.push("aa");
   setTimeout(function() { addWords(aLimit-1); }, 0);
 }

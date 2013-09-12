@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Application Update Service.
- *
- * The Initial Developer of the Original Code is
- * Robert Strong <robert.bugzilla@gmail.com>.
- *
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Mozilla Foundation <http://www.mozilla.org/>. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK *****
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
 /* General Update Check Update XML Tests */
@@ -43,17 +10,17 @@ var gExpectedCount;
 
 function run_test() {
   do_test_pending();
+  do_register_cleanup(end_test);
   removeUpdateDirsAndFiles();
   setUpdateURLOverride();
-  setUpdateChannel();
+  setUpdateChannel("test_channel");
   // The mock XMLHttpRequest is MUCH faster
   overrideXHR(callHandleEvent);
   standardInit();
-  do_timeout(0, run_test_pt01);
+  do_execute_soon(run_test_pt01);
 }
 
 function end_test() {
-  do_test_finished();
   cleanUp();
 }
 
@@ -64,7 +31,7 @@ function run_test_helper_pt1(aMsg, aExpectedCount, aNextRunFunc) {
   gCheckFunc = check_test_helper_pt1;
   gNextRunFunc = aNextRunFunc;
   gExpectedCount = aExpectedCount;
-  dump("Testing: " + aMsg + "\n");
+  logTestInfo(aMsg, Components.stack.caller);
   gUpdateChecker.checkForUpdates(updateCheckListener, true);
 }
 
@@ -87,19 +54,18 @@ function callHandleEvent() {
     gXHR.responseXML = null;
   }
   var e = { target: gXHR };
-  gXHR.onload.handleEvent(e);
+  gXHR.onload(e);
 }
 
 // update xml not found
 function run_test_pt01() {
-  run_test_helper_pt1("run_test_pt01 - update xml not available",
+  run_test_helper_pt1("testing update xml not available",
                       null, run_test_pt02);
 }
 
 // one update available and the update's property values
 function run_test_pt02() {
-  dump("Testing: run_test_pt02 - one update available and the update's " +
-       "property values\n");
+  logTestInfo("testing one update available and the update's property values");
   gUpdates = null;
   gUpdateCount = null;
   gCheckFunc = check_test_pt02;
@@ -115,7 +81,8 @@ function run_test_pt02() {
                                       "http://details/",
                                       "http://billboard/",
                                       "http://license/", "true",
-                                      "true", "true", "4.1a1pre", "5.1a1pre",
+                                      "true", "345600", "true", "4.1a1pre",
+                                      "5.1a1pre",
                                       "custom1_attr=\"custom1 value\"",
                                       "custom2_attr=\"custom2 value\"");
   gResponseBody = getRemoteUpdatesXMLString(updates);
@@ -151,6 +118,7 @@ function check_test_pt02() {
   do_check_eq(bestUpdate.licenseURL, "http://license/");
   do_check_true(bestUpdate.showPrompt);
   do_check_true(bestUpdate.showNeverForVersion);
+  do_check_eq(bestUpdate.promptWaitTime, "345600");
   do_check_true(bestUpdate.showSurvey);
   do_check_eq(bestUpdate.serviceURL, URL_HOST + "update.xml?force=1");
   do_check_eq(bestUpdate.channel, "test_channel");
@@ -199,8 +167,8 @@ function check_test_pt02() {
 
 // one update available and the update's property default values
 function run_test_pt03() {
-  dump("Testing: run_test_pt03 - one update available and the update's " +
-       "property default values\n");
+  logTestInfo("testing one update available and the update's property values " +
+              "with the format prior to bug 530872");
   gUpdates = null;
   gUpdateCount = null;
   gCheckFunc = check_test_pt03;
@@ -211,8 +179,8 @@ function run_test_pt03() {
                                       null, null,
                                       "5.1a1pre", "20080811053724",
                                       "http://details/",
-                                      null, null, null, null, null,
-                                      "version 4.1a1pre", "4.1a1pre");
+                                      null, null, null, null, "691200",
+                                      null, "version 4.1a1pre", "4.1a1pre");
   gResponseBody = getRemoteUpdatesXMLString(updates);
   gUpdateChecker.checkForUpdates(updateCheckListener, true);
 }
@@ -227,10 +195,11 @@ function check_test_pt03() {
   do_check_eq(bestUpdate.platformVersion, "5.1a1pre");
   do_check_eq(bestUpdate.buildID, "20080811053724");
   do_check_eq(bestUpdate.detailsURL, "http://details/");
-  do_check_eq(bestUpdate.billboardURL, null);
+  do_check_eq(bestUpdate.billboardURL, "http://details/");
   do_check_eq(bestUpdate.licenseURL, null);
-  do_check_false(bestUpdate.showPrompt);
-  do_check_false(bestUpdate.showNeverForVersion);
+  do_check_true(bestUpdate.showPrompt);
+  do_check_true(bestUpdate.showNeverForVersion);
+  do_check_eq(bestUpdate.promptWaitTime, "691200");
   do_check_false(bestUpdate.showSurvey);
   do_check_eq(bestUpdate.serviceURL, URL_HOST + "update.xml?force=1");
   do_check_eq(bestUpdate.channel, "test_channel");
@@ -267,14 +236,14 @@ function check_test_pt03() {
 // Empty update xml
 function run_test_pt04() {
   gResponseBody = "\n";
-  run_test_helper_pt1("run_test_pt04 - empty update xml",
+  run_test_helper_pt1("testing empty update xml",
                       null, run_test_pt05);
 }
 
 // no updates available
 function run_test_pt05() {
   gResponseBody = getRemoteUpdatesXMLString("");
-  run_test_helper_pt1("run_test_pt05 - no updates available",
+  run_test_helper_pt1("testing no updates available",
                       0, run_test_pt06);
 }
 
@@ -284,7 +253,7 @@ function run_test_pt06() {
   patches += getRemotePatchString("partial");
   var updates = getRemoteUpdateString(patches);
   gResponseBody = getRemoteUpdatesXMLString(updates);
-  run_test_helper_pt1("run_test_pt06 - one update available",
+  run_test_helper_pt1("testing one update available",
                       1, run_test_pt07);
 }
 
@@ -296,7 +265,7 @@ function run_test_pt07() {
   updates += getRemoteUpdateString(patches);
   updates += getRemoteUpdateString(patches);
   gResponseBody = getRemoteUpdatesXMLString(updates);
-  run_test_helper_pt1("run_test_pt07 - three updates available",
+  run_test_helper_pt1("testing three updates available",
                       3, run_test_pt08);
 }
 
@@ -307,7 +276,7 @@ function run_test_pt08() {
   patches += getRemotePatchString("partial", null, null, null, "0");
   var updates = getRemoteUpdateString(patches);
   gResponseBody = getRemoteUpdatesXMLString(updates);
-  run_test_helper_pt1("run_test_pt08 - one update with complete and partial " +
+  run_test_helper_pt1("testing one update with complete and partial " +
                       "patches with size 0", 0, run_test_pt09);
 }
 
@@ -316,7 +285,7 @@ function run_test_pt09() {
   var patches = getRemotePatchString("complete", null, null, null, "0");
   var updates = getRemoteUpdateString(patches);
   gResponseBody = getRemoteUpdatesXMLString(updates);
-  run_test_helper_pt1("one update with complete patch with size 0",
+  run_test_helper_pt1("testing one update with complete patch with size 0",
                       0, run_test_pt10);
 }
 
@@ -325,7 +294,7 @@ function run_test_pt10() {
   var patches = getRemotePatchString("partial", null, null, null, "0");
   var updates = getRemoteUpdateString(patches);
   gResponseBody = getRemoteUpdatesXMLString(updates);
-  run_test_helper_pt1("one update with partial patch with size 0",
+  run_test_helper_pt1("testing one update with partial patch with size 0",
                       0, run_test_pt11);
 }
 
@@ -336,7 +305,7 @@ function run_test_pt11() {
   var updates = getRemoteUpdateString(patches, "minor", null, null, "1.0pre");
   updates += getRemoteUpdateString(patches, "minor", null, null, "1.0a");
   gResponseBody = getRemoteUpdatesXMLString(updates);
-  run_test_helper_pt1("two updates older than the current version",
+  run_test_helper_pt1("testing two updates older than the current version",
                       2, check_test_pt11);
 }
 
@@ -352,7 +321,7 @@ function run_test_pt12() {
   patches += getRemotePatchString("partial");
   var updates = getRemoteUpdateString(patches, "minor", null, "version 1.0");
   gResponseBody = getRemoteUpdatesXMLString(updates);
-  run_test_helper_pt1("one update equal to the current version",
+  run_test_helper_pt1("testing one update equal to the current version",
                       1, check_test_pt12);
 }
 
@@ -360,5 +329,5 @@ function check_test_pt12() {
   var bestUpdate = gAUS.selectUpdate(gUpdates, gUpdateCount);
   do_check_neq(bestUpdate, null);
   do_check_eq(bestUpdate.displayVersion, "version 1.0");
-  end_test();
+  do_test_finished();
 }

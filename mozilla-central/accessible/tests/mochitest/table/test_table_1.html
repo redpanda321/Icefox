@@ -4,12 +4,10 @@
   <meta http-equiv="content-type" content="text/html; charset=UTF-8">
   <link rel="stylesheet" type="text/css" href="chrome://mochikit/content/tests/SimpleTest/test.css" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js"></script>
+          src="../common.js"></script>
 
   <script type="application/javascript">
 
@@ -28,43 +26,33 @@ function doTest()
 
   is(accTable.selectedCellCount, 1, "only one cell selected");
   cell = getNode("col2a");
+  range = document.createRange();
   range.selectNode(cell);
   s.addRange(range);
   cell = getNode("col2c");
+  range = document.createRange();
   range.selectNode(cell);
   s.addRange(range);
   is(accTable.selectedColumnCount, 1, "only one column selected");
+
   cell = getNode("row2a");
+  range = document.createRange();
   range.selectNode(cell);
   s.addRange(range);
   cell = getNode("row2b");
+  range = document.createRange();
   range.selectNode(cell);
   s.addRange(range);
+  range = document.createRange();
   cell = getNode("row2c");
   range.selectNode(cell);
   s.addRange(range);
 
   is(accTable.selectedRowCount, 1, "no cells selected");
 
-  var columnDescription;
-  works = true;
-  try{
-    columnDescription = accTable.getColumnDescription(1);
-  }
-  catch (e) {
-    works = false;
-  }
-  todo(works, "columnDescription should not throw");
+  var columnDescription = accTable.getColumnDescription(1);
+  var rowDescription = accTable.getRowDescription(1);
 
-  var rowDescription;
-  works = true;
-  try {
-    rowDescription = accTable.getRowDescription(1);
-  }
-  catch (e) {
-    works = false;
-  }
-  todo(works, "rowDescription should not throw");
   SimpleTest.finish();
 }
 SimpleTest.waitForExplicitFinish();
@@ -74,6 +62,12 @@ addA11yLoadEvent(doTest);
  <body >
 
   <a target="_blank" href="https://bugzilla.mozilla.org/show_bug.cgi?id=410052">Mozilla Bug 410052</a>
+  <a target="_blank"
+     href="https://bugzilla.mozilla.org/show_bug.cgi?id=760878"
+     title="decomtaminate Get Row / Column Description() on accessible tables">
+    Mozilla Bug 760878
+  </a>
+
   <p id="display"></p>
   <div id="content" style="display: none"></div>
   <pre id="test">

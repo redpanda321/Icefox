@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsEntityConverter.h"
 #include "nsIProperties.h"
@@ -50,15 +18,16 @@
 //
 // implementation methods
 //
-nsEntityConverter::nsEntityConverter()
-:	mVersionList(NULL),
-  mVersionListLength(0)
+nsEntityConverter::nsEntityConverter() :
+    mVersionList(nullptr),
+    mVersionListLength(0)
 {
 }
 
 nsEntityConverter::~nsEntityConverter()
 {
-  if (NULL != mVersionList) delete [] mVersionList;
+    if (mVersionList)
+        delete [] mVersionList;
 }
 
 NS_IMETHODIMP 
@@ -75,7 +44,7 @@ nsEntityConverter::LoadVersionPropertyFile()
     nsresult rv = bundleService->CreateBundle(url.get(), getter_AddRefs(entities));
     if (NS_FAILED(rv)) return rv;
     
-    PRInt32	result;
+    nsresult result;
 
     nsAutoString key;
     nsXPIDLString value;
@@ -91,11 +60,11 @@ nsEntityConverter::LoadVersionPropertyFile()
     mVersionList = new nsEntityVersionList[mVersionListLength];
     if (!mVersionList) return NS_ERROR_OUT_OF_MEMORY;
 
-    for (PRUint32 i = 0; i < mVersionListLength && NS_SUCCEEDED(rv); i++) {
+    for (uint32_t i = 0; i < mVersionListLength && NS_SUCCEEDED(rv); i++) {
         key.SetLength(0);
         key.AppendInt(i+1, 10);
         rv = entities->GetStringFromName(key.get(), getter_Copies(value));
-        PRUint32 len = value.Length();
+        uint32_t len = value.Length();
         if (kVERSION_STRING_LEN < len) return NS_ERROR_UNEXPECTED;
         
         memcpy(mVersionList[i].mEntityListName, value.get(), len*sizeof(PRUnichar));
@@ -107,18 +76,17 @@ nsEntityConverter::LoadVersionPropertyFile()
 }
 
 already_AddRefed<nsIStringBundle>
-nsEntityConverter::LoadEntityBundle(PRUint32 version)
+nsEntityConverter::LoadEntityBundle(uint32_t version)
 {
-  nsCAutoString url(NS_LITERAL_CSTRING("resource://gre/res/entityTables/"));
-  const PRUnichar *versionName = NULL;
+  nsAutoCString url(NS_LITERAL_CSTRING("resource://gre/res/entityTables/"));
   nsresult rv;
 
   nsCOMPtr<nsIStringBundleService> bundleService =
       do_GetService(NS_STRINGBUNDLE_CONTRACTID, &rv);
-  if (NS_FAILED(rv)) return NULL;
+  NS_ENSURE_SUCCESS(rv, nullptr);
   
-  versionName = GetVersionName(version);
-  if (NULL == versionName) return NULL;
+  const PRUnichar *versionName = GetVersionName(version);
+  NS_ENSURE_TRUE(versionName, nullptr);
 
   // all property file names are ASCII, like "html40Latin1" so this is safe
   LossyAppendUTF16toASCII(versionName, url);
@@ -126,34 +94,34 @@ nsEntityConverter::LoadEntityBundle(PRUint32 version)
 
   nsIStringBundle* bundle;
   rv = bundleService->CreateBundle(url.get(), &bundle);
-  if (NS_FAILED(rv)) return NULL;
+  NS_ENSURE_SUCCESS(rv, nullptr);
   
   // does this addref right?
   return bundle;
 }
 
 const PRUnichar*
-nsEntityConverter:: GetVersionName(PRUint32 versionNumber)
+nsEntityConverter:: GetVersionName(uint32_t versionNumber)
 {
-  for (PRUint32 i = 0; i < mVersionListLength; i++) {
+  for (uint32_t i = 0; i < mVersionListLength; i++) {
     if (versionNumber == mVersionList[i].mVersion)
       return mVersionList[i].mEntityListName;
   }
 
-  return NULL;
+  return nullptr;
 }
 
 nsIStringBundle*
-nsEntityConverter:: GetVersionBundleInstance(PRUint32 versionNumber)
+nsEntityConverter:: GetVersionBundleInstance(uint32_t versionNumber)
 {
-  if (NULL == mVersionList) {
+  if (!mVersionList) {
     // load the property file which contains available version names
     // and generate a list of version/name pair
-    nsresult rv = LoadVersionPropertyFile();
-    if (NS_FAILED(rv)) return NULL;
+    if (NS_FAILED(LoadVersionPropertyFile()))
+      return nullptr;
   }
 
-  PRUint32 i;
+  uint32_t i;
   for (i = 0; i < mVersionListLength; i++) {
     if (versionNumber == mVersionList[i].mVersion) {
       if (!mVersionList[i].mEntities)
@@ -166,7 +134,7 @@ nsEntityConverter:: GetVersionBundleInstance(PRUint32 versionNumber)
     }
   }
 
-  return NULL;
+  return nullptr;
 }
 
 
@@ -180,26 +148,26 @@ NS_IMPL_ISUPPORTS1(nsEntityConverter,nsIEntityConverter)
 // nsIEntityConverter
 //
 NS_IMETHODIMP
-nsEntityConverter::ConvertToEntity(PRUnichar character, PRUint32 entityVersion, char **_retval)
+nsEntityConverter::ConvertToEntity(PRUnichar character, uint32_t entityVersion, char **_retval)
 { 
-  return ConvertUTF32ToEntity((PRUint32)character, entityVersion, _retval);
+  return ConvertUTF32ToEntity((uint32_t)character, entityVersion, _retval);
 }
 
 NS_IMETHODIMP
-nsEntityConverter::ConvertUTF32ToEntity(PRUint32 character, PRUint32 entityVersion, char **_retval)
+nsEntityConverter::ConvertUTF32ToEntity(uint32_t character, uint32_t entityVersion, char **_retval)
 {
   NS_ASSERTION(_retval, "null ptr- _retval");
-  if(nsnull == _retval)
+  if(nullptr == _retval)
     return NS_ERROR_NULL_POINTER;
-  *_retval = NULL;
+  *_retval = nullptr;
 
-  for (PRUint32 mask = 1, mask2 = 0xFFFFFFFFL; (0!=(entityVersion & mask2)); mask<<=1, mask2<<=1) {
+  for (uint32_t mask = 1, mask2 = 0xFFFFFFFFL; (0!=(entityVersion & mask2)); mask<<=1, mask2<<=1) {
     if (0 == (entityVersion & mask)) 
       continue;
     nsIStringBundle* entities = GetVersionBundleInstance(entityVersion & mask);
     NS_ASSERTION(entities, "Cannot get the property file");
 
-    if (NULL == entities) 
+    if (!entities) 
       continue;
 
     nsAutoString key(NS_LITERAL_STRING("entity."));
@@ -209,7 +177,7 @@ nsEntityConverter::ConvertUTF32ToEntity(PRUint32 character, PRUint32 entityVersi
     nsresult rv = entities->GetStringFromName(key.get(), getter_Copies(value));
     if (NS_SUCCEEDED(rv)) {
       *_retval = ToNewCString(value);
-      if(nsnull == *_retval)
+      if(nullptr == *_retval)
         return NS_ERROR_OUT_OF_MEMORY;
       else
         return NS_OK;
@@ -219,20 +187,18 @@ nsEntityConverter::ConvertUTF32ToEntity(PRUint32 character, PRUint32 entityVersi
 }
 
 NS_IMETHODIMP
-nsEntityConverter::ConvertToEntities(const PRUnichar *inString, PRUint32 entityVersion, PRUnichar **_retval)
+nsEntityConverter::ConvertToEntities(const PRUnichar *inString, uint32_t entityVersion, PRUnichar **_retval)
 {
-  NS_ASSERTION(inString, "null ptr- inString");
-  NS_ASSERTION(_retval, "null ptr- _retval");
-  if((nsnull == inString) || (nsnull == _retval))
-    return NS_ERROR_NULL_POINTER;
-  *_retval = NULL;
+  NS_ENSURE_ARG_POINTER(inString);
+  NS_ENSURE_ARG_POINTER(_retval);
 
-  const PRUnichar *entity = NULL;
+  *_retval = nullptr;
+
   nsString outString;
 
   // per character look for the entity
-  PRUint32 len = nsCRT::strlen(inString);
-  for (PRUint32 i = 0; i < len; i++) {
+  uint32_t len = NS_strlen(inString);
+  for (uint32_t i = 0; i < len; i++) {
     nsAutoString key(NS_LITERAL_STRING("entity."));
     if (NS_IS_HIGH_SURROGATE(inString[i]) &&
         i + 2 < len &&
@@ -245,15 +211,15 @@ nsEntityConverter::ConvertToEntities(const PRUnichar *inString, PRUint32 entityV
     }
     
     nsXPIDLString value;
-    
-    entity = NULL;
-    for (PRUint32 mask = 1, mask2 = 0xFFFFFFFFL; (0!=(entityVersion & mask2)); mask<<=1, mask2<<=1) {
+    const PRUnichar *entity = nullptr;
+
+    for (uint32_t mask = 1, mask2 = 0xFFFFFFFFL; (0!=(entityVersion & mask2)); mask<<=1, mask2<<=1) {
       if (0 == (entityVersion & mask)) 
          continue;
       nsIStringBundle* entities = GetVersionBundleInstance(entityVersion & mask);
       NS_ASSERTION(entities, "Cannot get the property file");
 
-      if (NULL == entities) 
+      if (!entities) 
           continue;
 
       nsresult rv = entities->GetStringFromName(key.get(),
@@ -263,7 +229,7 @@ nsEntityConverter::ConvertToEntities(const PRUnichar *inString, PRUint32 entityV
         break;
       }
     }
-    if (NULL != entity) {
+    if (entity) {
       outString.Append(entity);
     }
     else {
@@ -272,7 +238,7 @@ nsEntityConverter::ConvertToEntities(const PRUnichar *inString, PRUint32 entityV
   }
 
   *_retval = ToNewUnicode(outString);
-  if (NULL == *_retval) 
+  if (!*_retval) 
     return NS_ERROR_OUT_OF_MEMORY;
 
   return NS_OK;

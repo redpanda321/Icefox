@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla browser.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications, Inc.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Travis Bogard <travis@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsXULWindow_h__
 #define nsXULWindow_h__
@@ -55,7 +22,7 @@
 #include "nsIBaseWindow.h"
 #include "nsIDocShell.h"
 #include "nsIDocShellTreeItem.h"
-#include "nsIDOMWindowInternal.h"
+#include "nsIDOMWindow.h"
 #include "nsIInterfaceRequestor.h"
 #include "nsIInterfaceRequestorUtils.h"
 #include "nsIXULWindow.h"
@@ -94,9 +61,9 @@ public:
 
    NS_DECLARE_STATIC_IID_ACCESSOR(NS_XULWINDOW_IMPL_CID)
 
-   void LockUntilChromeLoad() { mLockedUntilChromeLoad = PR_TRUE; }
-   PRBool IsLocked() const { return mLockedUntilChromeLoad; }
-   void IgnoreXULSizeMode(PRBool aEnable) { mIgnoreXULSizeMode = aEnable; }
+   void LockUntilChromeLoad() { mLockedUntilChromeLoad = true; }
+   bool IsLocked() const { return mLockedUntilChromeLoad; }
+   void IgnoreXULSizeMode(bool aEnable) { mIgnoreXULSizeMode = aEnable; }
 
 protected:
    enum persistentAttributes {
@@ -105,7 +72,7 @@ protected:
      PAD_SIZE =         0x4
    };
 
-   nsXULWindow(PRUint32 aChromeFlags);
+   nsXULWindow(uint32_t aChromeFlags);
    virtual ~nsXULWindow();
 
    NS_IMETHOD EnsureChromeTreeOwner();
@@ -115,46 +82,43 @@ protected:
    NS_IMETHOD EnsureAuthPrompter();
    
    void OnChromeLoaded();
-   void StaggerPosition(PRInt32 &aRequestedX, PRInt32 &aRequestedY,
-                        PRInt32 aSpecWidth, PRInt32 aSpecHeight);
-   PRBool     LoadPositionFromXUL();
-   PRBool     LoadSizeFromXUL();
-   PRBool     LoadMiscPersistentAttributesFromXUL();
+   void StaggerPosition(int32_t &aRequestedX, int32_t &aRequestedY,
+                        int32_t aSpecWidth, int32_t aSpecHeight);
+   bool       LoadPositionFromXUL();
+   bool       LoadSizeFromXUL();
+   bool       LoadMiscPersistentAttributesFromXUL();
    void       SyncAttributesToWidget();
    NS_IMETHOD SavePersistentAttributes();
 
-   NS_IMETHOD GetWindowDOMWindow(nsIDOMWindowInternal** aDOMWindow);
-   NS_IMETHOD GetWindowDOMElement(nsIDOMElement** aDOMElement);
+   NS_IMETHOD GetWindowDOMWindow(nsIDOMWindow** aDOMWindow);
+   nsIDOMElement* GetWindowDOMElement() const;
 
    // See nsIDocShellTreeOwner for docs on next two methods
    NS_HIDDEN_(nsresult) ContentShellAdded(nsIDocShellTreeItem* aContentShell,
-                                          PRBool aPrimary, PRBool aTargetable,
+                                          bool aPrimary, bool aTargetable,
                                           const nsAString& aID);
    NS_HIDDEN_(nsresult) ContentShellRemoved(nsIDocShellTreeItem* aContentShell);
-   NS_IMETHOD SizeShellTo(nsIDocShellTreeItem* aShellItem, PRInt32 aCX, 
-      PRInt32 aCY);
+   NS_IMETHOD SizeShellTo(nsIDocShellTreeItem* aShellItem, int32_t aCX, 
+      int32_t aCY);
    NS_IMETHOD ExitModalLoop(nsresult aStatus);
-   NS_IMETHOD CreateNewChromeWindow(PRInt32 aChromeFlags,
-      nsIAppShell* aAppShell, nsIXULWindow **_retval);
-   NS_IMETHOD CreateNewContentWindow(PRInt32 aChromeFlags,
-      nsIAppShell* aAppShell, nsIXULWindow **_retval);
+   NS_IMETHOD CreateNewChromeWindow(int32_t aChromeFlags, nsIXULWindow **_retval);
+   NS_IMETHOD CreateNewContentWindow(int32_t aChromeFlags, nsIXULWindow **_retval);
 
-   void       EnableParent(PRBool aEnable);
-   PRBool     ConstrainToZLevel(PRBool aImmediate, nsWindowZ *aPlacement,
+   void       EnableParent(bool aEnable);
+   bool       ConstrainToZLevel(bool aImmediate, nsWindowZ *aPlacement,
                                 nsIWidget *aReqBelow, nsIWidget **aActualBelow);
-   void       PlaceWindowLayersBehind(PRUint32 aLowLevel, PRUint32 aHighLevel,
+   void       PlaceWindowLayersBehind(uint32_t aLowLevel, uint32_t aHighLevel,
                                       nsIXULWindow *aBehind);
-   void       SetContentScrollbarVisibility(PRBool aVisible);
-   PRBool     GetContentScrollbarVisibility();
-   void       PersistentAttributesDirty(PRUint32 aDirtyFlags);
-   PRInt32    AppUnitsPerDevPixel();
+   void       SetContentScrollbarVisibility(bool aVisible);
+   bool       GetContentScrollbarVisibility();
+   void       PersistentAttributesDirty(uint32_t aDirtyFlags);
 
    nsChromeTreeOwner*      mChromeTreeOwner;
    nsContentTreeOwner*     mContentTreeOwner;
    nsContentTreeOwner*     mPrimaryContentTreeOwner;
    nsCOMPtr<nsIWidget>     mWindow;
    nsCOMPtr<nsIDocShell>   mDocShell;
-   nsCOMPtr<nsIDOMWindowInternal>  mDOMWindow;
+   nsCOMPtr<nsIDOMWindow>  mDOMWindow;
    nsCOMPtr<nsIWeakReference> mParentWindow;
    nsCOMPtr<nsIPrompt>     mPrompter;
    nsCOMPtr<nsIAuthPrompt> mAuthPrompter;
@@ -162,25 +126,25 @@ protected:
    nsCOMPtr<nsIDocShellTreeItem> mPrimaryContentShell;
    nsTArray<nsContentShellInfo*> mContentShells; // array of doc shells by id
    nsresult                mModalStatus;
-   PRPackedBool            mContinueModalLoop;
-   PRPackedBool            mDebuting;       // being made visible right now
-   PRPackedBool            mChromeLoaded; // True when chrome has loaded
-   PRPackedBool            mShowAfterLoad;
-   PRPackedBool            mIntrinsicallySized; 
-   PRPackedBool            mCenterAfterLoad;
-   PRPackedBool            mIsHiddenWindow;
-   PRPackedBool            mLockedUntilChromeLoad;
-   PRPackedBool            mIgnoreXULSize;
-   PRPackedBool            mIgnoreXULPosition;
-   PRPackedBool            mChromeFlagsFrozen;
-   PRPackedBool            mIgnoreXULSizeMode;
-   PRUint32                mContextFlags;
-   PRUint32                mBlurSuppressionLevel;
-   PRUint32                mPersistentAttributesDirty; // persistentAttributes
-   PRUint32                mPersistentAttributesMask;
-   PRUint32                mChromeFlags;
-   PRUint32                mAppPerDev; // sometimes needed when we can't get
-                                       // it from the widget
+   bool                    mContinueModalLoop;
+   bool                    mDebuting;       // being made visible right now
+   bool                    mChromeLoaded; // True when chrome has loaded
+   bool                    mShowAfterLoad;
+   bool                    mIntrinsicallySized; 
+   bool                    mCenterAfterLoad;
+   bool                    mIsHiddenWindow;
+   bool                    mLockedUntilChromeLoad;
+   bool                    mIgnoreXULSize;
+   bool                    mIgnoreXULPosition;
+   bool                    mChromeFlagsFrozen;
+   bool                    mIgnoreXULSizeMode;
+   // mDestroying is used to prevent reentry into into Destroy(), which can
+   // otherwise happen due to script running as we tear down various things.
+   bool                    mDestroying;
+   uint32_t                mContextFlags;
+   uint32_t                mPersistentAttributesDirty; // persistentAttributes
+   uint32_t                mPersistentAttributesMask;
+   uint32_t                mChromeFlags;
    nsString                mTitle;
    nsIntRect               mOpenerScreenRect; // the screen rect of the opener
 

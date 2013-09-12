@@ -1,40 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code, released
- * March 31, 1998.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998-2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Joe Hewitt (hewitt@netscape.com)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 @namespace url("http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul");
 
@@ -50,6 +16,7 @@ panel {
   padding: 0px;
   min-width: 1px;
   background: Menu;
+  color: MenuText;
 }
 
 menupopup {
@@ -61,6 +28,130 @@ menupopup > menu > menupopup {
   -moz-margin-start: -3px;
   margin-top: -3px;
 }
+
+panel[type="arrow"] {
+  -moz-appearance: none;
+  background: transparent;
+  border: none;
+  transition: opacity 300ms;
+}
+
+.panel-arrowcontainer[panelopen] {
+  transition-duration: 200ms, 150ms;
+  transition-property: opacity, transform;
+  transition-timing-function: ease-out;
+}
+
+.panel-arrowcontainer:not([panelopen]) {
+  opacity: 0;
+}
+
+.panel-arrowcontainer:not([panelopen])[side="top"] {
+  transform: translateY(-20px);
+}
+
+.panel-arrowcontainer:not([panelopen])[side="bottom"] {
+  transform: translateY(20px);
+}
+
+.panel-arrowcontainer:not([panelopen])[side="left"] {
+  transform: translateX(-20px);
+}
+
+.panel-arrowcontainer:not([panelopen])[side="right"] {
+  transform: translateX(20px);
+}
+
+panel[type="arrow"][side="top"],
+panel[type="arrow"][side="bottom"] {
+  margin-left: -20px;
+  margin-right: -20px;
+}
+
+panel[type="arrow"][side="left"],
+panel[type="arrow"][side="right"] {
+  margin-top: -20px;
+  margin-bottom: -20px;
+}
+
+.panel-arrowcontent {
+  border-radius: 4px;
+  padding: 10px;
+  color: -moz-DialogText;
+  background: -moz-Dialog;
+  background-clip: padding-box;
+  border: 1px solid ThreeDShadow;
+  margin: 4px;
+}
+
+.panel-arrow[side="top"],
+.panel-arrow[side="bottom"] {
+  list-style-image: url("chrome://global/skin/arrow/panelarrow-vertical.svg");
+  position: relative;
+  margin-left: 10px;
+  margin-right: 10px;
+}
+
+.panel-arrow[side="top"] {
+  margin-bottom: -5px;
+}
+
+.panel-arrow[side="bottom"] {
+  transform: scaleY(-1);
+  margin-top: -5px;
+}
+
+.panel-arrow[side="left"],
+.panel-arrow[side="right"] {
+  list-style-image: url("chrome://global/skin/arrow/panelarrow-horizontal.svg");
+  position: relative;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.panel-arrow[side="left"] {
+  margin-right: -5px;
+}
+
+.panel-arrow[side="right"] {
+  transform: scaleX(-1);
+  margin-left: -5px;
+}
+
+%ifdef XP_WIN
+@media (-moz-windows-default-theme) {
+  .panel-arrowcontent {
+    border-color: rgba(0,0,0,.3);
+    box-shadow: 0 0 4px rgba(0,0,0,.3);
+  }
+
+  .panel-arrowcontent[side="top"] {
+    background-image: -moz-linear-gradient(top, white 1px, rgba(255,255,255,0) 15px);
+  }
+
+  .panel-arrowcontent[side="bottom"] {
+    background-image: -moz-linear-gradient(bottom, white 1px, rgba(255,255,255,0) 15px);
+  }
+
+  .panel-arrowcontent[side="left"] {
+    background-image: -moz-linear-gradient(left, white 1px, rgba(255,255,255,0) 15px);
+  }
+
+  .panel-arrowcontent[side="right"] {
+    background-image: -moz-linear-gradient(right, white 1px, rgba(255,255,255,0) 15px);
+  }
+
+  .panel-arrow[side="top"],
+  .panel-arrow[side="bottom"] {
+    list-style-image: url("chrome://global/skin/arrow/panelarrow-vertical-white.png");
+  }
+
+  .panel-arrow[side="left"],
+  .panel-arrow[side="right"] {
+    list-style-image: url("chrome://global/skin/arrow/panelarrow-horizontal-white.png");
+  }
+}
+%endif
 
 /* ::::: tooltip ::::: */
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2002-2010 The ANGLE Project Authors. All rights reserved.
+// Copyright (c) 2002-2012 The ANGLE Project Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -19,24 +19,31 @@
 #include "libGLESv2/Blit.h"
 #include "libGLESv2/ResourceManager.h"
 #include "libGLESv2/Buffer.h"
-#include "libGLESv2/FrameBuffer.h"
+#include "libGLESv2/Fence.h"
+#include "libGLESv2/Framebuffer.h"
 #include "libGLESv2/Program.h"
-#include "libGLESv2/RenderBuffer.h"
+#include "libGLESv2/ProgramBinary.h"
+#include "libGLESv2/Query.h"
+#include "libGLESv2/Renderbuffer.h"
 #include "libGLESv2/Shader.h"
 #include "libGLESv2/Texture.h"
-#include "libGLESv2/geometry/backend.h"
-#include "libGLESv2/geometry/VertexDataManager.h"
-#include "libGLESv2/geometry/IndexDataManager.h"
-#include "libGLESv2/geometry/dx9.h"
+#include "libGLESv2/VertexDataManager.h"
+#include "libGLESv2/IndexDataManager.h"
 
 #undef near
 #undef far
 
 namespace gl
 {
-Context::Context(const egl::Config *config, const gl::Context *shareContext)
-    : mConfig(config)
+Context::Context(const egl::Config *config, const gl::Context *shareContext, bool notifyResets, bool robustAccess) : mConfig(config)
 {
+    ASSERT(robustAccess == false);   // Unimplemented
+
+    mDisplay = NULL;
+    mDevice = NULL;
+
+    mFenceHandleAllocator.setBaseHandle(0);
+
     setClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
     mState.depthClearValue = 1.0f;
@@ -83,6 +90,7 @@ Context::Context(const egl::Config *config, const gl::Context *shareContext)
     mState.scissorTest = false;
     mState.dither = true;
     mState.generateMipmapHint = GL_DONT_CARE;
+    mState.fragmentShaderDerivativeHint = GL_DONT_CARE;
 
     mState.lineWidth = 1.0f;
 
@@ -120,34 +128,29 @@ Context::Context(const egl::Config *config, const gl::Context *shareContext)
     // In order that access to these initial textures not be lost, they are treated as texture
     // objects all of whose names are 0.
 
-    mTexture2DZero = new Texture2D(0);
-    mTextureCubeMapZero = new TextureCubeMap(0);
-
-    mColorbufferZero = NULL;
-    mDepthStencilbufferZero = NULL;
+    mTexture2DZero.set(new Texture2D(0));
+    mTextureCubeMapZero.set(new TextureCubeMap(0));
 
     mState.activeSampler = 0;
     bindArrayBuffer(0);
     bindElementArrayBuffer(0);
     bindTextureCubeMap(0);
     bindTexture2D(0);
-    bindFramebuffer(0);
+    bindReadFramebuffer(0);
+    bindDrawFramebuffer(0);
     bindRenderbuffer(0);
 
-    for (int type = 0; type < SAMPLER_TYPE_COUNT; type++)
-    {
-        mIncompleteTextures[type] = NULL;
-    }
-
     mState.currentProgram = 0;
+    mCurrentProgramBinary.set(NULL);
 
     mState.packAlignment = 4;
     mState.unpackAlignment = 4;
+    mState.packReverseRowOrder = false;
 
-    mBufferBackEnd = NULL;
     mVertexDataManager = NULL;
     mIndexDataManager = NULL;
     mBlit = NULL;
+    mLineLoopIB = NULL;
 
     mInvalidEnum = false;
     mInvalidValue = false;
@@ -156,7 +159,18 @@ Context::Context(const egl::Config *config, const gl::Context *shareContext)
     mInvalidFramebufferOperation = false;
 
     mHasBeenCurrent = false;
+    mContextLost = false;
+    mResetStatus = GL_NO_ERROR;
+    mResetStrategy = (notifyResets ? GL_LOSE_CONTEXT_ON_RESET_EXT : GL_NO_RESET_NOTIFICATION_EXT);
+    mRobustAccess = robustAccess;
 
+    mSupportsDXT1Textures = false;
+    mSupportsDXT3Textures = false;
+    mSupportsDXT5Textures = false;
+    mSupportsEventQueries = false;
+    mSupportsOcclusionQueries = false;
+    mNumCompressedTextureFormats = 0;
+    mMaxSupportedSamples = 0;
     mMaskedClearSavedState = NULL;
     markAllStateDirty();
 }
@@ -172,23 +186,40 @@ Context::~Context()
         }
         mState.currentProgram = 0;
     }
+    mCurrentProgramBinary.set(NULL);
 
     while (!mFramebufferMap.empty())
     {
         deleteFramebuffer(mFramebufferMap.begin()->first);
     }
 
-    for (int type = 0; type < SAMPLER_TYPE_COUNT; type++)
+    while (!mFenceMap.empty())
     {
-        for (int sampler = 0; sampler < MAX_TEXTURE_IMAGE_UNITS; sampler++)
+        deleteFence(mFenceMap.begin()->first);
+    }
+
+    while (!mQueryMap.empty())
+    {
+        deleteQuery(mQueryMap.begin()->first);
+    }
+
+    while (!mMultiSampleSupport.empty())
+    {
+        delete [] mMultiSampleSupport.begin()->second;
+        mMultiSampleSupport.erase(mMultiSampleSupport.begin());
+    }
+
+    for (int type = 0; type < TEXTURE_TYPE_COUNT; type++)
+    {
+        for (int sampler = 0; sampler < MAX_COMBINED_TEXTURE_IMAGE_UNITS_VTF; sampler++)
         {
             mState.samplerTexture[type][sampler].set(NULL);
         }
     }
 
-    for (int type = 0; type < SAMPLER_TYPE_COUNT; type++)
+    for (int type = 0; type < TEXTURE_TYPE_COUNT; type++)
     {
-        delete mIncompleteTextures[type];
+        mIncompleteTextures[type].set(NULL);
     }
 
     for (int i = 0; i < MAX_VERTEX_ATTRIBS; i++)
@@ -196,19 +227,22 @@ Context::~Context()
         mState.vertexAttribute[i].mBoundBuffer.set(NULL);
     }
 
+    for (int i = 0; i < QUERY_TYPE_COUNT; i++)
+    {
+        mState.activeQuery[i].set(NULL);
+    }
+
     mState.arrayBuffer.set(NULL);
     mState.elementArrayBuffer.set(NULL);
-    mState.texture2D.set(NULL);
-    mState.textureCubeMap.set(NULL);
     mState.renderbuffer.set(NULL);
 
-    delete mTexture2DZero;
-    delete mTextureCubeMapZero;
+    mTexture2DZero.set(NULL);
+    mTextureCubeMapZero.set(NULL);
 
-    delete mBufferBackEnd;
     delete mVertexDataManager;
     delete mIndexDataManager;
     delete mBlit;
+    delete mLineLoopIB;
 
     if (mMaskedClearSavedState)
     {
@@ -220,18 +254,88 @@ Context::~Context()
 
 void Context::makeCurrent(egl::Display *display, egl::Surface *surface)
 {
-    IDirect3DDevice9 *device = display->getDevice();
+    mDisplay = display;
+    mDevice = mDisplay->getDevice();
 
     if (!mHasBeenCurrent)
     {
-        mDeviceCaps = display->getDeviceCaps();
+        mDeviceCaps = mDisplay->getDeviceCaps();
 
-        mBufferBackEnd = new Dx9BackEnd(this, device);
-        mVertexDataManager = new VertexDataManager(this, mBufferBackEnd);
-        mIndexDataManager = new IndexDataManager(this, mBufferBackEnd);
+        mVertexDataManager = new VertexDataManager(this, mDevice);
+        mIndexDataManager = new IndexDataManager(this, mDevice);
         mBlit = new Blit(this);
 
+        mSupportsShaderModel3 = mDeviceCaps.PixelShaderVersion >= D3DPS_VERSION(3, 0);
+        mMaximumPointSize = mDeviceCaps.MaxPointSize;
+        mSupportsVertexTexture = mDisplay->getVertexTextureSupport();
+        mSupportsNonPower2Texture = mDisplay->getNonPower2TextureSupport();
+        mSupportsInstancing = mDisplay->getInstancingSupport();
+
+        mMaxTextureDimension = std::min(std::min((int)mDeviceCaps.MaxTextureWidth, (int)mDeviceCaps.MaxTextureHeight),
+                                        (int)gl::IMPLEMENTATION_MAX_TEXTURE_SIZE);
+        mMaxCubeTextureDimension = std::min(mMaxTextureDimension, (int)gl::IMPLEMENTATION_MAX_CUBE_MAP_TEXTURE_SIZE);
+        mMaxRenderbufferDimension = mMaxTextureDimension;
+        mMaxTextureLevel = log2(mMaxTextureDimension) + 1;
+        mMaxTextureAnisotropy = mDisplay->getTextureFilterAnisotropySupport();
+        TRACE("MaxTextureDimension=%d, MaxCubeTextureDimension=%d, MaxRenderbufferDimension=%d, MaxTextureLevel=%d, MaxTextureAnisotropy=%f",
+              mMaxTextureDimension, mMaxCubeTextureDimension, mMaxRenderbufferDimension, mMaxTextureLevel, mMaxTextureAnisotropy);
+
+        const D3DFORMAT renderBufferFormats[] =
+        {
+            D3DFMT_A8R8G8B8,
+            D3DFMT_X8R8G8B8,
+            D3DFMT_R5G6B5,
+            D3DFMT_D24S8
+        };
+
+        int max = 0;
+        for (int i = 0; i < sizeof(renderBufferFormats) / sizeof(D3DFORMAT); ++i)
+        {
+            bool *multisampleArray = new bool[D3DMULTISAMPLE_16_SAMPLES + 1];
+            mDisplay->getMultiSampleSupport(renderBufferFormats[i], multisampleArray);
+            mMultiSampleSupport[renderBufferFormats[i]] = multisampleArray;
+
+            for (int j = D3DMULTISAMPLE_16_SAMPLES; j >= 0; --j)
+            {
+                if (multisampleArray[j] && j != D3DMULTISAMPLE_NONMASKABLE && j > max)
+                {
+                    max = j;
+                }
+            }
+        }
+
+        mMaxSupportedSamples = max;
+
+        mSupportsEventQueries = mDisplay->getEventQuerySupport();
+        mSupportsOcclusionQueries = mDisplay->getOcclusionQuerySupport();
+        mSupportsDXT1Textures = mDisplay->getDXT1TextureSupport();
+        mSupportsDXT3Textures = mDisplay->getDXT3TextureSupport();
+        mSupportsDXT5Textures = mDisplay->getDXT5TextureSupport();
+        mSupportsFloat32Textures = mDisplay->getFloat32TextureSupport(&mSupportsFloat32LinearFilter, &mSupportsFloat32RenderableTextures);
+        mSupportsFloat16Textures = mDisplay->getFloat16TextureSupport(&mSupportsFloat16LinearFilter, &mSupportsFloat16RenderableTextures);
+        mSupportsLuminanceTextures = mDisplay->getLuminanceTextureSupport();
+        mSupportsLuminanceAlphaTextures = mDisplay->getLuminanceAlphaTextureSupport();
+        mSupportsDepthTextures = mDisplay->getDepthTextureSupport();
+        mSupportsTextureFilterAnisotropy = mMaxTextureAnisotropy >= 2.0f;
+
+        mSupports32bitIndices = mDeviceCaps.MaxVertexIndex >= (1 << 16);
+
+        mNumCompressedTextureFormats = 0;
+        if (supportsDXT1Textures())
+        {
+            mNumCompressedTextureFormats += 2;
+        }
+        if (supportsDXT3Textures())
+        {
+            mNumCompressedTextureFormats += 1;
+        }
+        if (supportsDXT5Textures())
+        {
+            mNumCompressedTextureFormats += 1;
+        }
+
         initExtensionString();
+        initRendererString();
 
         mState.viewportX = 0;
         mState.viewportY = 0;
@@ -256,24 +360,46 @@ void Context::makeCurrent(egl::Display *display, egl::Surface *surface)
 
     setFramebufferZero(framebufferZero);
 
-    defaultRenderTarget->Release();
+    if (defaultRenderTarget)
+    {
+        defaultRenderTarget->Release();
+    }
 
     if (depthStencil)
     {
         depthStencil->Release();
     }
-    
-    mSupportsShaderModel3 = mDeviceCaps.PixelShaderVersion == D3DPS_VERSION(3, 0);
 
+    // Reset pixel shader to null to work around a bug that only happens with Intel GPUs.
+    // http://crbug.com/110343
+    mDevice->SetPixelShader(NULL);
+    
     markAllStateDirty();
 }
 
 // This function will set all of the state-related dirty flags, so that all state is set during next pre-draw.
 void Context::markAllStateDirty()
 {
+    for (int t = 0; t < MAX_TEXTURE_IMAGE_UNITS; t++)
+    {
+        mAppliedTextureSerialPS[t] = 0;
+    }
+
+    for (int t = 0; t < MAX_VERTEX_TEXTURE_IMAGE_UNITS_VTF; t++)
+    {
+        mAppliedTextureSerialVS[t] = 0;
+    }
+
+    mAppliedProgramBinarySerial = 0;
     mAppliedRenderTargetSerial = 0;
     mAppliedDepthbufferSerial = 0;
-    mAppliedProgram = 0;
+    mAppliedStencilbufferSerial = 0;
+    mAppliedIBSerial = 0;
+    mDepthStencilInitialized = false;
+    mViewportInitialized = false;
+    mRenderTargetDescInitialized = false;
+
+    mVertexDeclarationCache.markStateDirty();
 
     mClearStateDirty = true;
     mCullStateDirty = true;
@@ -286,11 +412,24 @@ void Context::markAllStateDirty()
     mSampleStateDirty = true;
     mDitherStateDirty = true;
     mFrontFaceDirty = true;
+    mDxUniformsDirty = true;
+}
 
-    if (mBufferBackEnd != NULL)
-    {
-        mBufferBackEnd->invalidate();
-    }
+void Context::markDxUniformsDirty()
+{
+    mDxUniformsDirty = true;
+}
+
+void Context::markContextLost()
+{
+    if (mResetStrategy == GL_LOSE_CONTEXT_ON_RESET_EXT)
+        mResetStatus = GL_UNKNOWN_CONTEXT_RESET_EXT;
+    mContextLost = true;
+}
+
+bool Context::isContextLost()
+{
+    return mContextLost;
 }
 
 void Context::setClearColor(float red, float green, float blue, float alpha)
@@ -614,6 +753,14 @@ void Context::setGenerateMipmapHint(GLenum hint)
     mState.generateMipmapHint = hint;
 }
 
+void Context::setFragmentShaderDerivativeHint(GLenum hint)
+{
+    mState.fragmentShaderDerivativeHint = hint;
+    // TODO: Propagate the hint to shader translator so we can write
+    // ddx, ddx_coarse, or ddx_fine depending on the hint.
+    // Ignore for now. It is valid for implementations to ignore hint.
+}
+
 void Context::setViewportParams(GLint x, GLint y, GLsizei width, GLsizei height)
 {
     mState.viewportX = x;
@@ -657,14 +804,19 @@ void Context::setDepthMask(bool mask)
     }
 }
 
-void Context::setActiveSampler(int active)
+void Context::setActiveSampler(unsigned int active)
 {
     mState.activeSampler = active;
 }
 
-GLuint Context::getFramebufferHandle() const
+GLuint Context::getReadFramebufferHandle() const
 {
-    return mState.framebuffer;
+    return mState.readFramebuffer;
+}
+
+GLuint Context::getDrawFramebufferHandle() const
+{
+    return mState.drawFramebuffer;
 }
 
 GLuint Context::getRenderbufferHandle() const
@@ -677,12 +829,38 @@ GLuint Context::getArrayBufferHandle() const
     return mState.arrayBuffer.id();
 }
 
-void Context::setVertexAttribEnabled(unsigned int attribNum, bool enabled)
+GLuint Context::getActiveQuery(GLenum target) const
 {
-    mState.vertexAttribute[attribNum].mEnabled = enabled;
+    Query *queryObject = NULL;
+    
+    switch (target)
+    {
+      case GL_ANY_SAMPLES_PASSED_EXT:
+        queryObject = mState.activeQuery[QUERY_ANY_SAMPLES_PASSED].get();
+        break;
+      case GL_ANY_SAMPLES_PASSED_CONSERVATIVE_EXT:
+        queryObject = mState.activeQuery[QUERY_ANY_SAMPLES_PASSED_CONSERVATIVE].get();
+        break;
+      default:
+        ASSERT(false);
+    }
+
+    if (queryObject)
+    {
+        return queryObject->id();
+    }
+    else
+    {
+        return 0;
+    }
 }
 
-const AttributeState &Context::getVertexAttribState(unsigned int attribNum)
+void Context::setEnableVertexAttribArray(unsigned int attribNum, bool enabled)
+{
+    mState.vertexAttribute[attribNum].mArrayEnabled = enabled;
+}
+
+const VertexAttribute &Context::getVertexAttribState(unsigned int attribNum)
 {
     return mState.vertexAttribute[attribNum];
 }
@@ -703,8 +881,7 @@ const void *Context::getVertexAttribPointer(unsigned int attribNum) const
     return mState.vertexAttribute[attribNum].mPointer;
 }
 
-// returns entire set of attributes as a block
-const AttributeState *Context::getVertexAttribBlock()
+const VertexAttributeArray &Context::getVertexAttributes()
 {
     return mState.vertexAttribute;
 }
@@ -727,6 +904,16 @@ void Context::setUnpackAlignment(GLint alignment)
 GLint Context::getUnpackAlignment() const
 {
     return mState.unpackAlignment;
+}
+
+void Context::setPackReverseRowOrder(bool reverseRowOrder)
+{
+    mState.packReverseRowOrder = reverseRowOrder;
+}
+
+bool Context::getPackReverseRowOrder() const
+{
+    return mState.packReverseRowOrder;
 }
 
 GLuint Context::createBuffer()
@@ -757,14 +944,28 @@ GLuint Context::createRenderbuffer()
 // Returns an unused framebuffer name
 GLuint Context::createFramebuffer()
 {
-    unsigned int handle = 1;
-
-    while (mFramebufferMap.find(handle) != mFramebufferMap.end())
-    {
-        handle++;
-    }
+    GLuint handle = mFramebufferHandleAllocator.allocate();
 
     mFramebufferMap[handle] = NULL;
+
+    return handle;
+}
+
+GLuint Context::createFence()
+{
+    GLuint handle = mFenceHandleAllocator.allocate();
+
+    mFenceMap[handle] = new Fence(mDisplay);
+
+    return handle;
+}
+
+// Returns an unused query name
+GLuint Context::createQuery()
+{
+    GLuint handle = mQueryHandleAllocator.allocate();
+
+    mQueryMap[handle] = NULL;
 
     return handle;
 }
@@ -817,8 +1018,35 @@ void Context::deleteFramebuffer(GLuint framebuffer)
     {
         detachFramebuffer(framebuffer);
 
+        mFramebufferHandleAllocator.release(framebufferObject->first);
         delete framebufferObject->second;
         mFramebufferMap.erase(framebufferObject);
+    }
+}
+
+void Context::deleteFence(GLuint fence)
+{
+    FenceMap::iterator fenceObject = mFenceMap.find(fence);
+
+    if (fenceObject != mFenceMap.end())
+    {
+        mFenceHandleAllocator.release(fenceObject->first);
+        delete fenceObject->second;
+        mFenceMap.erase(fenceObject);
+    }
+}
+
+void Context::deleteQuery(GLuint query)
+{
+    QueryMap::iterator queryObject = mQueryMap.find(query);
+    if (queryObject != mQueryMap.end())
+    {
+        mQueryHandleAllocator.release(queryObject->first);
+        if (queryObject->second)
+        {
+            queryObject->second->release();
+        }
+        mQueryMap.erase(queryObject);
     }
 }
 
@@ -847,9 +1075,14 @@ Renderbuffer *Context::getRenderbuffer(GLuint handle)
     return mResourceManager->getRenderbuffer(handle);
 }
 
-Framebuffer *Context::getFramebuffer()
+Framebuffer *Context::getReadFramebuffer()
 {
-    return getFramebuffer(mState.framebuffer);
+    return getFramebuffer(mState.readFramebuffer);
+}
+
+Framebuffer *Context::getDrawFramebuffer()
+{
+    return mBoundDrawFramebuffer;
 }
 
 void Context::bindArrayBuffer(unsigned int buffer)
@@ -868,30 +1101,38 @@ void Context::bindElementArrayBuffer(unsigned int buffer)
 
 void Context::bindTexture2D(GLuint texture)
 {
-    mResourceManager->checkTextureAllocation(texture, SAMPLER_2D);
+    mResourceManager->checkTextureAllocation(texture, TEXTURE_2D);
 
-    mState.texture2D.set(getTexture(texture));
-
-    mState.samplerTexture[SAMPLER_2D][mState.activeSampler].set(mState.texture2D.get());
+    mState.samplerTexture[TEXTURE_2D][mState.activeSampler].set(getTexture(texture));
 }
 
 void Context::bindTextureCubeMap(GLuint texture)
 {
-    mResourceManager->checkTextureAllocation(texture, SAMPLER_CUBE);
+    mResourceManager->checkTextureAllocation(texture, TEXTURE_CUBE);
 
-    mState.textureCubeMap.set(getTexture(texture));
-
-    mState.samplerTexture[SAMPLER_CUBE][mState.activeSampler].set(mState.textureCubeMap.get());
+    mState.samplerTexture[TEXTURE_CUBE][mState.activeSampler].set(getTexture(texture));
 }
 
-void Context::bindFramebuffer(GLuint framebuffer)
+void Context::bindReadFramebuffer(GLuint framebuffer)
 {
     if (!getFramebuffer(framebuffer))
     {
         mFramebufferMap[framebuffer] = new Framebuffer();
     }
 
-    mState.framebuffer = framebuffer;
+    mState.readFramebuffer = framebuffer;
+}
+
+void Context::bindDrawFramebuffer(GLuint framebuffer)
+{
+    if (!getFramebuffer(framebuffer))
+    {
+        mFramebufferMap[framebuffer] = new Framebuffer();
+    }
+
+    mState.drawFramebuffer = framebuffer;
+
+    mBoundDrawFramebuffer = getFramebuffer(framebuffer);
 }
 
 void Context::bindRenderbuffer(GLuint renderbuffer)
@@ -910,10 +1151,13 @@ void Context::useProgram(GLuint program)
     {
         Program *newProgram = mResourceManager->getProgram(program);
         Program *oldProgram = mResourceManager->getProgram(priorProgram);
+        mCurrentProgramBinary.set(NULL);
+        mDxUniformsDirty = true;
 
         if (newProgram)
         {
             newProgram->addRef();
+            mCurrentProgramBinary.set(newProgram->getProgramBinary());
         }
         
         if (oldProgram)
@@ -923,10 +1167,134 @@ void Context::useProgram(GLuint program)
     }
 }
 
+void Context::linkProgram(GLuint program)
+{
+    Program *programObject = mResourceManager->getProgram(program);
+
+    bool linked = programObject->link();
+
+    // if the current program was relinked successfully we
+    // need to install the new executables
+    if (linked && program == mState.currentProgram)
+    {
+        mCurrentProgramBinary.set(programObject->getProgramBinary());
+        mDxUniformsDirty = true;
+    }
+}
+
+void Context::setProgramBinary(GLuint program, const void *binary, GLint length)
+{
+    Program *programObject = mResourceManager->getProgram(program);
+
+    bool loaded = programObject->setProgramBinary(binary, length);
+
+    // if the current program was reloaded successfully we
+    // need to install the new executables
+    if (loaded && program == mState.currentProgram)
+    {
+        mCurrentProgramBinary.set(programObject->getProgramBinary());
+        mDxUniformsDirty = true;
+    }
+
+}
+
+void Context::beginQuery(GLenum target, GLuint query)
+{
+    // From EXT_occlusion_query_boolean: If BeginQueryEXT is called with an <id>  
+    // of zero, if the active query object name for <target> is non-zero (for the  
+    // targets ANY_SAMPLES_PASSED_EXT and ANY_SAMPLES_PASSED_CONSERVATIVE_EXT, if  
+    // the active query for either target is non-zero), if <id> is the name of an 
+    // existing query object whose type does not match <target>, or if <id> is the
+    // active query object name for any query type, the error INVALID_OPERATION is
+    // generated.
+
+    // Ensure no other queries are active
+    // NOTE: If other queries than occlusion are supported, we will need to check
+    // separately that:
+    //    a) The query ID passed is not the current active query for any target/type
+    //    b) There are no active queries for the requested target (and in the case
+    //       of GL_ANY_SAMPLES_PASSED_EXT and GL_ANY_SAMPLES_PASSED_CONSERVATIVE_EXT,
+    //       no query may be active for either if glBeginQuery targets either.
+    for (int i = 0; i < QUERY_TYPE_COUNT; i++)
+    {
+        if (mState.activeQuery[i].get() != NULL)
+        {
+            return error(GL_INVALID_OPERATION);
+        }
+    }
+
+    QueryType qType;
+    switch (target)
+    {
+      case GL_ANY_SAMPLES_PASSED_EXT: 
+        qType = QUERY_ANY_SAMPLES_PASSED; 
+        break;
+      case GL_ANY_SAMPLES_PASSED_CONSERVATIVE_EXT: 
+        qType = QUERY_ANY_SAMPLES_PASSED_CONSERVATIVE; 
+        break;
+      default: 
+        ASSERT(false);
+        return;
+    }
+
+    Query *queryObject = getQuery(query, true, target);
+
+    // check that name was obtained with glGenQueries
+    if (!queryObject)
+    {
+        return error(GL_INVALID_OPERATION);
+    }
+
+    // check for type mismatch
+    if (queryObject->getType() != target)
+    {
+        return error(GL_INVALID_OPERATION);
+    }
+
+    // set query as active for specified target
+    mState.activeQuery[qType].set(queryObject);
+
+    // begin query
+    queryObject->begin();
+}
+
+void Context::endQuery(GLenum target)
+{
+    QueryType qType;
+
+    switch (target)
+    {
+      case GL_ANY_SAMPLES_PASSED_EXT: 
+        qType = QUERY_ANY_SAMPLES_PASSED; 
+        break;
+      case GL_ANY_SAMPLES_PASSED_CONSERVATIVE_EXT: 
+        qType = QUERY_ANY_SAMPLES_PASSED_CONSERVATIVE; 
+        break;
+      default: 
+        ASSERT(false);
+        return;
+    }
+
+    Query *queryObject = mState.activeQuery[qType].get();
+
+    if (queryObject == NULL)
+    {
+        return error(GL_INVALID_OPERATION);
+    }
+
+    queryObject->end();
+
+    mState.activeQuery[qType].set(NULL);
+}
+
 void Context::setFramebufferZero(Framebuffer *buffer)
 {
     delete mFramebufferMap[0];
     mFramebufferMap[0] = buffer;
+    if (mState.drawFramebuffer == 0)
+    {
+        mBoundDrawFramebuffer = buffer;
+    }
 }
 
 void Context::setRenderbufferStorage(RenderbufferStorage *renderbuffer)
@@ -949,6 +1317,39 @@ Framebuffer *Context::getFramebuffer(unsigned int handle)
     }
 }
 
+Fence *Context::getFence(unsigned int handle)
+{
+    FenceMap::iterator fence = mFenceMap.find(handle);
+
+    if (fence == mFenceMap.end())
+    {
+        return NULL;
+    }
+    else
+    {
+        return fence->second;
+    }
+}
+
+Query *Context::getQuery(unsigned int handle, bool create, GLenum type)
+{
+    QueryMap::iterator query = mQueryMap.find(handle);
+
+    if (query == mQueryMap.end())
+    {
+        return NULL;
+    }
+    else
+    {
+        if (!query->second && create)
+        {
+            query->second = new Query(handle, type);
+            query->second->addRef();
+        }
+        return query->second;
+    }
+}
+
 Buffer *Context::getArrayBuffer()
 {
     return mState.arrayBuffer.get();
@@ -959,42 +1360,32 @@ Buffer *Context::getElementArrayBuffer()
     return mState.elementArrayBuffer.get();
 }
 
-Program *Context::getCurrentProgram()
+ProgramBinary *Context::getCurrentProgramBinary()
 {
-    return mResourceManager->getProgram(mState.currentProgram);
+    return mCurrentProgramBinary.get();
 }
 
 Texture2D *Context::getTexture2D()
 {
-    if (mState.texture2D.id() == 0)   // Special case: 0 refers to different initial textures based on the target
-    {
-        return mTexture2DZero;
-    }
-
-    return static_cast<Texture2D*>(mState.texture2D.get());
+    return static_cast<Texture2D*>(getSamplerTexture(mState.activeSampler, TEXTURE_2D));
 }
 
 TextureCubeMap *Context::getTextureCubeMap()
 {
-    if (mState.textureCubeMap.id() == 0)   // Special case: 0 refers to different initial textures based on the target
-    {
-        return mTextureCubeMapZero;
-    }
-
-    return static_cast<TextureCubeMap*>(mState.textureCubeMap.get());
+    return static_cast<TextureCubeMap*>(getSamplerTexture(mState.activeSampler, TEXTURE_CUBE));
 }
 
-Texture *Context::getSamplerTexture(unsigned int sampler, SamplerType type)
+Texture *Context::getSamplerTexture(unsigned int sampler, TextureType type)
 {
     GLuint texid = mState.samplerTexture[type][sampler].id();
 
-    if (texid == 0)
+    if (texid == 0)   // Special case: 0 refers to different initial textures based on the target
     {
         switch (type)
         {
           default: UNREACHABLE();
-          case SAMPLER_2D: return mTexture2DZero;
-          case SAMPLER_CUBE: return mTextureCubeMapZero;
+          case TEXTURE_2D: return mTexture2DZero.get();
+          case TEXTURE_CUBE: return mTextureCubeMapZero.get();
         }
     }
 
@@ -1005,24 +1396,25 @@ bool Context::getBooleanv(GLenum pname, GLboolean *params)
 {
     switch (pname)
     {
-      case GL_SHADER_COMPILER:          *params = GL_TRUE;                          break;
-      case GL_SAMPLE_COVERAGE_INVERT:   *params = mState.sampleCoverageInvert;      break;
-      case GL_DEPTH_WRITEMASK:          *params = mState.depthMask;                 break;
+      case GL_SHADER_COMPILER:           *params = GL_TRUE;                            break;
+      case GL_SAMPLE_COVERAGE_INVERT:    *params = mState.sampleCoverageInvert;        break;
+      case GL_DEPTH_WRITEMASK:           *params = mState.depthMask;                   break;
       case GL_COLOR_WRITEMASK:
         params[0] = mState.colorMaskRed;
         params[1] = mState.colorMaskGreen;
         params[2] = mState.colorMaskBlue;
         params[3] = mState.colorMaskAlpha;
         break;
-      case GL_CULL_FACE:                *params = mState.cullFace;
-      case GL_POLYGON_OFFSET_FILL:      *params = mState.polygonOffsetFill;
-      case GL_SAMPLE_ALPHA_TO_COVERAGE: *params = mState.sampleAlphaToCoverage;
-      case GL_SAMPLE_COVERAGE:          *params = mState.sampleCoverage;
-      case GL_SCISSOR_TEST:             *params = mState.scissorTest;
-      case GL_STENCIL_TEST:             *params = mState.stencilTest;
-      case GL_DEPTH_TEST:               *params = mState.depthTest;
-      case GL_BLEND:                    *params = mState.blend;
-      case GL_DITHER:                   *params = mState.dither;
+      case GL_CULL_FACE:                 *params = mState.cullFace;                    break;
+      case GL_POLYGON_OFFSET_FILL:       *params = mState.polygonOffsetFill;           break;
+      case GL_SAMPLE_ALPHA_TO_COVERAGE:  *params = mState.sampleAlphaToCoverage;       break;
+      case GL_SAMPLE_COVERAGE:           *params = mState.sampleCoverage;              break;
+      case GL_SCISSOR_TEST:              *params = mState.scissorTest;                 break;
+      case GL_STENCIL_TEST:              *params = mState.stencilTest;                 break;
+      case GL_DEPTH_TEST:                *params = mState.depthTest;                   break;
+      case GL_BLEND:                     *params = mState.blend;                       break;
+      case GL_DITHER:                    *params = mState.dither;                      break;
+      case GL_CONTEXT_ROBUST_ACCESS_EXT: *params = mRobustAccess ? GL_TRUE : GL_FALSE; break;
       default:
         return false;
     }
@@ -1049,7 +1441,7 @@ bool Context::getFloatv(GLenum pname, GLfloat *params)
         break;
       case GL_ALIASED_POINT_SIZE_RANGE:
         params[0] = gl::ALIASED_POINT_SIZE_RANGE_MIN;
-        params[1] = supportsShaderModel3() ? gl::ALIASED_POINT_SIZE_RANGE_MAX_SM3 : gl::ALIASED_POINT_SIZE_RANGE_MAX_SM2;
+        params[1] = getMaximumPointSize();
         break;
       case GL_DEPTH_RANGE:
         params[0] = mState.zNear;
@@ -1066,6 +1458,13 @@ bool Context::getFloatv(GLenum pname, GLfloat *params)
         params[1] = mState.blendColor.green;
         params[2] = mState.blendColor.blue;
         params[3] = mState.blendColor.alpha;
+        break;
+      case GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT:
+        if (!supportsTextureFilterAnisotropy())
+        {
+            return false;
+        }
+        *params = mMaxTextureAnisotropy;
         break;
       default:
         return false;
@@ -1085,24 +1484,26 @@ bool Context::getIntegerv(GLenum pname, GLint *params)
     {
       case GL_MAX_VERTEX_ATTRIBS:               *params = gl::MAX_VERTEX_ATTRIBS;               break;
       case GL_MAX_VERTEX_UNIFORM_VECTORS:       *params = gl::MAX_VERTEX_UNIFORM_VECTORS;       break;
-      case GL_MAX_VARYING_VECTORS:              *params = gl::MAX_VARYING_VECTORS;              break;
-      case GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS: *params = gl::MAX_COMBINED_TEXTURE_IMAGE_UNITS; break;
-      case GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS:   *params = gl::MAX_VERTEX_TEXTURE_IMAGE_UNITS;   break;
+      case GL_MAX_VARYING_VECTORS:              *params = getMaximumVaryingVectors();           break;
+      case GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS: *params = getMaximumCombinedTextureImageUnits(); break;
+      case GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS:   *params = getMaximumVertexTextureImageUnits();  break;
       case GL_MAX_TEXTURE_IMAGE_UNITS:          *params = gl::MAX_TEXTURE_IMAGE_UNITS;          break;
-      case GL_MAX_FRAGMENT_UNIFORM_VECTORS:     *params = gl::MAX_FRAGMENT_UNIFORM_VECTORS;     break;
-      case GL_MAX_RENDERBUFFER_SIZE:            *params = gl::MAX_RENDERBUFFER_SIZE;            break;
+      case GL_MAX_FRAGMENT_UNIFORM_VECTORS:     *params = getMaximumFragmentUniformVectors();   break;
+      case GL_MAX_RENDERBUFFER_SIZE:            *params = getMaximumRenderbufferDimension();    break;
       case GL_NUM_SHADER_BINARY_FORMATS:        *params = 0;                                    break;
-      case GL_NUM_COMPRESSED_TEXTURE_FORMATS:   *params = 0;                                    break;
-      case GL_COMPRESSED_TEXTURE_FORMATS: /* no compressed texture formats are supported */     break;
       case GL_SHADER_BINARY_FORMATS:      /* no shader binary formats are supported */          break;
       case GL_ARRAY_BUFFER_BINDING:             *params = mState.arrayBuffer.id();              break;
       case GL_ELEMENT_ARRAY_BUFFER_BINDING:     *params = mState.elementArrayBuffer.id();       break;
-      case GL_FRAMEBUFFER_BINDING:              *params = mState.framebuffer;                   break;
+      //case GL_FRAMEBUFFER_BINDING:            // now equivalent to GL_DRAW_FRAMEBUFFER_BINDING_ANGLE
+      case GL_DRAW_FRAMEBUFFER_BINDING_ANGLE:   *params = mState.drawFramebuffer;               break;
+      case GL_READ_FRAMEBUFFER_BINDING_ANGLE:   *params = mState.readFramebuffer;               break;
       case GL_RENDERBUFFER_BINDING:             *params = mState.renderbuffer.id();             break;
       case GL_CURRENT_PROGRAM:                  *params = mState.currentProgram;                break;
       case GL_PACK_ALIGNMENT:                   *params = mState.packAlignment;                 break;
+      case GL_PACK_REVERSE_ROW_ORDER_ANGLE:     *params = mState.packReverseRowOrder;           break;
       case GL_UNPACK_ALIGNMENT:                 *params = mState.unpackAlignment;               break;
       case GL_GENERATE_MIPMAP_HINT:             *params = mState.generateMipmapHint;            break;
+      case GL_FRAGMENT_SHADER_DERIVATIVE_HINT_OES: *params = mState.fragmentShaderDerivativeHint; break;
       case GL_ACTIVE_TEXTURE:                   *params = (mState.activeSampler + GL_TEXTURE0); break;
       case GL_STENCIL_FUNC:                     *params = mState.stencilFunc;                   break;
       case GL_STENCIL_REF:                      *params = mState.stencilRef;                    break;
@@ -1127,17 +1528,78 @@ bool Context::getIntegerv(GLenum pname, GLint *params)
       case GL_STENCIL_BACK_WRITEMASK:           *params = mState.stencilBackWritemask;          break;
       case GL_STENCIL_CLEAR_VALUE:              *params = mState.stencilClearValue;             break;
       case GL_SUBPIXEL_BITS:                    *params = 4;                                    break;
-      case GL_MAX_TEXTURE_SIZE:                 *params = gl::MAX_TEXTURE_SIZE;                 break;
-      case GL_MAX_CUBE_MAP_TEXTURE_SIZE:        *params = gl::MAX_CUBE_MAP_TEXTURE_SIZE;        break;
-      case GL_SAMPLE_BUFFERS:                   *params = 0;                                    break;
-      case GL_SAMPLES:                          *params = 0;                                    break;
+      case GL_MAX_TEXTURE_SIZE:                 *params = getMaximumTextureDimension();         break;
+      case GL_MAX_CUBE_MAP_TEXTURE_SIZE:        *params = getMaximumCubeTextureDimension();     break;
+      case GL_NUM_COMPRESSED_TEXTURE_FORMATS:   
+        params[0] = mNumCompressedTextureFormats;
+        break;
+      case GL_MAX_SAMPLES_ANGLE:
+        {
+            GLsizei maxSamples = getMaxSupportedSamples();
+            if (maxSamples != 0)
+            {
+                *params = maxSamples;
+            }
+            else
+            {
+                return false;
+            }
+
+            break;
+        }
+      case GL_SAMPLE_BUFFERS:                   
+      case GL_SAMPLES:
+        {
+            gl::Framebuffer *framebuffer = getDrawFramebuffer();
+            if (framebuffer->completeness() == GL_FRAMEBUFFER_COMPLETE)
+            {
+                switch (pname)
+                {
+                  case GL_SAMPLE_BUFFERS:
+                    if (framebuffer->getSamples() != 0)
+                    {
+                        *params = 1;
+                    }
+                    else
+                    {
+                        *params = 0;
+                    }
+                    break;
+                  case GL_SAMPLES:
+                    *params = framebuffer->getSamples();
+                    break;
+                }
+            }
+            else 
+            {
+                *params = 0;
+            }
+        }
+        break;
       case GL_IMPLEMENTATION_COLOR_READ_TYPE:   *params = gl::IMPLEMENTATION_COLOR_READ_TYPE;   break;
       case GL_IMPLEMENTATION_COLOR_READ_FORMAT: *params = gl::IMPLEMENTATION_COLOR_READ_FORMAT; break;
       case GL_MAX_VIEWPORT_DIMS:
         {
-            int maxDimension = std::max((int)gl::MAX_RENDERBUFFER_SIZE, (int)gl::MAX_TEXTURE_SIZE);
+            int maxDimension = std::max(getMaximumRenderbufferDimension(), getMaximumTextureDimension());
             params[0] = maxDimension;
             params[1] = maxDimension;
+        }
+        break;
+      case GL_COMPRESSED_TEXTURE_FORMATS:
+        {
+            if (supportsDXT1Textures())
+            {
+                *params++ = GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
+                *params++ = GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
+            }
+            if (supportsDXT3Textures())
+            {
+                *params++ = GL_COMPRESSED_RGBA_S3TC_DXT3_ANGLE;
+            }
+            if (supportsDXT5Textures())
+            {
+                *params++ = GL_COMPRESSED_RGBA_S3TC_DXT5_ANGLE;
+            }
         }
         break;
       case GL_VIEWPORT:
@@ -1159,8 +1621,8 @@ bool Context::getIntegerv(GLenum pname, GLint *params)
       case GL_BLUE_BITS:
       case GL_ALPHA_BITS:
         {
-            gl::Framebuffer *framebuffer = getFramebuffer();
-            gl::Colorbuffer *colorbuffer = framebuffer->getColorbuffer();
+            gl::Framebuffer *framebuffer = getDrawFramebuffer();
+            gl::Renderbuffer *colorbuffer = framebuffer->getColorbuffer();
 
             if (colorbuffer)
             {
@@ -1180,8 +1642,8 @@ bool Context::getIntegerv(GLenum pname, GLint *params)
         break;
       case GL_DEPTH_BITS:
         {
-            gl::Framebuffer *framebuffer = getFramebuffer();
-            gl::DepthStencilbuffer *depthbuffer = framebuffer->getDepthbuffer();
+            gl::Framebuffer *framebuffer = getDrawFramebuffer();
+            gl::Renderbuffer *depthbuffer = framebuffer->getDepthbuffer();
 
             if (depthbuffer)
             {
@@ -1195,8 +1657,8 @@ bool Context::getIntegerv(GLenum pname, GLint *params)
         break;
       case GL_STENCIL_BITS:
         {
-            gl::Framebuffer *framebuffer = getFramebuffer();
-            gl::DepthStencilbuffer *stencilbuffer = framebuffer->getStencilbuffer();
+            gl::Framebuffer *framebuffer = getDrawFramebuffer();
+            gl::Renderbuffer *stencilbuffer = framebuffer->getStencilbuffer();
 
             if (stencilbuffer)
             {
@@ -1210,25 +1672,34 @@ bool Context::getIntegerv(GLenum pname, GLint *params)
         break;
       case GL_TEXTURE_BINDING_2D:
         {
-            if (mState.activeSampler < 0 || mState.activeSampler > gl::MAX_TEXTURE_IMAGE_UNITS - 1)
+            if (mState.activeSampler < 0 || mState.activeSampler > getMaximumCombinedTextureImageUnits() - 1)
             {
                 error(GL_INVALID_OPERATION);
                 return false;
             }
 
-            *params = mState.samplerTexture[SAMPLER_2D][mState.activeSampler].id();
+            *params = mState.samplerTexture[TEXTURE_2D][mState.activeSampler].id();
         }
         break;
       case GL_TEXTURE_BINDING_CUBE_MAP:
         {
-            if (mState.activeSampler < 0 || mState.activeSampler > gl::MAX_TEXTURE_IMAGE_UNITS - 1)
+            if (mState.activeSampler < 0 || mState.activeSampler > getMaximumCombinedTextureImageUnits() - 1)
             {
                 error(GL_INVALID_OPERATION);
                 return false;
             }
 
-            *params = mState.samplerTexture[SAMPLER_CUBE][mState.activeSampler].id();
+            *params = mState.samplerTexture[TEXTURE_CUBE][mState.activeSampler].id();
         }
+        break;
+      case GL_RESET_NOTIFICATION_STRATEGY_EXT:
+        *params = mResetStrategy;
+        break;
+      case GL_NUM_PROGRAM_BINARY_FORMATS_OES:
+        *params = 1;
+        break;
+      case GL_PROGRAM_BINARY_FORMATS_OES:
+        *params = GL_PROGRAM_BINARY_ANGLE;
         break;
       default:
         return false;
@@ -1248,7 +1719,12 @@ bool Context::getQueryParameterInfo(GLenum pname, GLenum *type, unsigned int *nu
     // application.
     switch (pname)
     {
-      case GL_COMPRESSED_TEXTURE_FORMATS: /* no compressed texture formats are supported */ 
+      case GL_COMPRESSED_TEXTURE_FORMATS:
+        {
+            *type = GL_INT;
+            *numParams = mNumCompressedTextureFormats;
+        }
+        break;
       case GL_SHADER_BINARY_FORMATS:
         {
             *type = GL_INT;
@@ -1270,8 +1746,10 @@ bool Context::getQueryParameterInfo(GLenum pname, GLenum *type, unsigned int *nu
       case GL_RENDERBUFFER_BINDING:
       case GL_CURRENT_PROGRAM:
       case GL_PACK_ALIGNMENT:
+      case GL_PACK_REVERSE_ROW_ORDER_ANGLE:
       case GL_UNPACK_ALIGNMENT:
       case GL_GENERATE_MIPMAP_HINT:
+      case GL_FRAGMENT_SHADER_DERIVATIVE_HINT_OES:
       case GL_RED_BITS:
       case GL_GREEN_BITS:
       case GL_BLUE_BITS:
@@ -1313,9 +1791,25 @@ bool Context::getQueryParameterInfo(GLenum pname, GLenum *type, unsigned int *nu
       case GL_IMPLEMENTATION_COLOR_READ_FORMAT:
       case GL_TEXTURE_BINDING_2D:
       case GL_TEXTURE_BINDING_CUBE_MAP:
+      case GL_RESET_NOTIFICATION_STRATEGY_EXT:
+      case GL_NUM_PROGRAM_BINARY_FORMATS_OES:
+      case GL_PROGRAM_BINARY_FORMATS_OES:
         {
             *type = GL_INT;
             *numParams = 1;
+        }
+        break;
+      case GL_MAX_SAMPLES_ANGLE:
+        {
+            if (getMaxSupportedSamples() != 0)
+            {
+                *type = GL_INT;
+                *numParams = 1;
+            }
+            else
+            {
+                return false;
+            }
         }
         break;
       case GL_MAX_VIEWPORT_DIMS:
@@ -1343,6 +1837,7 @@ bool Context::getQueryParameterInfo(GLenum pname, GLenum *type, unsigned int *nu
       case GL_DEPTH_TEST:
       case GL_BLEND:
       case GL_DITHER:
+      case GL_CONTEXT_ROBUST_ACCESS_EXT:
         {
             *type = GL_BOOL;
             *numParams = 1;
@@ -1379,6 +1874,14 @@ bool Context::getQueryParameterInfo(GLenum pname, GLenum *type, unsigned int *nu
             *numParams = 4;
         }
         break;
+      case GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT:
+        if (!supportsTextureFilterAnisotropy())
+        {
+            return false;
+        }
+        *type = GL_FLOAT;
+        *numParams = 1;
+        break;
       default:
         return false;
     }
@@ -1390,69 +1893,124 @@ bool Context::getQueryParameterInfo(GLenum pname, GLenum *type, unsigned int *nu
 // scissor rectangle to the Direct3D 9 device
 bool Context::applyRenderTarget(bool ignoreViewport)
 {
-    IDirect3DDevice9 *device = getDevice();
-
-    Framebuffer *framebufferObject = getFramebuffer();
+    Framebuffer *framebufferObject = getDrawFramebuffer();
 
     if (!framebufferObject || framebufferObject->completeness() != GL_FRAMEBUFFER_COMPLETE)
     {
-        error(GL_INVALID_FRAMEBUFFER_OPERATION);
+        return error(GL_INVALID_FRAMEBUFFER_OPERATION, false);
+    }
 
+    // if there is no color attachment we must synthesize a NULL colorattachment
+    // to keep the D3D runtime happy.  This should only be possible if depth texturing.
+    Renderbuffer *renderbufferObject = NULL;
+    if (framebufferObject->getColorbufferType() != GL_NONE)
+    {
+        renderbufferObject = framebufferObject->getColorbuffer();
+    }
+    else
+    {
+        renderbufferObject = framebufferObject->getNullColorbuffer();
+    }
+    if (!renderbufferObject)
+    {
+        ERR("unable to locate renderbuffer for FBO.");
         return false;
     }
 
-    IDirect3DSurface9 *renderTarget = framebufferObject->getRenderTarget();
-    IDirect3DSurface9 *depthStencil = NULL;
-
-    unsigned int renderTargetSerial = framebufferObject->getRenderTargetSerial();
+    bool renderTargetChanged = false;
+    unsigned int renderTargetSerial = renderbufferObject->getSerial();
     if (renderTargetSerial != mAppliedRenderTargetSerial)
     {
-        device->SetRenderTarget(0, renderTarget);
+        IDirect3DSurface9 *renderTarget = renderbufferObject->getRenderTarget();
+        if (!renderTarget)
+        {
+            ERR("render target pointer unexpectedly null.");
+            return false;   // Context must be lost
+        }
+        mDevice->SetRenderTarget(0, renderTarget);
         mAppliedRenderTargetSerial = renderTargetSerial;
+        mScissorStateDirty = true; // Scissor area must be clamped to render target's size-- this is different for different render targets.
+        renderTargetChanged = true;
+        renderTarget->Release();
     }
 
+    IDirect3DSurface9 *depthStencil = NULL;
     unsigned int depthbufferSerial = 0;
     unsigned int stencilbufferSerial = 0;
     if (framebufferObject->getDepthbufferType() != GL_NONE)
     {
-        depthStencil = framebufferObject->getDepthbuffer()->getDepthStencil();
-        depthbufferSerial = framebufferObject->getDepthbuffer()->getSerial();
+        Renderbuffer *depthbuffer = framebufferObject->getDepthbuffer();
+        depthStencil = depthbuffer->getDepthStencil();
+        if (!depthStencil)
+        {
+            ERR("Depth stencil pointer unexpectedly null.");
+            return false;
+        }
+        
+        depthbufferSerial = depthbuffer->getSerial();
     }
     else if (framebufferObject->getStencilbufferType() != GL_NONE)
     {
-        depthStencil = framebufferObject->getStencilbuffer()->getDepthStencil();
-        stencilbufferSerial = framebufferObject->getStencilbuffer()->getSerial();
+        Renderbuffer *stencilbuffer = framebufferObject->getStencilbuffer();
+        depthStencil = stencilbuffer->getDepthStencil();
+        if (!depthStencil)
+        {
+            ERR("Depth stencil pointer unexpectedly null.");
+            return false;
+        }
+        
+        stencilbufferSerial = stencilbuffer->getSerial();
     }
 
     if (depthbufferSerial != mAppliedDepthbufferSerial ||
-        stencilbufferSerial != mAppliedStencilbufferSerial)
+        stencilbufferSerial != mAppliedStencilbufferSerial ||
+        !mDepthStencilInitialized)
     {
-        device->SetDepthStencilSurface(depthStencil);
+        mDevice->SetDepthStencilSurface(depthStencil);
         mAppliedDepthbufferSerial = depthbufferSerial;
         mAppliedStencilbufferSerial = stencilbufferSerial;
+        mDepthStencilInitialized = true;
+    }
+
+    if (depthStencil)
+    {
+        depthStencil->Release();
+    }
+
+    if (!mRenderTargetDescInitialized || renderTargetChanged)
+    {
+        IDirect3DSurface9 *renderTarget = renderbufferObject->getRenderTarget();
+        if (!renderTarget)
+        {
+            return false;   // Context must be lost
+        }
+        renderTarget->GetDesc(&mRenderTargetDesc);
+        mRenderTargetDescInitialized = true;
+        renderTarget->Release();
     }
 
     D3DVIEWPORT9 viewport;
-    D3DSURFACE_DESC desc;
-    renderTarget->GetDesc(&desc);
+
+    float zNear = clamp01(mState.zNear);
+    float zFar = clamp01(mState.zFar);
 
     if (ignoreViewport)
     {
         viewport.X = 0;
         viewport.Y = 0;
-        viewport.Width = desc.Width;
-        viewport.Height = desc.Height;
+        viewport.Width = mRenderTargetDesc.Width;
+        viewport.Height = mRenderTargetDesc.Height;
         viewport.MinZ = 0.0f;
         viewport.MaxZ = 1.0f;
     }
     else
     {
-        viewport.X = std::max(mState.viewportX, 0);
-        viewport.Y = std::max(mState.viewportY, 0);
-        viewport.Width = std::min(mState.viewportWidth, (int)desc.Width - (int)viewport.X);
-        viewport.Height = std::min(mState.viewportHeight, (int)desc.Height - (int)viewport.Y);
-        viewport.MinZ = clamp01(mState.zNear);
-        viewport.MaxZ = clamp01(mState.zFar);
+        viewport.X = clamp(mState.viewportX, 0L, static_cast<LONG>(mRenderTargetDesc.Width));
+        viewport.Y = clamp(mState.viewportY, 0L, static_cast<LONG>(mRenderTargetDesc.Height));
+        viewport.Width = clamp(mState.viewportWidth, 0L, static_cast<LONG>(mRenderTargetDesc.Width) - static_cast<LONG>(viewport.X));
+        viewport.Height = clamp(mState.viewportHeight, 0L, static_cast<LONG>(mRenderTargetDesc.Height) - static_cast<LONG>(viewport.Y));
+        viewport.MinZ = zNear;
+        viewport.MaxZ = zFar;
     }
 
     if (viewport.Width <= 0 || viewport.Height <= 0)
@@ -1460,55 +2018,57 @@ bool Context::applyRenderTarget(bool ignoreViewport)
         return false;   // Nothing to render
     }
 
-    device->SetViewport(&viewport);
+    if (renderTargetChanged || !mViewportInitialized || memcmp(&viewport, &mSetViewport, sizeof mSetViewport) != 0)
+    {
+        mDevice->SetViewport(&viewport);
+        mSetViewport = viewport;
+        mViewportInitialized = true;
+        mDxUniformsDirty = true;
+    }
 
     if (mScissorStateDirty)
     {
         if (mState.scissorTest)
         {
-            RECT rect = {mState.scissorX,
-                         mState.scissorY,
-                         mState.scissorX + mState.scissorWidth,
-                         mState.scissorY + mState.scissorHeight};
-
-            device->SetScissorRect(&rect);
-            device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+            RECT rect;
+            rect.left = clamp(mState.scissorX, 0L, static_cast<LONG>(mRenderTargetDesc.Width));
+            rect.top = clamp(mState.scissorY, 0L, static_cast<LONG>(mRenderTargetDesc.Height));
+            rect.right = clamp(mState.scissorX + mState.scissorWidth, 0L, static_cast<LONG>(mRenderTargetDesc.Width));
+            rect.bottom = clamp(mState.scissorY + mState.scissorHeight, 0L, static_cast<LONG>(mRenderTargetDesc.Height));
+            mDevice->SetScissorRect(&rect);
+            mDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
         }
         else
         {
-            device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+            mDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
         }
-        
+
         mScissorStateDirty = false;
     }
 
-    if (mState.currentProgram)
+    if (mState.currentProgram && mDxUniformsDirty)
     {
-        Program *programObject = getCurrentProgram();
+        ProgramBinary *programBinary = getCurrentProgramBinary();
 
-        GLint halfPixelSize = programObject->getDxHalfPixelSizeLocation();
-        GLfloat xy[2] = {1.0f / viewport.Width, 1.0f / viewport.Height};
-        programObject->setUniform2fv(halfPixelSize, 1, (GLfloat*)&xy);
+        GLint halfPixelSize = programBinary->getDxHalfPixelSizeLocation();
+        GLfloat xy[2] = {1.0f / viewport.Width, -1.0f / viewport.Height};
+        programBinary->setUniform2fv(halfPixelSize, 1, xy);
 
-        GLint window = programObject->getDxViewportLocation();
+        // These values are used for computing gl_FragCoord in Program::linkVaryings().
+        GLint coord = programBinary->getDxCoordLocation();
         GLfloat whxy[4] = {mState.viewportWidth / 2.0f, mState.viewportHeight / 2.0f, 
                           (float)mState.viewportX + mState.viewportWidth / 2.0f, 
                           (float)mState.viewportY + mState.viewportHeight / 2.0f};
-        programObject->setUniform4fv(window, 1, (GLfloat*)&whxy);
+        programBinary->setUniform4fv(coord, 1, whxy);
 
-        GLint depth = programObject->getDxDepthLocation();
-        GLfloat dz[2] = {(mState.zFar - mState.zNear) / 2.0f, (mState.zNear + mState.zFar) / 2.0f};
-        programObject->setUniform2fv(depth, 1, (GLfloat*)&dz);
+        GLint depth = programBinary->getDxDepthLocation();
+        GLfloat dz[2] = {(zFar - zNear) / 2.0f, (zNear + zFar) / 2.0f};
+        programBinary->setUniform2fv(depth, 1, dz);
 
-        GLint near = programObject->getDepthRangeNearLocation();
-        programObject->setUniform1fv(near, 1, &mState.zNear);
-
-        GLint far = programObject->getDepthRangeFarLocation();
-        programObject->setUniform1fv(far, 1, &mState.zFar);
-
-        GLint diff = programObject->getDepthRangeDiffLocation();
-        GLfloat zDiff = mState.zFar - mState.zNear;
-        programObject->setUniform1fv(diff, 1, &zDiff);
+        GLint depthRange = programBinary->getDxDepthRangeLocation();
+        GLfloat nearFarDiff[3] = {zNear, zFar, zFar - zNear};
+        programBinary->setUniform3fv(depthRange, 1, nearFarDiff);
+        mDxUniformsDirty = false;
     }
 
     return true;
@@ -1517,28 +2077,35 @@ bool Context::applyRenderTarget(bool ignoreViewport)
 // Applies the fixed-function state (culling, depth test, alpha blending, stenciling, etc) to the Direct3D 9 device
 void Context::applyState(GLenum drawMode)
 {
-    IDirect3DDevice9 *device = getDevice();
-    Program *programObject = getCurrentProgram();
+    ProgramBinary *programBinary = getCurrentProgramBinary();
 
-    GLint frontCCW = programObject->getDxFrontCCWLocation();
+    Framebuffer *framebufferObject = getDrawFramebuffer();
+
+    GLint frontCCW = programBinary->getDxFrontCCWLocation();
     GLint ccw = (mState.frontFace == GL_CCW);
-    programObject->setUniform1iv(frontCCW, 1, &ccw);
+    programBinary->setUniform1iv(frontCCW, 1, &ccw);
 
-    GLint pointsOrLines = programObject->getDxPointsOrLinesLocation();
+    GLint pointsOrLines = programBinary->getDxPointsOrLinesLocation();
     GLint alwaysFront = !isTriangleMode(drawMode);
-    programObject->setUniform1iv(pointsOrLines, 1, &alwaysFront);
+    programBinary->setUniform1iv(pointsOrLines, 1, &alwaysFront);
 
-    Framebuffer *framebufferObject = getFramebuffer();
+    D3DADAPTER_IDENTIFIER9 *identifier = mDisplay->getAdapterIdentifier();
+    bool zeroColorMaskAllowed = identifier->VendorId != 0x1002;
+    // Apparently some ATI cards have a bug where a draw with a zero color
+    // write mask can cause later draws to have incorrect results. Instead,
+    // set a nonzero color write mask but modify the blend state so that no
+    // drawing is done.
+    // http://code.google.com/p/angleproject/issues/detail?id=169
 
     if (mCullStateDirty || mFrontFaceDirty)
     {
         if (mState.cullFace)
         {
-            device->SetRenderState(D3DRS_CULLMODE, es2dx::ConvertCullMode(mState.cullMode, mState.frontFace));
+            mDevice->SetRenderState(D3DRS_CULLMODE, es2dx::ConvertCullMode(mState.cullMode, mState.frontFace));
         }
         else
         {
-            device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+            mDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
         }
 
         mCullStateDirty = false;
@@ -1546,61 +2113,66 @@ void Context::applyState(GLenum drawMode)
 
     if (mDepthStateDirty)
     {
-        if (mState.depthTest && framebufferObject->getDepthbufferType() != GL_NONE)
+        if (mState.depthTest)
         {
-            device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
-            device->SetRenderState(D3DRS_ZFUNC, es2dx::ConvertComparison(mState.depthFunc));
+            mDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+            mDevice->SetRenderState(D3DRS_ZFUNC, es2dx::ConvertComparison(mState.depthFunc));
         }
         else
         {
-            device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+            mDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
         }
 
         mDepthStateDirty = false;
+    }
+
+    if (!zeroColorMaskAllowed && (mMaskStateDirty || mBlendStateDirty))
+    {
+        mBlendStateDirty = true;
+        mMaskStateDirty = true;
     }
 
     if (mBlendStateDirty)
     {
         if (mState.blend)
         {
-            device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+            mDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 
             if (mState.sourceBlendRGB != GL_CONSTANT_ALPHA && mState.sourceBlendRGB != GL_ONE_MINUS_CONSTANT_ALPHA &&
                 mState.destBlendRGB != GL_CONSTANT_ALPHA && mState.destBlendRGB != GL_ONE_MINUS_CONSTANT_ALPHA)
             {
-                device->SetRenderState(D3DRS_BLENDFACTOR, es2dx::ConvertColor(mState.blendColor));
+                mDevice->SetRenderState(D3DRS_BLENDFACTOR, es2dx::ConvertColor(mState.blendColor));
             }
             else
             {
-                device->SetRenderState(D3DRS_BLENDFACTOR, D3DCOLOR_RGBA(unorm<8>(mState.blendColor.alpha),
+                mDevice->SetRenderState(D3DRS_BLENDFACTOR, D3DCOLOR_RGBA(unorm<8>(mState.blendColor.alpha),
                                                                         unorm<8>(mState.blendColor.alpha),
                                                                         unorm<8>(mState.blendColor.alpha),
                                                                         unorm<8>(mState.blendColor.alpha)));
             }
 
-            device->SetRenderState(D3DRS_SRCBLEND, es2dx::ConvertBlendFunc(mState.sourceBlendRGB));
-            device->SetRenderState(D3DRS_DESTBLEND, es2dx::ConvertBlendFunc(mState.destBlendRGB));
-            device->SetRenderState(D3DRS_BLENDOP, es2dx::ConvertBlendOp(mState.blendEquationRGB));
+            mDevice->SetRenderState(D3DRS_SRCBLEND, es2dx::ConvertBlendFunc(mState.sourceBlendRGB));
+            mDevice->SetRenderState(D3DRS_DESTBLEND, es2dx::ConvertBlendFunc(mState.destBlendRGB));
+            mDevice->SetRenderState(D3DRS_BLENDOP, es2dx::ConvertBlendOp(mState.blendEquationRGB));
 
             if (mState.sourceBlendRGB != mState.sourceBlendAlpha || 
                 mState.destBlendRGB != mState.destBlendAlpha || 
                 mState.blendEquationRGB != mState.blendEquationAlpha)
             {
-                device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, TRUE);
+                mDevice->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, TRUE);
 
-                device->SetRenderState(D3DRS_SRCBLENDALPHA, es2dx::ConvertBlendFunc(mState.sourceBlendAlpha));
-                device->SetRenderState(D3DRS_DESTBLENDALPHA, es2dx::ConvertBlendFunc(mState.destBlendAlpha));
-                device->SetRenderState(D3DRS_BLENDOPALPHA, es2dx::ConvertBlendOp(mState.blendEquationAlpha));
-
+                mDevice->SetRenderState(D3DRS_SRCBLENDALPHA, es2dx::ConvertBlendFunc(mState.sourceBlendAlpha));
+                mDevice->SetRenderState(D3DRS_DESTBLENDALPHA, es2dx::ConvertBlendFunc(mState.destBlendAlpha));
+                mDevice->SetRenderState(D3DRS_BLENDOPALPHA, es2dx::ConvertBlendOp(mState.blendEquationAlpha));
             }
             else
             {
-                device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+                mDevice->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
             }
         }
         else
         {
-            device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+            mDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
         }
 
         mBlendStateDirty = false;
@@ -1608,10 +2180,10 @@ void Context::applyState(GLenum drawMode)
 
     if (mStencilStateDirty || mFrontFaceDirty)
     {
-        if (mState.stencilTest && hasStencil())
+        if (mState.stencilTest && framebufferObject->hasStencil())
         {
-            device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
-            device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, TRUE);
+            mDevice->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+            mDevice->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, TRUE);
 
             // FIXME: Unsupported by D3D9
             const D3DRENDERSTATETYPE D3DRS_CCW_STENCILREF = D3DRS_STENCILREF;
@@ -1626,51 +2198,65 @@ void Context::applyState(GLenum drawMode)
             }
 
             // get the maximum size of the stencil ref
-            gl::Framebuffer *framebuffer = getFramebuffer();
-            gl::DepthStencilbuffer *stencilbuffer = framebuffer->getStencilbuffer();
+            gl::Renderbuffer *stencilbuffer = framebufferObject->getStencilbuffer();
             GLuint maxStencil = (1 << stencilbuffer->getStencilSize()) - 1;
 
-            device->SetRenderState(mState.frontFace == GL_CCW ? D3DRS_STENCILWRITEMASK : D3DRS_CCW_STENCILWRITEMASK, mState.stencilWritemask);
-            device->SetRenderState(mState.frontFace == GL_CCW ? D3DRS_STENCILFUNC : D3DRS_CCW_STENCILFUNC, 
+            mDevice->SetRenderState(mState.frontFace == GL_CCW ? D3DRS_STENCILWRITEMASK : D3DRS_CCW_STENCILWRITEMASK, mState.stencilWritemask);
+            mDevice->SetRenderState(mState.frontFace == GL_CCW ? D3DRS_STENCILFUNC : D3DRS_CCW_STENCILFUNC, 
                                    es2dx::ConvertComparison(mState.stencilFunc));
 
-            device->SetRenderState(mState.frontFace == GL_CCW ? D3DRS_STENCILREF : D3DRS_CCW_STENCILREF, (mState.stencilRef < (GLint)maxStencil) ? mState.stencilRef : maxStencil);
-            device->SetRenderState(mState.frontFace == GL_CCW ? D3DRS_STENCILMASK : D3DRS_CCW_STENCILMASK, mState.stencilMask);
+            mDevice->SetRenderState(mState.frontFace == GL_CCW ? D3DRS_STENCILREF : D3DRS_CCW_STENCILREF, (mState.stencilRef < (GLint)maxStencil) ? mState.stencilRef : maxStencil);
+            mDevice->SetRenderState(mState.frontFace == GL_CCW ? D3DRS_STENCILMASK : D3DRS_CCW_STENCILMASK, mState.stencilMask);
 
-            device->SetRenderState(mState.frontFace == GL_CCW ? D3DRS_STENCILFAIL : D3DRS_CCW_STENCILFAIL, 
+            mDevice->SetRenderState(mState.frontFace == GL_CCW ? D3DRS_STENCILFAIL : D3DRS_CCW_STENCILFAIL, 
                                    es2dx::ConvertStencilOp(mState.stencilFail));
-            device->SetRenderState(mState.frontFace == GL_CCW ? D3DRS_STENCILZFAIL : D3DRS_CCW_STENCILZFAIL, 
+            mDevice->SetRenderState(mState.frontFace == GL_CCW ? D3DRS_STENCILZFAIL : D3DRS_CCW_STENCILZFAIL, 
                                    es2dx::ConvertStencilOp(mState.stencilPassDepthFail));
-            device->SetRenderState(mState.frontFace == GL_CCW ? D3DRS_STENCILPASS : D3DRS_CCW_STENCILPASS, 
+            mDevice->SetRenderState(mState.frontFace == GL_CCW ? D3DRS_STENCILPASS : D3DRS_CCW_STENCILPASS, 
                                    es2dx::ConvertStencilOp(mState.stencilPassDepthPass));
 
-            device->SetRenderState(mState.frontFace == GL_CW ? D3DRS_STENCILWRITEMASK : D3DRS_CCW_STENCILWRITEMASK, mState.stencilBackWritemask);
-            device->SetRenderState(mState.frontFace == GL_CW ? D3DRS_STENCILFUNC : D3DRS_CCW_STENCILFUNC, 
+            mDevice->SetRenderState(mState.frontFace == GL_CW ? D3DRS_STENCILWRITEMASK : D3DRS_CCW_STENCILWRITEMASK, mState.stencilBackWritemask);
+            mDevice->SetRenderState(mState.frontFace == GL_CW ? D3DRS_STENCILFUNC : D3DRS_CCW_STENCILFUNC, 
                                    es2dx::ConvertComparison(mState.stencilBackFunc));
 
-            device->SetRenderState(mState.frontFace == GL_CW ? D3DRS_STENCILREF : D3DRS_CCW_STENCILREF, (mState.stencilBackRef < (GLint)maxStencil) ? mState.stencilBackRef : maxStencil);
-            device->SetRenderState(mState.frontFace == GL_CW ? D3DRS_STENCILMASK : D3DRS_CCW_STENCILMASK, mState.stencilBackMask);
+            mDevice->SetRenderState(mState.frontFace == GL_CW ? D3DRS_STENCILREF : D3DRS_CCW_STENCILREF, (mState.stencilBackRef < (GLint)maxStencil) ? mState.stencilBackRef : maxStencil);
+            mDevice->SetRenderState(mState.frontFace == GL_CW ? D3DRS_STENCILMASK : D3DRS_CCW_STENCILMASK, mState.stencilBackMask);
 
-            device->SetRenderState(mState.frontFace == GL_CW ? D3DRS_STENCILFAIL : D3DRS_CCW_STENCILFAIL, 
+            mDevice->SetRenderState(mState.frontFace == GL_CW ? D3DRS_STENCILFAIL : D3DRS_CCW_STENCILFAIL, 
                                    es2dx::ConvertStencilOp(mState.stencilBackFail));
-            device->SetRenderState(mState.frontFace == GL_CW ? D3DRS_STENCILZFAIL : D3DRS_CCW_STENCILZFAIL, 
+            mDevice->SetRenderState(mState.frontFace == GL_CW ? D3DRS_STENCILZFAIL : D3DRS_CCW_STENCILZFAIL, 
                                    es2dx::ConvertStencilOp(mState.stencilBackPassDepthFail));
-            device->SetRenderState(mState.frontFace == GL_CW ? D3DRS_STENCILPASS : D3DRS_CCW_STENCILPASS, 
+            mDevice->SetRenderState(mState.frontFace == GL_CW ? D3DRS_STENCILPASS : D3DRS_CCW_STENCILPASS, 
                                    es2dx::ConvertStencilOp(mState.stencilBackPassDepthPass));
         }
         else
         {
-            device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+            mDevice->SetRenderState(D3DRS_STENCILENABLE, FALSE);
         }
 
         mStencilStateDirty = false;
+        mFrontFaceDirty = false;
     }
 
     if (mMaskStateDirty)
     {
-        device->SetRenderState(D3DRS_COLORWRITEENABLE, es2dx::ConvertColorMask(mState.colorMaskRed, mState.colorMaskGreen, 
-                                                                               mState.colorMaskBlue, mState.colorMaskAlpha));
-        device->SetRenderState(D3DRS_ZWRITEENABLE, mState.depthMask ? TRUE : FALSE);
+        int colorMask = es2dx::ConvertColorMask(mState.colorMaskRed, mState.colorMaskGreen, 
+                                                mState.colorMaskBlue, mState.colorMaskAlpha);
+        if (colorMask == 0 && !zeroColorMaskAllowed)
+        {
+            // Enable green channel, but set blending so nothing will be drawn.
+            mDevice->SetRenderState(D3DRS_COLORWRITEENABLE, D3DCOLORWRITEENABLE_GREEN);
+            mDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+
+            mDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
+            mDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+            mDevice->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+        }
+        else
+        {
+            mDevice->SetRenderState(D3DRS_COLORWRITEENABLE, colorMask);
+        }
+        mDevice->SetRenderState(D3DRS_ZWRITEENABLE, mState.depthMask ? TRUE : FALSE);
 
         mMaskStateDirty = false;
     }
@@ -1679,33 +2265,60 @@ void Context::applyState(GLenum drawMode)
     {
         if (mState.polygonOffsetFill)
         {
-            gl::DepthStencilbuffer *depthbuffer = getFramebuffer()->getDepthbuffer();
+            gl::Renderbuffer *depthbuffer = framebufferObject->getDepthbuffer();
             if (depthbuffer)
             {
-                device->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, *((DWORD*)&mState.polygonOffsetFactor));
+                mDevice->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, *((DWORD*)&mState.polygonOffsetFactor));
                 float depthBias = ldexp(mState.polygonOffsetUnits, -(int)(depthbuffer->getDepthSize()));
-                device->SetRenderState(D3DRS_DEPTHBIAS, *((DWORD*)&depthBias));
+                mDevice->SetRenderState(D3DRS_DEPTHBIAS, *((DWORD*)&depthBias));
             }
         }
         else
         {
-            device->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, 0);
-            device->SetRenderState(D3DRS_DEPTHBIAS, 0);
+            mDevice->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, 0);
+            mDevice->SetRenderState(D3DRS_DEPTHBIAS, 0);
         }
 
         mPolygonOffsetStateDirty = false;
     }
 
-    if (mConfig->mMultiSample != 0 && mSampleStateDirty)
+    if (mSampleStateDirty)
     {
         if (mState.sampleAlphaToCoverage)
         {
             FIXME("Sample alpha to coverage is unimplemented.");
         }
 
+        mDevice->SetRenderState(D3DRS_MULTISAMPLEANTIALIAS, TRUE);
         if (mState.sampleCoverage)
         {
-            FIXME("Sample coverage is unimplemented.");
+            unsigned int mask = 0;
+            if (mState.sampleCoverageValue != 0)
+            {
+                float threshold = 0.5f;
+
+                for (int i = 0; i < framebufferObject->getSamples(); ++i)
+                {
+                    mask <<= 1;
+
+                    if ((i + 1) * mState.sampleCoverageValue >= threshold)
+                    {
+                        threshold += 1.0f;
+                        mask |= 1;
+                    }
+                }
+            }
+            
+            if (mState.sampleCoverageInvert)
+            {
+                mask = ~mask;
+            }
+
+            mDevice->SetRenderState(D3DRS_MULTISAMPLEMASK, mask);
+        }
+        else
+        {
+            mDevice->SetRenderState(D3DRS_MULTISAMPLEMASK, 0xFFFFFFFF);
         }
 
         mSampleStateDirty = false;
@@ -1713,85 +2326,38 @@ void Context::applyState(GLenum drawMode)
 
     if (mDitherStateDirty)
     {
-        device->SetRenderState(D3DRS_DITHERENABLE, mState.dither ? TRUE : FALSE);
+        mDevice->SetRenderState(D3DRS_DITHERENABLE, mState.dither ? TRUE : FALSE);
 
         mDitherStateDirty = false;
     }
-
-    mFrontFaceDirty = false;
 }
 
-// Fill in the semanticIndex field of the array of TranslatedAttributes based on the active GLSL program.
-void Context::lookupAttributeMapping(TranslatedAttribute *attributes)
+GLenum Context::applyVertexBuffer(GLint first, GLsizei count, GLsizei instances, GLsizei *repeatDraw)
 {
-    for (int i = 0; i < MAX_VERTEX_ATTRIBS; i++)
-    {
-        if (attributes[i].enabled)
-        {
-            attributes[i].semanticIndex = getCurrentProgram()->getSemanticIndex(i);
-        }
-    }
-}
+    TranslatedAttribute attributes[MAX_VERTEX_ATTRIBS];
 
-GLenum Context::applyVertexBuffer(GLenum mode, GLint first, GLsizei count, bool *useIndexing, TranslatedIndexData *indexInfo)
-{
-    TranslatedAttribute translated[MAX_VERTEX_ATTRIBS];
-
-    GLenum err = mVertexDataManager->preRenderValidate(first, count, translated);
+    GLenum err = mVertexDataManager->prepareVertexData(first, count, attributes, instances);
     if (err != GL_NO_ERROR)
     {
         return err;
     }
 
-    lookupAttributeMapping(translated);
-
-    mBufferBackEnd->setupAttributesPreDraw(translated);
-
-    for (int i = 0; i < MAX_VERTEX_ATTRIBS; i++)
-    {
-        if (translated[i].enabled && translated[i].nonArray)
-        {
-            err = mIndexDataManager->preRenderValidateUnindexed(mode, count, indexInfo);
-            if (err != GL_NO_ERROR)
-            {
-                return err;
-            }
-
-            mBufferBackEnd->setupIndicesPreDraw(*indexInfo);
-
-            *useIndexing = true;
-            return GL_NO_ERROR;
-        }
-    }
-
-    *useIndexing = false;
-    return GL_NO_ERROR;
-}
-
-GLenum Context::applyVertexBuffer(const TranslatedIndexData &indexInfo)
-{
-    TranslatedAttribute translated[MAX_VERTEX_ATTRIBS];
-
-    GLenum err = mVertexDataManager->preRenderValidate(indexInfo.minIndex, indexInfo.maxIndex-indexInfo.minIndex+1, translated);
-
-    if (err == GL_NO_ERROR)
-    {
-        lookupAttributeMapping(translated);
-
-        mBufferBackEnd->setupAttributesPreDraw(translated);
-    }
-
-    return err;
+    ProgramBinary *programBinary = getCurrentProgramBinary();
+    return mVertexDeclarationCache.applyDeclaration(mDevice, attributes, programBinary, instances, repeatDraw);
 }
 
 // Applies the indices and element array bindings to the Direct3D 9 device
-GLenum Context::applyIndexBuffer(const void *indices, GLsizei count, GLenum mode, GLenum type, TranslatedIndexData *indexInfo)
+GLenum Context::applyIndexBuffer(const GLvoid *indices, GLsizei count, GLenum mode, GLenum type, TranslatedIndexData *indexInfo)
 {
-    GLenum err = mIndexDataManager->preRenderValidate(mode, type, count, mState.elementArrayBuffer.get(), indices, indexInfo);
+    GLenum err = mIndexDataManager->prepareIndexData(type, count, mState.elementArrayBuffer.get(), indices, indexInfo);
 
     if (err == GL_NO_ERROR)
     {
-        mBufferBackEnd->setupIndicesPreDraw(*indexInfo);
+        if (indexInfo->serial != mAppliedIBSerial)
+        {
+            mDevice->SetIndices(indexInfo->indexBuffer);
+            mAppliedIBSerial = indexInfo->serial;
+        }
     }
 
     return err;
@@ -1800,131 +2366,225 @@ GLenum Context::applyIndexBuffer(const void *indices, GLsizei count, GLenum mode
 // Applies the shaders and shader constants to the Direct3D 9 device
 void Context::applyShaders()
 {
-    IDirect3DDevice9 *device = getDevice();
-    Program *programObject = getCurrentProgram();
-    IDirect3DVertexShader9 *vertexShader = programObject->getVertexShader();
-    IDirect3DPixelShader9 *pixelShader = programObject->getPixelShader();
+    ProgramBinary *programBinary = getCurrentProgramBinary();
 
-    device->SetVertexShader(vertexShader);
-    device->SetPixelShader(pixelShader);
-
-    if (programObject->getSerial() != mAppliedProgram)
+    if (programBinary->getSerial() != mAppliedProgramBinarySerial)
     {
-        programObject->dirtyAllUniforms();
-        programObject->dirtyAllSamplers();
-        mAppliedProgram = programObject->getSerial();
+        IDirect3DVertexShader9 *vertexShader = programBinary->getVertexShader();
+        IDirect3DPixelShader9 *pixelShader = programBinary->getPixelShader();
+
+        mDevice->SetPixelShader(pixelShader);
+        mDevice->SetVertexShader(vertexShader);
+        programBinary->dirtyAllUniforms();
+        mAppliedProgramBinarySerial = programBinary->getSerial();
     }
 
-    programObject->applyUniforms();
+    programBinary->applyUniforms();
 }
 
 // Applies the textures and sampler states to the Direct3D 9 device
 void Context::applyTextures()
 {
-    IDirect3DDevice9 *device = getDevice();
-    Program *programObject = getCurrentProgram();
+    applyTextures(SAMPLER_PIXEL);
 
-    for (int sampler = 0; sampler < MAX_TEXTURE_IMAGE_UNITS; sampler++)
+    if (mSupportsVertexTexture)
     {
-        int textureUnit = programObject->getSamplerMapping(sampler);
-        if (textureUnit != -1)
-        {
-            SamplerType textureType = programObject->getSamplerType(sampler);
-
-            Texture *texture = getSamplerTexture(textureUnit, textureType);
-
-            if (programObject->isSamplerDirty(sampler) || texture->isDirty())
-            {
-                if (texture->isComplete())
-                {
-                    GLenum wrapS = texture->getWrapS();
-                    GLenum wrapT = texture->getWrapT();
-                    GLenum minFilter = texture->getMinFilter();
-                    GLenum magFilter = texture->getMagFilter();
-
-                    device->SetSamplerState(sampler, D3DSAMP_ADDRESSU, es2dx::ConvertTextureWrap(wrapS));
-                    device->SetSamplerState(sampler, D3DSAMP_ADDRESSV, es2dx::ConvertTextureWrap(wrapT));
-
-                    device->SetSamplerState(sampler, D3DSAMP_MAGFILTER, es2dx::ConvertMagFilter(magFilter));
-                    D3DTEXTUREFILTERTYPE d3dMinFilter, d3dMipFilter;
-                    es2dx::ConvertMinFilter(minFilter, &d3dMinFilter, &d3dMipFilter);
-                    device->SetSamplerState(sampler, D3DSAMP_MINFILTER, d3dMinFilter);
-                    device->SetSamplerState(sampler, D3DSAMP_MIPFILTER, d3dMipFilter);
-
-                    device->SetTexture(sampler, texture->getTexture());
-                }
-                else
-                {
-                    device->SetTexture(sampler, getIncompleteTexture(textureType)->getTexture());
-                }
-            }
-
-            programObject->setSamplerDirty(sampler, false);
-        }
-        else
-        {
-            if (programObject->isSamplerDirty(sampler))
-            {
-                device->SetTexture(sampler, NULL);
-                programObject->setSamplerDirty(sampler, false);
-            }
-        }   
+        applyTextures(SAMPLER_VERTEX);
     }
 }
 
-void Context::readPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void* pixels)
+// For each Direct3D 9 sampler of either the pixel or vertex stage,
+// looks up the corresponding OpenGL texture image unit and texture type,
+// and sets the texture and its addressing/filtering state (or NULL when inactive).
+void Context::applyTextures(SamplerType type)
 {
-    Framebuffer *framebuffer = getFramebuffer();
+    ProgramBinary *programBinary = getCurrentProgramBinary();
+
+    int samplerCount = (type == SAMPLER_PIXEL) ? MAX_TEXTURE_IMAGE_UNITS : MAX_VERTEX_TEXTURE_IMAGE_UNITS_VTF;   // Range of Direct3D 9 samplers of given sampler type
+    unsigned int *appliedTextureSerial = (type == SAMPLER_PIXEL) ? mAppliedTextureSerialPS : mAppliedTextureSerialVS;
+    int d3dSamplerOffset = (type == SAMPLER_PIXEL) ? 0 : D3DVERTEXTEXTURESAMPLER0;
+    int samplerRange = programBinary->getUsedSamplerRange(type);
+
+    for (int samplerIndex = 0; samplerIndex < samplerRange; samplerIndex++)
+    {
+        int textureUnit = programBinary->getSamplerMapping(type, samplerIndex);   // OpenGL texture image unit index
+        int d3dSampler = samplerIndex + d3dSamplerOffset;
+
+        if (textureUnit != -1)
+        {
+            TextureType textureType = programBinary->getSamplerTextureType(type, samplerIndex);
+
+            Texture *texture = getSamplerTexture(textureUnit, textureType);
+            unsigned int texSerial = texture->getTextureSerial();
+
+            if (appliedTextureSerial[samplerIndex] != texSerial || texture->hasDirtyParameters() || texture->hasDirtyImages())
+            {
+                IDirect3DBaseTexture9 *d3dTexture = texture->getTexture();
+
+                if (d3dTexture)
+                {
+                    if (appliedTextureSerial[samplerIndex] != texSerial || texture->hasDirtyParameters())
+                    {
+                        GLenum wrapS = texture->getWrapS();
+                        GLenum wrapT = texture->getWrapT();
+                        GLenum minFilter = texture->getMinFilter();
+                        GLenum magFilter = texture->getMagFilter();
+                        float maxAnisotropy = texture->getMaxAnisotropy();
+
+                        mDevice->SetSamplerState(d3dSampler, D3DSAMP_ADDRESSU, es2dx::ConvertTextureWrap(wrapS));
+                        mDevice->SetSamplerState(d3dSampler, D3DSAMP_ADDRESSV, es2dx::ConvertTextureWrap(wrapT));
+
+                        mDevice->SetSamplerState(d3dSampler, D3DSAMP_MAGFILTER, es2dx::ConvertMagFilter(magFilter, maxAnisotropy));
+                        D3DTEXTUREFILTERTYPE d3dMinFilter, d3dMipFilter;
+                        es2dx::ConvertMinFilter(minFilter, &d3dMinFilter, &d3dMipFilter, maxAnisotropy);
+                        mDevice->SetSamplerState(d3dSampler, D3DSAMP_MINFILTER, d3dMinFilter);
+                        mDevice->SetSamplerState(d3dSampler, D3DSAMP_MIPFILTER, d3dMipFilter);
+                        mDevice->SetSamplerState(d3dSampler, D3DSAMP_MAXMIPLEVEL, texture->getLodOffset());
+
+                        if (supportsTextureFilterAnisotropy())
+                        {
+                            mDevice->SetSamplerState(d3dSampler, D3DSAMP_MAXANISOTROPY, (DWORD)maxAnisotropy);
+                        }
+                    }
+
+                    if (appliedTextureSerial[samplerIndex] != texSerial || texture->hasDirtyImages())
+                    {
+                        mDevice->SetTexture(d3dSampler, d3dTexture);
+                    }
+                }
+                else
+                {
+                    mDevice->SetTexture(d3dSampler, getIncompleteTexture(textureType)->getTexture());
+                }
+
+                appliedTextureSerial[samplerIndex] = texSerial;
+                texture->resetDirty();
+            }
+        }
+        else
+        {
+            if (appliedTextureSerial[samplerIndex] != 0)
+            {
+                mDevice->SetTexture(d3dSampler, NULL);
+                appliedTextureSerial[samplerIndex] = 0;
+            }
+        }
+    }
+
+    for (int samplerIndex = samplerRange; samplerIndex < samplerCount; samplerIndex++)
+    {
+        if (appliedTextureSerial[samplerIndex] != 0)
+        {
+            mDevice->SetTexture(samplerIndex + d3dSamplerOffset, NULL);
+            appliedTextureSerial[samplerIndex] = 0;
+        }
+    }
+}
+
+void Context::readPixels(GLint x, GLint y, GLsizei width, GLsizei height,
+                         GLenum format, GLenum type, GLsizei *bufSize, void* pixels)
+{
+    Framebuffer *framebuffer = getReadFramebuffer();
 
     if (framebuffer->completeness() != GL_FRAMEBUFFER_COMPLETE)
     {
         return error(GL_INVALID_FRAMEBUFFER_OPERATION);
     }
 
+    if (getReadFramebufferHandle() != 0 && framebuffer->getSamples() != 0)
+    {
+        return error(GL_INVALID_OPERATION);
+    }
+
+    GLsizei outputPitch = ComputePitch(width, format, type, mState.packAlignment);
+    // sized query sanity check
+    if (bufSize)
+    {
+        int requiredSize = outputPitch * height;
+        if (requiredSize > *bufSize)
+        {
+            return error(GL_INVALID_OPERATION);
+        }
+    }
+
     IDirect3DSurface9 *renderTarget = framebuffer->getRenderTarget();
-    IDirect3DDevice9 *device = getDevice();
+    if (!renderTarget)
+    {
+        return;   // Context must be lost, return silently
+    }
 
     D3DSURFACE_DESC desc;
     renderTarget->GetDesc(&desc);
 
-    IDirect3DSurface9 *systemSurface;
-    HRESULT result = device->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format, D3DPOOL_SYSTEMMEM, &systemSurface, NULL);
-
-    if (result == D3DERR_OUTOFVIDEOMEMORY || result == E_OUTOFMEMORY)
-    {
-        return error(GL_OUT_OF_MEMORY);
-    }
-
-    ASSERT(SUCCEEDED(result));
-
     if (desc.MultiSampleType != D3DMULTISAMPLE_NONE)
     {
         UNIMPLEMENTED();   // FIXME: Requires resolve using StretchRect into non-multisampled render target
+        renderTarget->Release();
+        return error(GL_OUT_OF_MEMORY);
     }
 
-    result = device->GetRenderTargetData(renderTarget, systemSurface);
+    HRESULT result;
+    IDirect3DSurface9 *systemSurface = NULL;
+    bool directToPixels = !getPackReverseRowOrder() && getPackAlignment() <= 4 && mDisplay->isD3d9ExDevice() &&
+                          x == 0 && y == 0 && UINT(width) == desc.Width && UINT(height) == desc.Height &&
+                          desc.Format == D3DFMT_A8R8G8B8 && format == GL_BGRA_EXT && type == GL_UNSIGNED_BYTE;
+    if (directToPixels)
+    {
+        // Use the pixels ptr as a shared handle to write directly into client's memory
+        result = mDevice->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format,
+                                                      D3DPOOL_SYSTEMMEM, &systemSurface, &pixels);
+        if (FAILED(result))
+        {
+            // Try again without the shared handle
+            directToPixels = false;
+        }
+    }
+
+    if (!directToPixels)
+    {
+        result = mDevice->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format,
+                                                      D3DPOOL_SYSTEMMEM, &systemSurface, NULL);
+        if (FAILED(result))
+        {
+            ASSERT(result == D3DERR_OUTOFVIDEOMEMORY || result == E_OUTOFMEMORY);
+            renderTarget->Release();
+            return error(GL_OUT_OF_MEMORY);
+        }
+    }
+
+    result = mDevice->GetRenderTargetData(renderTarget, systemSurface);
+    renderTarget->Release();
+    renderTarget = NULL;
 
     if (FAILED(result))
     {
         systemSurface->Release();
 
-        switch (result)
+        // It turns out that D3D will sometimes produce more error
+        // codes than those documented.
+        if (checkDeviceLost(result))
+            return error(GL_OUT_OF_MEMORY);
+        else
         {
-            case D3DERR_DRIVERINTERNALERROR:
-            case D3DERR_DEVICELOST:
-                return error(GL_OUT_OF_MEMORY);
-            default:
-                UNREACHABLE();
-                return;   // No sensible error to generate
+            UNREACHABLE();
+            return;
         }
+
     }
 
-    D3DLOCKED_RECT lock;
-    RECT rect = {std::max(x, 0),
-                 std::max(y, 0),
-                 std::min(x + width, (int)desc.Width),
-                 std::min(y + height, (int)desc.Height)};
+    if (directToPixels)
+    {
+        systemSurface->Release();
+        return;
+    }
 
+    RECT rect;
+    rect.left = clamp(x, 0L, static_cast<LONG>(desc.Width));
+    rect.top = clamp(y, 0L, static_cast<LONG>(desc.Height));
+    rect.right = clamp(x + width, 0L, static_cast<LONG>(desc.Width));
+    rect.bottom = clamp(y + height, 0L, static_cast<LONG>(desc.Height));
+
+    D3DLOCKED_RECT lock;
     result = systemSurface->LockRect(&lock, &rect, D3DLOCK_READONLY);
 
     if (FAILED(result))
@@ -1935,14 +2595,38 @@ void Context::readPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum
         return;   // No sensible error to generate
     }
 
-    unsigned char *source = (unsigned char*)lock.pBits;
     unsigned char *dest = (unsigned char*)pixels;
     unsigned short *dest16 = (unsigned short*)pixels;
 
-    GLsizei outputPitch = ComputePitch(width, format, type, mState.packAlignment);
+    unsigned char *source;
+    int inputPitch;
+    if (getPackReverseRowOrder())
+    {
+        source = ((unsigned char*)lock.pBits) + lock.Pitch * (rect.bottom - rect.top - 1);
+        inputPitch = -lock.Pitch;
+    }
+    else
+    {
+        source = (unsigned char*)lock.pBits;
+        inputPitch = lock.Pitch;
+    }
 
     for (int j = 0; j < rect.bottom - rect.top; j++)
     {
+        if (desc.Format == D3DFMT_A8R8G8B8 &&
+            format == GL_BGRA_EXT &&
+            type == GL_UNSIGNED_BYTE)
+        {
+            // Fast path for EXT_read_format_bgra, given
+            // an RGBA source buffer.  Note that buffers with no
+            // alpha go through the slow path below.
+            // Note that this is also the combo exposed by IMPLEMENTATION_COLOR_READ_TYPE/FORMAT
+            memcpy(dest + j * outputPitch,
+                   source + j * inputPitch,
+                   (rect.right - rect.left) * 4);
+            continue;
+        }
+
         for (int i = 0; i < rect.right - rect.left; i++)
         {
             float r;
@@ -1954,7 +2638,7 @@ void Context::readPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum
             {
               case D3DFMT_R5G6B5:
                 {
-                    unsigned short rgb = *(unsigned short*)(source + 2 * i + j * lock.Pitch);
+                    unsigned short rgb = *(unsigned short*)(source + 2 * i + j * inputPitch);
 
                     a = 1.0f;
                     b = (rgb & 0x001F) * (1.0f / 0x001F);
@@ -1962,19 +2646,9 @@ void Context::readPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum
                     r = (rgb & 0xF800) * (1.0f / 0xF800);
                 }
                 break;
-              case D3DFMT_X1R5G5B5:
-                {
-                    unsigned short xrgb = *(unsigned short*)(source + 2 * i + j * lock.Pitch);
-
-                    a = 1.0f;
-                    b = (xrgb & 0x001F) * (1.0f / 0x001F);
-                    g = (xrgb & 0x03E0) * (1.0f / 0x03E0);
-                    r = (xrgb & 0x7C00) * (1.0f / 0x7C00);
-                }
-                break;
               case D3DFMT_A1R5G5B5:
                 {
-                    unsigned short argb = *(unsigned short*)(source + 2 * i + j * lock.Pitch);
+                    unsigned short argb = *(unsigned short*)(source + 2 * i + j * inputPitch);
 
                     a = (argb & 0x8000) ? 1.0f : 0.0f;
                     b = (argb & 0x001F) * (1.0f / 0x001F);
@@ -1984,7 +2658,7 @@ void Context::readPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum
                 break;
               case D3DFMT_A8R8G8B8:
                 {
-                    unsigned int argb = *(unsigned int*)(source + 4 * i + j * lock.Pitch);
+                    unsigned int argb = *(unsigned int*)(source + 4 * i + j * inputPitch);
 
                     a = (argb & 0xFF000000) * (1.0f / 0xFF000000);
                     b = (argb & 0x000000FF) * (1.0f / 0x000000FF);
@@ -1994,7 +2668,7 @@ void Context::readPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum
                 break;
               case D3DFMT_X8R8G8B8:
                 {
-                    unsigned int xrgb = *(unsigned int*)(source + 4 * i + j * lock.Pitch);
+                    unsigned int xrgb = *(unsigned int*)(source + 4 * i + j * inputPitch);
 
                     a = 1.0f;
                     b = (xrgb & 0x000000FF) * (1.0f / 0x000000FF);
@@ -2004,7 +2678,7 @@ void Context::readPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum
                 break;
               case D3DFMT_A2R10G10B10:
                 {
-                    unsigned int argb = *(unsigned int*)(source + 4 * i + j * lock.Pitch);
+                    unsigned int argb = *(unsigned int*)(source + 4 * i + j * inputPitch);
 
                     a = (argb & 0xC0000000) * (1.0f / 0xC0000000);
                     b = (argb & 0x000003FF) * (1.0f / 0x000003FF);
@@ -2012,9 +2686,32 @@ void Context::readPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum
                     r = (argb & 0x3FF00000) * (1.0f / 0x3FF00000);
                 }
                 break;
+              case D3DFMT_A32B32G32R32F:
+                {
+                    // float formats in D3D are stored rgba, rather than the other way round
+                    r = *((float*)(source + 16 * i + j * inputPitch) + 0);
+                    g = *((float*)(source + 16 * i + j * inputPitch) + 1);
+                    b = *((float*)(source + 16 * i + j * inputPitch) + 2);
+                    a = *((float*)(source + 16 * i + j * inputPitch) + 3);
+                }
+                break;
+              case D3DFMT_A16B16G16R16F:
+                {
+                    // float formats in D3D are stored rgba, rather than the other way round
+                    float abgr[4];
+
+                    D3DXFloat16To32Array(abgr, (D3DXFLOAT16*)(source + 8 * i + j * inputPitch), 4);
+
+                    a = abgr[3];
+                    b = abgr[2];
+                    g = abgr[1];
+                    r = abgr[0];
+                }
+                break;
               default:
                 UNIMPLEMENTED();   // FIXME
                 UNREACHABLE();
+                return;
             }
 
             switch (format)
@@ -2031,10 +2728,50 @@ void Context::readPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum
                   default: UNREACHABLE();
                 }
                 break;
-              case GL_RGB:   // IMPLEMENTATION_COLOR_READ_FORMAT
+              case GL_BGRA_EXT:
                 switch (type)
                 {
-                  case GL_UNSIGNED_SHORT_5_6_5:   // IMPLEMENTATION_COLOR_READ_TYPE
+                  case GL_UNSIGNED_BYTE:
+                    dest[4 * i + j * outputPitch + 0] = (unsigned char)(255 * b + 0.5f);
+                    dest[4 * i + j * outputPitch + 1] = (unsigned char)(255 * g + 0.5f);
+                    dest[4 * i + j * outputPitch + 2] = (unsigned char)(255 * r + 0.5f);
+                    dest[4 * i + j * outputPitch + 3] = (unsigned char)(255 * a + 0.5f);
+                    break;
+                  case GL_UNSIGNED_SHORT_4_4_4_4_REV_EXT:
+                    // According to the desktop GL spec in the "Transfer of Pixel Rectangles" section
+                    // this type is packed as follows:
+                    //   15   14   13   12   11   10    9    8    7    6    5    4    3    2    1    0
+                    //  --------------------------------------------------------------------------------
+                    // |       4th         |        3rd         |        2nd        |   1st component   |
+                    //  --------------------------------------------------------------------------------
+                    // in the case of BGRA_EXT, B is the first component, G the second, and so forth.
+                    dest16[i + j * outputPitch / sizeof(unsigned short)] =
+                        ((unsigned short)(15 * a + 0.5f) << 12)|
+                        ((unsigned short)(15 * r + 0.5f) << 8) |
+                        ((unsigned short)(15 * g + 0.5f) << 4) |
+                        ((unsigned short)(15 * b + 0.5f) << 0);
+                    break;
+                  case GL_UNSIGNED_SHORT_1_5_5_5_REV_EXT:
+                    // According to the desktop GL spec in the "Transfer of Pixel Rectangles" section
+                    // this type is packed as follows:
+                    //   15   14   13   12   11   10    9    8    7    6    5    4    3    2    1    0
+                    //  --------------------------------------------------------------------------------
+                    // | 4th |          3rd           |           2nd          |      1st component     |
+                    //  --------------------------------------------------------------------------------
+                    // in the case of BGRA_EXT, B is the first component, G the second, and so forth.
+                    dest16[i + j * outputPitch / sizeof(unsigned short)] =
+                        ((unsigned short)(     a + 0.5f) << 15) |
+                        ((unsigned short)(31 * r + 0.5f) << 10) |
+                        ((unsigned short)(31 * g + 0.5f) << 5) |
+                        ((unsigned short)(31 * b + 0.5f) << 0);
+                    break;
+                  default: UNREACHABLE();
+                }
+                break;
+              case GL_RGB:
+                switch (type)
+                {
+                  case GL_UNSIGNED_SHORT_5_6_5:
                     dest16[i + j * outputPitch / sizeof(unsigned short)] = 
                         ((unsigned short)(31 * b + 0.5f) << 0) |
                         ((unsigned short)(63 * g + 0.5f) << 5) |
@@ -2055,17 +2792,13 @@ void Context::readPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum
 
 void Context::clear(GLbitfield mask)
 {
-    Framebuffer *framebufferObject = getFramebuffer();
+    Framebuffer *framebufferObject = getDrawFramebuffer();
 
     if (!framebufferObject || framebufferObject->completeness() != GL_FRAMEBUFFER_COMPLETE)
     {
-        error(GL_INVALID_FRAMEBUFFER_OPERATION);
-
-        return;
+        return error(GL_INVALID_FRAMEBUFFER_OPERATION);
     }
 
-    egl::Display *display = getDisplay();
-    IDirect3DDevice9 *device = getDevice();
     DWORD flags = 0;
 
     if (mask & GL_COLOR_BUFFER_BIT)
@@ -2095,10 +2828,17 @@ void Context::clear(GLbitfield mask)
         if (framebufferObject->getStencilbufferType() != GL_NONE)
         {
             IDirect3DSurface9 *depthStencil = framebufferObject->getStencilbuffer()->getDepthStencil();
+            if (!depthStencil)
+            {
+                ERR("Depth stencil pointer unexpectedly null.");
+                return;
+            }
+            
             D3DSURFACE_DESC desc;
             depthStencil->GetDesc(&desc);
+            depthStencil->Release();
 
-            unsigned int stencilSize = es2dx::GetStencilSize(desc.Format);
+            unsigned int stencilSize = dx2es::GetStencilSize(desc.Format);
             stencilUnmasked = (0x1 << stencilSize) - 1;
 
             if (stencilUnmasked != 0x0)
@@ -2119,18 +2859,13 @@ void Context::clear(GLbitfield mask)
     }
 
     D3DCOLOR color = D3DCOLOR_ARGB(unorm<8>(mState.colorClearValue.alpha), 
-                                            unorm<8>(mState.colorClearValue.red), 
-                                            unorm<8>(mState.colorClearValue.green), 
-                                            unorm<8>(mState.colorClearValue.blue));
+                                   unorm<8>(mState.colorClearValue.red), 
+                                   unorm<8>(mState.colorClearValue.green), 
+                                   unorm<8>(mState.colorClearValue.blue));
     float depth = clamp01(mState.depthClearValue);
     int stencil = mState.stencilClearValue & 0x000000FF;
 
-    IDirect3DSurface9 *renderTarget = framebufferObject->getRenderTarget();
-
-    D3DSURFACE_DESC desc;
-    renderTarget->GetDesc(&desc);
-
-    bool alphaUnmasked = (es2dx::GetAlphaSize(desc.Format) == 0) || mState.colorMaskAlpha;
+    bool alphaUnmasked = (dx2es::GetAlphaSize(mRenderTargetDesc.Format) == 0) || mState.colorMaskAlpha;
 
     const bool needMaskedStencilClear = (flags & D3DCLEAR_STENCIL) &&
                                         (mState.stencilWritemask & stencilUnmasked) != stencilUnmasked;
@@ -2146,25 +2881,37 @@ void Context::clear(GLbitfield mask)
         HRESULT hr;
         if (mMaskedClearSavedState == NULL)
         {
-            hr = device->BeginStateBlock();
+            hr = mDevice->BeginStateBlock();
             ASSERT(SUCCEEDED(hr) || hr == D3DERR_OUTOFVIDEOMEMORY || hr == E_OUTOFMEMORY);
 
-            device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-            device->SetRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
-            device->SetRenderState(D3DRS_ZENABLE, FALSE);
-            device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-            device->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
-            device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-            device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-            device->SetRenderState(D3DRS_CLIPPLANEENABLE, 0);
-            device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
-            device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
-            device->SetPixelShader(NULL);
-            device->SetVertexShader(NULL);
-            device->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
-            device->SetStreamSourceFreq(0, 1);
+            mDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+            mDevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
+            mDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
+            mDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+            mDevice->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+            mDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+            mDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+            mDevice->SetRenderState(D3DRS_CLIPPLANEENABLE, 0);
+            mDevice->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+            mDevice->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+            mDevice->SetPixelShader(NULL);
+            mDevice->SetVertexShader(NULL);
+            mDevice->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
+            mDevice->SetStreamSource(0, NULL, 0, 0);
+            mDevice->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, TRUE);
+            mDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+            mDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);
+            mDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+            mDevice->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);
+            mDevice->SetRenderState(D3DRS_TEXTUREFACTOR, color);
+            mDevice->SetRenderState(D3DRS_MULTISAMPLEMASK, 0xFFFFFFFF);
+            
+            for(int i = 0; i < MAX_VERTEX_ATTRIBS; i++)
+            {
+                mDevice->SetStreamSourceFreq(i, 1);
+            }
 
-            hr = device->EndStateBlock(&mMaskedClearSavedState);
+            hr = mDevice->EndStateBlock(&mMaskedClearSavedState);
             ASSERT(SUCCEEDED(hr) || hr == D3DERR_OUTOFVIDEOMEMORY || hr == E_OUTOFMEMORY);
         }
 
@@ -2176,88 +2923,86 @@ void Context::clear(GLbitfield mask)
             ASSERT(SUCCEEDED(hr));
         }
 
-        device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-        device->SetRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
-        device->SetRenderState(D3DRS_ZENABLE, FALSE);
-        device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-        device->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
-        device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-        device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-        device->SetRenderState(D3DRS_CLIPPLANEENABLE, 0);
+        mDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+        mDevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
+        mDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
+        mDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+        mDevice->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+        mDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+        mDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+        mDevice->SetRenderState(D3DRS_CLIPPLANEENABLE, 0);
 
         if (flags & D3DCLEAR_TARGET)
         {
-            device->SetRenderState(D3DRS_COLORWRITEENABLE, (mState.colorMaskRed   ? D3DCOLORWRITEENABLE_RED   : 0) |
-                                                           (mState.colorMaskGreen ? D3DCOLORWRITEENABLE_GREEN : 0) |
-                                                           (mState.colorMaskBlue  ? D3DCOLORWRITEENABLE_BLUE  : 0) |
-                                                           (mState.colorMaskAlpha ? D3DCOLORWRITEENABLE_ALPHA : 0));
+            mDevice->SetRenderState(D3DRS_COLORWRITEENABLE, es2dx::ConvertColorMask(mState.colorMaskRed, mState.colorMaskGreen, mState.colorMaskBlue, mState.colorMaskAlpha));
         }
         else
         {
-            device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+            mDevice->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
         }
 
         if (stencilUnmasked != 0x0 && (flags & D3DCLEAR_STENCIL))
         {
-            device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
-            device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
-            device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_ALWAYS);
-            device->SetRenderState(D3DRS_STENCILREF, stencil);
-            device->SetRenderState(D3DRS_STENCILWRITEMASK, mState.stencilWritemask);
-            device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_REPLACE);
-            device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_REPLACE);
-            device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_REPLACE);
+            mDevice->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+            mDevice->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
+            mDevice->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_ALWAYS);
+            mDevice->SetRenderState(D3DRS_STENCILREF, stencil);
+            mDevice->SetRenderState(D3DRS_STENCILWRITEMASK, mState.stencilWritemask);
+            mDevice->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_REPLACE);
+            mDevice->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_REPLACE);
+            mDevice->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_REPLACE);
             mStencilStateDirty = true;
         }
         else
         {
-            device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+            mDevice->SetRenderState(D3DRS_STENCILENABLE, FALSE);
         }
 
-        device->SetPixelShader(NULL);
-        device->SetVertexShader(NULL);
-        device->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
-        device->SetStreamSourceFreq(0, 1);
+        mDevice->SetPixelShader(NULL);
+        mDevice->SetVertexShader(NULL);
+        mDevice->SetFVF(D3DFVF_XYZRHW);
+        mDevice->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, TRUE);
+        mDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+        mDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);
+        mDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+        mDevice->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);
+        mDevice->SetRenderState(D3DRS_TEXTUREFACTOR, color);
+        mDevice->SetRenderState(D3DRS_MULTISAMPLEMASK, 0xFFFFFFFF);
 
-        struct Vertex
+        for(int i = 0; i < MAX_VERTEX_ATTRIBS; i++)
         {
-            float x, y, z, w;
-            D3DCOLOR diffuse;
-        };
+            mDevice->SetStreamSourceFreq(i, 1);
+        }
 
-        Vertex quad[4];
-        quad[0].x = 0.0f;
-        quad[0].y = (float)desc.Height;
-        quad[0].z = 0.0f;
-        quad[0].w = 1.0f;
-        quad[0].diffuse = color;
+        float quad[4][4];   // A quadrilateral covering the target, aligned to match the edges
+        quad[0][0] = -0.5f;
+        quad[0][1] = mRenderTargetDesc.Height - 0.5f;
+        quad[0][2] = 0.0f;
+        quad[0][3] = 1.0f;
 
-        quad[1].x = (float)desc.Width;
-        quad[1].y = (float)desc.Height;
-        quad[1].z = 0.0f;
-        quad[1].w = 1.0f;
-        quad[1].diffuse = color;
+        quad[1][0] = mRenderTargetDesc.Width - 0.5f;
+        quad[1][1] = mRenderTargetDesc.Height - 0.5f;
+        quad[1][2] = 0.0f;
+        quad[1][3] = 1.0f;
 
-        quad[2].x = 0.0f;
-        quad[2].y = 0.0f;
-        quad[2].z = 0.0f;
-        quad[2].w = 1.0f;
-        quad[2].diffuse = color;
+        quad[2][0] = -0.5f;
+        quad[2][1] = -0.5f;
+        quad[2][2] = 0.0f;
+        quad[2][3] = 1.0f;
 
-        quad[3].x = (float)desc.Width;
-        quad[3].y = 0.0f;
-        quad[3].z = 0.0f;
-        quad[3].w = 1.0f;
-        quad[3].diffuse = color;
+        quad[3][0] = mRenderTargetDesc.Width - 0.5f;
+        quad[3][1] = -0.5f;
+        quad[3][2] = 0.0f;
+        quad[3][3] = 1.0f;
 
-        display->startScene();
-        device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(Vertex));
+        mDisplay->startScene();
+        mDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(float[4]));
 
         if (flags & D3DCLEAR_ZBUFFER)
         {
-            device->SetRenderState(D3DRS_ZENABLE, TRUE);
-            device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-            device->Clear(0, NULL, D3DCLEAR_ZBUFFER, color, depth, stencil);
+            mDevice->SetRenderState(D3DRS_ZENABLE, TRUE);
+            mDevice->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+            mDevice->Clear(0, NULL, D3DCLEAR_ZBUFFER, color, depth, stencil);
         }
 
         if (mMaskedClearSavedState != NULL)
@@ -2267,19 +3012,17 @@ void Context::clear(GLbitfield mask)
     }
     else if (flags)
     {
-        device->Clear(0, NULL, flags, color, depth, stencil);
+        mDevice->Clear(0, NULL, flags, color, depth, stencil);
     }
 }
 
-void Context::drawArrays(GLenum mode, GLint first, GLsizei count)
+void Context::drawArrays(GLenum mode, GLint first, GLsizei count, GLsizei instances)
 {
     if (!mState.currentProgram)
     {
         return error(GL_INVALID_OPERATION);
     }
 
-    egl::Display *display = getDisplay();
-    IDirect3DDevice9 *device = getDevice();
     D3DPRIMITIVETYPE primitiveType;
     int primitiveCount;
 
@@ -2298,9 +3041,8 @@ void Context::drawArrays(GLenum mode, GLint first, GLsizei count)
 
     applyState(mode);
 
-    TranslatedIndexData indexInfo;
-    bool useIndexing;
-    GLenum err = applyVertexBuffer(mode, first, count, &useIndexing, &indexInfo);
+    GLsizei repeatDraw = 1;
+    GLenum err = applyVertexBuffer(first, count, instances, &repeatDraw);
     if (err != GL_NO_ERROR)
     {
         return error(err);
@@ -2309,26 +3051,49 @@ void Context::drawArrays(GLenum mode, GLint first, GLsizei count)
     applyShaders();
     applyTextures();
 
-    if (!getCurrentProgram()->validateSamplers())
+    if (!getCurrentProgramBinary()->validateSamplers(NULL))
     {
         return error(GL_INVALID_OPERATION);
     }
 
     if (!cullSkipsDraw(mode))
     {
-        display->startScene();
-        if (useIndexing)
+        mDisplay->startScene();
+        
+        if (mode == GL_LINE_LOOP)
         {
-            device->DrawIndexedPrimitive(primitiveType, -(INT)indexInfo.minIndex, indexInfo.minIndex, indexInfo.maxIndex-indexInfo.minIndex+1, indexInfo.offset/indexInfo.indexSize, primitiveCount);
+            drawLineLoop(count, GL_NONE, NULL, 0);
         }
-        else
+        else if (instances > 0)
         {
-            device->DrawPrimitive(primitiveType, 0, primitiveCount);
+            StaticIndexBuffer *countingIB = mIndexDataManager->getCountingIndices(count);
+            if (countingIB)
+            {
+                if (mAppliedIBSerial != countingIB->getSerial())
+                {
+                    mDevice->SetIndices(countingIB->getBuffer());
+                    mAppliedIBSerial = countingIB->getSerial();
+                }
+
+                for (int i = 0; i < repeatDraw; i++)
+                {
+                    mDevice->DrawIndexedPrimitive(primitiveType, 0, 0, count, 0, primitiveCount);
+                }
+            }
+            else
+            {
+                ERR("Could not create a counting index buffer for glDrawArraysInstanced.");
+                return error(GL_OUT_OF_MEMORY);
+            }
+        }
+        else   // Regular case
+        {
+            mDevice->DrawPrimitive(primitiveType, 0, primitiveCount);
         }
     }
 }
 
-void Context::drawElements(GLenum mode, GLsizei count, GLenum type, const void* indices)
+void Context::drawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices, GLsizei instances)
 {
     if (!mState.currentProgram)
     {
@@ -2340,8 +3105,6 @@ void Context::drawElements(GLenum mode, GLsizei count, GLenum type, const void* 
         return error(GL_INVALID_OPERATION);
     }
 
-    egl::Display *display = getDisplay();
-    IDirect3DDevice9 *device = getDevice();
     D3DPRIMITIVETYPE primitiveType;
     int primitiveCount;
 
@@ -2367,7 +3130,9 @@ void Context::drawElements(GLenum mode, GLsizei count, GLenum type, const void* 
         return error(err);
     }
 
-    err = applyVertexBuffer(indexInfo);
+    GLsizei vertexCount = indexInfo.maxIndex - indexInfo.minIndex + 1;
+    GLsizei repeatDraw = 1;
+    err = applyVertexBuffer(indexInfo.minIndex, vertexCount, instances, &repeatDraw);
     if (err != GL_NO_ERROR)
     {
         return error(err);
@@ -2376,92 +3141,177 @@ void Context::drawElements(GLenum mode, GLsizei count, GLenum type, const void* 
     applyShaders();
     applyTextures();
 
-    if (!getCurrentProgram()->validateSamplers())
+    if (!getCurrentProgramBinary()->validateSamplers(false))
     {
         return error(GL_INVALID_OPERATION);
     }
 
     if (!cullSkipsDraw(mode))
     {
-        display->startScene();
-        device->DrawIndexedPrimitive(primitiveType, -(INT)indexInfo.minIndex, indexInfo.minIndex, indexInfo.maxIndex-indexInfo.minIndex+1, indexInfo.offset/indexInfo.indexSize, primitiveCount);
-    }
-}
+        mDisplay->startScene();
 
-void Context::finish()
-{
-    egl::Display *display = getDisplay();
-    IDirect3DDevice9 *device = getDevice();
-    IDirect3DQuery9 *occlusionQuery = NULL;
-
-    HRESULT result = device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &occlusionQuery);
-
-    if (result == D3DERR_OUTOFVIDEOMEMORY || result == E_OUTOFMEMORY)
-    {
-        return error(GL_OUT_OF_MEMORY);
-    }
-
-    ASSERT(SUCCEEDED(result));
-
-    if (occlusionQuery)
-    {
-        IDirect3DStateBlock9 *savedState = NULL;
-        device->CreateStateBlock(D3DSBT_ALL, &savedState);
-
-        occlusionQuery->Issue(D3DISSUE_BEGIN);
-
-        // Render something outside the render target
-        device->SetStreamSourceFreq(0, 1);
-        device->SetPixelShader(NULL);
-        device->SetVertexShader(NULL);
-        device->SetFVF(D3DFVF_XYZRHW);
-        float data[4] = {-1.0f, -1.0f, -1.0f, 1.0f};
-        display->startScene();
-        device->DrawPrimitiveUP(D3DPT_POINTLIST, 1, data, sizeof(data));
-
-        occlusionQuery->Issue(D3DISSUE_END);
-
-        while (occlusionQuery->GetData(NULL, 0, D3DGETDATA_FLUSH) == S_FALSE)
+        if (mode == GL_LINE_LOOP)
         {
-            // Keep polling, but allow other threads to do something useful first
-            Sleep(0);
+            drawLineLoop(count, type, indices, indexInfo.minIndex);   
         }
-
-        occlusionQuery->Release();
-
-        if (savedState)
+        else
         {
-            savedState->Apply();
-            savedState->Release();
+            for (int i = 0; i < repeatDraw; i++)
+            {
+                mDevice->DrawIndexedPrimitive(primitiveType, -(INT)indexInfo.minIndex, indexInfo.minIndex, vertexCount, indexInfo.startIndex, primitiveCount);
+            }
         }
     }
 }
 
-void Context::flush()
+// Implements glFlush when block is false, glFinish when block is true
+void Context::sync(bool block)
 {
-    IDirect3DDevice9 *device = getDevice();
-    IDirect3DQuery9 *eventQuery = NULL;
+    mDisplay->sync(block);
+}
 
-    HRESULT result = device->CreateQuery(D3DQUERYTYPE_EVENT, &eventQuery);
-
-    if (result == D3DERR_OUTOFVIDEOMEMORY || result == E_OUTOFMEMORY)
+void Context::drawLineLoop(GLsizei count, GLenum type, const GLvoid *indices, int minIndex)
+{
+    // Get the raw indices for an indexed draw
+    if (type != GL_NONE && mState.elementArrayBuffer.get())
     {
-        return error(GL_OUT_OF_MEMORY);
+        Buffer *indexBuffer = mState.elementArrayBuffer.get();
+        intptr_t offset = reinterpret_cast<intptr_t>(indices);
+        indices = static_cast<const GLubyte*>(indexBuffer->data()) + offset;
     }
 
-    ASSERT(SUCCEEDED(result));
+    UINT startIndex = 0;
+    bool succeeded = false;
 
-    if (eventQuery)
+    if (supports32bitIndices())
     {
-        eventQuery->Issue(D3DISSUE_END);
+        const int spaceNeeded = (count + 1) * sizeof(unsigned int);
 
-        while (eventQuery->GetData(NULL, 0, D3DGETDATA_FLUSH) == S_FALSE)
+        if (!mLineLoopIB)
         {
-            // Keep polling, but allow other threads to do something useful first
-            Sleep(0);
+            mLineLoopIB = new StreamingIndexBuffer(mDevice, INITIAL_INDEX_BUFFER_SIZE, D3DFMT_INDEX32);
         }
 
-        eventQuery->Release();
+        if (mLineLoopIB)
+        {
+            mLineLoopIB->reserveSpace(spaceNeeded, GL_UNSIGNED_INT);
+
+            UINT offset = 0;
+            unsigned int *data = static_cast<unsigned int*>(mLineLoopIB->map(spaceNeeded, &offset));
+            startIndex = offset / 4;
+            
+            if (data)
+            {
+                switch (type)
+                {
+                  case GL_NONE:   // Non-indexed draw
+                    for (int i = 0; i < count; i++)
+                    {
+                        data[i] = i;
+                    }
+                    data[count] = 0;
+                    break;
+                  case GL_UNSIGNED_BYTE:
+                    for (int i = 0; i < count; i++)
+                    {
+                        data[i] = static_cast<const GLubyte*>(indices)[i];
+                    }
+                    data[count] = static_cast<const GLubyte*>(indices)[0];
+                    break;
+                  case GL_UNSIGNED_SHORT:
+                    for (int i = 0; i < count; i++)
+                    {
+                        data[i] = static_cast<const GLushort*>(indices)[i];
+                    }
+                    data[count] = static_cast<const GLushort*>(indices)[0];
+                    break;
+                  case GL_UNSIGNED_INT:
+                    for (int i = 0; i < count; i++)
+                    {
+                        data[i] = static_cast<const GLuint*>(indices)[i];
+                    }
+                    data[count] = static_cast<const GLuint*>(indices)[0];
+                    break;
+                  default: UNREACHABLE();
+                }
+
+                mLineLoopIB->unmap();
+                succeeded = true;
+            }
+        }
+    }
+    else
+    {
+        const int spaceNeeded = (count + 1) * sizeof(unsigned short);
+
+        if (!mLineLoopIB)
+        {
+            mLineLoopIB = new StreamingIndexBuffer(mDevice, INITIAL_INDEX_BUFFER_SIZE, D3DFMT_INDEX16);
+        }
+
+        if (mLineLoopIB)
+        {
+            mLineLoopIB->reserveSpace(spaceNeeded, GL_UNSIGNED_SHORT);
+
+            UINT offset = 0;
+            unsigned short *data = static_cast<unsigned short*>(mLineLoopIB->map(spaceNeeded, &offset));
+            startIndex = offset / 2;
+            
+            if (data)
+            {
+                switch (type)
+                {
+                  case GL_NONE:   // Non-indexed draw
+                    for (int i = 0; i < count; i++)
+                    {
+                        data[i] = i;
+                    }
+                    data[count] = 0;
+                    break;
+                  case GL_UNSIGNED_BYTE:
+                    for (int i = 0; i < count; i++)
+                    {
+                        data[i] = static_cast<const GLubyte*>(indices)[i];
+                    }
+                    data[count] = static_cast<const GLubyte*>(indices)[0];
+                    break;
+                  case GL_UNSIGNED_SHORT:
+                    for (int i = 0; i < count; i++)
+                    {
+                        data[i] = static_cast<const GLushort*>(indices)[i];
+                    }
+                    data[count] = static_cast<const GLushort*>(indices)[0];
+                    break;
+                  case GL_UNSIGNED_INT:
+                    for (int i = 0; i < count; i++)
+                    {
+                        data[i] = static_cast<const GLuint*>(indices)[i];
+                    }
+                    data[count] = static_cast<const GLuint*>(indices)[0];
+                    break;
+                  default: UNREACHABLE();
+                }
+
+                mLineLoopIB->unmap();
+                succeeded = true;
+            }
+        }
+    }
+    
+    if (succeeded)
+    {
+        if (mAppliedIBSerial != mLineLoopIB->getSerial())
+        {
+            mDevice->SetIndices(mLineLoopIB->getBuffer());
+            mAppliedIBSerial = mLineLoopIB->getSerial();
+        }
+
+        mDevice->DrawIndexedPrimitive(D3DPT_LINESTRIP, -minIndex, minIndex, count, startIndex, count);
+    }
+    else
+    {
+        ERR("Could not create a looping index buffer for GL_LINE_LOOP.");
+        return error(GL_OUT_OF_MEMORY);
     }
 }
 
@@ -2532,9 +3382,208 @@ GLenum Context::getError()
     return GL_NO_ERROR;
 }
 
+GLenum Context::getResetStatus()
+{
+    if (mResetStatus == GL_NO_ERROR)
+    {
+        bool lost = mDisplay->testDeviceLost();
+
+        if (lost)
+        {
+            mDisplay->notifyDeviceLost();   // Sets mResetStatus
+        }
+    }
+
+    GLenum status = mResetStatus;
+
+    if (mResetStatus != GL_NO_ERROR)
+    {
+        if (mDisplay->testDeviceResettable())
+        {
+            mResetStatus = GL_NO_ERROR;
+        }
+    }
+    
+    return status;
+}
+
+bool Context::isResetNotificationEnabled()
+{
+    return (mResetStrategy == GL_LOSE_CONTEXT_ON_RESET_EXT);
+}
+
 bool Context::supportsShaderModel3() const
 {
     return mSupportsShaderModel3;
+}
+
+float Context::getMaximumPointSize() const
+{
+    return mSupportsShaderModel3 ? mMaximumPointSize : ALIASED_POINT_SIZE_RANGE_MAX_SM2;
+}
+
+int Context::getMaximumVaryingVectors() const
+{
+    return mSupportsShaderModel3 ? MAX_VARYING_VECTORS_SM3 : MAX_VARYING_VECTORS_SM2;
+}
+
+unsigned int Context::getMaximumVertexTextureImageUnits() const
+{
+    return mSupportsVertexTexture ? MAX_VERTEX_TEXTURE_IMAGE_UNITS_VTF : 0;
+}
+
+unsigned int Context::getMaximumCombinedTextureImageUnits() const
+{
+    return MAX_TEXTURE_IMAGE_UNITS + getMaximumVertexTextureImageUnits();
+}
+
+int Context::getMaximumFragmentUniformVectors() const
+{
+    return mSupportsShaderModel3 ? MAX_FRAGMENT_UNIFORM_VECTORS_SM3 : MAX_FRAGMENT_UNIFORM_VECTORS_SM2;
+}
+
+int Context::getMaxSupportedSamples() const
+{
+    return mMaxSupportedSamples;
+}
+
+int Context::getNearestSupportedSamples(D3DFORMAT format, int requested) const
+{
+    if (requested == 0)
+    {
+        return requested;
+    }
+
+    std::map<D3DFORMAT, bool *>::const_iterator itr = mMultiSampleSupport.find(format);
+    if (itr == mMultiSampleSupport.end())
+    {
+        return -1;
+    }
+
+    for (int i = requested; i <= D3DMULTISAMPLE_16_SAMPLES; ++i)
+    {
+        if (itr->second[i] && i != D3DMULTISAMPLE_NONMASKABLE)
+        {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+bool Context::supportsEventQueries() const
+{
+    return mSupportsEventQueries;
+}
+
+bool Context::supportsOcclusionQueries() const
+{
+    return mSupportsOcclusionQueries;
+}
+
+bool Context::supportsDXT1Textures() const
+{
+    return mSupportsDXT1Textures;
+}
+
+bool Context::supportsDXT3Textures() const
+{
+    return mSupportsDXT3Textures;
+}
+
+bool Context::supportsDXT5Textures() const
+{
+    return mSupportsDXT5Textures;
+}
+
+bool Context::supportsFloat32Textures() const
+{
+    return mSupportsFloat32Textures;
+}
+
+bool Context::supportsFloat32LinearFilter() const
+{
+    return mSupportsFloat32LinearFilter;
+}
+
+bool Context::supportsFloat32RenderableTextures() const
+{
+    return mSupportsFloat32RenderableTextures;
+}
+
+bool Context::supportsFloat16Textures() const
+{
+    return mSupportsFloat16Textures;
+}
+
+bool Context::supportsFloat16LinearFilter() const
+{
+    return mSupportsFloat16LinearFilter;
+}
+
+bool Context::supportsFloat16RenderableTextures() const
+{
+    return mSupportsFloat16RenderableTextures;
+}
+
+int Context::getMaximumRenderbufferDimension() const
+{
+    return mMaxRenderbufferDimension;
+}
+
+int Context::getMaximumTextureDimension() const
+{
+    return mMaxTextureDimension;
+}
+
+int Context::getMaximumCubeTextureDimension() const
+{
+    return mMaxCubeTextureDimension;
+}
+
+int Context::getMaximumTextureLevel() const
+{
+    return mMaxTextureLevel;
+}
+
+bool Context::supportsLuminanceTextures() const
+{
+    return mSupportsLuminanceTextures;
+}
+
+bool Context::supportsLuminanceAlphaTextures() const
+{
+    return mSupportsLuminanceAlphaTextures;
+}
+
+bool Context::supportsDepthTextures() const
+{
+    return mSupportsDepthTextures;
+}
+
+bool Context::supports32bitIndices() const
+{
+    return mSupports32bitIndices;
+}
+
+bool Context::supportsNonPower2Texture() const
+{
+    return mSupportsNonPower2Texture;
+}
+
+bool Context::supportsInstancing() const
+{
+    return mSupportsInstancing;
+}
+
+bool Context::supportsTextureFilterAnisotropy() const
+{
+    return mSupportsTextureFilterAnisotropy;
+}
+
+float Context::getTextureMaxAnisotropy() const
+{
+    return mMaxTextureAnisotropy;
 }
 
 void Context::detachBuffer(GLuint buffer)
@@ -2568,9 +3617,9 @@ void Context::detachTexture(GLuint texture)
     // If a texture object is deleted, it is as if all texture units which are bound to that texture object are
     // rebound to texture object zero
 
-    for (int type = 0; type < SAMPLER_TYPE_COUNT; type++)
+    for (int type = 0; type < TEXTURE_TYPE_COUNT; type++)
     {
-        for (int sampler = 0; sampler < MAX_TEXTURE_IMAGE_UNITS; sampler++)
+        for (int sampler = 0; sampler < MAX_COMBINED_TEXTURE_IMAGE_UNITS_VTF; sampler++)
         {
             if (mState.samplerTexture[type][sampler].id() == texture)
             {
@@ -2584,11 +3633,17 @@ void Context::detachTexture(GLuint texture)
     // as if FramebufferTexture2D had been called, with a texture of 0, for each attachment point to which this
     // image was attached in the currently bound framebuffer.
 
-    Framebuffer *framebuffer = getFramebuffer();
+    Framebuffer *readFramebuffer = getReadFramebuffer();
+    Framebuffer *drawFramebuffer = getDrawFramebuffer();
 
-    if (framebuffer)
+    if (readFramebuffer)
     {
-        framebuffer->detachTexture(texture);
+        readFramebuffer->detachTexture(texture);
+    }
+
+    if (drawFramebuffer && drawFramebuffer != readFramebuffer)
+    {
+        drawFramebuffer->detachTexture(texture);
     }
 }
 
@@ -2598,9 +3653,14 @@ void Context::detachFramebuffer(GLuint framebuffer)
     // If a framebuffer that is currently bound to the target FRAMEBUFFER is deleted, it is as though
     // BindFramebuffer had been executed with the target of FRAMEBUFFER and framebuffer of zero.
 
-    if (mState.framebuffer == framebuffer)
+    if (mState.readFramebuffer == framebuffer)
     {
-        bindFramebuffer(0);
+        bindReadFramebuffer(0);
+    }
+
+    if (mState.drawFramebuffer == framebuffer)
+    {
+        bindDrawFramebuffer(0);
     }
 }
 
@@ -2620,17 +3680,23 @@ void Context::detachRenderbuffer(GLuint renderbuffer)
     // then it is as if FramebufferRenderbuffer had been called, with a renderbuffer of 0, for each attachment
     // point to which this image was attached in the currently bound framebuffer.
 
-    Framebuffer *framebuffer = getFramebuffer();
+    Framebuffer *readFramebuffer = getReadFramebuffer();
+    Framebuffer *drawFramebuffer = getDrawFramebuffer();
 
-    if (framebuffer)
+    if (readFramebuffer)
     {
-        framebuffer->detachRenderbuffer(renderbuffer);
+        readFramebuffer->detachRenderbuffer(renderbuffer);
+    }
+
+    if (drawFramebuffer && drawFramebuffer != readFramebuffer)
+    {
+        drawFramebuffer->detachRenderbuffer(renderbuffer);
     }
 }
 
-Texture *Context::getIncompleteTexture(SamplerType type)
+Texture *Context::getIncompleteTexture(TextureType type)
 {
-    Texture *t = mIncompleteTextures[type];
+    Texture *t = mIncompleteTextures[type].get();
 
     if (t == NULL)
     {
@@ -2640,33 +3706,33 @@ Texture *Context::getIncompleteTexture(SamplerType type)
         {
           default:
             UNREACHABLE();
-            // default falls through to SAMPLER_2D
+            // default falls through to TEXTURE_2D
 
-          case SAMPLER_2D:
+          case TEXTURE_2D:
             {
                 Texture2D *incomplete2d = new Texture2D(Texture::INCOMPLETE_TEXTURE_ID);
-                incomplete2d->setImage(0, GL_RGBA, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 1, color);
+                incomplete2d->setImage(0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 1, color);
                 t = incomplete2d;
             }
             break;
 
-          case SAMPLER_CUBE:
+          case TEXTURE_CUBE:
             {
               TextureCubeMap *incompleteCube = new TextureCubeMap(Texture::INCOMPLETE_TEXTURE_ID);
 
-              incompleteCube->setImagePosX(0, GL_RGBA, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 1, color);
-              incompleteCube->setImageNegX(0, GL_RGBA, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 1, color);
-              incompleteCube->setImagePosY(0, GL_RGBA, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 1, color);
-              incompleteCube->setImageNegY(0, GL_RGBA, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 1, color);
-              incompleteCube->setImagePosZ(0, GL_RGBA, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 1, color);
-              incompleteCube->setImageNegZ(0, GL_RGBA, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 1, color);
+              incompleteCube->setImagePosX(0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 1, color);
+              incompleteCube->setImageNegX(0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 1, color);
+              incompleteCube->setImagePosY(0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 1, color);
+              incompleteCube->setImageNegY(0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 1, color);
+              incompleteCube->setImagePosZ(0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 1, color);
+              incompleteCube->setImageNegZ(0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 1, color);
 
               t = incompleteCube;
             }
             break;
         }
 
-        mIncompleteTextures[type] = t;
+        mIncompleteTextures[type].set(t);
     }
 
     return t;
@@ -2696,23 +3762,6 @@ bool Context::isTriangleMode(GLenum drawMode)
     return false;
 }
 
-bool Context::hasStencil()
-{
-    Framebuffer *framebufferObject = getFramebuffer();
-
-    if (framebufferObject && framebufferObject->getStencilbufferType() != GL_NONE)
-    {
-        DepthStencilbuffer *stencilbufferObject = framebufferObject->getStencilbuffer();
-
-        if (stencilbufferObject)
-        {
-            return stencilbufferObject->getStencilSize() > 0;
-        }
-    }
-
-    return false;
-}
-
 void Context::setVertexAttrib(GLuint index, const GLfloat *values)
 {
     ASSERT(index < gl::MAX_VERTEX_ATTRIBS);
@@ -2722,16 +3771,114 @@ void Context::setVertexAttrib(GLuint index, const GLfloat *values)
     mState.vertexAttribute[index].mCurrentValue[2] = values[2];
     mState.vertexAttribute[index].mCurrentValue[3] = values[3];
 
-    mVertexDataManager->dirtyCurrentValues();
+    mVertexDataManager->dirtyCurrentValue(index);
 }
 
+void Context::setVertexAttribDivisor(GLuint index, GLuint divisor)
+{
+    ASSERT(index < gl::MAX_VERTEX_ATTRIBS);
+
+    mState.vertexAttribute[index].mDivisor = divisor;
+}
+
+// keep list sorted in following order
+// OES extensions
+// EXT extensions
+// Vendor extensions
 void Context::initExtensionString()
 {
-    mExtensionString += "GL_OES_packed_depth_stencil ";
+    mExtensionString = "";
 
-    if (mBufferBackEnd->supportIntIndices())
+    // OES extensions
+    if (supports32bitIndices())
     {
         mExtensionString += "GL_OES_element_index_uint ";
+    }
+
+    mExtensionString += "GL_OES_packed_depth_stencil ";
+    mExtensionString += "GL_OES_get_program_binary ";
+    mExtensionString += "GL_OES_rgb8_rgba8 ";
+    mExtensionString += "GL_OES_standard_derivatives ";
+
+    if (supportsFloat16Textures())
+    {
+        mExtensionString += "GL_OES_texture_half_float ";
+    }
+    if (supportsFloat16LinearFilter())
+    {
+        mExtensionString += "GL_OES_texture_half_float_linear ";
+    }
+    if (supportsFloat32Textures())
+    {
+        mExtensionString += "GL_OES_texture_float ";
+    }
+    if (supportsFloat32LinearFilter())
+    {
+        mExtensionString += "GL_OES_texture_float_linear ";
+    }
+
+    if (supportsNonPower2Texture())
+    {
+        mExtensionString += "GL_OES_texture_npot ";
+    }
+
+    // Multi-vendor (EXT) extensions
+    if (supportsOcclusionQueries())
+    {
+        mExtensionString += "GL_EXT_occlusion_query_boolean ";
+    }
+
+    mExtensionString += "GL_EXT_read_format_bgra ";
+    mExtensionString += "GL_EXT_robustness ";
+
+    if (supportsDXT1Textures())
+    {
+        mExtensionString += "GL_EXT_texture_compression_dxt1 ";
+    }
+
+    if (supportsTextureFilterAnisotropy())
+    {
+        mExtensionString += "GL_EXT_texture_filter_anisotropic ";
+    }
+
+    mExtensionString += "GL_EXT_texture_format_BGRA8888 ";
+    mExtensionString += "GL_EXT_texture_storage ";
+
+    // ANGLE-specific extensions
+    if (supportsDepthTextures())
+    {
+        mExtensionString += "GL_ANGLE_depth_texture ";
+    }
+
+    mExtensionString += "GL_ANGLE_framebuffer_blit ";
+    if (getMaxSupportedSamples() != 0)
+    {
+        mExtensionString += "GL_ANGLE_framebuffer_multisample ";
+    }
+
+    if (supportsInstancing())
+    {
+        mExtensionString += "GL_ANGLE_instanced_arrays ";
+    }
+
+    mExtensionString += "GL_ANGLE_pack_reverse_row_order ";
+
+    if (supportsDXT3Textures())
+    {
+        mExtensionString += "GL_ANGLE_texture_compression_dxt3 ";
+    }
+    if (supportsDXT5Textures())
+    {
+        mExtensionString += "GL_ANGLE_texture_compression_dxt5 ";
+    }
+
+    mExtensionString += "GL_ANGLE_texture_usage ";
+    mExtensionString += "GL_ANGLE_translated_shader_source ";
+
+    // Other vendor-specific extensions
+    if (supportsEventQueries())
+    {
+        mExtensionString += "GL_NV_fence ";
     }
 
     std::string::size_type end = mExtensionString.find_last_not_of(' ');
@@ -2746,13 +3893,501 @@ const char *Context::getExtensionString() const
     return mExtensionString.c_str();
 }
 
+void Context::initRendererString()
+{
+    D3DADAPTER_IDENTIFIER9 *identifier = mDisplay->getAdapterIdentifier();
+
+    mRendererString = "ANGLE (";
+    mRendererString += identifier->Description;
+    mRendererString += ")";
+}
+
+const char *Context::getRendererString() const
+{
+    return mRendererString.c_str();
+}
+
+void Context::blitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, 
+                              GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
+                              GLbitfield mask)
+{
+    Framebuffer *readFramebuffer = getReadFramebuffer();
+    Framebuffer *drawFramebuffer = getDrawFramebuffer();
+
+    if (!readFramebuffer || readFramebuffer->completeness() != GL_FRAMEBUFFER_COMPLETE ||
+        !drawFramebuffer || drawFramebuffer->completeness() != GL_FRAMEBUFFER_COMPLETE)
+    {
+        return error(GL_INVALID_FRAMEBUFFER_OPERATION);
+    }
+
+    if (drawFramebuffer->getSamples() != 0)
+    {
+        return error(GL_INVALID_OPERATION);
+    }
+
+    int readBufferWidth = readFramebuffer->getColorbuffer()->getWidth();
+    int readBufferHeight = readFramebuffer->getColorbuffer()->getHeight();
+    int drawBufferWidth = drawFramebuffer->getColorbuffer()->getWidth();
+    int drawBufferHeight = drawFramebuffer->getColorbuffer()->getHeight();
+
+    RECT sourceRect;
+    RECT destRect;
+
+    if (srcX0 < srcX1)
+    {
+        sourceRect.left = srcX0;
+        sourceRect.right = srcX1;
+        destRect.left = dstX0;
+        destRect.right = dstX1;
+    }
+    else
+    {
+        sourceRect.left = srcX1;
+        destRect.left = dstX1;
+        sourceRect.right = srcX0;
+        destRect.right = dstX0;
+    }
+
+    if (srcY0 < srcY1)
+    {
+        sourceRect.bottom = srcY1;
+        destRect.bottom = dstY1;
+        sourceRect.top = srcY0;
+        destRect.top = dstY0;
+    }
+    else
+    {
+        sourceRect.bottom = srcY0;
+        destRect.bottom = dstY0;
+        sourceRect.top = srcY1;
+        destRect.top = dstY1;
+    }
+
+    RECT sourceScissoredRect = sourceRect;
+    RECT destScissoredRect = destRect;
+
+    if (mState.scissorTest)
+    {
+        // Only write to parts of the destination framebuffer which pass the scissor test
+        // Please note: the destRect is now in D3D-style coordinates, so the *top* of the
+        // rect will be checked against scissorY, rather than the bottom.
+        if (destRect.left < mState.scissorX)
+        {
+            int xDiff = mState.scissorX - destRect.left;
+            destScissoredRect.left = mState.scissorX;
+            sourceScissoredRect.left += xDiff;
+        }
+
+        if (destRect.right > mState.scissorX + mState.scissorWidth)
+        {
+            int xDiff = destRect.right - (mState.scissorX + mState.scissorWidth);
+            destScissoredRect.right = mState.scissorX + mState.scissorWidth;
+            sourceScissoredRect.right -= xDiff;
+        }
+
+        if (destRect.top < mState.scissorY)
+        {
+            int yDiff = mState.scissorY - destRect.top;
+            destScissoredRect.top = mState.scissorY;
+            sourceScissoredRect.top += yDiff;
+        }
+
+        if (destRect.bottom > mState.scissorY + mState.scissorHeight)
+        {
+            int yDiff = destRect.bottom - (mState.scissorY + mState.scissorHeight);
+            destScissoredRect.bottom = mState.scissorY + mState.scissorHeight;
+            sourceScissoredRect.bottom -= yDiff;
+        }
+    }
+
+    bool blitRenderTarget = false;
+    bool blitDepthStencil = false;
+
+    RECT sourceTrimmedRect = sourceScissoredRect;
+    RECT destTrimmedRect = destScissoredRect;
+
+    // The source & destination rectangles also may need to be trimmed if they fall out of the bounds of 
+    // the actual draw and read surfaces.
+    if (sourceTrimmedRect.left < 0)
+    {
+        int xDiff = 0 - sourceTrimmedRect.left;
+        sourceTrimmedRect.left = 0;
+        destTrimmedRect.left += xDiff;
+    }
+
+    if (sourceTrimmedRect.right > readBufferWidth)
+    {
+        int xDiff = sourceTrimmedRect.right - readBufferWidth;
+        sourceTrimmedRect.right = readBufferWidth;
+        destTrimmedRect.right -= xDiff;
+    }
+
+    if (sourceTrimmedRect.top < 0)
+    {
+        int yDiff = 0 - sourceTrimmedRect.top;
+        sourceTrimmedRect.top = 0;
+        destTrimmedRect.top += yDiff;
+    }
+
+    if (sourceTrimmedRect.bottom > readBufferHeight)
+    {
+        int yDiff = sourceTrimmedRect.bottom - readBufferHeight;
+        sourceTrimmedRect.bottom = readBufferHeight;
+        destTrimmedRect.bottom -= yDiff;
+    }
+
+    if (destTrimmedRect.left < 0)
+    {
+        int xDiff = 0 - destTrimmedRect.left;
+        destTrimmedRect.left = 0;
+        sourceTrimmedRect.left += xDiff;
+    }
+
+    if (destTrimmedRect.right > drawBufferWidth)
+    {
+        int xDiff = destTrimmedRect.right - drawBufferWidth;
+        destTrimmedRect.right = drawBufferWidth;
+        sourceTrimmedRect.right -= xDiff;
+    }
+
+    if (destTrimmedRect.top < 0)
+    {
+        int yDiff = 0 - destTrimmedRect.top;
+        destTrimmedRect.top = 0;
+        sourceTrimmedRect.top += yDiff;
+    }
+
+    if (destTrimmedRect.bottom > drawBufferHeight)
+    {
+        int yDiff = destTrimmedRect.bottom - drawBufferHeight;
+        destTrimmedRect.bottom = drawBufferHeight;
+        sourceTrimmedRect.bottom -= yDiff;
+    }
+
+    bool partialBufferCopy = false;
+    if (sourceTrimmedRect.bottom - sourceTrimmedRect.top < readBufferHeight ||
+        sourceTrimmedRect.right - sourceTrimmedRect.left < readBufferWidth || 
+        destTrimmedRect.bottom - destTrimmedRect.top < drawBufferHeight ||
+        destTrimmedRect.right - destTrimmedRect.left < drawBufferWidth ||
+        sourceTrimmedRect.top != 0 || destTrimmedRect.top != 0 || sourceTrimmedRect.left != 0 || destTrimmedRect.left != 0)
+    {
+        partialBufferCopy = true;
+    }
+
+    if (mask & GL_COLOR_BUFFER_BIT)
+    {
+        const bool validReadType = readFramebuffer->getColorbufferType() == GL_TEXTURE_2D ||
+            readFramebuffer->getColorbufferType() == GL_RENDERBUFFER;
+        const bool validDrawType = drawFramebuffer->getColorbufferType() == GL_TEXTURE_2D ||
+            drawFramebuffer->getColorbufferType() == GL_RENDERBUFFER;
+        if (!validReadType || !validDrawType ||
+            readFramebuffer->getColorbuffer()->getD3DFormat() != drawFramebuffer->getColorbuffer()->getD3DFormat())
+        {
+            ERR("Color buffer format conversion in BlitFramebufferANGLE not supported by this implementation");
+            return error(GL_INVALID_OPERATION);
+        }
+        
+        if (partialBufferCopy && readFramebuffer->getSamples() != 0)
+        {
+            return error(GL_INVALID_OPERATION);
+        }
+
+        blitRenderTarget = true;
+
+    }
+
+    if (mask & (GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT))
+    {
+        Renderbuffer *readDSBuffer = NULL;
+        Renderbuffer *drawDSBuffer = NULL;
+
+        // We support OES_packed_depth_stencil, and do not support a separately attached depth and stencil buffer, so if we have
+        // both a depth and stencil buffer, it will be the same buffer.
+
+        if (mask & GL_DEPTH_BUFFER_BIT)
+        {
+            if (readFramebuffer->getDepthbuffer() && drawFramebuffer->getDepthbuffer())
+            {
+                if (readFramebuffer->getDepthbufferType() != drawFramebuffer->getDepthbufferType() ||
+                    readFramebuffer->getDepthbuffer()->getD3DFormat() != drawFramebuffer->getDepthbuffer()->getD3DFormat())
+                {
+                    return error(GL_INVALID_OPERATION);
+                }
+
+                blitDepthStencil = true;
+                readDSBuffer = readFramebuffer->getDepthbuffer();
+                drawDSBuffer = drawFramebuffer->getDepthbuffer();
+            }
+        }
+
+        if (mask & GL_STENCIL_BUFFER_BIT)
+        {
+            if (readFramebuffer->getStencilbuffer() && drawFramebuffer->getStencilbuffer())
+            {
+                if (readFramebuffer->getStencilbufferType() != drawFramebuffer->getStencilbufferType() ||
+                    readFramebuffer->getStencilbuffer()->getD3DFormat() != drawFramebuffer->getStencilbuffer()->getD3DFormat())
+                {
+                    return error(GL_INVALID_OPERATION);
+                }
+
+                blitDepthStencil = true;
+                readDSBuffer = readFramebuffer->getStencilbuffer();
+                drawDSBuffer = drawFramebuffer->getStencilbuffer();
+            }
+        }
+
+        if (partialBufferCopy)
+        {
+            ERR("Only whole-buffer depth and stencil blits are supported by this implementation.");
+            return error(GL_INVALID_OPERATION); // only whole-buffer copies are permitted
+        }
+
+        if ((drawDSBuffer && drawDSBuffer->getSamples() != 0) || 
+            (readDSBuffer && readDSBuffer->getSamples() != 0))
+        {
+            return error(GL_INVALID_OPERATION);
+        }
+    }
+
+    if (blitRenderTarget || blitDepthStencil)
+    {
+        mDisplay->endScene();
+
+        if (blitRenderTarget)
+        {
+            IDirect3DSurface9* readRenderTarget = readFramebuffer->getRenderTarget();
+            IDirect3DSurface9* drawRenderTarget = drawFramebuffer->getRenderTarget();
+
+            HRESULT result = mDevice->StretchRect(readRenderTarget, &sourceTrimmedRect, 
+                                                  drawRenderTarget, &destTrimmedRect, D3DTEXF_NONE);
+
+            readRenderTarget->Release();
+            drawRenderTarget->Release();
+
+            if (FAILED(result))
+            {
+                ERR("BlitFramebufferANGLE failed: StretchRect returned %x.", result);
+                return;
+            }
+        }
+
+        if (blitDepthStencil)
+        {
+            IDirect3DSurface9* readDepthStencil = readFramebuffer->getDepthStencil();
+            IDirect3DSurface9* drawDepthStencil = drawFramebuffer->getDepthStencil();
+
+            HRESULT result = mDevice->StretchRect(readDepthStencil, NULL, drawDepthStencil, NULL, D3DTEXF_NONE);
+
+            readDepthStencil->Release();
+            drawDepthStencil->Release();
+
+            if (FAILED(result))
+            {
+                ERR("BlitFramebufferANGLE failed: StretchRect returned %x.", result);
+                return;
+            }
+        }
+    }
+}
+
+VertexDeclarationCache::VertexDeclarationCache() : mMaxLru(0)
+{
+    for (int i = 0; i < NUM_VERTEX_DECL_CACHE_ENTRIES; i++)
+    {
+        mVertexDeclCache[i].vertexDeclaration = NULL;
+        mVertexDeclCache[i].lruCount = 0;
+    }
+}
+
+VertexDeclarationCache::~VertexDeclarationCache()
+{
+    for (int i = 0; i < NUM_VERTEX_DECL_CACHE_ENTRIES; i++)
+    {
+        if (mVertexDeclCache[i].vertexDeclaration)
+        {
+            mVertexDeclCache[i].vertexDeclaration->Release();
+        }
+    }
+}
+
+GLenum VertexDeclarationCache::applyDeclaration(IDirect3DDevice9 *device, TranslatedAttribute attributes[], ProgramBinary *programBinary, GLsizei instances, GLsizei *repeatDraw)
+{
+    *repeatDraw = 1;
+
+    int indexedAttribute = MAX_VERTEX_ATTRIBS;
+    int instancedAttribute = MAX_VERTEX_ATTRIBS;
+
+    if (instances > 0)
+    {
+        // Find an indexed attribute to be mapped to D3D stream 0
+        for (int i = 0; i < MAX_VERTEX_ATTRIBS; i++)
+        {
+            if (attributes[i].active)
+            {
+                if (indexedAttribute == MAX_VERTEX_ATTRIBS)
+                {
+                    if (attributes[i].divisor == 0)
+                    {
+                        indexedAttribute = i;
+                    }
+                }
+                else if (instancedAttribute == MAX_VERTEX_ATTRIBS)
+                {
+                    if (attributes[i].divisor != 0)
+                    {
+                        instancedAttribute = i;
+                    }
+                }
+                else break;   // Found both an indexed and instanced attribute
+            }
+        }
+
+        if (indexedAttribute == MAX_VERTEX_ATTRIBS)
+        {
+            return GL_INVALID_OPERATION;
+        }
+    }
+
+    D3DVERTEXELEMENT9 elements[MAX_VERTEX_ATTRIBS + 1];
+    D3DVERTEXELEMENT9 *element = &elements[0];
+
+    for (int i = 0; i < MAX_VERTEX_ATTRIBS; i++)
+    {
+        if (attributes[i].active)
+        {
+            int stream = i;
+
+            if (instances > 0)
+            {
+                // Due to a bug on ATI cards we can't enable instancing when none of the attributes are instanced.
+                if (instancedAttribute == MAX_VERTEX_ATTRIBS)
+                {
+                    *repeatDraw = instances;
+                }
+                else
+                {
+                    if (i == indexedAttribute)
+                    {
+                        stream = 0;
+                    }
+                    else if (i == 0)
+                    {
+                        stream = indexedAttribute;
+                    }
+
+                    UINT frequency = 1;
+                    
+                    if (attributes[i].divisor == 0)
+                    {
+                        frequency = D3DSTREAMSOURCE_INDEXEDDATA | instances;
+                    }
+                    else
+                    {
+                        frequency = D3DSTREAMSOURCE_INSTANCEDATA | attributes[i].divisor;
+                    }
+                    
+                    device->SetStreamSourceFreq(stream, frequency);
+                    mInstancingEnabled = true;
+                }
+            }
+
+            if (mAppliedVBs[stream].serial != attributes[i].serial ||
+                mAppliedVBs[stream].stride != attributes[i].stride ||
+                mAppliedVBs[stream].offset != attributes[i].offset)
+            {
+                device->SetStreamSource(stream, attributes[i].vertexBuffer, attributes[i].offset, attributes[i].stride);
+                mAppliedVBs[stream].serial = attributes[i].serial;
+                mAppliedVBs[stream].stride = attributes[i].stride;
+                mAppliedVBs[stream].offset = attributes[i].offset;
+            }
+
+            element->Stream = stream;
+            element->Offset = 0;
+            element->Type = attributes[i].type;
+            element->Method = D3DDECLMETHOD_DEFAULT;
+            element->Usage = D3DDECLUSAGE_TEXCOORD;
+            element->UsageIndex = programBinary->getSemanticIndex(i);
+            element++;
+        }
+    }
+
+    if (instances == 0 || instancedAttribute == MAX_VERTEX_ATTRIBS)
+    {
+        if (mInstancingEnabled)
+        {
+            for (int i = 0; i < MAX_VERTEX_ATTRIBS; i++)
+            {
+                device->SetStreamSourceFreq(i, 1);
+            }
+
+            mInstancingEnabled = false;
+        }
+    }
+
+    static const D3DVERTEXELEMENT9 end = D3DDECL_END();
+    *(element++) = end;
+
+    for (int i = 0; i < NUM_VERTEX_DECL_CACHE_ENTRIES; i++)
+    {
+        VertexDeclCacheEntry *entry = &mVertexDeclCache[i];
+        if (memcmp(entry->cachedElements, elements, (element - elements) * sizeof(D3DVERTEXELEMENT9)) == 0 && entry->vertexDeclaration)
+        {
+            entry->lruCount = ++mMaxLru;
+            if(entry->vertexDeclaration != mLastSetVDecl)
+            {
+                device->SetVertexDeclaration(entry->vertexDeclaration);
+                mLastSetVDecl = entry->vertexDeclaration;
+            }
+
+            return GL_NO_ERROR;
+        }
+    }
+
+    VertexDeclCacheEntry *lastCache = mVertexDeclCache;
+
+    for (int i = 0; i < NUM_VERTEX_DECL_CACHE_ENTRIES; i++)
+    {
+        if (mVertexDeclCache[i].lruCount < lastCache->lruCount)
+        {
+            lastCache = &mVertexDeclCache[i];
+        }
+    }
+
+    if (lastCache->vertexDeclaration != NULL)
+    {
+        lastCache->vertexDeclaration->Release();
+        lastCache->vertexDeclaration = NULL;
+        // mLastSetVDecl is set to the replacement, so we don't have to worry
+        // about it.
+    }
+
+    memcpy(lastCache->cachedElements, elements, (element - elements) * sizeof(D3DVERTEXELEMENT9));
+    device->CreateVertexDeclaration(elements, &lastCache->vertexDeclaration);
+    device->SetVertexDeclaration(lastCache->vertexDeclaration);
+    mLastSetVDecl = lastCache->vertexDeclaration;
+    lastCache->lruCount = ++mMaxLru;
+
+    return GL_NO_ERROR;
+}
+
+void VertexDeclarationCache::markStateDirty()
+{
+    for (int i = 0; i < MAX_VERTEX_ATTRIBS; i++)
+    {
+        mAppliedVBs[i].serial = 0;
+    }
+
+    mLastSetVDecl = NULL;
+    mInstancingEnabled = true;   // Forces it to be disabled when not used
+}
+
 }
 
 extern "C"
 {
-gl::Context *glCreateContext(const egl::Config *config, const gl::Context *shareContext)
+gl::Context *glCreateContext(const egl::Config *config, const gl::Context *shareContext, bool notifyResets, bool robustAccess)
 {
-    return new gl::Context(config, shareContext);
+    return new gl::Context(config, shareContext, notifyResets, robustAccess);
 }
 
 void glDestroyContext(gl::Context *context)

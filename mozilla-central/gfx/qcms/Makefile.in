@@ -1,4 +1,8 @@
-DEPTH		= ../..
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+DEPTH		= @DEPTH@
 topsrcdir	= @top_srcdir@
 srcdir		= @srcdir@
 VPATH		= @srcdir@
@@ -9,11 +13,16 @@ MODULE       = qcms
 LIBRARY_NAME = mozqcms
 LIBXUL_LIBRARY = 1
 GRE_MODULE      = 1
-DIST_INSTALL = 1
 
 EXPORTS      = qcms.h qcmstypes.h
 
-CSRCS = iccread.c transform.c
+CSRCS = \
+  chain.c \
+  iccread.c \
+  matrix.c \
+  transform.c \
+  transform_util.c \
+  $(NULL)
 
 ifeq (86,$(findstring 86,$(OS_TEST)))
 CSRCS += transform-sse2.c
@@ -45,9 +54,13 @@ endif
 endif
 endif
 
+# -pedantic causes warnings that we don't care about
+# so turn it off
+ifdef GNU_CC
+OS_CFLAGS := $(filter-out -pedantic,$(OS_CFLAGS))
+endif
+
 FORCE_STATIC_LIB = 1
-# This library is used by other shared libs
-FORCE_USE_PIC = 1
 
 include $(topsrcdir)/config/rules.mk
 
@@ -59,12 +72,6 @@ CFLAGS += -Wno-missing-field-initializers
 endif # GNU_CC
 
 # special rules for transform-sse*.c to get the right cflags. (taken from pixman/src/Makefile.in)
-transform-sse1.$(OBJ_SUFFIX): transform-sse1.c $(GLOBAL_DEPS)
-	$(REPORT_BUILD)
-	@$(MAKE_DEPS_AUTO_CC)
-	$(ELOG) $(CC) $(OUTOPTION)$@ -c $(COMPILE_CFLAGS) $(SSE1_FLAGS) $(_VPATH_SRCS)
+transform-sse1.$(OBJ_SUFFIX): COMPILE_CFLAGS += $(SSE1_FLAGS)
 
-transform-sse2.$(OBJ_SUFFIX): transform-sse2.c $(GLOBAL_DEPS)
-	$(REPORT_BUILD)
-	@$(MAKE_DEPS_AUTO_CC)
-	$(ELOG) $(CC) $(OUTOPTION)$@ -c $(COMPILE_CFLAGS) $(SSE2_FLAGS) $(_VPATH_SRCS)
+transform-sse2.$(OBJ_SUFFIX): COMPILE_CFLAGS += $(SSE2_FLAGS)

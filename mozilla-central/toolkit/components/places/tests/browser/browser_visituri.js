@@ -3,14 +3,12 @@
  * http://creativecommons.org/publicdomain/zero/1.0/
  */
 
-Components.utils.import("resource://gre/modules/XPCOMUtils.jsm");
-
 gBrowser.selectedTab = gBrowser.addTab();
 
 function finishAndCleanUp()
 {
   gBrowser.removeCurrentTab();
-  waitForClearHistory(finish);
+  promiseClearHistory().then(finish);
 }
 
 /**
@@ -50,37 +48,19 @@ var conn = PlacesUtils.history.QueryInterface(Ci.nsPIPlacesDatabase).DBConnectio
  */
 function getColumn(table, column, fromColumnName, fromColumnValue)
 {
-  var stmt = conn.createStatement(
-    "SELECT " + column + " FROM " + table + "_temp WHERE " + fromColumnName + "=:val " +
-    "UNION ALL " +
-    "SELECT " + column + " FROM " + table + " WHERE " + fromColumnName + "=:val " +
-    "LIMIT 1");
+  let sql = "SELECT " + column + " " +
+            "FROM " + table + " " +
+            "WHERE " + fromColumnName + " = :val " +
+            "LIMIT 1";
+  let stmt = conn.createStatement(sql);
   try {
     stmt.params.val = fromColumnValue;
-    stmt.executeStep();
+    ok(stmt.executeStep(), "Expect to get a row");
     return stmt.row[column];
   }
   finally {
     stmt.reset();
   }
-}
-
-/**
- * Clears history invoking callback when done.
- */
-function waitForClearHistory(aCallback) {
-  const TOPIC_EXPIRATION_FINISHED = "places-expiration-finished";
-  let observer = {
-    observe: function(aSubject, aTopic, aData) {
-      Services.obs.removeObserver(this, TOPIC_EXPIRATION_FINISHED);
-      aCallback();
-    }
-  };
-  Services.obs.addObserver(observer, TOPIC_EXPIRATION_FINISHED, false);
-
-  let hs = Cc["@mozilla.org/browser/nav-history-service;1"].
-           getService(Ci.nsINavHistoryService);
-  hs.QueryInterface(Ci.nsIBrowserHistory).removeAllPages();
 }
 
 function test()

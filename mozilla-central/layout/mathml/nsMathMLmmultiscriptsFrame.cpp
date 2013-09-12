@@ -1,42 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla MathML Project.
- *
- * The Initial Developer of the Original Code is
- * The University Of Queensland.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Roger B. Sidje <rbs@maths.uq.edu.au>
- *   David J. Fiddes <D.J.Fiddes@hw.ac.uk>
- *   Shyjan Mahamud <mahamud@cs.cmu.edu> (added TeX rendering rules)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #include "nsCOMPtr.h"
@@ -44,8 +9,7 @@
 #include "nsPresContext.h"
 #include "nsStyleContext.h"
 #include "nsStyleConsts.h"
-#include "nsIRenderingContext.h"
-#include "nsIFontMetrics.h"
+#include "nsRenderingContext.h"
 
 #include "nsMathMLmmultiscriptsFrame.h"
 
@@ -81,8 +45,8 @@ nsMathMLmmultiscriptsFrame::TransmitAutomaticData()
   // The TeXbook (Ch 17. p.141) says the superscript inherits the compression
   // while the subscript is compressed. So here we collect subscripts and set
   // the compression flag in them.
-  PRInt32 count = 0;
-  PRBool isSubScript = PR_FALSE;
+  int32_t count = 0;
+  bool isSubScript = false;
   nsAutoTArray<nsIFrame*, 8> subScriptFrames;
   nsIFrame* childFrame = mFrames.FirstChild();
   while (childFrame) {
@@ -106,7 +70,7 @@ nsMathMLmmultiscriptsFrame::TransmitAutomaticData()
     count++;
     childFrame = childFrame->GetNextSibling();
   }
-  for (PRInt32 i = subScriptFrames.Length() - 1; i >= 0; i--) {
+  for (int32_t i = subScriptFrames.Length() - 1; i >= 0; i--) {
     childFrame = subScriptFrames[i];
     PropagatePresentationDataFor(childFrame,
       NS_MATHML_COMPRESSED, NS_MATHML_COMPRESSED);
@@ -121,30 +85,48 @@ nsMathMLmmultiscriptsFrame::ProcessAttributes()
   mSubScriptShift = 0;
   mSupScriptShift = 0;
 
-  // check if the subscriptshift attribute is there
+  // subscriptshift
+  //
+  // "Specifies the minimum amount to shift the baseline of subscript down; the
+  // default is for the rendering agent to use its own positioning rules."
+  //
+  // values: length
+  // default: automatic
+  //
+  // We use 0 as the default value so unitless values can be ignored.
+  // XXXfredw Should we forbid negative values? (bug 411227)
+  //
   nsAutoString value;
   GetAttribute(mContent, mPresentationData.mstyle,
                nsGkAtoms::subscriptshift_, value);
   if (!value.IsEmpty()) {
-    nsCSSValue cssValue;
-    if (ParseNumericValue(value, cssValue) && cssValue.IsLengthUnit()) {
-      mSubScriptShift = CalcLength(PresContext(), mStyleContext, cssValue);
-    }
+    ParseNumericValue(value, &mSubScriptShift,
+                      nsMathMLElement::PARSE_ALLOW_NEGATIVE,
+                      PresContext(), mStyleContext);
   }
-  // check if the superscriptshift attribute is there
+  // superscriptshift
+  //
+  // "Specifies the minimum amount to shift the baseline of superscript up; the
+  // default is for the rendering agent to use its own positioning rules."
+  //
+  // values: length
+  // default: automatic
+  //
+  // We use 0 as the default value so unitless values can be ignored.
+  // XXXfredw Should we forbid negative values? (bug 411227)
+  //
   GetAttribute(mContent, mPresentationData.mstyle,
                nsGkAtoms::superscriptshift_, value);
   if (!value.IsEmpty()) {
-    nsCSSValue cssValue;
-    if (ParseNumericValue(value, cssValue) && cssValue.IsLengthUnit()) {
-      mSupScriptShift = CalcLength(PresContext(), mStyleContext, cssValue);
-    }
+    ParseNumericValue(value, &mSupScriptShift,
+                      nsMathMLElement::PARSE_ALLOW_NEGATIVE,
+                      PresContext(), mStyleContext);
   }
 }
 
 /* virtual */ nsresult
-nsMathMLmmultiscriptsFrame::Place(nsIRenderingContext& aRenderingContext,
-                                  PRBool               aPlaceOrigin,
+nsMathMLmmultiscriptsFrame::Place(nsRenderingContext& aRenderingContext,
+                                  bool                 aPlaceOrigin,
                                   nsHTMLReflowMetrics& aDesiredSize)
 {
   ////////////////////////////////////
@@ -161,13 +143,11 @@ nsMathMLmmultiscriptsFrame::Place(nsIRenderingContext& aRenderingContext,
 
   // get x-height (an ex)
   const nsStyleFont* font = GetStyleFont();
-  aRenderingContext.SetFont(font->mFont,
-                            PresContext()->GetUserFontSet());
-  nsCOMPtr<nsIFontMetrics> fm;
-  aRenderingContext.GetFontMetrics(*getter_AddRefs(fm));
+  nsRefPtr<nsFontMetrics> fm;
+  nsLayoutUtils::GetFontMetricsForFrame(this, getter_AddRefs(fm));
+  aRenderingContext.SetFont(fm);
 
-  nscoord xHeight;
-  fm->GetXHeight (xHeight);
+  nscoord xHeight = fm->XHeight();
 
   nscoord ruleSize;
   GetRuleThickness (aRenderingContext, fm, ruleSize);
@@ -241,22 +221,22 @@ nsMathMLmmultiscriptsFrame::Place(nsIRenderingContext& aRenderingContext,
   ////////////////////////////////////
 
   nscoord width = 0, prescriptsWidth = 0, rightBearing = 0;
-  nsIFrame* mprescriptsFrame = nsnull; // frame of <mprescripts/>, if there.
-  PRBool isSubScript = PR_FALSE;
+  nsIFrame* mprescriptsFrame = nullptr; // frame of <mprescripts/>, if there.
+  bool isSubScript = false;
   nscoord minSubScriptShift = 0, minSupScriptShift = 0;
   nscoord trySubScriptShift = subScriptShift;
   nscoord trySupScriptShift = supScriptShift;
   nscoord maxSubScriptShift = subScriptShift;
   nscoord maxSupScriptShift = supScriptShift;
-  PRInt32 count = 0;
+  int32_t count = 0;
   nsHTMLReflowMetrics baseSize;
   nsHTMLReflowMetrics subScriptSize;
   nsHTMLReflowMetrics supScriptSize;
-  nsIFrame* baseFrame = nsnull;
-  nsIFrame* subScriptFrame = nsnull;
-  nsIFrame* supScriptFrame = nsnull;
+  nsIFrame* baseFrame = nullptr;
+  nsIFrame* subScriptFrame = nullptr;
+  nsIFrame* supScriptFrame = nullptr;
 
-  PRBool firstPrescriptsPair = PR_FALSE;
+  bool firstPrescriptsPair = false;
   nsBoundingMetrics bmBase, bmSubScript, bmSupScript;
   nscoord italicCorrection = 0;
 
@@ -274,7 +254,7 @@ nsMathMLmmultiscriptsFrame::Place(nsIRenderingContext& aRenderingContext,
         return ReflowError(aRenderingContext, aDesiredSize);
       }
       mprescriptsFrame = childFrame;
-      firstPrescriptsPair = PR_TRUE;
+      firstPrescriptsPair = true;
     }
     else {
       if (0 == count) {
@@ -336,7 +316,7 @@ nsMathMLmmultiscriptsFrame::Place(nsIRenderingContext& aRenderingContext,
           else {
             prescriptsWidth += width;
             if (firstPrescriptsPair) {
-              firstPrescriptsPair = PR_FALSE;
+              firstPrescriptsPair = false;
               mBoundingMetrics.leftBearing =
                 NS_MIN(bmSubScript.leftBearing, bmSupScript.leftBearing);
             }
@@ -420,7 +400,11 @@ nsMathMLmmultiscriptsFrame::Place(nsIRenderingContext& aRenderingContext,
         // place the base ...
         childFrame = baseFrame;
         dy = aDesiredSize.ascent - baseSize.ascent;
-        FinishReflowChild (baseFrame, PresContext(), nsnull, baseSize, dx, dy, 0);
+        FinishReflowChild (baseFrame, PresContext(), nullptr, baseSize,
+                           MirrorIfRTL(aDesiredSize.width,
+                                       baseSize.width,
+                                       dx),
+                           dy, 0);
         dx += bmBase.width + italicCorrection;
       }
       else if (mprescriptsFrame != childFrame) {
@@ -443,13 +427,21 @@ nsMathMLmmultiscriptsFrame::Place(nsIRenderingContext& aRenderingContext,
 
           dy = aDesiredSize.ascent - subScriptSize.ascent +
             maxSubScriptShift;
-          FinishReflowChild (subScriptFrame, PresContext(), nsnull, subScriptSize,
-                             dx + (width-subScriptSize.width)/2, dy, 0);
+          FinishReflowChild (subScriptFrame, PresContext(), nullptr,
+                             subScriptSize,
+                             MirrorIfRTL(aDesiredSize.width,
+                                         subScriptSize.width,
+                                         dx + (width-subScriptSize.width)/2),
+                             dy, 0);
 
           dy = aDesiredSize.ascent - supScriptSize.ascent -
             maxSupScriptShift;
-          FinishReflowChild (supScriptFrame, PresContext(), nsnull, supScriptSize,
-                             dx + (width-supScriptSize.width)/2, dy, 0);
+          FinishReflowChild (supScriptFrame, PresContext(), nullptr,
+                             supScriptSize,
+                             MirrorIfRTL(aDesiredSize.width,
+                                         supScriptSize.width,
+                                         dx + (width-supScriptSize.width)/2),
+                             dy, 0);
 
           dx += width + scriptSpace;
         }

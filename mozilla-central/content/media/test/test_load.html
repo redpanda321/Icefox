@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=479859
 -->
 <head>
   <title>Test for Bug 479859</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
   <script type="application/javascript" src="manifest.js"></script>
@@ -38,10 +37,21 @@ var gTestName = "?";
 
 function listener(evt) {
   log('event ' + evt.type);
-  evt.stopPropagation();
   ok(gEventNum < gExpectedEvents.length, gTestName+" - corrent number of events received");
   var expected = (gEventNum < gExpectedEvents.length) ? gExpectedEvents[gEventNum] : "NoEvent";
   is(evt.type, expected, gTestName+" - events received in order");
+  gEventNum++;
+  if (gEventNum == gExpectedEvents.length) {
+    setTimeout(nextTest, 0); 
+  }
+}
+
+function source_error(evt) {
+  log('event source_error');
+  ok(evt.type == "error", "Should only get error events here");
+  ok(gEventNum < gExpectedEvents.length, gTestName+" - corrent number of events received");
+  var expected = (gEventNum < gExpectedEvents.length) ? gExpectedEvents[gEventNum] : "NoEvent";
+  is("source_error", expected, gTestName+" - events received in order");
   gEventNum++;
   if (gEventNum == gExpectedEvents.length) {
     setTimeout(nextTest, 0); 
@@ -60,16 +70,20 @@ function createMedia(tag) {
 
 function addSource(src, type) {
   var s = document.createElement("source");
+  s.addEventListener("error", source_error, false);
   s.src = src;
   s.type = type;
   gMedia.appendChild(s);
+  return s;
 }
 
 function prependSource(src, type) {
   var s = document.createElement("source");
+  s.addEventListener("error", source_error, false);
   s.src = src;
   s.type = type;
   gMedia.insertBefore(s, gMedia.firstChild);
+  return s;
 }
 
 var gTests = [
@@ -80,7 +94,7 @@ var gTests = [
         document.body.appendChild(gMedia);
         gMedia.src = src;
       },
-    expectedEvents: ['loadstart', 'durationchange', 'loadedmetadata', 'loadeddata']
+    expectedEvents: ['ratechange',  'loadstart', 'durationchange', 'loadedmetadata', 'loadeddata']
   }, {
     // Test 1: adding video to doc, then adding source.
     create:
@@ -89,8 +103,9 @@ var gTests = [
         addSource(src, type);
       },
     expectedEvents: ['loadstart', 'durationchange', 'loadedmetadata', 'loadeddata']
-  }, {
-    // Test 2: video with multiple source, the first of which are bad, we should load the last.
+  },{
+    // Test 2: video with multiple source, the first of which are bad, we should load the last,
+    // and receive error events for failed loads on the source children.
     create:
       function(src, type) {
         document.body.appendChild(gMedia);
@@ -98,7 +113,7 @@ var gTests = [
         addSource("404b", type);
         addSource(src, type);
       },
-    expectedEvents: ['loadstart', 'durationchange', 'loadedmetadata', 'loadeddata']
+    expectedEvents: ['loadstart', 'source_error', 'source_error', 'durationchange', 'loadedmetadata', 'loadeddata']
   }, {
     // Test 3:  video with bad src, good <source>, ensure that <source> aren't used.
     create:
@@ -107,15 +122,15 @@ var gTests = [
         addSource(src, type);
         document.body.appendChild(gMedia);
       },
-    expectedEvents: ['loadstart', 'error']
+    expectedEvents: ['ratechange', 'loadstart', 'error']
   }, {
     // Test 4:  video with only bad source, loading, then adding a good source
     // -  should resume load.
     create:
       function(src, type) {
         addSource("404a", type);
-        addSource("404b", type);
-        gMedia.addEventListener("error",
+        var s2 = addSource("404b", type);
+        s2.addEventListener("error",
           function(e) {
             // Should awaken waiting load, causing successful load.
             addSource(src, type);
@@ -123,7 +138,7 @@ var gTests = [
           false);
         document.body.appendChild(gMedia);
       },
-    expectedEvents: ['loadstart', 'error', 'durationchange', 'loadedmetadata', 'loadeddata']
+    expectedEvents: ['loadstart', 'source_error', 'source_error', 'durationchange', 'loadedmetadata', 'loadeddata']
   }, {
     // Test 5: video with only 1 bad source, let it fail to load, then prepend
     // a good <source> to the video, it shouldn't be selected, because the
@@ -133,8 +148,8 @@ var gTests = [
       function(src, type) {
         var prepended = false;
         addSource("404a", type);
-        addSource("404b", type);
-        gMedia.addEventListener("error",
+        var s2 = addSource("404b", type);
+        s2.addEventListener("error",
           function(e) {
             // Should awaken waiting load, causing successful load.
             if (!prepended) {
@@ -145,7 +160,7 @@ var gTests = [
           false);
         document.body.appendChild(gMedia);
       },
-    expectedEvents: ['loadstart', 'error', 'error']
+    expectedEvents: ['loadstart', 'source_error', 'source_error']
   }
 ];
 

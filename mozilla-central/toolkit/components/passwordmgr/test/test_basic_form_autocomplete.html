@@ -2,7 +2,6 @@
 <html>
 <head>
   <title>Test for Login Manager</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>  
   <script type="text/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
   <script type="text/javascript" src="pwmgr_common.js"></script>
@@ -82,21 +81,20 @@ Login Manager test: multiple login autocomplete
 /** Test for Login Manager: multiple login autocomplete. **/
 
 commonInit();
-netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
 
 var uname = $_(1, "uname");
 var pword = $_(1, "pword");
-const shiftModifier = Components.interfaces.nsIDOMNSEvent.SHIFT_MASK;
+const shiftModifier = Components.interfaces.nsIDOMEvent.SHIFT_MASK;
 
 // Get the pwmgr service
-var pwmgr = Components.classes["@mozilla.org/login-manager;1"]
-            .getService(Components.interfaces.nsILoginManager);
+var pwmgr = SpecialPowers.wrap(Components).classes["@mozilla.org/login-manager;1"]
+                         .getService(Components.interfaces.nsILoginManager);
 ok(pwmgr != null, "nsLoginManager service");
 
 // Create some logins just for this form, since we'll be deleting them.
 var nsLoginInfo =
-Components.Constructor("@mozilla.org/login-manager/loginInfo;1",
-                       Components.interfaces.nsILoginInfo, "init");
+SpecialPowers.wrap(Components).Constructor("@mozilla.org/login-manager/loginInfo;1",
+                          Components.interfaces.nsILoginInfo, "init");
 ok(nsLoginInfo != null, "nsLoginInfo constructor");
 
 
@@ -189,6 +187,24 @@ function sendFakeAutocompleteEvent(element) {
     element.dispatchEvent(acEvent);
 }
 
+function hitEventLoop(func, times) {
+  if (times > 0) {
+    setTimeout(hitEventLoop, 0, func, times - 1);
+  } else {
+    setTimeout(func, 0);
+  }
+}
+
+var gNextTestWillOpenPopup = true;
+var gLastTest = 704;
+
+function addPopupListener(eventName, func, capture) {
+  autocompletePopup.addEventListener(eventName, func, capture);
+}
+
+function removePopupListener(eventName, func, capture) {
+  autocompletePopup.removeEventListener(eventName, func, capture);
+}
 
 /*
  * Main section of test...
@@ -199,13 +215,32 @@ function sendFakeAutocompleteEvent(element) {
  * timeout.
  */
 function runTest(testNum) {
-  // Seems we need to enable this again, or sendKeyEvent() complaints.
-  // But don't for test 14, or else dispatchEvent will send it as a trusted
-  // event (we're testing to see if we ignore untrusted events, so don't want
-  // that).
-  if (testNum != 14)
-    netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
   ok(true, "Starting test #" + testNum);
+
+  if (gNextTestWillOpenPopup) {
+    addPopupListener("popupshown", function() {
+      removePopupListener("popupshown", arguments.callee, false);
+
+      if (testNum != gLastTest) {
+        window.setTimeout(runTest, 0, testNum + 1);
+      }
+    }, false);
+  } else {
+    var unexpectedPopup = function() {
+      removePopupListener("popupshown", arguments.callee, false);
+
+      ok(false, "Test " + testNum + " should not show a popup");
+    };
+    addPopupListener("popupshown", unexpectedPopup, false);
+    if (testNum == gLastTest) {
+      removePopupListener("popupshown", unexpectedPopup, false);
+    } else {
+      hitEventLoop(function() {
+        removePopupListener("popupshown", unexpectedPopup, false);
+        runTest(testNum + 1);
+      }, 100);
+    }
+  }
 
   switch(testNum) {
     case 1:
@@ -358,6 +393,7 @@ function runTest(testNum) {
         // Trigger autocomplete popup
         restoreForm();
         doKey("down");
+        gNextTestWillOpenPopup = false;
         break;
 
     case 13:
@@ -367,18 +403,28 @@ function runTest(testNum) {
         doKey("return");
         checkACForm("zzzuser4", "zzzpass4");
         restoreForm();
+        gNextTestWillOpenPopup = false;
         break;
 
+    /* The previous comments said that test 14 was special and needed to not
+     * have enablePrivilege, or else dispatchEvent will send a trusted event
+     * (we're testing to see if we ignore untrusted events, so don't want
+     * that).
+     * We should file a bug to look into this.
+     */
     case 14:
+    /*
         // Send a fake (untrusted) event.
         checkACForm("", "");
         uname.value = "zzzuser4";
         sendFakeAutocompleteEvent(uname);
         checkACForm("zzzuser4", "");
+    */
+        gNextTestWillOpenPopup = true;
         break;
 
     case 15:
-        checkACForm("zzzuser4", "");
+        //checkACForm("zzzuser4", "");
 
         // Trigger autocomplete popup
         restoreForm();
@@ -477,6 +523,7 @@ function runTest(testNum) {
         // Trigger autocomplete popup
         restoreForm();
         doKey("down");
+        gNextTestWillOpenPopup = false;
         break;
 
     case 56:
@@ -489,6 +536,7 @@ function runTest(testNum) {
         is(numLogins, 1, "Correct number of logins after deleting one");
         pwmgr.removeLogin(login0); // remove the login that's not shown in the list.
         testNum = 99;
+        gNextTestWillOpenPopup = true;
         break;
 
 
@@ -503,6 +551,7 @@ function runTest(testNum) {
         // Trigger autocomplete popup
         restoreForm();
         doKey("down");
+        gNextTestWillOpenPopup = false;
         break;
 
     case 101:
@@ -512,6 +561,7 @@ function runTest(testNum) {
         doKey("return"); // not "enter"!
         checkACForm("singleuser5", "singlepass5");
         restoreForm(); // clear field, so reloading test doesn't fail
+        gNextTestWillOpenPopup = true;
         break;
 
     case 102:
@@ -523,6 +573,7 @@ function runTest(testNum) {
         // Trigger autocomplete popup
         restoreForm();
         doKey("down");
+        gNextTestWillOpenPopup = false;
         break;
 
     case 103:
@@ -531,6 +582,7 @@ function runTest(testNum) {
         checkACForm("", ""); // value shouldn't update
         doKey("return"); // not "enter"!
         checkACForm("singleuser5", "singlepass5");
+        gNextTestWillOpenPopup = true;
         break;
 
     case 104:
@@ -542,6 +594,7 @@ function runTest(testNum) {
         // Trigger autocomplete popup
         restoreForm();
         doKey("down");
+        gNextTestWillOpenPopup = false;
         break;
 
     case 105:
@@ -550,6 +603,7 @@ function runTest(testNum) {
         checkACForm("", ""); // value shouldn't update
         doKey("return"); // not "enter"!
         checkACForm("singleuser5", "singlepass5");
+        gNextTestWillOpenPopup = true;
         break;
 
     case 106:
@@ -561,6 +615,7 @@ function runTest(testNum) {
         // Trigger autocomplete popup
         restoreForm();
         doKey("down");
+        gNextTestWillOpenPopup = false;
         break;
 
     case 107:
@@ -569,6 +624,7 @@ function runTest(testNum) {
         checkACForm("", ""); // value shouldn't update
         doKey("return"); // not "enter"!
         checkACForm("singleuser5", "singlepass5");
+        gNextTestWillOpenPopup = false;
         break;
 
     case 108:
@@ -578,6 +634,7 @@ function runTest(testNum) {
         uname = $_(6, "uname");
         pword = $_(6, "pword");
         checkACForm("singleuser5", "singlepass5");
+        gNextTestWillOpenPopup = false;
         break;
 
     case 109:
@@ -585,13 +642,14 @@ function runTest(testNum) {
         // the username.
         uname.focus();
         doKey("right");
-        sendChar("X", uname);
+        sendChar("X");
         // Trigger the 'blur' event on uname
         pword.focus();
-        checkACForm("singleuser5X", "singlepass5");
+        checkACForm("sXingleuser5", "singlepass5");
 
         pwmgr.removeLogin(login5);
         testNum = 499;
+        gNextTestWillOpenPopup = true;
         break;
 
     case 500:
@@ -616,6 +674,7 @@ function runTest(testNum) {
         // Trigger autocomplete popup
         restoreForm();
         doKey("down");
+        gNextTestWillOpenPopup = false;
         break;
 
     case 501:
@@ -632,6 +691,7 @@ function runTest(testNum) {
 
         pwmgr.removeLogin(login6A);
         testNum = 599;
+        gNextTestWillOpenPopup = false;
         break;
 
     case 600:
@@ -640,17 +700,20 @@ function runTest(testNum) {
         pword = $_(8, "pword");
         checkACForm("form8user", "form8pass");
         restoreForm();
+        gNextTestWillOpenPopup = false;
         break;
 
     case 601:
         checkACForm("", "");
         // Focus the previous form to trigger a blur.
         $_(7, "uname").focus();
+        gNextTestWillOpenPopup = false;
         break;
 
     case 602:
         checkACForm("", "");
         restoreForm();
+        gNextTestWillOpenPopup = false;
         break;
 
     case 603:
@@ -658,20 +721,24 @@ function runTest(testNum) {
         pwmgr.removeLogin(login7);
 
         testNum = 699;
+        gNextTestWillOpenPopup = true;
         break;
 
     case 700:
         // Turn our attention to form9 to test the dropdown - bug 497541
         uname = $_(9, "uname");
         pword = $_(9, "pword");
-        sendString("form9userAB", uname);
+        uname.focus();
+        sendString("form9userAB");
+        gNextTestWillOpenPopup = true;
         break;
 
     case 701:
         checkACForm("form9userAB", "");
         uname.focus();
         doKey("left");
-        sendChar("A", uname);
+        sendChar("A");
+        gNextTestWillOpenPopup = false;
         break;
 
     case 702:
@@ -681,11 +748,14 @@ function runTest(testNum) {
         doKey("down");
         doKey("return");
         checkACForm("form9userAAB", "form9pass");
+        gNextTestWillOpenPopup = false;
         break;
 
     case 703:
         pwmgr.addLogin(login8C);
-        sendChar("z", uname);
+        uname.focus();
+        sendChar("z");
+        gNextTestWillOpenPopup = false;
         break;
 
     case 704:
@@ -700,8 +770,6 @@ function runTest(testNum) {
         SimpleTest.finish();
         return;
   }
-
-  setTimeout(runTest, 50, testNum + 1); // XXX 40ms was too slow, why?
 }
 
 
@@ -727,9 +795,8 @@ function getMenuEntries() {
 }
 
 function startTest() {
-    netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
     var Ci = Components.interfaces;
-    chromeWin = window
+    chromeWin = SpecialPowers.wrap(window)
                     .QueryInterface(Ci.nsIInterfaceRequestor)
                     .getInterface(Ci.nsIWebNavigation)
                     .QueryInterface(Ci.nsIDocShellTreeItem)

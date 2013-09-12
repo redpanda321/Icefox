@@ -1,73 +1,40 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is String Enumerator.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corp.
- * Portions created by the Initial Developer are Copyright (C) 2003
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Alec Flett <alecf@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #include "nsStringEnumerator.h"
-#include "prtypes.h"
 #include "nsCRT.h"
 #include "nsString.h"
 #include "nsReadableUtils.h"
 #include "nsISimpleEnumerator.h"
 #include "nsSupportsPrimitives.h"
+#include "mozilla/Attributes.h"
 
 //
 // nsStringEnumerator
 //
 
-class nsStringEnumerator : public nsIStringEnumerator,
-                           public nsIUTF8StringEnumerator,
-                           public nsISimpleEnumerator
+class nsStringEnumerator MOZ_FINAL : public nsIStringEnumerator,
+                                     public nsIUTF8StringEnumerator,
+                                     public nsISimpleEnumerator
 {
 public:
-    nsStringEnumerator(const nsTArray<nsString>* aArray, PRBool aOwnsArray) :
-        mArray(aArray), mIndex(0), mOwnsArray(aOwnsArray), mIsUnicode(PR_TRUE)
+    nsStringEnumerator(const nsTArray<nsString>* aArray, bool aOwnsArray) :
+        mArray(aArray), mIndex(0), mOwnsArray(aOwnsArray), mIsUnicode(true)
     {}
     
-    nsStringEnumerator(const nsTArray<nsCString>* aArray, PRBool aOwnsArray) :
-        mCArray(aArray), mIndex(0), mOwnsArray(aOwnsArray), mIsUnicode(PR_FALSE)
+    nsStringEnumerator(const nsTArray<nsCString>* aArray, bool aOwnsArray) :
+        mCArray(aArray), mIndex(0), mOwnsArray(aOwnsArray), mIsUnicode(false)
     {}
 
     nsStringEnumerator(const nsTArray<nsString>* aArray, nsISupports* aOwner) :
-        mArray(aArray), mIndex(0), mOwner(aOwner), mOwnsArray(PR_FALSE), mIsUnicode(PR_TRUE)
+        mArray(aArray), mIndex(0), mOwner(aOwner), mOwnsArray(false), mIsUnicode(true)
     {}
     
     nsStringEnumerator(const nsTArray<nsCString>* aArray, nsISupports* aOwner) :
-        mCArray(aArray), mIndex(0), mOwner(aOwner), mOwnsArray(PR_FALSE), mIsUnicode(PR_FALSE)
+        mCArray(aArray), mIndex(0), mOwner(aOwner), mOwnsArray(false), mIsUnicode(false)
     {}
 
     NS_DECL_ISUPPORTS
@@ -96,19 +63,19 @@ private:
         const nsTArray<nsCString>* mCArray;
     };
 
-    inline PRUint32 Count() {
+    inline uint32_t Count() {
         return mIsUnicode ? mArray->Length() : mCArray->Length();
     }
     
-    PRUint32 mIndex;
+    uint32_t mIndex;
 
     // the owner allows us to hold a strong reference to the object
     // that owns the array. Having a non-null value in mOwner implies
-    // that mOwnsArray is PR_FALSE, because we rely on the real owner
+    // that mOwnsArray is false, because we rely on the real owner
     // to release the array
     nsCOMPtr<nsISupports> mOwner;
-    PRPackedBool mOwnsArray;
-    PRPackedBool mIsUnicode;
+    bool mOwnsArray;
+    bool mIsUnicode;
 };
 
 NS_IMPL_ISUPPORTS3(nsStringEnumerator,
@@ -117,7 +84,7 @@ NS_IMPL_ISUPPORTS3(nsStringEnumerator,
                    nsISimpleEnumerator)
 
 NS_IMETHODIMP
-nsStringEnumerator::HasMore(PRBool* aResult)
+nsStringEnumerator::HasMore(bool* aResult)
 {
     NS_ENSURE_ARG_POINTER(aResult);
     *aResult = mIndex < Count();
@@ -125,7 +92,7 @@ nsStringEnumerator::HasMore(PRBool* aResult)
 }
 
 NS_IMETHODIMP
-nsStringEnumerator::HasMoreElements(PRBool* aResult)
+nsStringEnumerator::HasMoreElements(bool* aResult)
 {
     return HasMore(aResult);
 }
@@ -179,7 +146,7 @@ nsStringEnumerator::GetNext(nsACString& aResult)
 
 template<class T>
 static inline nsresult
-StringEnumeratorTail(T** aResult NS_INPARAM)
+StringEnumeratorTail(T** aResult)
 {
     if (!*aResult)
         return NS_ERROR_OUT_OF_MEMORY;
@@ -191,7 +158,7 @@ StringEnumeratorTail(T** aResult NS_INPARAM)
 // constructors
 //
 
-NS_COM nsresult
+nsresult
 NS_NewStringEnumerator(nsIStringEnumerator** aResult,
                        const nsTArray<nsString>* aArray, nsISupports* aOwner)
 {
@@ -203,7 +170,7 @@ NS_NewStringEnumerator(nsIStringEnumerator** aResult,
 }
 
 
-NS_COM nsresult
+nsresult
 NS_NewUTF8StringEnumerator(nsIUTF8StringEnumerator** aResult,
                            const nsTArray<nsCString>* aArray, nsISupports* aOwner)
 {
@@ -214,48 +181,48 @@ NS_NewUTF8StringEnumerator(nsIUTF8StringEnumerator** aResult,
     return StringEnumeratorTail(aResult);
 }
 
-NS_COM nsresult
+nsresult
 NS_NewAdoptingStringEnumerator(nsIStringEnumerator** aResult,
                                nsTArray<nsString>* aArray)
 {
     NS_ENSURE_ARG_POINTER(aResult);
     NS_ENSURE_ARG_POINTER(aArray);
     
-    *aResult = new nsStringEnumerator(aArray, PR_TRUE);
+    *aResult = new nsStringEnumerator(aArray, true);
     return StringEnumeratorTail(aResult);
 }
 
-NS_COM nsresult
+nsresult
 NS_NewAdoptingUTF8StringEnumerator(nsIUTF8StringEnumerator** aResult,
                                    nsTArray<nsCString>* aArray)
 {
     NS_ENSURE_ARG_POINTER(aResult);
     NS_ENSURE_ARG_POINTER(aArray);
     
-    *aResult = new nsStringEnumerator(aArray, PR_TRUE);
+    *aResult = new nsStringEnumerator(aArray, true);
     return StringEnumeratorTail(aResult);
 }
 
 // const ones internally just forward to the non-const equivalents
-NS_COM nsresult
+nsresult
 NS_NewStringEnumerator(nsIStringEnumerator** aResult,
                        const nsTArray<nsString>* aArray)
 {
     NS_ENSURE_ARG_POINTER(aResult);
     NS_ENSURE_ARG_POINTER(aArray);
     
-    *aResult = new nsStringEnumerator(aArray, PR_FALSE);
+    *aResult = new nsStringEnumerator(aArray, false);
     return StringEnumeratorTail(aResult);
 }
 
-NS_COM nsresult
+nsresult
 NS_NewUTF8StringEnumerator(nsIUTF8StringEnumerator** aResult,
                            const nsTArray<nsCString>* aArray)
 {
     NS_ENSURE_ARG_POINTER(aResult);
     NS_ENSURE_ARG_POINTER(aArray);
     
-    *aResult = new nsStringEnumerator(aArray, PR_FALSE);
+    *aResult = new nsStringEnumerator(aArray, false);
     return StringEnumeratorTail(aResult);
 }
 

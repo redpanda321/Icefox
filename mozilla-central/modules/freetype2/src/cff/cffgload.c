@@ -4,8 +4,7 @@
 /*                                                                         */
 /*    OpenType Glyph Loader (body).                                        */
 /*                                                                         */
-/*  Copyright 1996-2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,   */
-/*            2010 by                                                      */
+/*  Copyright 1996-2012 by                                                 */
 /*  David Turner, Robert Wilhelm, and Werner Lemberg.                      */
 /*                                                                         */
 /*  This file is part of the FreeType project, and may only be used,       */
@@ -1159,8 +1158,8 @@
               op = cff_op_flex1;
               break;
             default:
-              /* decrement ip for syntax error message */
-              ip--;
+              FT_TRACE4(( " unknown op (12, %d)\n", v ));
+              break;
             }
           }
           break;
@@ -1213,11 +1212,12 @@
           op = cff_op_hvcurveto;
           break;
         default:
+          FT_TRACE4(( " unknown op (%d)\n", v ));
           break;
         }
 
         if ( op == cff_op_unknown )
-          goto Syntax_Error;
+          continue;
 
         /* check arguments */
         req_args = cff_argument_counts[op];
@@ -1438,8 +1438,13 @@
             FT_TRACE4(( op == cff_op_hlineto ? " hlineto\n"
                                              : " vlineto\n" ));
 
-            if ( num_args < 1 )
+            if ( num_args < 0 )
               goto Stack_Underflow;
+
+            /* there exist subsetted fonts (found in PDFs) */
+            /* which call `hlineto' without arguments      */
+            if ( num_args == 0 )
+              break;
 
             if ( cff_builder_start_point ( builder, x, y ) ||
                  check_points( builder, num_args )         )
@@ -1508,11 +1513,9 @@
               goto Stack_Underflow;
 
             /* if num_args isn't of the form 4n or 4n+1, */
-            /* we reduce it to 4n+1                      */
+            /* we enforce it by clearing the second bit  */
 
-            nargs = num_args - num_args % 4;
-            if ( num_args - nargs > 0 )
-              nargs += 1;
+            nargs = num_args & ~2;
 
             if ( cff_builder_start_point( builder, x, y ) )
               goto Fail;
@@ -1555,11 +1558,9 @@
               goto Stack_Underflow;
 
             /* if num_args isn't of the form 4n or 4n+1, */
-            /* we reduce it to 4n+1                      */
+            /* we enforce it by clearing the second bit  */
 
-            nargs = num_args - num_args % 4;
-            if ( num_args - nargs > 0 )
-              nargs += 1;
+            nargs = num_args & ~2;
 
             if ( cff_builder_start_point( builder, x, y ) )
               goto Fail;
@@ -1607,11 +1608,9 @@
               goto Stack_Underflow;
 
             /* if num_args isn't of the form 8n, 8n+1, 8n+4, or 8n+5, */
-            /* we reduce it to the largest one which fits             */
+            /* we enforce it by clearing the second bit               */
 
-            nargs = num_args - num_args % 4;
-            if ( num_args - nargs > 0 )
-              nargs += 1;
+            nargs = num_args & ~2;
 
             args -= nargs;
             if ( check_points( builder, ( nargs / 4 ) * 3 ) )
@@ -1958,6 +1957,7 @@
             /* Save glyph width so that the subglyphs don't overwrite it. */
             FT_Pos  glyph_width = decoder->glyph_width;
 
+
             error = cff_operator_seac( decoder,
                                        0L, args[-4], args[-3],
                                        (FT_Int)( args[-2] >> 16 ),
@@ -2280,6 +2280,8 @@
           /* subsequent `pop' operands should add the arguments,       */
           /* this is the implementation described for `unknown' other  */
           /* subroutines in the Type1 spec.                            */
+          /*                                                           */
+          /* XXX Fix return arguments (see discussion below).          */
           args -= 2 + ( args[-2] >> 16 );
           if ( args < stack )
             goto Stack_Underflow;
@@ -2292,6 +2294,22 @@
 
           FT_TRACE4(( " pop (invalid op)\n" ));
 
+          /* XXX Increasing `args' is wrong: After a certain number of */
+          /* `pop's we get a stack overflow.  Reason for doing it is   */
+          /* code like this (actually found in a CFF font):            */
+          /*                                                           */
+          /*   17 1 3 callothersubr                                    */
+          /*   pop                                                     */
+          /*   callsubr                                                */
+          /*                                                           */
+          /* Since we handle `callothersubr' as a no-op, and           */
+          /* `callsubr' needs at least one argument, `pop' can't be a  */
+          /* no-op too as it basically should be.                      */
+          /*                                                           */
+          /* The right solution would be to provide real support for   */
+          /* `callothersubr' as done in `t1decode.c', however, given   */
+          /* the fact that CFF fonts with `pop' are invalid, it is     */
+          /* questionable whether it is worth the time.                */
           args++;
           break;
 
@@ -2455,7 +2473,10 @@
           return CFF_Err_Unimplemented_Feature;
         }
 
-      decoder->top = args;
+        decoder->top = args;
+
+        if ( decoder->top - stack >= CFF_MAX_OPERANDS )
+          goto Stack_Overflow;
 
       } /* general operator processing */
 
@@ -2679,8 +2700,8 @@
       FT_Byte   fd_index = cff_fd_select_get( &cff->fd_select,
                                               glyph_index );
 
-      if ( fd_index >= cff->num_subfonts ) 
-        fd_index = cff->num_subfonts - 1;
+      if ( fd_index >= cff->num_subfonts )
+        fd_index = (FT_Byte)( cff->num_subfonts - 1 );
 
       top_upm = cff->top_font.font_dict.units_per_em;
       sub_upm = cff->subfonts[fd_index]->font_dict.units_per_em;
@@ -2728,48 +2749,53 @@
       /* now load the unscaled outline */
       error = cff_get_glyph_data( face, glyph_index,
                                   &charstring, &charstring_len );
-      if ( !error )
-      {
-        error = cff_decoder_prepare( &decoder, size, glyph_index );
-        if ( !error )
-        {
-          error = cff_decoder_parse_charstrings( &decoder,
-                                                 charstring,
-                                                 charstring_len );
+      if ( error )
+        goto Glyph_Build_Finished;
 
-          cff_free_glyph_data( face, &charstring, charstring_len );
+      error = cff_decoder_prepare( &decoder, size, glyph_index );
+      if ( error )
+        goto Glyph_Build_Finished;
 
+      error = cff_decoder_parse_charstrings( &decoder,
+                                             charstring,
+                                             charstring_len );
+
+      cff_free_glyph_data( face, &charstring, charstring_len );
+
+      if ( error )
+        goto Glyph_Build_Finished;
 
 #ifdef FT_CONFIG_OPTION_INCREMENTAL
-          /* Control data and length may not be available for incremental */
-          /* fonts.                                                       */
-          if ( face->root.internal->incremental_interface )
-          {
-            glyph->root.control_data = 0;
-            glyph->root.control_len = 0;
-          }
-          else
+      /* Control data and length may not be available for incremental */
+      /* fonts.                                                       */
+      if ( face->root.internal->incremental_interface )
+      {
+        glyph->root.control_data = 0;
+        glyph->root.control_len = 0;
+      }
+      else
 #endif /* FT_CONFIG_OPTION_INCREMENTAL */
 
-          /* We set control_data and control_len if charstrings is loaded. */
-          /* See how charstring loads at cff_index_access_element() in     */
-          /* cffload.c.                                                    */
-          {
-            CFF_Index  csindex = &cff->charstrings_index;
+      /* We set control_data and control_len if charstrings is loaded. */
+      /* See how charstring loads at cff_index_access_element() in     */
+      /* cffload.c.                                                    */
+      {
+        CFF_Index  csindex = &cff->charstrings_index;
 
 
-            if ( csindex->offsets )
-            {
-              glyph->root.control_data = csindex->bytes +
-                                           csindex->offsets[glyph_index] - 1;
-              glyph->root.control_len  = charstring_len;
-            }
-          }
+        if ( csindex->offsets )
+        {
+          glyph->root.control_data = csindex->bytes +
+                                     csindex->offsets[glyph_index] - 1;
+          glyph->root.control_len  = charstring_len;
         }
       }
 
-      /* save new glyph tables */
-      cff_builder_done( &decoder.builder );
+  Glyph_Build_Finished:
+      /* save new glyph tables, if no error */
+      if ( !error )
+        cff_builder_done( &decoder.builder );
+      /* XXX: anything to do for broken glyph entry? */
     }
 
 #ifdef FT_CONFIG_OPTION_INCREMENTAL
@@ -2930,7 +2956,7 @@
         if ( has_vertical_info )
           metrics->vertBearingX = metrics->horiBearingX -
                                     metrics->horiAdvance / 2;
-        else 
+        else
         {
           if ( load_flags & FT_LOAD_VERTICAL_LAYOUT )
             ft_synthesize_vertical_metrics( metrics,

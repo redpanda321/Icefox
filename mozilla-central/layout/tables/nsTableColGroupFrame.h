@@ -1,47 +1,16 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef nsTableColGroupFrame_h__
 #define nsTableColGroupFrame_h__
 
+#include "mozilla/Attributes.h"
 #include "nscore.h"
-#include "nsHTMLContainerFrame.h"
+#include "nsContainerFrame.h"
 #include "nsTableColFrame.h"
-#include "nsTablePainter.h"
 
+class nsTableFrame;
 class nsTableColFrame;
 
 enum nsTableColGroupType {
@@ -56,7 +25,7 @@ enum nsTableColGroupType {
  *
  * @author  sclark
  */
-class nsTableColGroupFrame : public nsHTMLContainerFrame
+class nsTableColGroupFrame : public nsContainerFrame
 {
 public:
   NS_DECL_FRAMEARENA_HELPERS
@@ -73,8 +42,8 @@ public:
   /** Initialize the colgroup frame with a set of children.
     * @see nsIFrame::SetInitialChildList
     */
-  NS_IMETHOD SetInitialChildList(nsIAtom*        aListName,
-                                 nsFrameList&    aChildList);
+  NS_IMETHOD SetInitialChildList(ChildListID     aListID,
+                                 nsFrameList&    aChildList) MOZ_OVERRIDE;
 
   /**
    * ColGroups never paint anything, nor receive events.
@@ -109,17 +78,17 @@ public:
   static nsTableColGroupFrame* GetLastRealColGroup(nsTableFrame* aTableFrame);
 
   /** @see nsIFrame::DidSetStyleContext */
-  virtual void DidSetStyleContext(nsStyleContext* aOldStyleContext);
+  virtual void DidSetStyleContext(nsStyleContext* aOldStyleContext) MOZ_OVERRIDE;
 
   /** @see nsIFrame::AppendFrames, InsertFrames, RemoveFrame
     */
-  NS_IMETHOD AppendFrames(nsIAtom*        aListName,
-                          nsFrameList&    aFrameList);
-  NS_IMETHOD InsertFrames(nsIAtom*        aListName,
+  NS_IMETHOD AppendFrames(ChildListID     aListID,
+                          nsFrameList&    aFrameList) MOZ_OVERRIDE;
+  NS_IMETHOD InsertFrames(ChildListID     aListID,
                           nsIFrame*       aPrevFrame,
-                          nsFrameList&    aFrameList);
-  NS_IMETHOD RemoveFrame(nsIAtom*        aListName,
-                         nsIFrame*       aOldFrame);
+                          nsFrameList&    aFrameList) MOZ_OVERRIDE;
+  NS_IMETHOD RemoveFrame(ChildListID     aListID,
+                         nsIFrame*       aOldFrame) MOZ_OVERRIDE;
 
   /** remove the column aChild from the column group, if requested renumber
     * the subsequent columns in this column group and all following column
@@ -129,7 +98,7 @@ public:
     *                                     after aChild will be reenumerated
     */
   void RemoveChild(nsTableColFrame& aChild,
-                   PRBool           aResetSubsequentColIndices);
+                   bool             aResetSubsequentColIndices);
 
   /** reflow of a column group is a trivial matter of reflowing
     * the col group's children (columns), and setting this frame
@@ -140,18 +109,14 @@ public:
   NS_IMETHOD Reflow(nsPresContext*          aPresContext,
                     nsHTMLReflowMetrics&     aDesiredSize,
                     const nsHTMLReflowState& aReflowState,
-                    nsReflowStatus&          aStatus);
-
-  /* needed only because we use Reflow in a hacky way, see
-     nsTableFrame::ReflowColGroups */
-  virtual PRBool IsContainingBlock() const;
+                    nsReflowStatus&          aStatus) MOZ_OVERRIDE;
 
   /**
    * Get the "type" of the frame
    *
    * @see nsGkAtoms::tableColGroupFrame
    */
-  virtual nsIAtom* GetType() const;
+  virtual nsIAtom* GetType() const MOZ_OVERRIDE;
 
   /** Add column frames to the table storages: colframe cache and cellmap
     * this doesn't change the mFrames of the colgroup frame.
@@ -167,20 +132,20 @@ public:
     * @result            - if there is no table frame or the table frame is not
     *                      the first in flow it will return an error
     */
-  nsresult AddColsToTable(PRInt32                   aFirstColIndex,
-                          PRBool                    aResetSubsequentColIndices,
+  nsresult AddColsToTable(int32_t                   aFirstColIndex,
+                          bool                      aResetSubsequentColIndices,
                           const nsFrameList::Slice& aCols);
 
 #ifdef DEBUG
-  NS_IMETHOD GetFrameName(nsAString& aResult) const;
-  void Dump(PRInt32 aIndent);
+  NS_IMETHOD GetFrameName(nsAString& aResult) const MOZ_OVERRIDE;
+  void Dump(int32_t aIndent);
 #endif
 
   /** returns the number of columns represented by this group.
     * if there are col children, count them (taking into account the span of each)
     * else, check my own span attribute.
     */
-  virtual PRInt32 GetColCount() const;
+  virtual int32_t GetColCount() const;
 
   /** first column on the child list */
   nsTableColFrame * GetFirstColumn();
@@ -192,15 +157,15 @@ public:
   /** @return - the position of the first column in this colgroup in the table
     * colframe cache.
     */
-  PRInt32 GetStartColumnIndex();
+  int32_t GetStartColumnIndex();
   
   /** set the position of the first column in this colgroup in the table
     * colframe cache.
     */
-  void SetStartColumnIndex(PRInt32 aIndex);
+  void SetStartColumnIndex(int32_t aIndex);
 
   /** helper method to get the span attribute for this colgroup */
-  PRInt32 GetSpan();
+  int32_t GetSpan();
 
   /** provide access to the mFrames list
     */
@@ -215,8 +180,8 @@ public:
     *                         starts with the first column
     */
   static void ResetColIndices(nsIFrame*       aFirstColGroup,
-                              PRInt32         aFirstColIndex,
-                              nsIFrame*       aStartColFrame = nsnull);
+                              int32_t         aFirstColIndex,
+                              nsIFrame*       aStartColFrame = nullptr);
 
   /**
    * Gets inner border widths before collapsing with cell borders
@@ -229,21 +194,26 @@ public:
    * Set full border widths before collapsing with cell borders
    * @param aForSide - side to set; only accepts top and bottom
    */
-  void SetContinuousBCBorderWidth(PRUint8     aForSide,
+  void SetContinuousBCBorderWidth(uint8_t     aForSide,
                                   BCPixelSize aPixelValue);
+  
+  virtual void InvalidateFrame(uint32_t aDisplayItemKey = 0) MOZ_OVERRIDE;
+  virtual void InvalidateFrameWithRect(const nsRect& aRect, uint32_t aDisplayItemKey = 0) MOZ_OVERRIDE;
+  virtual void InvalidateFrameForRemoval() MOZ_OVERRIDE { InvalidateFrameSubtree(); }
+
 protected:
   nsTableColGroupFrame(nsStyleContext* aContext);
 
-  void InsertColsReflow(PRInt32                   aColIndex,
+  void InsertColsReflow(int32_t                   aColIndex,
                         const nsFrameList::Slice& aCols);
 
-  /** implement abstract method on nsHTMLContainerFrame */
-  virtual PRIntn GetSkipSides() const;
+  /** implement abstract method on nsContainerFrame */
+  virtual int GetSkipSides() const;
 
   // data members
-  PRInt32 mColCount;
+  int32_t mColCount;
   // the starting column index this col group represents. Must be >= 0. 
-  PRInt32 mStartColIndex;
+  int32_t mStartColIndex;
 
   // border width in pixels
   BCPixelSize mTopContBorderWidth;
@@ -251,22 +221,22 @@ protected:
 };
 
 inline nsTableColGroupFrame::nsTableColGroupFrame(nsStyleContext *aContext)
-: nsHTMLContainerFrame(aContext), mColCount(0), mStartColIndex(0)
+: nsContainerFrame(aContext), mColCount(0), mStartColIndex(0)
 { 
   SetColType(eColGroupContent);
 }
   
-inline PRInt32 nsTableColGroupFrame::GetStartColumnIndex()
+inline int32_t nsTableColGroupFrame::GetStartColumnIndex()
 {  
   return mStartColIndex;
 }
 
-inline void nsTableColGroupFrame::SetStartColumnIndex (PRInt32 aIndex)
+inline void nsTableColGroupFrame::SetStartColumnIndex (int32_t aIndex)
 {
   mStartColIndex = aIndex;
 }
 
-inline PRInt32 nsTableColGroupFrame::GetColCount() const
+inline int32_t nsTableColGroupFrame::GetColCount() const
 {  
   return mColCount;
 }

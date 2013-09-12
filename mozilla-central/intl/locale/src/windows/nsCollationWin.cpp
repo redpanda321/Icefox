@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #include "nsCollationWin.h"
@@ -43,7 +10,7 @@
 #include "nsLocaleCID.h"
 #include "nsILocaleService.h"
 #include "nsIPlatformCharset.h"
-#include "nsIWin32Locale.h"
+#include "nsWin32Locale.h"
 #include "nsCOMPtr.h"
 #include "prmem.h"
 #include "plstr.h"
@@ -54,27 +21,23 @@
 NS_IMPL_ISUPPORTS1(nsCollationWin, nsICollation)
 
 
-nsCollationWin::nsCollationWin() 
+nsCollationWin::nsCollationWin() : mCollation(nullptr)
 {
-  mCollation = NULL;
 }
 
 nsCollationWin::~nsCollationWin() 
 {
-  if (mCollation != NULL)
+  if (mCollation)
     delete mCollation;
 }
 
 nsresult nsCollationWin::Initialize(nsILocale* locale) 
 {
-  NS_ASSERTION(mCollation == NULL, "Should only be initialized once.");
+  NS_ASSERTION(!mCollation, "Should only be initialized once.");
 
   nsresult res;
 
   mCollation = new nsCollation;
-  if (!mCollation) {
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
 
   // default LCID (en-US)
   mLCID = 1033;
@@ -100,20 +63,16 @@ nsresult nsCollationWin::Initialize(nsILocale* locale)
   }
 
   // Get LCID and charset name from locale, if available
-  nsCOMPtr <nsIWin32Locale> win32Locale = 
-      do_GetService(NS_WIN32LOCALE_CONTRACTID);
-  if (win32Locale) {
-    LCID lcid;
-    res = win32Locale->GetPlatformLocale(localeStr, &lcid);
-    if (NS_SUCCEEDED(res)) {
-      mLCID = lcid;
-    }
+  LCID lcid;
+  res = nsWin32Locale::GetPlatformLocale(localeStr, &lcid);
+  if (NS_SUCCEEDED(res)) {
+    mLCID = lcid;
   }
 
   nsCOMPtr <nsIPlatformCharset> platformCharset = 
       do_GetService(NS_PLATFORMCHARSET_CONTRACTID);
   if (platformCharset) {
-    nsCAutoString mappedCharset;
+    nsAutoCString mappedCharset;
     res = platformCharset->GetDefaultCharsetForLocale(localeStr, mappedCharset);
     if (NS_SUCCEEDED(res)) {
       mCollation->SetCharset(mappedCharset.get());
@@ -124,20 +83,18 @@ nsresult nsCollationWin::Initialize(nsILocale* locale)
 }
 
 
-NS_IMETHODIMP nsCollationWin::CompareString(PRInt32 strength, 
+NS_IMETHODIMP nsCollationWin::CompareString(int32_t strength, 
                                             const nsAString & string1, 
                                             const nsAString & string2, 
-                                            PRInt32 *result)
+                                            int32_t *result)
 {
   int retval;
   nsresult res;
   DWORD dwMapFlags = 0;
 
-#ifndef WINCE // NORM_IGNORECASE is not supported on WINCE
   if (strength == kCollationCaseInSensitive)
     dwMapFlags |= NORM_IGNORECASE;
 
-#endif
   retval = ::CompareStringW(mLCID, 
                             dwMapFlags,
                             (LPCWSTR) PromiseFlatString(string1).get(), 
@@ -155,8 +112,8 @@ NS_IMETHODIMP nsCollationWin::CompareString(PRInt32 strength,
 }
  
 
-nsresult nsCollationWin::AllocateRawSortKey(PRInt32 strength, 
-                                            const nsAString& stringIn, PRUint8** key, PRUint32* outLen)
+nsresult nsCollationWin::AllocateRawSortKey(int32_t strength, 
+                                            const nsAString& stringIn, uint8_t** key, uint32_t* outLen)
 {
   int byteLen;
   void *buffer;
@@ -173,7 +130,7 @@ nsresult nsCollationWin::AllocateRawSortKey(PRInt32 strength,
   if (!buffer) {
     res = NS_ERROR_OUT_OF_MEMORY;
   } else {
-    *key = (PRUint8 *)buffer;
+    *key = (uint8_t *)buffer;
     *outLen = LCMapStringW(mLCID, dwMapFlags, 
                            (LPCWSTR) PromiseFlatString(stringIn).get(),
                            -1, (LPWSTR) buffer, byteLen);
@@ -181,9 +138,9 @@ nsresult nsCollationWin::AllocateRawSortKey(PRInt32 strength,
   return res;
 }
 
-nsresult nsCollationWin::CompareRawSortKey(const PRUint8* key1, PRUint32 len1, 
-                                           const PRUint8* key2, PRUint32 len2, 
-                                           PRInt32* result)
+nsresult nsCollationWin::CompareRawSortKey(const uint8_t* key1, uint32_t len1, 
+                                           const uint8_t* key2, uint32_t len2, 
+                                           int32_t* result)
 {
   *result = PL_strcmp((const char *)key1, (const char *)key2);
   return NS_OK;

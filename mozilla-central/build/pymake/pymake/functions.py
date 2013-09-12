@@ -3,11 +3,26 @@ Makefile functions.
 """
 
 import parser, util
-import subprocess, os, logging
+import subprocess, os, logging, sys
 from globrelative import glob
 from cStringIO import StringIO
 
 log = logging.getLogger('pymake.data')
+
+def emit_expansions(descend, *expansions):
+    """Helper function to emit all expansions within an input set."""
+    for expansion in expansions:
+        yield expansion
+
+        if not descend or not isinstance(expansion, list):
+            continue
+
+        for e, is_func in expansion:
+            if is_func:
+                for exp in e.expansions(True):
+                    yield exp
+            else:
+                yield e
 
 class Function(object):
     """
@@ -44,17 +59,116 @@ class Function(object):
         assert isinstance(arg, (data.Expansion, data.StringExpansion))
         self._arguments.append(arg)
 
+    def to_source(self):
+        """Convert the function back to make file "source" code."""
+        if not hasattr(self, 'name'):
+            raise Exception("%s must implement to_source()." % self.__class__)
+
+        # The default implementation simply prints the function name and all
+        # the arguments joined by a comma.
+        # According to the GNU make manual Section 8.1, whitespace around
+        # arguments is *not* part of the argument's value. So, we trim excess
+        # white space so we have consistent behavior.
+        args = []
+        curly = False
+        for i, arg in enumerate(self._arguments):
+            arg = arg.to_source()
+
+            if i == 0:
+                arg = arg.lstrip()
+
+            # Are balanced parens even OK?
+            if arg.count('(') != arg.count(')'):
+                curly = True
+
+            args.append(arg)
+
+        if curly:
+            return '${%s %s}' % (self.name, ','.join(args))
+
+        return '$(%s %s)' % (self.name, ','.join(args))
+
+    def expansions(self, descend=False):
+        """Obtain all expansions contained within this function.
+
+        By default, only expansions directly part of this function are
+        returned. If descend is True, we will descend into child expansions and
+        return all of the composite parts.
+
+        This is a generator for pymake.data.BaseExpansion instances.
+        """
+        # Our default implementation simply returns arguments. More advanced
+        # functions like variable references may need their own implementation.
+        return emit_expansions(descend, *self._arguments)
+
+    @property
+    def is_filesystem_dependent(self):
+        """Exposes whether this function depends on the filesystem for results.
+
+        If True, the function touches the filesystem as part of evaluation.
+
+        This only tests whether the function itself uses the filesystem. If
+        this function has arguments that are functions that touch the
+        filesystem, this will return False.
+        """
+        return False
+
     def __len__(self):
         return len(self._arguments)
 
+    def __repr__(self):
+        return "%s<%s>(%r)" % (
+            self.__class__.__name__, self.loc,
+            ','.join([repr(a) for a in self._arguments]),
+            )
+
+    def __eq__(self, other):
+        if not hasattr(self, 'name'):
+            raise Exception("%s must implement __eq__." % self.__class__)
+
+        if type(self) != type(other):
+            return False
+
+        if self.name != other.name:
+            return False
+
+        if len(self._arguments) != len(other._arguments):
+            return False
+
+        for i in xrange(len(self._arguments)):
+            # According to the GNU make manual Section 8.1, whitespace around
+            # arguments is *not* part of the argument's value. So, we do a
+            # whitespace-agnostic comparison.
+            if i == 0:
+                a = self._arguments[i]
+                a.lstrip()
+
+                b = other._arguments[i]
+                b.lstrip()
+
+                if a != b:
+                    return False
+
+                continue
+
+            if self._arguments[i] != other._arguments[i]:
+                return False
+
+        return True
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
 class VariableRef(Function):
+    AUTOMATIC_VARIABLES = set(['@', '%', '<', '?', '^', '+', '|', '*'])
+
     __slots__ = ('vname', 'loc')
 
     def __init__(self, loc, vname):
         self.loc = loc
         assert isinstance(vname, (data.Expansion, data.StringExpansion))
         self.vname = vname
-        
+
     def setup(self):
         assert False, "Shouldn't get here"
 
@@ -69,6 +183,27 @@ class VariableRef(Function):
             return
 
         value.resolve(makefile, variables, fd, setting + [vname])
+
+    def to_source(self):
+        if isinstance(self.vname, data.StringExpansion):
+            if self.vname.s in self.AUTOMATIC_VARIABLES:
+                return '$%s' % self.vname.s
+
+            return '$(%s)' % self.vname.s
+
+        return '$(%s)' % self.vname.to_source()
+
+    def expansions(self, descend=False):
+        return emit_expansions(descend, self.vname)
+
+    def __repr__(self):
+        return "VariableRef<%s>(%r)" % (self.loc, self.vname)
+
+    def __eq__(self, other):
+        if not isinstance(other, VariableRef):
+            return False
+
+        return self.vname == other.vname
 
 class SubstitutionRef(Function):
     """$(VARNAME:.c=.o) and $(VARNAME:%.c=%.o)"""
@@ -104,6 +239,27 @@ class SubstitutionRef(Function):
 
         fd.write(' '.join([f.subst(substto, word, False)
                            for word in value.resolvesplit(makefile, variables, setting + [vname])]))
+
+    def to_source(self):
+        return '$(%s:%s=%s)' % (
+            self.vname.to_source(),
+            self.substfrom.to_source(),
+            self.substto.to_source())
+
+    def expansions(self, descend=False):
+        return emit_expansions(descend, self.vname, self.substfrom,
+                self.substto)
+
+    def __repr__(self):
+        return "SubstitutionRef<%s>(%r:%r=%r)" % (
+            self.loc, self.vname, self.substfrom, self.substto,)
+
+    def __eq__(self, other):
+        if not isinstance(other, SubstitutionRef):
+            return False
+
+        return self.vname == other.vname and self.substfrom == other.substfrom \
+                and self.substto == other.substto
 
 class SubstFunction(Function):
     name = 'subst'
@@ -193,9 +349,8 @@ class SortFunction(Function):
     __slots__ = Function.__slots__
 
     def resolve(self, makefile, variables, fd, setting):
-        d = list(self._arguments[0].resolvesplit(makefile, variables, setting))
-        d.sort()
-        util.joiniter(fd, d)
+        d = set(self._arguments[0].resolvesplit(makefile, variables, setting))
+        util.joiniter(fd, sorted(d))
 
 class WordFunction(Function):
     name = 'word'
@@ -340,7 +495,7 @@ class BasenameFunction(Function):
         util.joiniter(fd, self.basenames(self._arguments[0].resolvesplit(makefile, variables, setting)))
 
 class AddSuffixFunction(Function):
-    name = 'addprefix'
+    name = 'addsuffix'
     minargs = 2
     maxargs = 2
 
@@ -352,7 +507,7 @@ class AddSuffixFunction(Function):
         fd.write(' '.join([w + suffix for w in self._arguments[1].resolvesplit(makefile, variables, setting)]))
 
 class AddPrefixFunction(Function):
-    name = 'addsuffix'
+    name = 'addprefix'
     minargs = 2
     maxargs = 2
 
@@ -395,7 +550,9 @@ class WildcardFunction(Function):
                            for p in patterns
                            for x in glob(makefile.workdir, p)]))
 
-    __slots__ = Function.__slots__
+    @property
+    def is_filesystem_dependent(self):
+        return True
 
 class RealpathFunction(Function):
     name = 'realpath'
@@ -405,6 +562,9 @@ class RealpathFunction(Function):
     def resolve(self, makefile, variables, fd, setting):
         fd.write(' '.join([os.path.realpath(os.path.join(makefile.workdir, path)).replace('\\', '/')
                            for path in self._arguments[0].resolvesplit(makefile, variables, setting)]))
+
+    def is_filesystem_dependent(self):
+        return True
 
 class AbspathFunction(Function):
     name = 'abspath'
@@ -606,16 +766,28 @@ class ShellFunction(Function):
     __slots__ = Function.__slots__
 
     def resolve(self, makefile, variables, fd, setting):
-        #TODO: call this once up-front somewhere and save the result?
-        shell, msys = util.checkmsyscompat()
+        from process import prepare_command
         cline = self._arguments[0].resolvestr(makefile, variables, setting)
+        executable, cline = prepare_command(cline, makefile.workdir, self.loc)
 
-        log.debug("%s: running shell command '%s'" % (self.loc, cline))
-        if msys:
-            cline = [shell, "-c", cline]
-        p = subprocess.Popen(cline, shell=not msys, stdout=subprocess.PIPE, cwd=makefile.workdir)
+        # subprocess.Popen doesn't use the PATH set in the env argument for
+        # finding the executable on some platforms (but strangely it does on
+        # others!), so set os.environ['PATH'] explicitly.
+        oldpath = os.environ['PATH']
+        if makefile.env is not None and 'PATH' in makefile.env:
+            os.environ['PATH'] = makefile.env['PATH']
+
+        log.debug("%s: running command '%s'" % (self.loc, ' '.join(cline)))
+        try:
+            p = subprocess.Popen(cline, executable=executable, env=makefile.env, shell=False,
+                                 stdout=subprocess.PIPE, cwd=makefile.workdir)
+        except OSError, e:
+            print >>sys.stderr, "Error executing command %s" % cline[0], e
+            return
+        finally:
+            os.environ['PATH'] = oldpath
+
         stdout, stderr = p.communicate()
-
         stdout = stdout.replace('\r\n', '\n')
         if stdout.endswith('\n'):
             stdout = stdout[:-1]
@@ -654,7 +826,7 @@ class InfoFunction(Function):
 
     def resolve(self, makefile, variables, fd, setting):
         v = self._arguments[0].resolvestr(makefile, variables, setting)
-        log.info(v)
+        print v
 
 functionmap = {
     'subst': SubstFunction,

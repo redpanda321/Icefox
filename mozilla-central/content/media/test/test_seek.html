@@ -2,7 +2,6 @@
 <html>
 <head>
   <title>Media test: seek tests</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
   <script type="text/javascript" src="manifest.js"></script>
@@ -17,6 +16,8 @@
   <script type="text/javascript" src="seek9.js"></script>
   <script type="text/javascript" src="seek10.js"></script>
   <script type="text/javascript" src="seek11.js"></script>
+  <script type="text/javascript" src="seek12.js"></script>
+  <script type="text/javascript" src="seek13.js"></script>
 </head>
 <body>
 <pre id="test">
@@ -24,7 +25,7 @@
 
 var manager = new MediaTestManager;
 
-const NUM_SEEK_TESTS = 11
+const NUM_SEEK_TESTS = 13;
 
 function createTestArray() {
   var tests = [];
@@ -65,9 +66,10 @@ function startTest(test, token) {
     if (v.parentNode) {
       v.parentNode.removeChild(v);
     }
+    dump("SEEK-TEST: Finished " + name + "\n");
     manager.finished(v.token);
   }}(v, manager);
-  dump("Seek test: " + test.number + "\n");
+  dump("SEEK-TEST: Started " + name + "\n");
   window['test_seek' + test.number](v, test.duration/2, localIs, localOk, localFinish);
 }
 

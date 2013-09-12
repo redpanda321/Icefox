@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=postMessage
 -->
 <head>
   <title>postMessage chrome tests</title>
-  <script type="application/javascript" src="chrome://mochikit/content/MochiKit/packed.js"></script>
   <script type="application/javascript" src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
   <script type="application/javascript" src="chrome://mochikit/content/chrome-harness.js"></script>
   <link rel="stylesheet" type="text/css" href="chrome://mochikit/content/tests/SimpleTest/test.css" />
@@ -45,6 +44,10 @@ function messageReceiver(evt)
 
   switch (evt.data)
   {
+    case "path-is-set":
+      chromePathIsSet(evt);
+      break;
+      
     case "post-to-self":
       checkSelf(evt);
       break;
@@ -73,10 +76,15 @@ function checkSelf(evt)
   is(evt.origin, prepath, "wrong origin for chrome: URL");
   is(evt.source, null, "chrome posters get a null source, for security");
 
+  window.frames.contentDomain.postMessage(prepath, "*");
+}
+
+
+function chromePathIsSet(evt)
+{
   window.frames.contentDomain.postMessage("post-to-content",
                                           "http://example.org");
 }
-
 
 /*************
  * RECEIVERS *
@@ -85,10 +93,6 @@ function checkSelf(evt)
 function receiveContent(evt)
 {
   is(evt.isTrusted, true, "should have sent a trusted event");
-  is(evt.origin, "http://example.org", "content response event has wrong URI");
-  is(evt.source, window.frames.contentDomain,
-     "wrong source for same-domain message!");
-
   finish();
 }
 

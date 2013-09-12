@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Sun Microsystems
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * nss_pkix_proxy.h
  *
@@ -225,9 +192,6 @@ typedef struct {
 const SECCertUsageToEku certUsageEkuStringMap[] = {
     {certUsageSSLClient,             ekuIndexSSLClient},
     {certUsageSSLServer,             ekuIndexSSLServer},
-    {certUsageSSLServerWithStepUp,   ekuIndexSSLServer}, /* need to add oids to
-                                                          * the list of eku.
-                                                          * see 390381*/
     {certUsageSSLCA,                 ekuIndexSSLServer},
     {certUsageEmailSigner,           ekuIndexEmail},
     {certUsageEmailRecipient,        ekuIndexEmail},
@@ -238,8 +202,6 @@ const SECCertUsageToEku certUsageEkuStringMap[] = {
     {certUsageStatusResponder,       ekuIndexStatusResponder},
     {certUsageAnyCA,                 ekuIndexUnknown},
 };
-
-#define CERT_USAGE_EKU_STRING_MAPS_TOTAL       12
 
 /*
  * FUNCTION: cert_NssCertificateUsageToPkixKUAndEKU
@@ -292,7 +254,7 @@ cert_NssCertificateUsageToPkixKUAndEKU(
         PKIX_List_Create(&ekuOidsList, plContext),
         PKIX_LISTCREATEFAILED);
 
-    for (;i < CERT_USAGE_EKU_STRING_MAPS_TOTAL;i++) {
+    for (;i < PR_ARRAY_SIZE(certUsageEkuStringMap);i++) {
         const SECCertUsageToEku *usageToEkuElem =
             &certUsageEkuStringMap[i];
         if (usageToEkuElem->certUsage == requiredCertUsage) {
@@ -864,7 +826,7 @@ cert_PkixErrorToNssCode(
     void *plContext)
 {
     int errLevel = 0;
-    PKIX_UInt32 nssErr = 0;
+    PKIX_Int32 nssErr = 0;
     PKIX_Error *errPtr = error;
 
     PKIX_ENTER(CERTVFYPKIX, "cert_PkixErrorToNssCode");
@@ -1431,8 +1393,8 @@ struct fake_PKIX_PL_CertStruct {
 /* This needs to be part of the PKIX_PL_* */
 /* This definitely needs to go away, and be replaced with
    a real accessor function in PKIX */
-CERTCertificate *
-cert_NSSCertFromPKIXCert(const PKIX_PL_Cert *pkix_cert, void *plContext)
+static CERTCertificate *
+cert_NSSCertFromPKIXCert(const PKIX_PL_Cert *pkix_cert)
 {
     struct fake_PKIX_PL_CertStruct *fcert = NULL;
 
@@ -1462,9 +1424,10 @@ PKIX_List *cert_PKIXMakeOIDList(const SECOidTag *oids, int oidCount, void *plCon
         error = PKIX_List_AppendItem(policyList, 
                 (PKIX_PL_Object *)policyOID, plContext);
         if (error != NULL) {
-            PKIX_PL_Object_DecRef((PKIX_PL_Object *)policyOID, plContext);
             goto cleanup;
         }
+        PKIX_PL_Object_DecRef((PKIX_PL_Object *)policyOID, plContext);
+        policyOID = NULL;
     }
 
     error = PKIX_List_SetImmutable(policyList, plContext);
@@ -1559,6 +1522,7 @@ cert_pkixSetParam(PKIX_ProcessingParams *procParams,
     PKIX_TrustAnchor *trustAnchor = NULL;
     PKIX_PL_Date *revDate = NULL;
     PKIX_RevocationChecker *revChecker = NULL;
+    PKIX_PL_NssContext *nssContext = (PKIX_PL_NssContext *)plContext;
 
     /* XXX we need a way to map generic PKIX error to generic NSS errors */
 
@@ -1732,7 +1696,21 @@ cert_pkixSetParam(PKIX_ProcessingParams *procParams,
                                      (PRBool)(param->value.scalar.b != 0),
                                                                plContext);
             break;
-            
+
+        case cert_pi_chainVerifyCallback:
+        {
+            const CERTChainVerifyCallback *chainVerifyCallback =
+                param->value.pointer.chainVerifyCallback;
+            if (!chainVerifyCallback || !chainVerifyCallback->isChainValid) {
+                PORT_SetError(errCode);
+                r = SECFailure;
+                break;
+            }
+
+            nssContext->chainVerifyCallback = *chainVerifyCallback;
+        }
+        break;
+
         default:
             PORT_SetError(errCode);
             r = SECFailure;
@@ -1986,6 +1964,63 @@ CERT_GetPKIXVerifyNistRevocationPolicy()
     return &certRev_PKIX_Verify_Nist_Policy;
 }
 
+CERTRevocationFlags *
+CERT_AllocCERTRevocationFlags(
+    PRUint32 number_leaf_methods, PRUint32 number_leaf_pref_methods,
+    PRUint32 number_chain_methods, PRUint32 number_chain_pref_methods)
+{
+    CERTRevocationFlags *flags;
+    
+    flags = PORT_New(CERTRevocationFlags);
+    if (!flags)
+        return(NULL);
+    
+    flags->leafTests.number_of_defined_methods = number_leaf_methods;
+    flags->leafTests.cert_rev_flags_per_method = 
+        PORT_NewArray(PRUint64, number_leaf_methods);
+
+    flags->leafTests.number_of_preferred_methods = number_leaf_pref_methods;
+    flags->leafTests.preferred_methods = 
+        PORT_NewArray(CERTRevocationMethodIndex, number_leaf_pref_methods);
+
+    flags->chainTests.number_of_defined_methods = number_chain_methods;
+    flags->chainTests.cert_rev_flags_per_method = 
+        PORT_NewArray(PRUint64, number_chain_methods);
+
+    flags->chainTests.number_of_preferred_methods = number_chain_pref_methods;
+    flags->chainTests.preferred_methods = 
+        PORT_NewArray(CERTRevocationMethodIndex, number_chain_pref_methods);
+    
+    if (!flags->leafTests.cert_rev_flags_per_method
+        || !flags->leafTests.preferred_methods
+        || !flags->chainTests.cert_rev_flags_per_method
+        || !flags->chainTests.preferred_methods) {
+        CERT_DestroyCERTRevocationFlags(flags);
+        return (NULL);
+    }
+    
+    return flags;
+}
+
+void CERT_DestroyCERTRevocationFlags(CERTRevocationFlags *flags)
+{
+    if (!flags)
+	return;
+  
+    if (flags->leafTests.cert_rev_flags_per_method)
+        PORT_Free(flags->leafTests.cert_rev_flags_per_method);
+
+    if (flags->leafTests.preferred_methods)
+        PORT_Free(flags->leafTests.preferred_methods);
+    
+    if (flags->chainTests.cert_rev_flags_per_method)
+        PORT_Free(flags->chainTests.cert_rev_flags_per_method);
+
+    if (flags->chainTests.preferred_methods)
+        PORT_Free(flags->chainTests.preferred_methods);
+
+     PORT_Free(flags);
+}
 
 /*
  * CERT_PKIXVerifyCert
@@ -2165,10 +2200,12 @@ do {
         goto cleanup;
     }
 
-    error = PKIX_TrustAnchor_GetTrustedCert( trustAnchor, &trustAnchorCert,
-                                                plContext);
-    if (error != NULL) {
-        goto cleanup;
+    if (trustAnchor != NULL) {
+        error = PKIX_TrustAnchor_GetTrustedCert( trustAnchor, &trustAnchorCert,
+                                                 plContext);
+        if (error != NULL) {
+            goto cleanup;
+        }
     }
 
 #ifdef PKIX_OBJECT_LEAK_TEST
@@ -2179,8 +2216,12 @@ do {
 
     oparam = cert_pkix_FindOutputParam(paramsOut, cert_po_trustAnchor);
     if (oparam != NULL) {
-        oparam->value.pointer.cert = 
-                cert_NSSCertFromPKIXCert(trustAnchorCert,plContext);
+        if (trustAnchorCert != NULL) {
+            oparam->value.pointer.cert =
+                    cert_NSSCertFromPKIXCert(trustAnchorCert);
+        } else {
+            oparam->value.pointer.cert = NULL;
+        }
     }
 
     error = PKIX_BuildResult_GetCertChain( buildResult, &builtCertList,

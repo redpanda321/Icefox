@@ -1,3 +1,7 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 toolkit.jar:
 % skin global classic/1.0 %skin/classic/global/ os=WINNT osversion<6
 % skin global classic/1.0 %skin/classic/global/ os!=WINNT
@@ -27,15 +31,16 @@ toolkit.jar:
 *       skin/classic/global/global.css
         skin/classic/global/globalBindings.xml
         skin/classic/global/groupbox.css
+*       skin/classic/global/inContentUI.css
         skin/classic/global/linkTree.css
         skin/classic/global/listbox.css
 *       skin/classic/global/menu.css
         skin/classic/global/menulist.css
         skin/classic/global/netError.css
         skin/classic/global/numberbox.css
-        skin/classic/global/notification.css
+*       skin/classic/global/notification.css
         skin/classic/global/passwordmgr.css
-        skin/classic/global/popup.css
+*       skin/classic/global/popup.css
         skin/classic/global/preferences.css
         skin/classic/global/printPageSetup.css
         skin/classic/global/printPreview.css
@@ -43,17 +48,17 @@ toolkit.jar:
         skin/classic/global/radio.css
         skin/classic/global/resizer.css
         skin/classic/global/richlistbox.css
-*       skin/classic/global/scale.css
+        skin/classic/global/scale.css
         skin/classic/global/scrollbars.css                       (xulscrollbars.css)
         skin/classic/global/scrollbox.css
         skin/classic/global/spinbuttons.css
         skin/classic/global/splitter.css
         skin/classic/global/tabbox.css
+        skin/classic/global/tabprompts.css
         skin/classic/global/textbox.css
-*       skin/classic/global/toolbar.css
+        skin/classic/global/toolbar.css
         skin/classic/global/toolbarbutton.css
         skin/classic/global/tree.css
-*       skin/classic/global/webConsole.css
         skin/classic/global/wizard.css
         skin/classic/global/alerts/alert.css                     (alerts/alert.css)
         skin/classic/global/arrow/arrow-dn.gif                   (arrow/arrow-dn.gif)
@@ -63,25 +68,26 @@ toolkit.jar:
         skin/classic/global/arrow/arrow-down.png                 (arrow/arrow-down.png)
         skin/classic/global/arrow/arrow-lft.gif                  (arrow/arrow-lft.gif)
         skin/classic/global/arrow/arrow-lft-dis.gif              (arrow/arrow-lft-dis.gif)
-        skin/classic/global/arrow/arrow-lft-hov.gif              (arrow/arrow-lft-hov.gif)
+        skin/classic/global/arrow/arrow-lft-hov.gif              (arrow/arrow-lft.gif)
         skin/classic/global/arrow/arrow-lft-sharp.gif            (arrow/arrow-lft-sharp.gif)
         skin/classic/global/arrow/arrow-lft-sharp-end.gif        (arrow/arrow-lft-sharp-end.gif)
         skin/classic/global/arrow/arrow-rit.gif                  (arrow/arrow-rit.gif) 
         skin/classic/global/arrow/arrow-rit-dis.gif              (arrow/arrow-rit-dis.gif)
-        skin/classic/global/arrow/arrow-rit-hov.gif              (arrow/arrow-rit-hov.gif)
+        skin/classic/global/arrow/arrow-rit-hov.gif              (arrow/arrow-rit.gif)
         skin/classic/global/arrow/arrow-rit-sharp.gif            (arrow/arrow-rit-sharp.gif)
         skin/classic/global/arrow/arrow-rit-sharp-end.gif        (arrow/arrow-rit-sharp-end.gif)
         skin/classic/global/arrow/arrow-up.gif                   (arrow/arrow-up.gif)
         skin/classic/global/arrow/arrow-up-dis.gif               (arrow/arrow-up-dis.gif)
         skin/classic/global/arrow/arrow-up-hov.gif               (arrow/arrow-up-hov.gif)
         skin/classic/global/arrow/arrow-up-sharp.gif             (arrow/arrow-up-sharp.gif)
+        skin/classic/global/arrow/panelarrow-horizontal.svg      (arrow/panelarrow-horizontal.svg)
+        skin/classic/global/arrow/panelarrow-horizontal-white.png (arrow/panelarrow-horizontal-white.png)
+        skin/classic/global/arrow/panelarrow-vertical.svg        (arrow/panelarrow-vertical.svg)
+        skin/classic/global/arrow/panelarrow-vertical-white.png  (arrow/panelarrow-vertical-white.png)
         skin/classic/global/checkbox/cbox-check.gif              (checkbox/cbox-check.gif)
         skin/classic/global/checkbox/cbox-check-dis.gif          (checkbox/cbox-check-dis.gif)
         skin/classic/global/console/console.css                  (console/console.css)
         skin/classic/global/console/console-toolbar.png          (console/console-toolbar.png)
-        skin/classic/global/console/bullet-error.png             (console/bullet-error.png)
-        skin/classic/global/console/bullet-question.png          (console/bullet-question.png)
-        skin/classic/global/console/bullet-warning.png           (console/bullet-warning.png)
         skin/classic/global/console/console-error-caret.gif      (console/console-error-caret.gif)
         skin/classic/global/console/console-error-dash.gif       (console/console-error-dash.gif)
         skin/classic/global/console/itemSelected.png             (console/itemSelected.png)
@@ -97,7 +103,6 @@ toolkit.jar:
         skin/classic/global/icons/Close.gif                      (icons/Close.gif)
         skin/classic/global/icons/close.png                      (icons/close.png)
         skin/classic/global/icons/collapse.png                   (icons/collapse.png)
-        skin/classic/global/icons/commandline.png                (icons/commandline.png)
         skin/classic/global/icons/Error.png                      (icons/Error.png)
         skin/classic/global/icons/error-16.png                   (icons/error-16.png)
         skin/classic/global/icons/error-24.png                   (icons/error-24.png)
@@ -114,7 +119,6 @@ toolkit.jar:
         skin/classic/global/icons/loading_16.png                 (icons/loading_16.png)
         skin/classic/global/icons/notloading_16.png              (icons/notloading_16.png)
         skin/classic/global/icons/Minimize.gif                   (icons/Minimize.gif)
-        skin/classic/global/icons/notfound.png                   (icons/notfound.png)
         skin/classic/global/icons/Print-preview.png              (icons/Print-preview.png)
         skin/classic/global/icons/Portrait.png                   (icons/Portrait.png)
         skin/classic/global/icons/Landscape.png                  (icons/Landscape.png)
@@ -129,6 +133,7 @@ toolkit.jar:
         skin/classic/global/icons/Search-close.png               (icons/Search-close.png)
         skin/classic/global/icons/Search-glass.png               (icons/Search-glass.png)
         skin/classic/global/icons/sslWarning.png                 (icons/sslWarning.png)
+        skin/classic/global/icons/tabprompts-bgtexture.png       (icons/tabprompts-bgtexture.png)
         skin/classic/global/icons/Warning.png                    (icons/Warning.png)
         skin/classic/global/icons/warning-large.png              (icons/warning-large.png)
         skin/classic/global/icons/warning-16.png                 (icons/warning-16.png)
@@ -136,16 +141,26 @@ toolkit.jar:
         skin/classic/global/icons/warning-64.png                 (icons/warning-64.png)
         skin/classic/global/icons/windowControls.png             (icons/windowControls.png)
         skin/classic/global/icons/wrap.png                       (icons/wrap.png)
+        skin/classic/global/inContentUI/background-texture.png   (inContentUI/background-texture.png)
+        skin/classic/global/media/TopLevelImageDocument.css      (media/TopLevelImageDocument.css)
+        skin/classic/global/media/TopLevelVideoDocument.css      (media/TopLevelVideoDocument.css)
+        skin/classic/global/media/imagedoc-lightnoise.png        (media/imagedoc-lightnoise.png)
+        skin/classic/global/media/imagedoc-darknoise.png         (media/imagedoc-darknoise.png)
         skin/classic/global/media/videocontrols.css              (media/videocontrols.css)
         skin/classic/global/media/pauseButton.png                (media/pauseButton.png)
         skin/classic/global/media/playButton.png                 (media/playButton.png)
         skin/classic/global/media/muteButton.png                 (media/muteButton.png)
         skin/classic/global/media/unmuteButton.png               (media/unmuteButton.png)
+        skin/classic/global/media/noAudio.png                    (media/noAudio.png)
+        skin/classic/global/media/fullscreenButton.png           (media/fullscreenButton.png)
         skin/classic/global/media/scrubberThumb.png              (media/scrubberThumb.png)
         skin/classic/global/media/scrubberThumbWide.png          (media/scrubberThumbWide.png)
         skin/classic/global/media/throbber.png                   (media/throbber.png)
+        skin/classic/global/media/stalled.png                    (media/stalled.png)
         skin/classic/global/media/volumeThumb.png                (media/volumeThumb.png)
         skin/classic/global/media/error.png                      (media/error.png)
+        skin/classic/global/media/clicktoplay-bgtexture.png      (media/clicktoplay-bgtexture.png)
+        skin/classic/global/media/videoClickToPlayButton.svg     (media/videoClickToPlayButton.svg)
         skin/classic/global/printpreview/arrow-left.png          (printpreview/arrow-left.png)
         skin/classic/global/printpreview/arrow-left-end.png      (printpreview/arrow-left-end.png)
         skin/classic/global/printpreview/arrow-right.png         (printpreview/arrow-right.png)
@@ -158,7 +173,6 @@ toolkit.jar:
         skin/classic/global/splitter/grip-left.gif               (splitter/grip-left.gif)
         skin/classic/global/splitter/grip-right.gif              (splitter/grip-right.gif)
         skin/classic/global/toolbar/chevron.gif                  (toolbar/chevron.gif)
-        skin/classic/global/toolbar/Lighten.png                  (toolbar/Lighten.png)
         skin/classic/global/toolbar/spring.png                   (toolbar/spring.png)
         skin/classic/global/tree/columnpicker.gif                (tree/columnpicker.gif)
         skin/classic/global/tree/sort-asc.png                    (tree/sort-asc.png)
@@ -178,7 +192,7 @@ toolkit.jar:
         skin/classic/aero/global/aboutSupport.css
         skin/classic/aero/global/appPicker.css
         skin/classic/aero/global/arrow.css
-*       skin/classic/aero/global/autocomplete.css
+*       skin/classic/aero/global/autocomplete.css                        (autocomplete-aero.css)
         skin/classic/aero/global/button.css
         skin/classic/aero/global/checkbox.css
         skin/classic/aero/global/colorpicker.css
@@ -195,15 +209,16 @@ toolkit.jar:
 *       skin/classic/aero/global/global.css
         skin/classic/aero/global/globalBindings.xml
         skin/classic/aero/global/groupbox.css
+*       skin/classic/aero/global/inContentUI.css                        (inContentUI-aero.css)
         skin/classic/aero/global/linkTree.css
         skin/classic/aero/global/listbox.css
 *       skin/classic/aero/global/menu.css                                (menu-aero.css)
 *       skin/classic/aero/global/menulist.css                            (menulist-aero.css)
         skin/classic/aero/global/netError.css
         skin/classic/aero/global/numberbox.css
-        skin/classic/aero/global/notification.css
+*       skin/classic/aero/global/notification.css                        (notification-aero.css)
         skin/classic/aero/global/passwordmgr.css
-        skin/classic/aero/global/popup.css
+*       skin/classic/aero/global/popup.css
         skin/classic/aero/global/preferences.css
         skin/classic/aero/global/printPageSetup.css
         skin/classic/aero/global/printPreview.css
@@ -211,17 +226,17 @@ toolkit.jar:
         skin/classic/aero/global/radio.css
         skin/classic/aero/global/resizer.css
         skin/classic/aero/global/richlistbox.css
-*       skin/classic/aero/global/scale.css
+        skin/classic/aero/global/scale.css
         skin/classic/aero/global/scrollbars.css                          (xulscrollbars.css)
         skin/classic/aero/global/scrollbox.css
         skin/classic/aero/global/spinbuttons.css
         skin/classic/aero/global/splitter.css
         skin/classic/aero/global/tabbox.css
+        skin/classic/aero/global/tabprompts.css
 *       skin/classic/aero/global/textbox.css                             (textbox-aero.css)
-*       skin/classic/aero/global/toolbar.css
+        skin/classic/aero/global/toolbar.css
 *       skin/classic/aero/global/toolbarbutton.css                       (toolbarbutton-aero.css)
 *       skin/classic/aero/global/tree.css                                (tree-aero.css)
-*       skin/classic/aero/global/webConsole.css
         skin/classic/aero/global/wizard.css
         skin/classic/aero/global/alerts/alert.css                        (alerts/alert.css)
         skin/classic/aero/global/arrow/arrow-dn.gif                      (arrow/arrow-dn.gif)
@@ -231,25 +246,26 @@ toolkit.jar:
         skin/classic/aero/global/arrow/arrow-down.png                    (arrow/arrow-down.png)
         skin/classic/aero/global/arrow/arrow-lft.gif                     (arrow/arrow-lft.gif)
         skin/classic/aero/global/arrow/arrow-lft-dis.gif                 (arrow/arrow-lft-dis.gif)
-        skin/classic/aero/global/arrow/arrow-lft-hov.gif                 (arrow/arrow-lft-hov.gif)
+        skin/classic/aero/global/arrow/arrow-lft-hov.gif                 (arrow/arrow-lft.gif)
         skin/classic/aero/global/arrow/arrow-lft-sharp.gif               (arrow/arrow-lft-sharp.gif)
         skin/classic/aero/global/arrow/arrow-lft-sharp-end.gif           (arrow/arrow-lft-sharp-end.gif)
         skin/classic/aero/global/arrow/arrow-rit.gif                     (arrow/arrow-rit.gif) 
         skin/classic/aero/global/arrow/arrow-rit-dis.gif                 (arrow/arrow-rit-dis.gif)
-        skin/classic/aero/global/arrow/arrow-rit-hov.gif                 (arrow/arrow-rit-hov.gif)
+        skin/classic/aero/global/arrow/arrow-rit-hov.gif                 (arrow/arrow-rit.gif)
         skin/classic/aero/global/arrow/arrow-rit-sharp.gif               (arrow/arrow-rit-sharp.gif)
         skin/classic/aero/global/arrow/arrow-rit-sharp-end.gif           (arrow/arrow-rit-sharp-end.gif)
         skin/classic/aero/global/arrow/arrow-up.gif                      (arrow/arrow-up.gif)
         skin/classic/aero/global/arrow/arrow-up-dis.gif                  (arrow/arrow-up-dis.gif)
         skin/classic/aero/global/arrow/arrow-up-hov.gif                  (arrow/arrow-up-hov.gif)
         skin/classic/aero/global/arrow/arrow-up-sharp.gif                (arrow/arrow-up-sharp.gif)
+        skin/classic/aero/global/arrow/panelarrow-horizontal.svg         (arrow/panelarrow-horizontal.svg)
+        skin/classic/aero/global/arrow/panelarrow-horizontal-white.png   (arrow/panelarrow-horizontal-white.png)
+        skin/classic/aero/global/arrow/panelarrow-vertical.svg           (arrow/panelarrow-vertical.svg)
+        skin/classic/aero/global/arrow/panelarrow-vertical-white.png     (arrow/panelarrow-vertical-white.png)
         skin/classic/aero/global/checkbox/cbox-check.gif                 (checkbox/cbox-check.gif)
         skin/classic/aero/global/checkbox/cbox-check-dis.gif             (checkbox/cbox-check-dis.gif)
 *       skin/classic/aero/global/console/console.css                     (console/console-aero.css)
         skin/classic/aero/global/console/console-toolbar.png             (console/console-toolbar-aero.png)
-        skin/classic/aero/global/console/bullet-error.png                (console/bullet-error-aero.png)
-        skin/classic/aero/global/console/bullet-question.png             (console/bullet-question-aero.png)
-        skin/classic/aero/global/console/bullet-warning.png              (console/bullet-warning-aero.png)
         skin/classic/aero/global/console/console-error-caret.gif         (console/console-error-caret.gif)
         skin/classic/aero/global/console/console-error-dash.gif          (console/console-error-dash.gif)
         skin/classic/aero/global/console/itemSelected.png                (console/itemSelected.png)
@@ -265,7 +281,6 @@ toolkit.jar:
         skin/classic/aero/global/icons/Close.gif                         (icons/Close.gif)
         skin/classic/aero/global/icons/close.png                         (icons/close.png)
         skin/classic/aero/global/icons/collapse.png                      (icons/collapse.png)
-        skin/classic/aero/global/icons/commandline.png                   (icons/commandline.png)
         skin/classic/aero/global/icons/Error.png                         (icons/Error-aero.png)
         skin/classic/aero/global/icons/error-16.png                      (icons/error-16-aero.png)
         skin/classic/aero/global/icons/error-24.png                      (icons/error-24-aero.png)
@@ -279,10 +294,9 @@ toolkit.jar:
         skin/classic/aero/global/icons/information-32.png                (icons/information-32-aero.png)
         skin/classic/aero/global/icons/information-48.png                (icons/information-48-aero.png)
         skin/classic/aero/global/icons/information-64.png                (icons/information-64-aero.png)
-        skin/classic/aero/global/icons/loading_16.png                    (icons/loading_16-aero.png)
-        skin/classic/aero/global/icons/notloading_16.png                 (icons/notloading_16-aero.png)
+        skin/classic/aero/global/icons/loading_16.png                    (icons/loading_16.png)
+        skin/classic/aero/global/icons/notloading_16.png                 (icons/notloading_16.png)
         skin/classic/aero/global/icons/Minimize.gif                      (icons/Minimize.gif)
-        skin/classic/aero/global/icons/notfound.png                      (icons/notfound-aero.png)
         skin/classic/aero/global/icons/Print-preview.png                 (icons/Print-preview-aero.png)
         skin/classic/aero/global/icons/Portrait.png                      (icons/Portrait-aero.png)
         skin/classic/aero/global/icons/Landscape.png                     (icons/Landscape-aero.png)
@@ -297,6 +311,7 @@ toolkit.jar:
         skin/classic/aero/global/icons/Search-close.png                  (icons/Search-close-aero.png)
         skin/classic/aero/global/icons/Search-glass.png                  (icons/Search-glass-aero.png)
         skin/classic/aero/global/icons/sslWarning.png                    (icons/sslWarning-aero.png)
+        skin/classic/aero/global/icons/tabprompts-bgtexture.png          (icons/tabprompts-bgtexture.png)
         skin/classic/aero/global/icons/Warning.png                       (icons/Warning-aero.png)
         skin/classic/aero/global/icons/warning-large.png                 (icons/warning-large-aero.png)
         skin/classic/aero/global/icons/warning-16.png                    (icons/warning-16-aero.png)
@@ -304,16 +319,26 @@ toolkit.jar:
         skin/classic/aero/global/icons/warning-64.png                    (icons/warning-64-aero.png)
         skin/classic/aero/global/icons/windowControls.png                (icons/windowControls-aero.png)
         skin/classic/aero/global/icons/wrap.png                          (icons/wrap-aero.png)
+        skin/classic/aero/global/inContentUI/background-texture.png      (inContentUI/background-texture.png)
+        skin/classic/aero/global/media/TopLevelImageDocument.css         (media/TopLevelImageDocument.css)
+        skin/classic/aero/global/media/TopLevelVideoDocument.css         (media/TopLevelVideoDocument.css)
+        skin/classic/aero/global/media/imagedoc-lightnoise.png           (media/imagedoc-lightnoise.png)
+        skin/classic/aero/global/media/imagedoc-darknoise.png            (media/imagedoc-darknoise.png)
         skin/classic/aero/global/media/videocontrols.css                 (media/videocontrols.css)
         skin/classic/aero/global/media/pauseButton.png                   (media/pauseButton.png)
         skin/classic/aero/global/media/playButton.png                    (media/playButton.png)
         skin/classic/aero/global/media/muteButton.png                    (media/muteButton.png)
         skin/classic/aero/global/media/unmuteButton.png                  (media/unmuteButton.png)
+        skin/classic/aero/global/media/noAudio.png                       (media/noAudio.png)
+        skin/classic/aero/global/media/fullscreenButton.png              (media/fullscreenButton.png)
         skin/classic/aero/global/media/scrubberThumb.png                 (media/scrubberThumb.png)
         skin/classic/aero/global/media/scrubberThumbWide.png             (media/scrubberThumbWide.png)
         skin/classic/aero/global/media/throbber.png                      (media/throbber.png)
+        skin/classic/aero/global/media/stalled.png                       (media/stalled.png)
         skin/classic/aero/global/media/volumeThumb.png                   (media/volumeThumb.png)
         skin/classic/aero/global/media/error.png                         (media/error.png)
+        skin/classic/aero/global/media/clicktoplay-bgtexture.png         (media/clicktoplay-bgtexture.png)
+        skin/classic/aero/global/media/videoClickToPlayButton.svg        (media/videoClickToPlayButton.svg)
         skin/classic/aero/global/printpreview/arrow-left.png             (printpreview/arrow-left-aero.png)
         skin/classic/aero/global/printpreview/arrow-left-end.png         (printpreview/arrow-left-end-aero.png)
         skin/classic/aero/global/printpreview/arrow-right.png            (printpreview/arrow-right-aero.png)
@@ -326,7 +351,6 @@ toolkit.jar:
         skin/classic/aero/global/splitter/grip-left.gif                  (splitter/grip-left.gif)
         skin/classic/aero/global/splitter/grip-right.gif                 (splitter/grip-right.gif)
         skin/classic/aero/global/toolbar/chevron.gif                     (toolbar/chevron.gif)
-        skin/classic/aero/global/toolbar/Lighten.png                     (toolbar/Lighten.png)
         skin/classic/aero/global/toolbar/spring.png                      (toolbar/spring-aero.png)
         skin/classic/aero/global/tree/columnpicker.gif                   (tree/columnpicker.gif)
         skin/classic/aero/global/tree/sort-asc.png                       (tree/sort-asc-aero.png)

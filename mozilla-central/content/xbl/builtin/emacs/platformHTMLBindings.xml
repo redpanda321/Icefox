@@ -1,4 +1,8 @@
 <?xml version="1.0"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 
 <bindings id="htmlBindings"
    xmlns="http://www.mozilla.org/xbl"
@@ -69,10 +73,6 @@
         command="cmd_redo"/>
     <handler event="keypress" key="a" modifiers="alt"
         command="cmd_selectAll"/>
-    <handler event="keypress" keycode="VK_F20" command="cmd_cut" />
-    <handler event="keypress" keycode="VK_F16" command="cmd_copy" />
-    <handler event="keypress" keycode="VK_F18" command="cmd_paste" />
-    <handler event="keypress" keycode="VK_F14" command="cmd_undo" />
     </handlers>
   </binding>
 
@@ -157,10 +157,6 @@
         command="cmd_redo"/>
     <handler event="keypress" key="a" modifiers="alt"
         command="cmd_selectAll"/>
-    <handler event="keypress" keycode="VK_F20" command="cmd_cut" />
-    <handler event="keypress" keycode="VK_F16" command="cmd_copy" />
-    <handler event="keypress" keycode="VK_F18" command="cmd_paste" />
-    <handler event="keypress" keycode="VK_F14" command="cmd_undo" />
     </handlers>
   </binding>
 
@@ -177,15 +173,11 @@
       <handler event="keypress" keycode="VK_INSERT" modifiers="control" command="cmd_copy" /> 
       <handler event="keypress" keycode="VK_HOME" command="cmd_beginLine"/>
       <handler event="keypress" keycode="VK_END" command="cmd_endLine"/>
-      <handler event="keypress" keycode="VK_HOME" modifiers="control" command="cmd_scrollTop"/>
-      <handler event="keypress" keycode="VK_END" modifiers="control" command="cmd_scrollBottom"/>
+      <handler event="keypress" keycode="VK_HOME" modifiers="control" command="cmd_moveTop"/>
+      <handler event="keypress" keycode="VK_END" modifiers="control" command="cmd_moveBottom"/>
       <handler event="keypress" keycode="VK_HOME" modifiers="shift,control" command="cmd_selectTop" /> 
       <handler event="keypress" keycode="VK_END" modifiers="shift,control" command="cmd_selectBottom" /> 
 
-      <handler event="keypress" keycode="VK_F20" command="cmd_cut" /> 
-      <handler event="keypress" keycode="VK_F16" command="cmd_copy" /> 
-      <handler event="keypress" keycode="VK_F18" command="cmd_paste" /> 
-      <handler event="keypress" keycode="VK_F14" command="cmd_undo" />
       <handler event="keypress" keycode="VK_LEFT" modifiers="control" command="cmd_wordPrevious" />
       <handler event="keypress" keycode="VK_RIGHT" modifiers="control" command="cmd_wordNext" />
       <handler event="keypress" keycode="VK_LEFT" modifiers="control,shift" command="cmd_selectWordPrevious" />
@@ -240,10 +232,6 @@
       <handler event="keypress" keycode="VK_PAGE_DOWN" command="cmd_movePageDown"/>
       <handler event="keypress" keycode="VK_PAGE_UP" modifiers="shift" command="cmd_selectPageUp"/>
       <handler event="keypress" keycode="VK_PAGE_DOWN" modifiers="shift" command="cmd_selectPageDown"/>
-      <handler event="keypress" keycode="VK_F20" command="cmd_cut" />
-      <handler event="keypress" keycode="VK_F16" command="cmd_copy" />
-      <handler event="keypress" keycode="VK_F18" command="cmd_paste" />
-      <handler event="keypress" keycode="VK_F14" command="cmd_undo" />
     </handlers>
   </binding>
 </bindings>

@@ -1,49 +1,13 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is DOM Range tests.
- *
- * The Initial Developer of the Original Code is
- * Alexander J. Vincent <ajvincent@gmail.com>.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 const C_i = Components.interfaces;
-const C_r = Components.results;
 
 const UNORDERED_TYPE = C_i.nsIDOMXPathResult.ANY_UNORDERED_NODE_TYPE;
 
-const INVALID_STATE_ERR = 0x8053000b;     // NS_ERROR_DOM_INVALID_STATE_ERR
-const INDEX_SIZE_ERR = 0x80530001;        // NS_ERROR_DOM_INDEX_SIZE_ERR
-const INVALID_NODE_TYPE_ERR = 0x805c0002; // NS_ERROR_DOM_INVALID_NODE_TYPE_ERR
-const NOT_OBJECT_ERR = 0x805303eb;        // NS_ERROR_DOM_NOT_OBJECT_ERR
-const SECURITY_ERR = 0x805303e8;          // NS_ERROR_DOM_SECURITY_ERR
+// Instantiate nsIDOMScriptObjectFactory so that DOMException is usable in xpcshell
+Components.classesByID["{9eb760f0-4380-11d2-b328-00805f8a3859}"].getService(C_i.nsISupports);
 
 /**
  * Determine if the data node has only ignorable white-space.
@@ -66,7 +30,6 @@ function isWhitespace(aNode) {
  */
 function getFragment(aNode) {
   var frag = aNode.ownerDocument.createDocumentFragment();
-  do_check_true(frag instanceof C_i.nsIDOM3Node);
   for (var i = 0; i < aNode.childNodes.length; i++) {
     frag.appendChild(aNode.childNodes.item(i).cloneNode(true));
   }
@@ -217,9 +180,8 @@ function getRange(aSourceNode, aFragment) {
 function getParsedDocument(aPath) {
   var doc = do_parse_document(aPath, "application/xml");
   do_check_true(doc.documentElement.localName != "parsererror");
-  do_check_true(doc instanceof C_i.nsIDOMDocumentTraversal);
   do_check_true(doc instanceof C_i.nsIDOMXPathEvaluator);
-  do_check_true(doc instanceof C_i.nsIDOMDocumentRange);
+  do_check_true(doc instanceof C_i.nsIDOMDocument);
 
   // Clean out whitespace.
   var walker = doc.createTreeWalker(doc,
@@ -281,7 +243,7 @@ function run_extract_test() {
        them.
 
        After the range's extraction or deletion is done, we use
-       nsIDOM3Node.isEqualNode() between the altered source fragment and the
+       nsIDOMNode.isEqualNode() between the altered source fragment and the
        result fragment.  We also run isEqualNode() between the extracted
        fragment and the fragment from the baseExtract node.  If they are not
        equal, we have failed a test.
@@ -322,13 +284,11 @@ function run_extract_test() {
     var foundStart = false;
     var foundEnd = false;
     do {
-      do_check_true(walker.currentNode instanceof C_i.nsIDOM3Node);
-
-      if (walker.currentNode.isSameNode(startContainer)) {
+      if (walker.currentNode == startContainer) {
         foundStart = true;
       }
 
-      if (walker.currentNode.isSameNode(endContainer)) {
+      if (walker.currentNode == endContainer) {
         // An end container node should not come before the start container node.
         do_check_true(foundStart);
         foundEnd = true;
@@ -358,13 +318,11 @@ function run_extract_test() {
     foundStart = false;
     foundEnd = false;
     do {
-      do_check_true(walker.currentNode instanceof C_i.nsIDOM3Node);
-
-      if (walker.currentNode.isSameNode(startContainer)) {
+      if (walker.currentNode == startContainer) {
         foundStart = true;
       }
 
-      if (walker.currentNode.isSameNode(endContainer)) {
+      if (walker.currentNode == endContainer) {
         // An end container node should not come before the start container node.
         do_check_true(foundStart);
         foundEnd = true;
@@ -375,33 +333,6 @@ function run_extract_test() {
 
     // Clean up after ourselves.
     walker = null;
-
-    /* Whenever a DOM range is detached, we cannot use any methods on
-       it - including extracting its contents or deleting its contents.  It
-       should throw a NS_ERROR_DOM_INVALID_STATE_ERR exception.
-    */
-    dump("Detached range test\n");
-    var compareFrag = getFragment(baseSource);
-    baseFrag = getFragment(baseSource);
-    baseRange = getRange(baseSource, baseFrag);
-    baseRange.detach();
-    try {
-      var cutFragment = baseRange.extractContents();
-      do_throw("Should have thrown INVALID_STATE_ERR!");
-    } catch (e if (e instanceof C_i.nsIException &&
-                   e.result == INVALID_STATE_ERR)) {
-      // do nothing
-    }
-    do_check_true(compareFrag.isEqualNode(baseFrag));
-
-    try {
-      baseRange.deleteContents();
-      do_throw("Should have thrown INVALID_STATE_ERR!");
-    } catch (e if (e instanceof C_i.nsIException &&
-                   e.result == INVALID_STATE_ERR)) {
-      // do nothing
-    }
-    do_check_true(compareFrag.isEqualNode(baseFrag));
   }
 }
 
@@ -435,27 +366,24 @@ function run_miscellaneous_tests() {
     try {
       baseRange.setStart(null, 0);
       do_throw("Should have thrown NOT_OBJECT_ERR!");
-    } catch (e if (e instanceof C_i.nsIException &&
-                   e.result == NOT_OBJECT_ERR)) {
-      // do nothing
+    } catch (e) {
+      do_check_eq(e.name, "NS_ERROR_DOM_NOT_OBJECT_ERR");
     }
 
     // Invalid start node
     try {
       baseRange.setStart({}, 0);
-      do_throw("Should have thrown SECURITY_ERR!");
-    } catch (e if (e instanceof C_i.nsIException &&
-                   e.result == SECURITY_ERR)) {
-      // do nothing
+      do_throw("Should have thrown SecurityError!");
+    } catch (e) {
+      do_check_eq(e.name, "SecurityError");
     }
 
     // Invalid index
     try {
       baseRange.setStart(startContainer, -1);
-      do_throw("Should have thrown INVALID_STATE_ERR!");
-    } catch (e if (e instanceof C_i.nsIException &&
-                   e.result == INDEX_SIZE_ERR)) {
-      // do nothing
+      do_throw("Should have thrown IndexSizeError!");
+    } catch (e) {
+      do_check_eq(e.name, "IndexSizeError");
     }
   
     // Invalid index
@@ -464,10 +392,9 @@ function run_miscellaneous_tests() {
                       startContainer.childNodes.length + 1;
     try {
       baseRange.setStart(startContainer, newOffset);
-      do_throw("Should have thrown INVALID_STATE_ERR!");
-    } catch (e if (e instanceof C_i.nsIException &&
-                   e.result == INDEX_SIZE_ERR)) {
-      // do nothing
+      do_throw("Should have thrown IndexSizeError!");
+    } catch (e) {
+      do_check_eq(e.name, "IndexSizeError");
     }
   
     newOffset--;
@@ -509,7 +436,6 @@ function run_miscellaneous_tests() {
 
   /*
   // XXX ajvincent if rv == WRONG_DOCUMENT_ERR, return false?
-  do_check_true(baseRange instanceof C_i.nsIDOMNSRange);
   do_check_false(baseRange.isPointInRange(startContainer, startOffset));
   do_check_false(baseRange.isPointInRange(startContainer, startOffset + 1));
   do_check_false(baseRange.isPointInRange(endContainer, endOffset));
@@ -517,7 +443,7 @@ function run_miscellaneous_tests() {
 
   // Requested by smaug:  A range involving a comment as a document child.
   doc = parser.parseFromString("<!-- foo --><foo/>", "application/xml");
-  do_check_true(doc instanceof C_i.nsIDOMDocumentRange);
+  do_check_true(doc instanceof C_i.nsIDOMDocument);
   do_check_eq(doc.childNodes.length, 2);
   baseRange = doc.createRange();
   baseRange.setStart(doc.firstChild, 1);

@@ -10,11 +10,20 @@
         onload="test_template();"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
 
   <body xmlns="http://www.w3.org/1999/xhtml" style="height: 300px; overflow: auto;"/>
+
+  <data id="output">
+    <checkbox id="http://www.some-fictitious-zoo.com/mammals/lion" label="Lion"/>
+    <checkbox id="http://www.some-fictitious-zoo.com/mammals/hippopotamus" label="HIPPOPOTAMUS"/>
+    <checkbox id="http://www.some-fictitious-zoo.com/mammals/africanelephant" label="African Elephant"/>
+    <checkbox id="http://www.some-fictitious-zoo.com/mammals/llama" label="LLAMA"/>
+    <checkbox id="http://www.some-fictitious-zoo.com/mammals/polarbear" label="Polar Bear"/>
+    <checkbox id="http://www.some-fictitious-zoo.com/mammals/aardvark" label="aardvark"/>
+    <checkbox id="http://www.some-fictitious-zoo.com/mammals/ninebandedarmadillo" label="Nine-banded Armadillo"/>
+    <checkbox id="http://www.some-fictitious-zoo.com/mammals/gorilla" label="Gorilla"/>
+  </data>
 
 <script src="templates_shared.js"/>
 
@@ -28,23 +37,13 @@ var isTreeBuilder = false;
 var needsOpen = false;
 var notWorkingYet = false;
 var notWorkingYetDynamic = false;
-var expectedOutput =
-<output>
-  <checkbox id="http://www.some-fictitious-zoo.com/mammals/lion" label="Lion"/>
-  <checkbox id="http://www.some-fictitious-zoo.com/mammals/hippopotamus" label="HIPPOPOTAMUS"/>
-  <checkbox id="http://www.some-fictitious-zoo.com/mammals/africanelephant" label="African Elephant"/>
-  <checkbox id="http://www.some-fictitious-zoo.com/mammals/llama" label="LLAMA"/>
-  <checkbox id="http://www.some-fictitious-zoo.com/mammals/polarbear" label="Polar Bear"/>
-  <checkbox id="http://www.some-fictitious-zoo.com/mammals/aardvark" label="aardvark"/>
-  <checkbox id="http://www.some-fictitious-zoo.com/mammals/ninebandedarmadillo" label="Nine-banded Armadillo"/>
-  <checkbox id="http://www.some-fictitious-zoo.com/mammals/gorilla" label="Gorilla"/>
-</output>;
+var expectedOutput = document.getElementById("output");
 
 var changes = [];
 ]]>
 </script>
 
-<vbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" id="root" datasources="animals.rdf" ref="http://www.some-fictitious-zoo.com/mammals">
+<vbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" id="root" datasources="rdf:null" ref="http://www.some-fictitious-zoo.com/mammals">
 <template id="template">
 <query>
 <content uri="?uri"/>

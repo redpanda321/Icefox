@@ -7,10 +7,12 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stddef.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/uio.h>
 
 #include <string>
 #include <map>
@@ -131,8 +133,7 @@ int ChannelNameToClientFD(const std::string& channel_id) {
 }
 
 //------------------------------------------------------------------------------
-sockaddr_un sizecheck;
-const size_t kMaxPipeNameLength = sizeof(sizecheck.sun_path);
+const size_t kMaxPipeNameLength = sizeof(((sockaddr_un*)0)->sun_path);
 
 // Creates a Fifo with the specified name ready to listen on.
 bool CreateServerFifo(const std::string& pipe_name, int* server_listen_fd) {
@@ -238,7 +239,6 @@ bool ClientConnectToFifo(const std::string &pipe_name, int* client_socket) {
   return true;
 }
 
-#if defined(CHROMIUM_MOZILLA_BUILD)
 bool SetCloseOnExec(int fd) {
   int flags = fcntl(fd, F_GETFD);
   if (flags == -1)
@@ -250,31 +250,44 @@ bool SetCloseOnExec(int fd) {
 
   return true;
 }
-#endif
 
 }  // namespace
 //------------------------------------------------------------------------------
 
 Channel::ChannelImpl::ChannelImpl(const std::wstring& channel_id, Mode mode,
                                   Listener* listener)
-    : mode_(mode),
-      is_blocked_on_write_(false),
-      message_send_bytes_written_(0),
-      uses_fifo_(CommandLine::ForCurrentProcess()->HasSwitch(
-                     switches::kIPCUseFIFO)),
-      server_listen_pipe_(-1),
-      pipe_(-1),
-      client_pipe_(-1),
-      listener_(listener),
-      waiting_connect_(true),
-      processing_incoming_(false),
-      factory_(this) {
+    : factory_(this) {
+  Init(mode, listener);
+  uses_fifo_ = CommandLine::ForCurrentProcess()->HasSwitch(switches::kIPCUseFIFO);
+
   if (!CreatePipe(channel_id, mode)) {
     // The pipe may have been closed already.
     LOG(WARNING) << "Unable to create pipe named \"" << channel_id <<
                     "\" in " << (mode == MODE_SERVER ? "server" : "client") <<
                     " mode error(" << strerror(errno) << ").";
   }
+}
+
+Channel::ChannelImpl::ChannelImpl(int fd, Mode mode, Listener* listener)
+    : factory_(this) {
+  Init(mode, listener);
+  pipe_ = fd;
+  waiting_connect_ = (MODE_SERVER == mode);
+
+  EnqueueHelloMessage();
+}
+
+void Channel::ChannelImpl::Init(Mode mode, Listener* listener) {
+  mode_ = mode;
+  is_blocked_on_write_ = false;
+  message_send_bytes_written_ = 0;
+  uses_fifo_ = false;
+  server_listen_pipe_ = -1;
+  pipe_ = -1;
+  client_pipe_ = -1;
+  listener_ = listener;
+  waiting_connect_ = true;
+  processing_incoming_ = false;
 }
 
 bool Channel::ChannelImpl::CreatePipe(const std::wstring& channel_id,
@@ -313,19 +326,19 @@ bool Channel::ChannelImpl::CreatePipe(const std::wstring& channel_id,
         return false;
       }
 
-#if defined(CHROMIUM_MOZILLA_BUILD)
       if (!SetCloseOnExec(pipe_fds[0]) ||
           !SetCloseOnExec(pipe_fds[1])) {
         HANDLE_EINTR(close(pipe_fds[0]));
         HANDLE_EINTR(close(pipe_fds[1]));
         return false;
       }
-#endif
 
       pipe_ = pipe_fds[0];
       client_pipe_ = pipe_fds[1];
 
-      Singleton<PipeMap>()->Insert(pipe_name_, client_pipe_);
+      if (pipe_name_.length()) {
+        Singleton<PipeMap>()->Insert(pipe_name_, client_pipe_);
+      }
     } else {
       pipe_ = ChannelNameToClientFD(pipe_name_);
       DCHECK(pipe_ > 0);
@@ -334,6 +347,10 @@ bool Channel::ChannelImpl::CreatePipe(const std::wstring& channel_id,
   }
 
   // Create the Hello message to be sent when Connect is called
+  return EnqueueHelloMessage();
+}
+
+bool Channel::ChannelImpl::EnqueueHelloMessage() {
   scoped_ptr<Message> msg(new Message(MSG_ROUTING_NONE,
                                       HELLO_MESSAGE_TYPE,
                                       IPC::Message::PRIORITY_NORMAL));
@@ -344,6 +361,16 @@ bool Channel::ChannelImpl::CreatePipe(const std::wstring& channel_id,
 
   output_queue_.push(msg.release());
   return true;
+}
+
+static void
+ClearAndShrink(std::string& s, size_t capacity)
+{
+  // This swap trick is the closest thing C++ has to a guaranteed way to
+  // shrink the capacity of a string.
+  std::string tmp;
+  tmp.reserve(capacity);
+  s.swap(tmp);
 }
 
 bool Channel::ChannelImpl::Connect() {
@@ -463,19 +490,21 @@ bool Channel::ChannelImpl::ProcessIncomingMessages() {
 
     // Process messages from input buffer.
     const char *p;
+    const char *overflowp;
     const char *end;
     if (input_overflow_buf_.empty()) {
+      overflowp = NULL;
       p = input_buf_;
       end = p + bytes_read;
     } else {
       if (input_overflow_buf_.size() >
          static_cast<size_t>(kMaximumMessageSize - bytes_read)) {
-        input_overflow_buf_.clear();
+        ClearAndShrink(input_overflow_buf_, Channel::kReadBufferSize);
         LOG(ERROR) << "IPC message is too big";
         return false;
       }
       input_overflow_buf_.append(input_buf_, bytes_read);
-      p = input_overflow_buf_.data();
+      overflowp = p = input_overflow_buf_.data();
       end = p + input_overflow_buf_.size();
     }
 
@@ -553,7 +582,15 @@ bool Channel::ChannelImpl::ProcessIncomingMessages() {
         break;
       }
     }
-    input_overflow_buf_.assign(p, end - p);
+    if (end == p) {
+      ClearAndShrink(input_overflow_buf_, Channel::kReadBufferSize);
+    } else if (!overflowp) {
+      // p is from input_buf_
+      input_overflow_buf_.assign(p, end - p);
+    } else if (p > overflowp) {
+      // p is from input_overflow_buf_
+      input_overflow_buf_.erase(0, p - overflowp);
+    }
     input_overflow_fds_ = std::vector<int>(&fds[fds_i], &fds[num_fds]);
 
     // When the input data buffer is empty, the overflow fds should be too. If
@@ -595,8 +632,9 @@ bool Channel::ChannelImpl::ProcessOutgoingMessages() {
     struct iovec iov = {const_cast<char*>(out_bytes), amt_to_write};
     msgh.msg_iov = &iov;
     msgh.msg_iovlen = 1;
-    char buf[CMSG_SPACE(
-        sizeof(int[FileDescriptorSet::MAX_DESCRIPTORS_PER_MESSAGE]))];
+    static const int tmp = CMSG_SPACE(sizeof(
+        int[FileDescriptorSet::MAX_DESCRIPTORS_PER_MESSAGE]));
+    char buf[tmp];
 
     if (message_send_bytes_written_ == 0 &&
         !msg->file_descriptor_set()->empty()) {
@@ -659,9 +697,6 @@ bool Channel::ChannelImpl::ProcessOutgoingMessages() {
 }
 
 bool Channel::ChannelImpl::Send(Message* message) {
-#ifndef CHROMIUM_MOZILLA_BUILD
-  chrome::Counters::ipc_send_counter().Increment();
-#endif
 #ifdef IPC_MESSAGE_DEBUG_EXTRA
   DLOG(INFO) << "sending message @" << message << " on channel @" << this
              << " with type " << message->type()
@@ -795,6 +830,10 @@ Channel::Channel(const std::wstring& channel_id, Mode mode,
     : channel_impl_(new ChannelImpl(channel_id, mode, listener)) {
 }
 
+Channel::Channel(int fd, Mode mode, Listener* listener)
+    : channel_impl_(new ChannelImpl(fd, mode, listener)) {
+}
+
 Channel::~Channel() {
   delete channel_impl_;
 }
@@ -807,15 +846,9 @@ void Channel::Close() {
   channel_impl_->Close();
 }
 
-#ifdef CHROMIUM_MOZILLA_BUILD
 Channel::Listener* Channel::set_listener(Listener* listener) {
   return channel_impl_->set_listener(listener);
 }
-#else
-void Channel::set_listener(Listener* listener) {
-  channel_impl_->set_listener(listener);
-}
-#endif
 
 bool Channel::Send(Message* message) {
   return channel_impl_->Send(message);
@@ -823,6 +856,10 @@ bool Channel::Send(Message* message) {
 
 void Channel::GetClientFileDescriptorMapping(int *src_fd, int *dest_fd) const {
   return channel_impl_->GetClientFileDescriptorMapping(src_fd, dest_fd);
+}
+
+int Channel::GetServerFileDescriptor() const {
+  return channel_impl_->GetServerFileDescriptor();
 }
 
 }  // namespace IPC

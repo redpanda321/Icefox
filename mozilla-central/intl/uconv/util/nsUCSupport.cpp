@@ -1,42 +1,10 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "pratom.h"
+#include "nsAlgorithm.h"
 #include "nsIComponentManager.h"
 #include "nsUCSupport.h"
 #include "nsUnicodeDecodeHelper.h"
@@ -61,7 +29,7 @@ nsBasicDecoderSupport::~nsBasicDecoderSupport()
 //----------------------------------------------------------------------
 // Interface nsISupports [implementation]
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
 NS_IMPL_THREADSAFE_ISUPPORTS2(nsBasicDecoderSupport,
                               nsIUnicodeDecoder,
                               nsIBasicDecoder)
@@ -73,7 +41,7 @@ NS_IMPL_THREADSAFE_ISUPPORTS1(nsBasicDecoderSupport, nsIUnicodeDecoder)
 // Interface nsIUnicodeDecoder [implementation]
 
 void
-nsBasicDecoderSupport::SetInputErrorBehavior(PRInt32 aBehavior)
+nsBasicDecoderSupport::SetInputErrorBehavior(int32_t aBehavior)
 {
   NS_ABORT_IF_FALSE(aBehavior == kOnError_Recover || aBehavior == kOnError_Signal,
                     "Unknown behavior for SetInputErrorBehavior");
@@ -89,7 +57,7 @@ nsBasicDecoderSupport::GetCharacterForUnMapped()
 //----------------------------------------------------------------------
 // Class nsBufferDecoderSupport [implementation]
 
-nsBufferDecoderSupport::nsBufferDecoderSupport(PRUint32 aMaxLengthFactor)
+nsBufferDecoderSupport::nsBufferDecoderSupport(uint32_t aMaxLengthFactor)
   : nsBasicDecoderSupport(),
     mMaxLengthFactor(aMaxLengthFactor)
 {
@@ -104,9 +72,9 @@ nsBufferDecoderSupport::~nsBufferDecoderSupport()
   delete [] mBuffer;
 }
 
-void nsBufferDecoderSupport::FillBuffer(const char ** aSrc, PRInt32 aSrcLength)
+void nsBufferDecoderSupport::FillBuffer(const char ** aSrc, int32_t aSrcLength)
 {
-  PRInt32 bcr = PR_MIN(mBufferCapacity - mBufferLength, aSrcLength);
+  int32_t bcr = NS_MIN(mBufferCapacity - mBufferLength, aSrcLength);
   memcpy(mBuffer + mBufferLength, *aSrc, bcr);
   mBufferLength += bcr;
   (*aSrc) += bcr;
@@ -116,9 +84,9 @@ void nsBufferDecoderSupport::FillBuffer(const char ** aSrc, PRInt32 aSrcLength)
 // Subclassing of nsBasicDecoderSupport class [implementation]
 
 NS_IMETHODIMP nsBufferDecoderSupport::Convert(const char * aSrc,
-                                              PRInt32 * aSrcLength,
+                                              int32_t * aSrcLength,
                                               PRUnichar * aDest,
-                                              PRInt32 * aDestLength)
+                                              int32_t * aDestLength)
 {
   // we do all operations using pointers internally
   const char * src = aSrc;
@@ -126,7 +94,7 @@ NS_IMETHODIMP nsBufferDecoderSupport::Convert(const char * aSrc,
   PRUnichar * dest = aDest;
   PRUnichar * destEnd = aDest + *aDestLength;
 
-  PRInt32 bcr, bcw; // byte counts for read & write;
+  int32_t bcr, bcw; // byte counts for read & write;
   nsresult res = NS_OK;
 
   // do we have some residual data from the last conversion?
@@ -142,7 +110,7 @@ NS_IMETHODIMP nsBufferDecoderSupport::Convert(const char * aSrc,
         }
 
         // fill that buffer
-        PRInt32 buffLen = mBufferLength;  // initial buffer length
+        int32_t buffLen = mBufferLength;  // initial buffer length
         FillBuffer(&src, srcEnd - src);
 
         // convert that buffer
@@ -215,8 +183,8 @@ NS_IMETHODIMP nsBufferDecoderSupport::Reset()
 }
 
 NS_IMETHODIMP nsBufferDecoderSupport::GetMaxLength(const char* aSrc,
-                                                   PRInt32 aSrcLength,
-                                                   PRInt32* aDestLength)
+                                                   int32_t aSrcLength,
+                                                   int32_t* aDestLength)
 {
   NS_ASSERTION(mMaxLengthFactor != 0, "Must override GetMaxLength!");
   *aDestLength = aSrcLength * mMaxLengthFactor;
@@ -229,7 +197,7 @@ NS_IMETHODIMP nsBufferDecoderSupport::GetMaxLength(const char* aSrc,
 nsTableDecoderSupport::nsTableDecoderSupport(uScanClassID aScanClass,
                                              uShiftInTable * aShiftInTable,
                                              uMappingTable  * aMappingTable,
-                                             PRUint32 aMaxLengthFactor)
+                                             uint32_t aMaxLengthFactor)
 : nsBufferDecoderSupport(aMaxLengthFactor)
 {
   mScanClass = aScanClass;
@@ -245,9 +213,9 @@ nsTableDecoderSupport::~nsTableDecoderSupport()
 // Subclassing of nsBufferDecoderSupport class [implementation]
 
 NS_IMETHODIMP nsTableDecoderSupport::ConvertNoBuff(const char * aSrc,
-                                                   PRInt32 * aSrcLength,
+                                                   int32_t * aSrcLength,
                                                    PRUnichar * aDest,
-                                                   PRInt32 * aDestLength)
+                                                   int32_t * aDestLength)
 {
   return nsUnicodeDecodeHelper::ConvertByTable(aSrc, aSrcLength,
                                                aDest, aDestLength,
@@ -260,11 +228,11 @@ NS_IMETHODIMP nsTableDecoderSupport::ConvertNoBuff(const char * aSrc,
 // Class nsMultiTableDecoderSupport [implementation]
 
 nsMultiTableDecoderSupport::nsMultiTableDecoderSupport(
-                            PRInt32 aTableCount,
+                            int32_t aTableCount,
                             const uRange * aRangeArray,
                             uScanClassID * aScanClassArray,
                             uMappingTable ** aMappingTable,
-                            PRUint32 aMaxLengthFactor)
+                            uint32_t aMaxLengthFactor)
 : nsBufferDecoderSupport(aMaxLengthFactor)
 {
   mTableCount = aTableCount;
@@ -281,9 +249,9 @@ nsMultiTableDecoderSupport::~nsMultiTableDecoderSupport()
 // Subclassing of nsBufferDecoderSupport class [implementation]
 
 NS_IMETHODIMP nsMultiTableDecoderSupport::ConvertNoBuff(const char * aSrc,
-                                                        PRInt32 * aSrcLength,
+                                                        int32_t * aSrcLength,
                                                         PRUnichar * aDest,
-                                                        PRInt32 * aDestLength)
+                                                        int32_t * aDestLength)
 {
   return nsUnicodeDecodeHelper::ConvertByMultiTable(aSrc, aSrcLength,
                                                     aDest, aDestLength,
@@ -300,7 +268,7 @@ nsOneByteDecoderSupport::nsOneByteDecoderSupport(
                          uMappingTable  * aMappingTable)
   : nsBasicDecoderSupport()
   , mMappingTable(aMappingTable)
-  , mFastTableCreated(PR_FALSE)
+  , mFastTableCreated(false)
   , mFastTableMutex("nsOneByteDecoderSupport mFastTableMutex")
 {
 }
@@ -313,9 +281,9 @@ nsOneByteDecoderSupport::~nsOneByteDecoderSupport()
 // Subclassing of nsBasicDecoderSupport class [implementation]
 
 NS_IMETHODIMP nsOneByteDecoderSupport::Convert(const char * aSrc,
-                                              PRInt32 * aSrcLength,
+                                              int32_t * aSrcLength,
                                               PRUnichar * aDest,
-                                              PRInt32 * aDestLength)
+                                              int32_t * aDestLength)
 {
   if (!mFastTableCreated) {
     // Probably better to make this non-lazy and get rid of the mutex
@@ -324,7 +292,7 @@ NS_IMETHODIMP nsOneByteDecoderSupport::Convert(const char * aSrc,
       nsresult res = nsUnicodeDecodeHelper::CreateFastTable(
                          mMappingTable, mFastTable, ONE_BYTE_TABLE_SIZE);
       if (NS_FAILED(res)) return res;
-      mFastTableCreated = PR_TRUE;
+      mFastTableCreated = true;
     }
   }
 
@@ -336,8 +304,8 @@ NS_IMETHODIMP nsOneByteDecoderSupport::Convert(const char * aSrc,
 }
 
 NS_IMETHODIMP nsOneByteDecoderSupport::GetMaxLength(const char * aSrc,
-                                                    PRInt32 aSrcLength,
-                                                    PRInt32 * aDestLength)
+                                                    int32_t aSrcLength,
+                                                    int32_t * aDestLength)
 {
   // single byte to Unicode converter
   *aDestLength = aSrcLength;
@@ -365,7 +333,7 @@ nsBasicEncoder::~nsBasicEncoder()
 
 NS_IMPL_ADDREF(nsBasicEncoder)
 NS_IMPL_RELEASE(nsBasicEncoder)
-#ifdef NS_DEBUG
+#ifdef DEBUG
 NS_IMPL_QUERY_INTERFACE2(nsBasicEncoder,
                          nsIUnicodeEncoder,
                          nsIBasicEncoder)
@@ -376,7 +344,7 @@ NS_IMPL_QUERY_INTERFACE1(nsBasicEncoder,
 //----------------------------------------------------------------------
 // Class nsEncoderSupport [implementation]
 
-nsEncoderSupport::nsEncoderSupport(PRUint32 aMaxLengthFactor) :
+nsEncoderSupport::nsEncoderSupport(uint32_t aMaxLengthFactor) :
   mMaxLengthFactor(aMaxLengthFactor)
 {
   mBufferCapacity = DEFAULT_BUFFER_CAPACITY;
@@ -394,9 +362,9 @@ nsEncoderSupport::~nsEncoderSupport()
 }
 
 NS_IMETHODIMP nsEncoderSupport::ConvertNoBuff(const PRUnichar * aSrc,
-                                              PRInt32 * aSrcLength,
+                                              int32_t * aSrcLength,
                                               char * aDest,
-                                              PRInt32 * aDestLength)
+                                              int32_t * aDestLength)
 {
   // we do all operations using pointers internally
   const PRUnichar * src = aSrc;
@@ -404,7 +372,7 @@ NS_IMETHODIMP nsEncoderSupport::ConvertNoBuff(const PRUnichar * aSrc,
   char * dest = aDest;
   char * destEnd = aDest + *aDestLength;
 
-  PRInt32 bcr, bcw; // byte counts for read & write;
+  int32_t bcr, bcw; // byte counts for read & write;
   nsresult res;
 
   for (;;) {
@@ -443,7 +411,7 @@ NS_IMETHODIMP nsEncoderSupport::ConvertNoBuff(const PRUnichar * aSrc,
 }
 
 NS_IMETHODIMP nsEncoderSupport::FinishNoBuff(char * aDest,
-                                             PRInt32 * aDestLength)
+                                             int32_t * aDestLength)
 {
   *aDestLength = 0;
   return NS_OK;
@@ -451,7 +419,7 @@ NS_IMETHODIMP nsEncoderSupport::FinishNoBuff(char * aDest,
 
 nsresult nsEncoderSupport::FlushBuffer(char ** aDest, const char * aDestEnd)
 {
-  PRInt32 bcr, bcw; // byte counts for read & write;
+  int32_t bcr, bcw; // byte counts for read & write;
   nsresult res = NS_OK;
   char * dest = *aDest;
 
@@ -475,9 +443,9 @@ nsresult nsEncoderSupport::FlushBuffer(char ** aDest, const char * aDestEnd)
 // Interface nsIUnicodeEncoder [implementation]
 
 NS_IMETHODIMP nsEncoderSupport::Convert(const PRUnichar * aSrc,
-                                        PRInt32 * aSrcLength,
+                                        int32_t * aSrcLength,
                                         char * aDest,
-                                        PRInt32 * aDestLength)
+                                        int32_t * aDestLength)
 {
   // we do all operations using pointers internally
   const PRUnichar * src = aSrc;
@@ -485,7 +453,7 @@ NS_IMETHODIMP nsEncoderSupport::Convert(const PRUnichar * aSrc,
   char * dest = aDest;
   char * destEnd = aDest + *aDestLength;
 
-  PRInt32 bcr, bcw; // byte counts for read & write;
+  int32_t bcr, bcw; // byte counts for read & write;
   nsresult res;
 
   res = FlushBuffer(&dest, destEnd);
@@ -525,13 +493,13 @@ final:
   return res;
 }
 
-NS_IMETHODIMP nsEncoderSupport::Finish(char * aDest, PRInt32 * aDestLength)
+NS_IMETHODIMP nsEncoderSupport::Finish(char * aDest, int32_t * aDestLength)
 {
   // we do all operations using pointers internally
   char * dest = aDest;
   char * destEnd = aDest + *aDestLength;
 
-  PRInt32 bcw; // byte count for write;
+  int32_t bcw; // byte count for write;
   nsresult res;
 
   res = FlushBuffer(&dest, destEnd);
@@ -567,11 +535,11 @@ NS_IMETHODIMP nsEncoderSupport::Reset()
 }
 
 NS_IMETHODIMP nsEncoderSupport::SetOutputErrorBehavior(
-                                PRInt32 aBehavior,
+                                int32_t aBehavior,
                                 nsIUnicharEncoder * aEncoder,
                                 PRUnichar aChar)
 {
-  if (aBehavior == kOnError_CallBack && aEncoder == nsnull)
+  if (aBehavior == kOnError_CallBack && !aEncoder)
     return NS_ERROR_NULL_POINTER;
 
   mErrEncoder = aEncoder;
@@ -582,8 +550,8 @@ NS_IMETHODIMP nsEncoderSupport::SetOutputErrorBehavior(
 
 NS_IMETHODIMP
 nsEncoderSupport::GetMaxLength(const PRUnichar * aSrc,
-                               PRInt32 aSrcLength,
-                               PRInt32 * aDestLength)
+                               int32_t aSrcLength,
+                               int32_t * aDestLength)
 {
   *aDestLength = aSrcLength * mMaxLengthFactor;
   return NS_OK;
@@ -596,7 +564,7 @@ nsEncoderSupport::GetMaxLength(const PRUnichar * aSrc,
 nsTableEncoderSupport::nsTableEncoderSupport(uScanClassID aScanClass,
                                              uShiftOutTable * aShiftOutTable,
                                              uMappingTable  * aMappingTable,
-                                             PRUint32 aMaxLengthFactor)
+                                             uint32_t aMaxLengthFactor)
 : nsEncoderSupport(aMaxLengthFactor)
 {
   mScanClass = aScanClass;
@@ -606,11 +574,11 @@ nsTableEncoderSupport::nsTableEncoderSupport(uScanClassID aScanClass,
 
 nsTableEncoderSupport::nsTableEncoderSupport(uScanClassID aScanClass,
                                              uMappingTable  * aMappingTable,
-                                             PRUint32 aMaxLengthFactor)
+                                             uint32_t aMaxLengthFactor)
 : nsEncoderSupport(aMaxLengthFactor)
 {
   mScanClass = aScanClass;
-  mShiftOutTable = nsnull;
+  mShiftOutTable = nullptr;
   mMappingTable = aMappingTable;
 }
 
@@ -623,9 +591,9 @@ nsTableEncoderSupport::~nsTableEncoderSupport()
 
 NS_IMETHODIMP nsTableEncoderSupport::ConvertNoBuffNoErr(
                                      const PRUnichar * aSrc,
-                                     PRInt32 * aSrcLength,
+                                     int32_t * aSrcLength,
                                      char * aDest,
-                                     PRInt32 * aDestLength)
+                                     int32_t * aDestLength)
 {
   return nsUnicodeEncodeHelper::ConvertByTable(aSrc, aSrcLength,
                                                aDest, aDestLength,
@@ -637,11 +605,11 @@ NS_IMETHODIMP nsTableEncoderSupport::ConvertNoBuffNoErr(
 // Class nsMultiTableEncoderSupport [implementation]
 
 nsMultiTableEncoderSupport::nsMultiTableEncoderSupport(
-                            PRInt32 aTableCount,
+                            int32_t aTableCount,
                             uScanClassID * aScanClassArray,
                             uShiftOutTable ** aShiftOutTable,
                             uMappingTable  ** aMappingTable,
-                            PRUint32 aMaxLengthFactor)
+                            uint32_t aMaxLengthFactor)
 : nsEncoderSupport(aMaxLengthFactor)
 {
   mTableCount = aTableCount;
@@ -659,9 +627,9 @@ nsMultiTableEncoderSupport::~nsMultiTableEncoderSupport()
 
 NS_IMETHODIMP nsMultiTableEncoderSupport::ConvertNoBuffNoErr(
                                           const PRUnichar * aSrc,
-                                          PRInt32 * aSrcLength,
+                                          int32_t * aSrcLength,
                                           char * aDest,
-                                          PRInt32 * aDestLength)
+                                          int32_t * aDestLength)
 {
   return nsUnicodeEncodeHelper::ConvertByMultiTable(aSrc, aSrcLength,
                                                     aDest, aDestLength,

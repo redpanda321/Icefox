@@ -45,7 +45,7 @@ NS_IMPL_ISUPPORTS2(mozHunspellDirProvider,
 		   nsIDirectoryServiceProvider2)
 
 NS_IMETHODIMP
-mozHunspellDirProvider::GetFile(const char *aKey, PRBool *aPersist,
+mozHunspellDirProvider::GetFile(const char *aKey, bool *aPersist,
 			       nsIFile* *aResult)
 {
   return NS_ERROR_FAILURE;
@@ -75,7 +75,7 @@ mozHunspellDirProvider::GetFiles(const char *aKey,
   if (!e)
     return NS_ERROR_OUT_OF_MEMORY;
 
-  *aResult = nsnull;
+  *aResult = nullptr;
   e.swap(*aResult);
   return NS_SUCCESS_AGGREGATE_RESULT;
 }
@@ -84,9 +84,9 @@ NS_IMPL_ISUPPORTS1(mozHunspellDirProvider::AppendingEnumerator,
 		   nsISimpleEnumerator)
 
 NS_IMETHODIMP
-mozHunspellDirProvider::AppendingEnumerator::HasMoreElements(PRBool *aResult)
+mozHunspellDirProvider::AppendingEnumerator::HasMoreElements(bool *aResult)
 {
-  *aResult = mNext ? PR_TRUE : PR_FALSE;
+  *aResult = mNext ? true : false;
   return NS_OK;
 }
 
@@ -96,13 +96,13 @@ mozHunspellDirProvider::AppendingEnumerator::GetNext(nsISupports* *aResult)
   if (aResult)
     NS_ADDREF(*aResult = mNext);
 
-  mNext = nsnull;
+  mNext = nullptr;
 
   nsresult rv;
 
   // Ignore all errors
 
-  PRBool more;
+  bool more;
   while (NS_SUCCEEDED(mBase->HasMoreElements(&more)) && more) {
     nsCOMPtr<nsISupports> nextbasesupp;
     mBase->GetNext(getter_AddRefs(nextbasesupp));
@@ -117,12 +117,12 @@ mozHunspellDirProvider::AppendingEnumerator::GetNext(nsISupports* *aResult)
 
     mNext->AppendNative(NS_LITERAL_CSTRING("dictionaries"));
 
-    PRBool exists;
+    bool exists;
     rv = mNext->Exists(&exists);
     if (NS_SUCCEEDED(rv) && exists)
       break;
 
-    mNext = nsnull;
+    mNext = nullptr;
   }
 
   return NS_OK;
@@ -133,7 +133,7 @@ mozHunspellDirProvider::AppendingEnumerator::AppendingEnumerator
   mBase(aBase)
 {
   // Initialize mNext to begin
-  GetNext(nsnull);
+  GetNext(nullptr);
 }
 
 char const *const

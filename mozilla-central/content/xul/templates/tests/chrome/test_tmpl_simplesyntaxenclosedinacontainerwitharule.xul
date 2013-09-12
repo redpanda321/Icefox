@@ -10,11 +10,22 @@
         onload="test_template();"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
 
   <body xmlns="http://www.w3.org/1999/xhtml" style="height: 300px; overflow: auto;"/>
+
+  <data id="output">
+    <hbox id="http://www.some-fictitious-zoo.com/birds/emu">
+      <label value="Emu"/>
+    </hbox>
+    <hbox id="http://www.some-fictitious-zoo.com/birds/barnowl">
+      <label value="Barn Owl"/>
+    </hbox>
+    <hbox id="http://www.some-fictitious-zoo.com/birds/raven">
+      <label value="Raven"/>
+    </hbox>
+    <label step="2" id="http://www.some-fictitious-zoo.com/birds/emperorpenguin" value="Emperor Penguin"/>
+  </data>
 
 <script src="templates_shared.js"/>
 
@@ -28,25 +39,13 @@ var isTreeBuilder = false;
 var needsOpen = false;
 var notWorkingYet = false;
 var notWorkingYetDynamic = false;
-var expectedOutput =
-<output>
-  <hbox id="http://www.some-fictitious-zoo.com/birds/emu">
-    <label value="Emu"/>
-  </hbox>
-  <hbox id="http://www.some-fictitious-zoo.com/birds/barnowl">
-    <label value="Barn Owl"/>
-  </hbox>
-  <hbox id="http://www.some-fictitious-zoo.com/birds/raven">
-    <label value="Raven"/>
-  </hbox>
-  <label step="2" id="http://www.some-fictitious-zoo.com/birds/emperorpenguin" value="Emperor Penguin"/>
-</output>;
+var expectedOutput = document.getElementById("output");
 
 var changes = [];
 ]]>
 </script>
 
-<vbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" id="root" datasources="animals.rdf" ref="http://www.some-fictitious-zoo.com/birds">
+<vbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" id="root" datasources="rdf:null" ref="http://www.some-fictitious-zoo.com/birds">
 <template id="template">
 <rule>
 <hbox uri="rdf:*">

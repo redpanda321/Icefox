@@ -1,11 +1,12 @@
 == bug-364968.html bug-364968-ref.html
 == bug-463204.html bug-463204-ref.html
-== canvas-outside-document.html canvas-inside-document.html
+fails-if(Android) == canvas-outside-document.html canvas-inside-document.html
 == mozsetimageelement-01.html mozsetimageelement-01-ref.html
 == mozsetimageelement-02.html about:blank
 == image-outside-document-invalidate.html about:blank
 == canvas-outside-document-invalidate-01.html about:blank
-== canvas-outside-document-invalidate-02.html about:blank
+fails-if(azureSkia&&winWidget) fails-if(cocoaWidget) == canvas-outside-document-invalidate-02.html about:blank # See bug 666800
+#fails with Skia due to Skia bug http://code.google.com/p/skia/issues/detail?id=568
 == element-paint-simple.html element-paint-simple-ref.html
 == element-paint-repeated.html element-paint-repeated-ref.html
 == element-paint-recursion.html element-paint-recursion-ref.html
@@ -34,11 +35,12 @@ random-if(d2d) == element-paint-transform-02.html element-paint-transform-02-ref
 random-if(!cocoaWidget) == gradient-html-03.html gradient-html-03-ref.svg
 == gradient-html-04.html gradient-html-04-ref.html
 == gradient-html-05.html gradient-html-05-ref.html
-random-if(!cocoaWidget) == gradient-html-06a.html gradient-html-06b.html
-random-if(!cocoaWidget) == gradient-html-06b.html gradient-html-06c.html
+fuzzy(1,9674) random-if(!cocoaWidget) == gradient-html-06a.html gradient-html-06b.html
+fuzzy(1,9674) random-if(!cocoaWidget) == gradient-html-06b.html gradient-html-06c.html
 == gradient-html-06c.html gradient-html-06d.html
 == gradient-html-06d.html gradient-html-06e.html
 random-if(!cocoaWidget) == gradient-html-07a.html gradient-html-07b.html
-== gradient-html-07b.html gradient-html-07c.html
+fuzzy-if(Android,9,23112) == gradient-html-07b.html gradient-html-07c.html
 == pattern-html-01.html pattern-html-01-ref.svg
 == pattern-html-02.html pattern-html-02-ref.svg
+== referenced-from-binding-01.html referenced-from-binding-01-ref.html

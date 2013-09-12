@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* Here is the list, from beppe and glazman:
     href >> A, AREA, BASE, LINK
@@ -80,7 +48,7 @@
   rv = NS_NewURI(getter_AddRefs(theURI), theSpec);
   if (!theURI)
     error;
-  rv = NS_OpenURI(getter_AddRefs(theChannel), theURI, nsnull, theLoadGroup);
+  rv = NS_OpenURI(getter_AddRefs(theChannel), theURI, nullptr, theLoadGroup);
   if (!theChannel)
     error;
   nsCOMPtr<nsILoadGroup> theLoadGroup(do_CreateInstance(NS_LOADGROUP_CONTRACTID));
@@ -91,18 +59,24 @@
 		//qaWebBrowser->AddWebBrowserListener(thisListener, NS_GET_IID(nsIStreamListener));
 
 		// this calls nsIStreamListener::OnDataAvailable()
-		rv = theChannel->AsyncOpen(listener, nsnull);
+		rv = theChannel->AsyncOpen(listener, nullptr);
 
 		nsCOMPtr<nsIRequest> theRequest = do_QueryInterface(theChannel);
     // Now we can do things on nsIRequest (like what?)
  */
 
-#include "nsHTMLURIRefObject.h"
-
+#include "mozilla/mozalloc.h"
 #include "nsAString.h"
-#include "nsString.h"
+#include "nsDebug.h"
+#include "nsError.h"
+#include "nsHTMLURIRefObject.h"
+#include "nsID.h"
 #include "nsIDOMAttr.h"
 #include "nsIDOMElement.h"
+#include "nsIDOMNamedNodeMap.h"
+#include "nsIDOMNode.h"
+#include "nsISupportsUtils.h"
+#include "nsString.h"
 
 // String classes change too often and I can't keep up.
 // Set this macro to this week's approved case-insensitive compare routine.
@@ -275,7 +249,7 @@ nsHTMLURIRefObject::GetNextURI(nsAString & aURI)
 NS_IMETHODIMP
 nsHTMLURIRefObject::RewriteAllURIs(const nsAString & aOldPat,
                             const nsAString & aNewPat,
-                            PRBool aMakeRel)
+                            bool aMakeRel)
 {
 #ifdef DEBUG_akkana
   printf("Can't rewrite URIs yet\n");

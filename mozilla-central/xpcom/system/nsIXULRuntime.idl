@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla XUL Toolkit.
- *
- * The Initial Developer of the Original Code is
- * Benjamin Smedberg <benjamin@smedbergs.us>
- *
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsISupports.idl"
 
@@ -44,7 +11,7 @@
  *                    stable/frozen, please contact Benjamin Smedberg.
  */
 
-[scriptable, uuid(7685dac8-3637-4660-a544-928c5ec0e714)]
+[scriptable, uuid(cb0b8eda-4c83-4d0e-a63c-d3b65714bc85)]
 interface nsIXULRuntime : nsISupports
 {
   /**
@@ -93,8 +60,7 @@ interface nsIXULRuntime : nsISupports
   const unsigned long PROCESS_TYPE_DEFAULT = 0;
   const unsigned long PROCESS_TYPE_PLUGIN = 1;
   const unsigned long PROCESS_TYPE_CONTENT = 2;
-  const unsigned long PROCESS_TYPE_JETPACK = 3;
-  const unsigned long PROCESS_TYPE_IPDLUNITTEST = 4;
+  const unsigned long PROCESS_TYPE_IPDLUNITTEST = 3;
 
   /**
    * The type of the caller's process.  Returns one of the values above.
@@ -116,4 +82,17 @@ interface nsIXULRuntime : nsISupports
    * @throw NS_ERROR_NOT_AVAILABLE if not available.
    */
   void ensureContentProcess();
+
+  /**
+   * Modification time of the profile lock before the profile was locked on
+   * this startup. Used to know the last time the profile was used and not
+   * closed cleanly. This is set to 0 if there was no existing profile lock.
+   */
+  readonly attribute PRTime replacedLockTime;
+
+  /**
+   * Local ID of the minidump generated when the process crashed
+   * on the previous run. Can be passed directly to CrashSubmit.submit.
+   */
+  readonly attribute DOMString lastRunCrashID;
 };

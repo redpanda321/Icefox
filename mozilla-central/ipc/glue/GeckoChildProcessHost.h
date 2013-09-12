@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla IPC.
- *
- * The Initial Developer of the Original Code is
- *   Ben Turner <bent.mozilla@gmail.com>.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef __IPC_GLUE_GECKOCHILDPROCESSHOST_H__
 #define __IPC_GLUE_GECKOCHILDPROCESSHOST_H__
@@ -55,22 +23,54 @@ class GeckoChildProcessHost : public ChildProcessHost
 {
 protected:
   typedef mozilla::Monitor Monitor;
+  typedef std::vector<std::string> StringVector;
 
 public:
+  typedef base::ChildPrivileges ChildPrivileges;
   typedef base::ProcessHandle ProcessHandle;
 
-  GeckoChildProcessHost(GeckoProcessType aProcessType=GeckoProcessType_Default,
-                        base::WaitableEventWatcher::Delegate* aDelegate=nsnull);
+  GeckoChildProcessHost(GeckoProcessType aProcessType,
+                        ChildPrivileges aPrivileges=base::PRIVILEGES_DEFAULT);
 
   ~GeckoChildProcessHost();
 
-  bool SyncLaunch(std::vector<std::string> aExtraOpts=std::vector<std::string>(), int32 timeoutMs=0);
-  bool AsyncLaunch(std::vector<std::string> aExtraOpts=std::vector<std::string>());
-  bool PerformAsyncLaunch(std::vector<std::string> aExtraOpts=std::vector<std::string>());
+  static nsresult GetArchitecturesForBinary(const char *path, uint32_t *result);
 
-  virtual void OnChannelConnected(int32 peer_pid);
+  static uint32_t GetSupportedArchitecturesForProcessType(GeckoProcessType type);
+
+  // Block until the IPC channel for our subprocess is initialized,
+  // but no longer.  The child process may or may not have been
+  // created when this method returns.
+  bool AsyncLaunch(StringVector aExtraOpts=StringVector());
+
+  // Block until the IPC channel for our subprocess is initialized and
+  // the OS process is created.  The subprocess may or may not have
+  // connected back to us when this method returns.
+  //
+  // NB: on POSIX, this method is relatively cheap, and doesn't
+  // require disk IO.  On win32 however, it requires at least the
+  // analogue of stat().  This difference induces a semantic
+  // difference in this method: on POSIX, when we return, we know the
+  // subprocess has been created, but we don't know whether its
+  // executable image can be loaded.  On win32, we do know that when
+  // we return.  But we don't know if dynamic linking succeeded on
+  // either platform.
+  bool LaunchAndWaitForProcessHandle(StringVector aExtraOpts=StringVector());
+
+  // Block until the child process has been created and it connects to
+  // the IPC channel, meaning it's fully initialized.  (Or until an
+  // error occurs.)
+  bool SyncLaunch(StringVector aExtraOpts=StringVector(),
+                  int32_t timeoutMs=0,
+                  base::ProcessArchitecture arch=base::GetCurrentProcessArchitecture());
+
+  bool PerformAsyncLaunch(StringVector aExtraOpts=StringVector(),
+                          base::ProcessArchitecture arch=base::GetCurrentProcessArchitecture());
+
+  virtual void OnChannelConnected(int32_t peer_pid);
   virtual void OnMessageReceived(const IPC::Message& aMsg);
   virtual void OnChannelError();
+  virtual void GetQueuedMessages(std::queue<IPC::Message>& queue);
 
   void InitializeChannel();
 
@@ -99,10 +99,29 @@ public:
 
 protected:
   GeckoProcessType mProcessType;
+  ChildPrivileges mPrivileges;
   Monitor mMonitor;
-  bool mLaunched;
-  bool mChannelInitialized;
   FilePath mProcessPath;
+  // This value must be accessed while holding mMonitor.
+  enum {
+    // This object has been constructed, but the OS process has not
+    // yet.
+    CREATING_CHANNEL = 0,
+    // The IPC channel for our subprocess has been created, but the OS
+    // process has still not been created.
+    CHANNEL_INITIALIZED,
+    // The OS process has been created, but it hasn't yet connected to
+    // our IPC channel.
+    PROCESS_CREATED,
+    // The process is launched and connected to our IPC channel.  All
+    // is well.
+    PROCESS_CONNECTED,
+    PROCESS_ERROR
+  } mProcessState;
+
+  static int32_t mChildCounter;
+
+  void PrepareLaunch();
 
 #ifdef XP_WIN
   void InitWindowsGroupID();
@@ -122,6 +141,21 @@ protected:
 
 private:
   DISALLOW_EVIL_CONSTRUCTORS(GeckoChildProcessHost);
+
+  // Does the actual work for AsyncLaunch, on the IO thread.
+  bool PerformAsyncLaunchInternal(std::vector<std::string>& aExtraOpts,
+                                  base::ProcessArchitecture arch);
+
+  void OpenPrivilegedHandle(base::ProcessId aPid);
+
+  // In between launching the subprocess and handing off its IPC
+  // channel, there's a small window of time in which *we* might still
+  // be the channel listener, and receive messages.  That's bad
+  // because we have no idea what to do with those messages.  So queue
+  // them here until we hand off the eventual listener.
+  //
+  // FIXME/cjones: this strongly indicates bad design.  Shame on us.
+  std::queue<IPC::Message> mQueue;
 };
 
 } /* namespace ipc */

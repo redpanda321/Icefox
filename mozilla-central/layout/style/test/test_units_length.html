@@ -2,7 +2,6 @@
 <html>
 <head>
   <title>Test for serialization and equivalence of length units</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
 </head>
@@ -48,6 +47,11 @@ for (var test in tests) {
     is(cm1, cm2, test + " should compute to the same as " + equiv);
   }
 }
+
+// Bug 393910
+p.setAttribute("style", "margin-left: 0");
+is(p.style.getPropertyValue("margin-left"), "0px",
+  "0 serializes to 0px");
 
 </script>
 </pre>

@@ -1,72 +1,38 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is TransforMiiX XSLT processor code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Peter Van der Beken <peterv@propagandism.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsXPathEvaluator.h"
 #include "nsCOMPtr.h"
 #include "nsIAtom.h"
-#include "nsIDOMClassInfo.h"
 #include "nsXPathExpression.h"
 #include "nsXPathNSResolver.h"
 #include "nsXPathResult.h"
 #include "nsContentCID.h"
 #include "txExpr.h"
 #include "txExprParser.h"
-#include "nsDOMError.h"
+#include "nsError.h"
 #include "txURIUtils.h"
 #include "nsIDocument.h"
 #include "nsIDOMDocument.h"
 #include "nsDOMString.h"
 #include "nsINameSpaceManager.h"
-#include "txError.h"
 #include "nsContentUtils.h"
+#include "mozilla/dom/XPathEvaluatorBinding.h"
+
+using namespace mozilla;
 
 // txIParseContext implementation
 class nsXPathEvaluatorParseContext : public txIParseContext
 {
 public:
-    nsXPathEvaluatorParseContext(nsXPathEvaluator &aEvaluator,
-                                 nsIDOMXPathNSResolver* aResolver,
-                                 nsTArray<PRInt32> *aNamespaceIDs,
+    nsXPathEvaluatorParseContext(nsIDOMXPathNSResolver* aResolver,
+                                 nsTArray<int32_t> *aNamespaceIDs,
                                  nsTArray<nsCString> *aContractIDs,
                                  nsCOMArray<nsISupports> *aState,
-                                 PRBool aIsCaseSensitive)
-        : mEvaluator(aEvaluator),
-          mResolver(aResolver),
+                                 bool aIsCaseSensitive)
+        : mResolver(aResolver),
           mNamespaceIDs(aNamespaceIDs),
           mContractIDs(aContractIDs),
           mState(aState),
@@ -83,29 +49,25 @@ public:
         return mLastError;
     }
 
-    nsresult resolveNamespacePrefix(nsIAtom* aPrefix, PRInt32& aID);
-    nsresult resolveFunctionCall(nsIAtom* aName, PRInt32 aID,
+    nsresult resolveNamespacePrefix(nsIAtom* aPrefix, int32_t& aID);
+    nsresult resolveFunctionCall(nsIAtom* aName, int32_t aID,
                                  FunctionCall** aFunction);
-    PRBool caseInsensitiveNameTests();
-    void SetErrorOffset(PRUint32 aOffset);
+    bool caseInsensitiveNameTests();
+    void SetErrorOffset(uint32_t aOffset);
 
 private:
-    nsXPathEvaluator &mEvaluator;
     nsIDOMXPathNSResolver* mResolver;
-    nsTArray<PRInt32> *mNamespaceIDs;
+    nsTArray<int32_t> *mNamespaceIDs;
     nsTArray<nsCString> *mContractIDs;
     nsCOMArray<nsISupports> *mState;
     nsresult mLastError;
-    PRBool mIsCaseSensitive;
+    bool mIsCaseSensitive;
 };
-
-DOMCI_DATA(XPathEvaluator, nsXPathEvaluator)
 
 NS_IMPL_AGGREGATED(nsXPathEvaluator)
 NS_INTERFACE_MAP_BEGIN_AGGREGATED(nsXPathEvaluator)
     NS_INTERFACE_MAP_ENTRY(nsIDOMXPathEvaluator)
     NS_INTERFACE_MAP_ENTRY(nsIXPathEvaluatorInternal)
-    NS_DOM_INTERFACE_MAP_ENTRY_CLASSINFO(XPathEvaluator)
 NS_INTERFACE_MAP_END
 
 nsXPathEvaluator::nsXPathEvaluator(nsISupports *aOuter)
@@ -126,8 +88,8 @@ nsXPathEvaluator::CreateExpression(const nsAString & aExpression,
                                    nsIDOMXPathNSResolver *aResolver,
                                    nsIDOMXPathExpression **aResult)
 {
-    return CreateExpression(aExpression, aResolver, (nsTArray<PRInt32>*)nsnull,
-                            nsnull, nsnull, aResult);
+    return CreateExpression(aExpression, aResolver, (nsTArray<int32_t>*)nullptr,
+                            nullptr, nullptr, aResult);
 }
 
 NS_IMETHODIMP
@@ -149,7 +111,7 @@ NS_IMETHODIMP
 nsXPathEvaluator::Evaluate(const nsAString & aExpression,
                            nsIDOMNode *aContextNode,
                            nsIDOMXPathNSResolver *aResolver,
-                           PRUint16 aType,
+                           uint16_t aType,
                            nsISupports *aInResult,
                            nsISupports **aResult)
 {
@@ -177,9 +139,9 @@ nsXPathEvaluator::CreateExpression(const nsAString & aExpression,
                                    nsCOMArray<nsISupports> *aState,
                                    nsIDOMXPathExpression **aResult)
 {
-    nsTArray<PRInt32> namespaceIDs;
+    nsTArray<int32_t> namespaceIDs;
     if (aNamespaceURIs) {
-        PRUint32 count = aNamespaceURIs->Length();
+        uint32_t count = aNamespaceURIs->Length();
 
         if (!aContractIDs || aContractIDs->Length() != count) {
             return NS_ERROR_FAILURE;
@@ -189,7 +151,7 @@ nsXPathEvaluator::CreateExpression(const nsAString & aExpression,
             return NS_ERROR_OUT_OF_MEMORY;
         }
 
-        PRUint32 i;
+        uint32_t i;
         for (i = 0; i < count; ++i) {
             if (aContractIDs->ElementAt(i).IsEmpty()) {
                 return NS_ERROR_FAILURE;
@@ -207,7 +169,7 @@ nsXPathEvaluator::CreateExpression(const nsAString & aExpression,
 nsresult
 nsXPathEvaluator::CreateExpression(const nsAString & aExpression,
                                    nsIDOMXPathNSResolver *aResolver,
-                                   nsTArray<PRInt32> *aNamespaceIDs,
+                                   nsTArray<int32_t> *aNamespaceIDs,
                                    nsTArray<nsCString> *aContractIDs,
                                    nsCOMArray<nsISupports> *aState,
                                    nsIDOMXPathExpression **aResult)
@@ -224,7 +186,7 @@ nsXPathEvaluator::CreateExpression(const nsAString & aExpression,
     }
 
     nsCOMPtr<nsIDocument> doc = do_QueryReferent(mDocument);
-    nsXPathEvaluatorParseContext pContext(*this, aResolver, aNamespaceIDs,
+    nsXPathEvaluatorParseContext pContext(aResolver, aNamespaceIDs,
                                           aContractIDs, aState,
                                           !(doc && doc->IsHTML()));
 
@@ -250,13 +212,61 @@ nsXPathEvaluator::CreateExpression(const nsAString & aExpression,
     return NS_OK;
 }
 
+JSObject*
+nsXPathEvaluator::WrapObject(JSContext* aCx, JSObject* aScope)
+{
+    return dom::XPathEvaluatorBinding::Wrap(aCx, aScope, this);
+}
+
+/* static */
+already_AddRefed<nsXPathEvaluator>
+nsXPathEvaluator::Constructor(nsISupports* aGlobal, ErrorResult& rv)
+{
+    nsRefPtr<nsXPathEvaluator> newObj = new nsXPathEvaluator(nullptr);
+    newObj->Init();
+    return newObj.forget();
+}
+
+already_AddRefed<nsIDOMXPathExpression>
+nsXPathEvaluator::CreateExpression(const nsAString& aExpression,
+                                   nsIDOMXPathNSResolver* aResolver,
+                                   ErrorResult& rv)
+{
+  nsCOMPtr<nsIDOMXPathExpression> expr;
+  rv = CreateExpression(aExpression, aResolver, getter_AddRefs(expr));
+  return expr.forget();
+}
+
+already_AddRefed<nsIDOMXPathNSResolver>
+nsXPathEvaluator::CreateNSResolver(nsINode* aNodeResolver,
+                                   ErrorResult& rv)
+{
+  nsCOMPtr<nsIDOMNode> nodeResolver = do_QueryInterface(aNodeResolver);
+  nsCOMPtr<nsIDOMXPathNSResolver> res;
+  rv = CreateNSResolver(nodeResolver, getter_AddRefs(res));
+  return res.forget();
+}
+
+already_AddRefed<nsISupports>
+nsXPathEvaluator::Evaluate(const nsAString& aExpression, nsINode* aContextNode,
+                           nsIDOMXPathNSResolver* aResolver, uint16_t aType,
+                           nsISupports* aResult, ErrorResult& rv)
+{
+  nsCOMPtr<nsIDOMNode> contextNode = do_QueryInterface(aContextNode);
+  nsCOMPtr<nsISupports> res;
+  rv = Evaluate(aExpression, contextNode, aResolver, aType,
+                aResult, getter_AddRefs(res));
+  return res.forget();
+}
+
+
 /*
  * Implementation of txIParseContext private to nsXPathEvaluator, based on a
  * nsIDOMXPathNSResolver
  */
 
 nsresult nsXPathEvaluatorParseContext::resolveNamespacePrefix
-    (nsIAtom* aPrefix, PRInt32& aID)
+    (nsIAtom* aPrefix, int32_t& aID)
 {
     aID = kNameSpaceID_Unknown;
 
@@ -288,21 +298,21 @@ nsresult nsXPathEvaluatorParseContext::resolveNamespacePrefix
 }
 
 extern nsresult
-TX_ResolveFunctionCallXPCOM(const nsCString &aContractID, PRInt32 aNamespaceID,
+TX_ResolveFunctionCallXPCOM(const nsCString &aContractID, int32_t aNamespaceID,
                             nsIAtom *aName, nsISupports *aState,
                             FunctionCall **aFunction);
 
 nsresult
 nsXPathEvaluatorParseContext::resolveFunctionCall(nsIAtom* aName,
-                                                  PRInt32 aID,
+                                                  int32_t aID,
                                                   FunctionCall** aFn)
 {
     nsresult rv = NS_ERROR_XPATH_UNKNOWN_FUNCTION;
 
-    PRUint32 i, count = mNamespaceIDs ? mNamespaceIDs->Length() : 0;
+    uint32_t i, count = mNamespaceIDs ? mNamespaceIDs->Length() : 0;
     for (i = 0; i < count; ++i) {
         if (mNamespaceIDs->ElementAt(i) == aID) {
-            nsISupports *state = mState ? mState->SafeObjectAt(i) : nsnull;
+            nsISupports *state = mState ? mState->SafeObjectAt(i) : nullptr;
             rv = TX_ResolveFunctionCallXPCOM(mContractIDs->ElementAt(i), aID,
                                              aName, state, aFn);
             if (NS_SUCCEEDED(rv)) {
@@ -314,12 +324,12 @@ nsXPathEvaluatorParseContext::resolveFunctionCall(nsIAtom* aName,
     return rv;
 }
 
-PRBool nsXPathEvaluatorParseContext::caseInsensitiveNameTests()
+bool nsXPathEvaluatorParseContext::caseInsensitiveNameTests()
 {
     return !mIsCaseSensitive;
 }
 
 void
-nsXPathEvaluatorParseContext::SetErrorOffset(PRUint32 aOffset)
+nsXPathEvaluatorParseContext::SetErrorOffset(uint32_t aOffset)
 {
 }

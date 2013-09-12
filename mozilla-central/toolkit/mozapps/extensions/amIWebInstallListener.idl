@@ -1,43 +1,10 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Extension Manager.
- *
- * The Initial Developer of the Original Code is
- * the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dave Townsend <dtownsend@oxymoronical.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsISupports.idl"
 
-interface nsIDOMWindowInternal;
+interface nsIDOMWindow;
 interface nsIURI;
 interface nsIVariant;
 
@@ -49,7 +16,7 @@ interface nsIVariant;
 [scriptable, uuid(8710e692-3989-4dc7-b607-40d57610ae75)]
 interface amIWebInstallInfo : nsISupports
 {
-  readonly attribute nsIDOMWindowInternal originatingWindow;
+  readonly attribute nsIDOMWindow originatingWindow;
   readonly attribute nsIURI originatingURI;
   readonly attribute nsIVariant installs;
 
@@ -65,9 +32,25 @@ interface amIWebInstallInfo : nsISupports
  * dialog when add-ons are ready to install and uses the observer service to
  * notify when installations are blocked.
  */
-[scriptable, uuid(ea806f3a-1b27-4d3d-9aee-88dec4c29fda)]
+[scriptable, uuid(a5503979-89c8-441e-9e4a-321df379c172)]
 interface amIWebInstallListener : nsISupports
 {
+  /**
+   * Called when installation by websites is currently disabled.
+   *
+   * @param  aWindow
+   *         The window that triggered the installs
+   * @param  aUri
+   *         The URI of the site that triggered the installs
+   * @param  aInstalls
+   *         The AddonInstalls that were blocked
+   * @param  aCount
+   *         The number of AddonInstalls
+   */
+  void onWebInstallDisabled(in nsIDOMWindow aWindow, in nsIURI aUri,
+                            [array, size_is(aCount)] in nsIVariant aInstalls,
+                            [optional] in uint32_t aCount);
+
   /**
    * Called when the website is not allowed to directly prompt the user to
    * install add-ons.
@@ -82,9 +65,9 @@ interface amIWebInstallListener : nsISupports
    *         The number of AddonInstalls
    * @return true if the caller should start the installs
    */
-  boolean onWebInstallBlocked(in nsIDOMWindowInternal aWindow, in nsIURI aUri,
+  boolean onWebInstallBlocked(in nsIDOMWindow aWindow, in nsIURI aUri,
                               [array, size_is(aCount)] in nsIVariant aInstalls,
-                              [optional] in PRUint32 aCount);
+                              [optional] in uint32_t aCount);
 
   /**
    * Called when a website wants to ask the user to install add-ons.
@@ -99,9 +82,9 @@ interface amIWebInstallListener : nsISupports
    *         The number of AddonInstalls
    * @return true if the caller should start the installs
    */
-  boolean onWebInstallRequested(in nsIDOMWindowInternal aWindow, in nsIURI aUri,
+  boolean onWebInstallRequested(in nsIDOMWindow aWindow, in nsIURI aUri,
                                 [array, size_is(aCount)] in nsIVariant aInstalls,
-                                [optional] in PRUint32 aCount);
+                                [optional] in uint32_t aCount);
 };
 
 /**
@@ -124,7 +107,7 @@ interface amIWebInstallPrompt : nsISupports
    * @param  aCount
    *         The number of AddonInstalls
    */
-  void confirm(in nsIDOMWindowInternal aWindow, in nsIURI aUri,
+  void confirm(in nsIDOMWindow aWindow, in nsIURI aUri,
                [array, size_is(aCount)] in nsIVariant aInstalls,
-               [optional] in PRUint32 aCount);
+               [optional] in uint32_t aCount);
 };

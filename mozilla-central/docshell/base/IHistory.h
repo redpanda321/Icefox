@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  * vim: set ts=4 sw=4 et tw=80:
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Shawn Wilsher <me@shawnwilsher.com> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef mozilla_IHistory_h_
 #define mozilla_IHistory_h_
@@ -51,8 +18,9 @@ namespace mozilla {
         class Link;
     }
 
+// 0057c9d3-b98e-4933-bdc5-0275d06705e1
 #define IHISTORY_IID \
-  {0x6f733924, 0x6321, 0x4384, {0x01, 0xee, 0x8e, 0x7d, 0xfb, 0xde, 0xe7, 0xa8}}
+  {0x0057c9d3, 0xb98e, 0x4933, {0xbd, 0xc5, 0x02, 0x75, 0xd0, 0x67, 0x05, 0xe1}}
 
 class IHistory : public nsISupports
 {
@@ -71,7 +39,7 @@ public:
      *       UnregisterVisitedCallback.
      *
      * @pre aURI must not be null.
-     * @pre aLink may be null only in the MOZ_IPC parent process.
+     * @pre aLink may be null only in the parent (chrome) process.
      *
      * @param aURI
      *        The URI to check.
@@ -109,7 +77,16 @@ public:
         /**
          * Indicates whether the URI was loaded as part of a temporary redirect.
          */
-        REDIRECT_TEMPORARY = 1 << 2
+        REDIRECT_TEMPORARY = 1 << 2,
+        /**
+         * Indicates the URI is redirecting  (Response code 3xx).
+         */
+        REDIRECT_SOURCE = 1 << 3,
+        /**
+         * Indicates the URI caused an error that is unlikely fixable by a
+         * retry, like a not found or unfetchable page.
+         */
+        UNRECOVERABLE_ERROR = 1 << 4
     };
 
     /**
@@ -127,7 +104,7 @@ public:
     NS_IMETHOD VisitURI(
         nsIURI *aURI,
         nsIURI *aLastVisitedURI,
-        PRUint32 aFlags
+        uint32_t aFlags
     ) = 0;
 
     /**
@@ -141,6 +118,14 @@ public:
      *        The title string.
      */
     NS_IMETHOD SetURITitle(nsIURI* aURI, const nsAString& aTitle) = 0;
+
+    /**
+     * Notifies about the visited status of a given URI.
+     *
+     * @param aURI
+     *        The URI to notify about.
+     */
+    NS_IMETHOD NotifyVisited(nsIURI* aURI) = 0;
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(IHistory, IHISTORY_IID)
@@ -152,8 +137,9 @@ NS_DEFINE_STATIC_IID_ACCESSOR(IHistory, IHISTORY_IID)
                                          mozilla::dom::Link *aContent); \
     NS_IMETHOD VisitURI(nsIURI *aURI, \
                         nsIURI *aLastVisitedURI, \
-                        PRUint32 aFlags); \
-    NS_IMETHOD SetURITitle(nsIURI* aURI, const nsAString& aTitle);
+                        uint32_t aFlags); \
+    NS_IMETHOD SetURITitle(nsIURI* aURI, const nsAString& aTitle); \
+    NS_IMETHOD NotifyVisited(nsIURI* aURI);
 
 } // namespace mozilla
 

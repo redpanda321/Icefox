@@ -1,5 +1,8 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH		= ../..
+DEPTH		= @DEPTH@
 topsrcdir	= @top_srcdir@
 srcdir		= @srcdir@
 VPATH		= @srcdir@
@@ -12,6 +15,7 @@ LIBXUL_LIBRARY	= 1
 EXPORT_LIBRARY	= 1
 
 EXPORTS	= \
+	gfx2DGlue.h \
 	gfx3DMatrix.h \
 	gfxASurface.h \
 	gfxAlphaRecovery.h \
@@ -20,36 +24,44 @@ EXPORTS	= \
 	gfxColor.h \
 	gfxContext.h \
 	gfxDrawable.h \
+	gfxFailure.h \
 	gfxFont.h \
 	gfxFontConstants.h \
+	gfxFontFeatures.h \
+	gfxFontMissingGlyphs.h \
 	gfxFontUtils.h \
 	gfxFontTest.h \
 	gfxImageSurface.h \
+	gfxLineSegment.h \
 	gfxMatrix.h \
 	gfxPath.h \
 	gfxPattern.h \
 	gfxPlatform.h \
 	gfxPoint.h \
+	gfxPoint3D.h \
+	gfxPointH3D.h \
+	gfxQuad.h \
+	gfxQuaternion.h \
 	gfxRect.h \
 	gfxSkipChars.h \
+	gfxTeeSurface.h \
 	gfxTypes.h \
-	gfxTextRunCache.h \
-	gfxTextRunWordCache.h \
-	gfxThebesUtils.h \
 	gfxUtils.h \
 	gfxUserFontSet.h \
-	GLDefs.h \
-	GLContext.h \
-	GLContextProvider.h \
-	GLContextProviderImpl.h \
-	nsCoreAnimationSupport.h \
+	nsSurfaceTexture.h \
+	gfxBaseSharedMemorySurface.h \
+	gfxSharedImageSurface.h \
+	gfxSharedQuartzSurface.h \
+	gfxReusableSurfaceWrapper.h \
+	gfxSVGGlyphs.h \
+	RoundedRect.h \
 	$(NULL)
 
-ifdef MOZ_IPC
-EXPORTS	+= \
-	gfxSharedImageSurface.h \
+# gfxSVGGlyphs needs nsDOMParser.h
+LOCAL_INCLUDES += \
+	-I$(topsrcdir)/content/base/public \
+	-I$(topsrcdir)/content/xml/document/src \
 	$(NULL)
-endif
 
 ifeq ($(MOZ_WIDGET_TOOLKIT),android)
 EXPORTS += \
@@ -59,13 +71,11 @@ EXPORTS += \
 	$(NULL)
 endif
 
-ifeq ($(MOZ_WIDGET_TOOLKIT),beos)
-EXPORTS	+= \
-	gfxBeOSPlatform.h \
-	gfxBeOSSurface.h \
+ifeq ($(MOZ_WIDGET_TOOLKIT),gonk)
+EXPORTS += \
+	gfxAndroidPlatform.h \
+	gfxFT2Fonts.h \
 	gfxFT2FontBase.h \
-	gfxPDFSurface.h \
-	gfxPangoFonts.h \
 	$(NULL)
 endif
 
@@ -74,7 +84,6 @@ EXPORTS += \
 	gfxPlatformMac.h \
 	gfxQuartzSurface.h \
 	gfxQuartzImageSurface.h \
-	gfxQuartzPDFSurface.h \
 	gfxQuartzNativeDrawing.h \
 	$(NULL)
 endif
@@ -92,7 +101,6 @@ ifdef MOZ_X11
 EXPORTS += \
 	gfxXlibSurface.h \
         gfxXlibNativeRenderer.h \
-	GLXLibrary.h \
 	$(NULL)
 endif
 
@@ -102,9 +110,6 @@ else
 EXPORTS += gfxFT2Fonts.h
 endif
 
-ifdef MOZ_DFB
-EXPORTS += gfxDirectFBSurface.h
-endif
 endif
 
 ifeq ($(MOZ_WIDGET_TOOLKIT),os2)
@@ -122,12 +127,12 @@ EXPORTS += \
 	gfxQPainterSurface.h \
 	gfxQtNativeRenderer.h \
 	gfxQtPlatform.h \
+	gfxPDFSurface.h \
 	$(NULL)
 
 ifdef MOZ_X11
 EXPORTS += \
 	gfxXlibSurface.h \
-	GLXLibrary.h \
 	$(NULL)
 endif
 
@@ -144,24 +149,16 @@ EXPORTS	+= \
 	gfxWindowsPlatform.h \
 	gfxWindowsSurface.h \
 	gfxWindowsNativeDrawing.h \
-	WGLLibrary.h \
-	$(NULL)
-
-ifdef WINCE
-EXPORTS += \
-	gfxFT2Fonts.h \
-	gfxFT2FontBase.h \
-	gfxDDrawSurface.h \
-	$(NULL)
-else
-EXPORTS += \
 	gfxDWriteFonts.h \
 	gfxD2DSurface.h \
+	gfxGDIFont.h \
+	gfxGDIFontList.h \
+	gfxPlatformFontList.h \
 	$(NULL)
-endif
 endif
 
 CPPSRCS	= \
+	gfx3DMatrix.cpp \
 	gfxASurface.cpp \
 	gfxAlphaRecovery.cpp \
 	gfxBlur.cpp \
@@ -173,7 +170,6 @@ CPPSRCS	= \
 	gfxFontMissingGlyphs.cpp \
 	gfxFontTest.cpp \
 	gfxFontUtils.cpp \
-	gfxAtoms.cpp \
 	gfxMatrix.cpp \
 	gfxPath.cpp \
 	gfxPattern.cpp \
@@ -181,77 +177,46 @@ CPPSRCS	= \
 	gfxPlatformFontList.cpp \
 	gfxRect.cpp \
 	gfxSkipChars.cpp \
-	gfxTextRunCache.cpp \
-	gfxTextRunWordCache.cpp \
-	gfxThebesUtils.cpp \
+	gfxTeeSurface.cpp \
 	gfxUserFontSet.cpp \
 	gfxUtils.cpp \
-	gfxUnicodeProperties.cpp \
 	gfxScriptItemizer.cpp \
 	gfxHarfBuzzShaper.cpp \
-	GLContext.cpp \
-	GLContextProviderOSMesa.cpp \
+	gfxBaseSharedMemorySurface.cpp \
+	gfxReusableSurfaceWrapper.cpp \
+	nsSurfaceTexture.cpp \
+	gfxSVGGlyphs.cpp \
 	$(NULL)
 
-ifdef MOZ_IPC
-CPPSRCS += \
-	gfxSharedImageSurface.cpp \
+ifeq ($(MOZ_WIDGET_TOOLKIT),$(findstring $(MOZ_WIDGET_TOOLKIT),android gtk2 gonk qt))
+DEFINES += -DMOZ_ENABLE_FREETYPE
+endif
+
+ifdef MOZ_GRAPHITE
+DEFINES += -DGRAPHITE2_STATIC
+CPPSRCS	+= \
+	gfxGraphiteShaper.cpp \
 	$(NULL)
 endif
 
-ifeq (86,$(findstring 86,$(OS_TEST)))
-ifdef __GNUC__
-gfxAlphaRecovery.$(OBJ_SUFFIX): MODULE_OPTIMIZE_FLAGS += -msse2
-endif
-ifdef SOLARIS_SUNPRO_CXX
-gfxAlphaRecovery.$(OBJ_SUFFIX): OS_CXXFLAGS += -xarch=sse2 -xO4
-endif
+# Are we targeting x86 or x64?  If so, build gfxAlphaRecoverySSE2.cpp.
+ifneq (,$(INTEL_ARCHITECTURE))
+CPPSRCS += gfxAlphaRecoverySSE2.cpp
 endif
 
 SHARED_LIBRARY_LIBS += \
 	../layers/$(LIB_PREFIX)layers.$(LIB_SUFFIX) \
-    ../harfbuzz/src/$(LIB_PREFIX)mozharfbuzz.$(LIB_SUFFIX) \
-    $(NULL)
-
-
-ifndef MOZ_ENABLE_LIBXUL
-EXTRA_DSO_LIBS	= gkgfx ycbcr
-ifeq (,$(filter-out WINNT WINCE OS2,$(OS_ARCH)))
-CPPSRCS += gfxDllDeps.cpp
-endif
-endif
-
-EXTRA_DSO_LDOPTS += \
-	$(MOZ_CAIRO_LIBS) \
-	$(LIBS_DIR) \
-	$(EXTRA_DSO_LIBS) \
-	$(MOZ_UNICHARUTIL_LIBS) \
-	$(XPCOM_LIBS) \
-	$(NSPR_LIBS) \
-	$(ZLIB_LIBS) \
-	$(QCMS_LIBS) \
-	$(MOZ_HARFBUZZ_LIBS) \
 	$(NULL)
 
+
 ifeq ($(MOZ_WIDGET_TOOLKIT),windows)
+
 CPPSRCS	+= 	gfxWindowsPlatform.cpp \
 		gfxWindowsSurface.cpp \
 		gfxWindowsNativeDrawing.cpp \
 		nsUnicodeRange.cpp \
 		$(NULL)
 
-ifdef WINCE
-CPPSRCS	+= gfxFT2Fonts.cpp \
-	   gfxFT2FontBase.cpp \
-	   gfxFT2Utils.cpp \
-	   gfxDDrawSurface.cpp \
-	   gfxFT2FontList.cpp \
-	   $(NULL)
-
-EXTRA_DSO_LDOPTS += $(FT2_LIBS)
-
-OS_LIBS += $(call EXPAND_LIBNAME,ddraw)
-else
 ifdef MOZ_ENABLE_DWRITE_FONT
 CPPSRCS	+= gfxDWriteFonts.cpp \
 	   gfxDWriteShaper.cpp \
@@ -261,35 +226,55 @@ CPPSRCS	+= gfxDWriteFonts.cpp \
 	   gfxDWriteFontList.cpp \
 	   $(NULL)
 endif
+
 CPPSRCS	+= gfxGDIFont.cpp \
 	   gfxGDIFontList.cpp \
 	   gfxGDIShaper.cpp \
 	   gfxUniscribeShaper.cpp \
 	   $(NULL)
-_OS_LIBS = usp10 msimg32 ole32
-endif
 
 CPPSRCS +=	gfxPDFSurface.cpp
 
-ifdef GNU_CXX
-_OS_LIBS	+= uuid
-endif
-OS_LIBS		+= $(call EXPAND_LIBNAME,$(_OS_LIBS))
-
 ifdef MOZ_ENABLE_D3D9_LAYER
 DEFINES +=	-DMOZ_ENABLE_D3D9_LAYER
+endif
+
+ifdef MOZ_ENABLE_D3D10_LAYER
+DEFINES +=	-DMOZ_ENABLE_D3D10_LAYER
 endif
 
 ACDEFINES +=	-UWIN32_LEAN_AND_MEAN
 endif
 
 ifeq ($(MOZ_WIDGET_TOOLKIT),android)
+EXPORTS	+= \
+	gfxPDFSurface.h \
+	$(NULL)
 CPPSRCS += \
 	gfxAndroidPlatform.cpp \
 	gfxFT2Fonts.cpp \
 	gfxFT2FontBase.cpp \
 	gfxFT2Utils.cpp \
 	gfxFT2FontList.cpp \
+	gfxPDFSurface.cpp \
+	nsUnicodeRange.cpp \
+	$(NULL)
+# This is set for "normal Android", that is, when Gecko is running on
+# top of the android java runtime.
+DEFINES +=	-DMOZ_USING_ANDROID_JAVA_WIDGETS
+endif
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),gonk)
+EXPORTS	+= \
+	gfxPDFSurface.h \
+	$(NULL)
+CPPSRCS += \
+	gfxAndroidPlatform.cpp \
+	gfxFT2Fonts.cpp \
+	gfxFT2FontBase.cpp \
+	gfxFT2Utils.cpp \
+	gfxFT2FontList.cpp \
+	gfxPDFSurface.cpp \
 	nsUnicodeRange.cpp \
 	$(NULL)
 endif
@@ -323,20 +308,13 @@ CPPSRCS +=	gfxFT2FontBase.cpp
 CPPSRCS +=	gfxFT2Utils.cpp
 CPPSRCS +=	nsUnicodeRange.cpp
 
-ifdef MOZ_DFB
-CSRCS = cairo-gdk-utils.c
-endif
-
-EXTRA_DSO_LDOPTS += $(MOZ_PANGO_LIBS) $(ZLIB_LIBS) $(XLDFLAGS) $(XLIBS) $(XEXT_LIBS)
-endif
-
-ifdef MOZ_DFB
-CPPSRCS += gfxDirectFBSurface.cpp
 endif
 
 ifeq ($(MOZ_WIDGET_TOOLKIT),qt)
 CPPSRCS += gfxQtPlatform.cpp gfxQPainterSurface.cpp
+ifdef MOZ_X11
 CPPSRCS += gfxXlibSurface.cpp gfxQtNativeRenderer.cpp
+endif
 ifdef MOZ_PANGO
 CPPSRCS += gfxPangoFonts.cpp
 else
@@ -346,25 +324,13 @@ CPPSRCS +=	gfxFT2FontBase.cpp
 CPPSRCS +=	gfxFT2Utils.cpp
 CPPSRCS +=	gfxFontconfigUtils.cpp
 CPPSRCS +=	nsUnicodeRange.cpp
-EXTRA_DSO_LDOPTS += $(MOZ_PANGO_LIBS) $(ZLIB_LIBS) $(XLDFLAGS) $(XLIBS) $(CAIRO_FT_LIBS) $(XEXT_LIBS)
-endif
-
-ifeq ($(MOZ_WIDGET_TOOLKIT),beos)
-CPPSRCS	+= 	gfxBeOSSurface.cpp gfxBeOSPlatform.cpp
-CPPSRCS +=	gfxPangoFonts.cpp 
-CPPSRCS +=	gfxFT2FontBase.cpp
-CPPSRCS +=	gfxFT2Utils.cpp
-#CPPSRCS +=	gfxPDFSurface.cpp
-CPPSRCS +=	gfxFontconfigUtils.cpp
-CPPSRCS +=	nsUnicodeRange.cpp
-EXTRA_DSO_LDOPTS += $(MOZ_PANGO_LIBS) $(CAIRO_FT_LIBS) -lfontconfig
+CPPSRCS +=	gfxPDFSurface.cpp
 endif
 
 ifneq (,$(filter cocoa uikit,$(MOZ_WIDGET_TOOLKIT)))
 CPPSRCS	+= \
 	gfxQuartzSurface.cpp \
 	gfxQuartzImageSurface.cpp \
-	gfxQuartzPDFSurface.cpp \
 	gfxPlatformMac.cpp \
 	gfxCoreTextShaper.cpp \
 	$(NULL)
@@ -376,96 +342,46 @@ ifeq ($(MOZ_WIDGET_TOOLKIT),cocoa)
 CPPSRCS += gfxMacFont.cpp
 CMMSRCS += \
   gfxMacPlatformFontList.mm \
-  nsCoreAnimationSupport.mm \
   $(NULL)
 endif
 
-ifeq (uikit,$(MOZ_WIDGET_TOOLKIT))
+ifeq ($(MOZ_WIDGET_TOOLKIT),uikit)
 CMMSRCS += \
   gfxUIKitPlatformFontList.mm \
   gfxUIKitFont.mm \
   $(NULL)
 endif
 
-# Always link with OpenGL/AGL
-EXTRA_DSO_LDOPTS += -framework OpenGL -framework AGL -framework QuickTime -framework AppKit -framework QuartzCore
+
 endif
 
 CSRCS += woff.c
 
-EXTRA_DSO_LDOPTS += $(TK_LIBS)
+DEFINES += -DIMPL_THEBES -DWOFF_MOZILLA_CLIENT -DHB_DONT_DEFINE_STDINT
+DEFINES += -DMOZ_OTS_REPORT_ERRORS
 
-GL_PROVIDER = Null
-
-ifeq ($(MOZ_WIDGET_TOOLKIT),windows)
-ifndef WINCE
-GL_PROVIDER = WGL
+ifeq (WINNT,$(OS_TARGET))
+DEFINES += -DOTS_DLL
 endif
-endif
-
-
-ifeq ($(MOZ_WIDGET_TOOLKIT),cocoa)
-GL_PROVIDER = CGL
-endif
-
-ifeq ($(MOZ_WIDGET_TOOLKIT),gtk2)
-ifdef MOZ_PLATFORM_MAEMO
-GL_PROVIDER = EGL
-else
-GL_PROVIDER = GLX
-endif
-endif
-
-ifeq ($(MOZ_WIDGET_TOOLKIT),qt)
-ifdef MOZ_PLATFORM_MAEMO
-GL_PROVIDER = EGL
-else
-GL_PROVIDER = GLX
-endif
-endif
-
-ifeq ($(MOZ_WIDGET_TOOLKIT),android)
-GL_PROVIDER = EGL
-endif
-
-# Mac is a special snowflake
-ifeq ($(GL_PROVIDER),CGL)
-CMMSRCS += GLContextProvider$(GL_PROVIDER).mm
-else
-CPPSRCS += GLContextProvider$(GL_PROVIDER).cpp
-endif
-
-# Win32 is a special snowflake, for ANGLE
-ifeq ($(MOZ_WIDGET_TOOLKIT),windows)
-CPPSRCS += GLContextProviderEGL.cpp
-endif
-
-DEFINES += -DIMPL_THEBES -DWOFF_MOZILLA_CLIENT
 
 include $(topsrcdir)/config/rules.mk
 include $(topsrcdir)/ipc/chromium/chromium-config.mk
 
 DEFINES := $(filter-out -DUNICODE,$(DEFINES))
 
-CXXFLAGS += $(MOZ_CAIRO_CFLAGS) $(TK_CFLAGS)
-CFLAGS += $(MOZ_CAIRO_CFLAGS) $(TK_CFLAGS)
-
-ifeq ($(MOZ_WIDGET_TOOLKIT),windows)
-ifdef WINCE
-CXXFLAGS += $(CAIRO_FT_CFLAGS)
-endif
-endif
+CXXFLAGS += $(MOZ_CAIRO_CFLAGS) $(MOZ_PIXMAN_CFLAGS) $(TK_CFLAGS)
+CFLAGS += $(MOZ_CAIRO_CFLAGS) $(MOZ_PIXMAN_CFLAGS) $(TK_CFLAGS)
 
 ifeq ($(MOZ_WIDGET_TOOLKIT),android)
 CXXFLAGS += $(CAIRO_FT_CFLAGS)
 endif
 
-ifeq ($(MOZ_WIDGET_TOOLKIT),gtk2)
-CXXFLAGS += $(MOZ_PANGO_CFLAGS)
+ifeq ($(MOZ_WIDGET_TOOLKIT),gonk)
+CXXFLAGS += $(CAIRO_FT_CFLAGS)
 endif
 
-ifeq ($(MOZ_WIDGET_TOOLKIT),beos)
-CXXFLAGS += $(CAIRO_FT_CFLAGS)
+ifeq ($(MOZ_WIDGET_TOOLKIT),gtk2)
+CXXFLAGS += $(MOZ_PANGO_CFLAGS)
 endif
 
 ifeq ($(MOZ_WIDGET_TOOLKIT),os2)
@@ -475,3 +391,21 @@ endif
 ifeq ($(MOZ_WIDGET_TOOLKIT),qt)
 CXXFLAGS += $(CAIRO_FT_CFLAGS) $(MOZ_PANGO_CFLAGS)
 endif
+
+# The file uses SSE2 intrinsics, so it needs special compile flags on some
+# compilers.
+ifneq (,$(INTEL_ARCHITECTURE))
+ifdef GNU_CC
+gfxAlphaRecoverySSE2.$(OBJ_SUFFIX): CXXFLAGS+=-msse2
+endif
+
+ifdef SOLARIS_SUNPRO_CXX
+gfxAlphaRecoverySSE2.$(OBJ_SUFFIX): OS_CXXFLAGS += -xarch=sse2 -xO4
+endif
+endif
+
+.PHONY: CONSTANT_TABLES
+CONSTANT_TABLES:
+	$(PYTHON) $(srcdir)/genTables.py
+
+gfxUtils.$(OBJ_SUFFIX): CONSTANT_TABLES

@@ -1,55 +1,24 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla browser.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications, Inc.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Mats Palmgren <mats.palmgren@bredband.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsPrintPreviewListener.h"
-#include "nsIContent.h"
+
+#include "mozilla/dom/Element.h"
 #include "nsIDOMWindow.h"
 #include "nsPIDOMWindow.h"
 #include "nsIDOMElement.h"
 #include "nsIDOMKeyEvent.h"
-#include "nsIDOMNSEvent.h"
+#include "nsIDOMEvent.h"
 #include "nsIDocument.h"
 #include "nsIDocShell.h"
 #include "nsPresContext.h"
-#include "nsIEventStateManager.h"
 #include "nsFocusManager.h"
 #include "nsLiteralString.h"
+
+using namespace mozilla;
 
 NS_IMPL_ISUPPORTS1(nsPrintPreviewListener, nsIDOMEventListener)
 
@@ -129,7 +98,7 @@ enum eEventAction {
 static eEventAction
 GetActionForEvent(nsIDOMEvent* aEvent)
 {
-  static const PRUint32 kOKKeyCodes[] = {
+  static const uint32_t kOKKeyCodes[] = {
     nsIDOMKeyEvent::DOM_VK_PAGE_UP, nsIDOMKeyEvent::DOM_VK_PAGE_DOWN,
     nsIDOMKeyEvent::DOM_VK_UP,      nsIDOMKeyEvent::DOM_VK_DOWN, 
     nsIDOMKeyEvent::DOM_VK_HOME,    nsIDOMKeyEvent::DOM_VK_END 
@@ -137,7 +106,7 @@ GetActionForEvent(nsIDOMEvent* aEvent)
 
   nsCOMPtr<nsIDOMKeyEvent> keyEvent(do_QueryInterface(aEvent));
   if (keyEvent) {
-    PRBool b;
+    bool b;
     keyEvent->GetAltKey(&b);
     if (b) return eEventAction_Suppress;
     keyEvent->GetCtrlKey(&b);
@@ -145,19 +114,19 @@ GetActionForEvent(nsIDOMEvent* aEvent)
 
     keyEvent->GetShiftKey(&b);
 
-    PRUint32 keyCode;
+    uint32_t keyCode;
     keyEvent->GetKeyCode(&keyCode);
     if (keyCode == nsIDOMKeyEvent::DOM_VK_TAB)
       return b ? eEventAction_ShiftTab : eEventAction_Tab;
 
-    PRUint32 charCode;
+    uint32_t charCode;
     keyEvent->GetCharCode(&charCode);
     if (charCode == ' ' || keyCode == nsIDOMKeyEvent::DOM_VK_SPACE)
       return eEventAction_Propagate;
 
     if (b) return eEventAction_Suppress;
 
-    for (PRUint32 i = 0; i < sizeof(kOKKeyCodes)/sizeof(kOKKeyCodes[0]); ++i) {
+    for (uint32_t i = 0; i < sizeof(kOKKeyCodes)/sizeof(kOKKeyCodes[0]); ++i) {
       if (keyCode == kOKKeyCodes[i]) {
         return eEventAction_Propagate;
       }
@@ -170,9 +139,8 @@ NS_IMETHODIMP
 nsPrintPreviewListener::HandleEvent(nsIDOMEvent* aEvent)
 {
   nsCOMPtr<nsIDOMEventTarget> target;
-  nsCOMPtr<nsIDOMNSEvent> nsEvent = do_QueryInterface(aEvent);
-  if (nsEvent)
-    nsEvent->GetOriginalTarget(getter_AddRefs(target));
+  if (aEvent)
+    aEvent->GetOriginalTarget(getter_AddRefs(target));
   nsCOMPtr<nsIContent> content(do_QueryInterface(target));
   if (content && !content->IsXUL()) {
     eEventAction action = ::GetActionForEvent(aEvent);
@@ -195,10 +163,10 @@ nsPrintPreviewListener::HandleEvent(nsIDOMEvent* aEvent)
 
           nsIFocusManager* fm = nsFocusManager::GetFocusManager();
           if (fm && win) {
-            nsIContent* fromContent = parentDoc->FindContentForSubDocument(doc);
-            nsCOMPtr<nsIDOMElement> from = do_QueryInterface(fromContent);
+            dom::Element* fromElement = parentDoc->FindContentForSubDocument(doc);
+            nsCOMPtr<nsIDOMElement> from = do_QueryInterface(fromElement);
 
-            PRBool forward = (action == eEventAction_Tab);
+            bool forward = (action == eEventAction_Tab);
             nsCOMPtr<nsIDOMElement> result;
             fm->MoveFocus(win, from,
                           forward ? nsIFocusManager::MOVEFOCUS_FORWARD :

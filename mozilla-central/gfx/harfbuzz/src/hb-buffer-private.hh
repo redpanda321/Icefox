@@ -1,8 +1,9 @@
 /*
- * Copyright (C) 1998-2004  David Turner and Werner Lemberg
- * Copyright (C) 2004,2007,2009,2010  Red Hat, Inc.
+ * Copyright © 1998-2004  David Turner and Werner Lemberg
+ * Copyright © 2004,2007,2009,2010  Red Hat, Inc.
+ * Copyright © 2011,2012  Google, Inc.
  *
- * This is part of HarfBuzz, a text shaping library.
+ *  This is part of HarfBuzz, a text shaping library.
  *
  * Permission is hereby granted, without written agreement and without
  * license or royalty fees, to use, copy, modify, and distribute this
@@ -23,151 +24,176 @@
  * PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
  *
  * Red Hat Author(s): Owen Taylor, Behdad Esfahbod
+ * Google Author(s): Behdad Esfahbod
  */
 
-#ifndef HB_BUFFER_PRIVATE_H
-#define HB_BUFFER_PRIVATE_H
+#ifndef HB_BUFFER_PRIVATE_HH
+#define HB_BUFFER_PRIVATE_HH
 
-#include "hb-private.h"
+#include "hb-private.hh"
 #include "hb-buffer.h"
-#include "hb-unicode-private.h"
-
-HB_BEGIN_DECLS
-
-#define HB_BUFFER_GLYPH_PROPERTIES_UNKNOWN 0xFFFF
+#include "hb-object-private.hh"
+#include "hb-unicode-private.hh"
 
 
-typedef struct _hb_internal_glyph_info_t {
-  hb_codepoint_t codepoint;
-  hb_mask_t      mask;
-  uint32_t       cluster;
-  uint16_t       component;
-  uint16_t       lig_id;
-  uint32_t       gproperty;
-} hb_internal_glyph_info_t;
-
-typedef struct _hb_internal_glyph_position_t {
-  hb_position_t  x_advance;
-  hb_position_t  y_advance;
-  hb_position_t  x_offset;
-  hb_position_t  y_offset;
-  uint32_t       back : 16;		/* number of glyphs to go back
-					   for drawing current glyph */
-  int32_t        cursive_chain : 16;	/* character to which this connects,
-					   may be positive or negative */
-} hb_internal_glyph_position_t;
-
-ASSERT_STATIC (sizeof (hb_glyph_info_t) == sizeof (hb_internal_glyph_info_t));
-ASSERT_STATIC (sizeof (hb_glyph_position_t) == sizeof (hb_internal_glyph_position_t));
+ASSERT_STATIC (sizeof (hb_glyph_info_t) == 20);
 ASSERT_STATIC (sizeof (hb_glyph_info_t) == sizeof (hb_glyph_position_t));
 
 
-HB_INTERNAL void
-_hb_buffer_swap (hb_buffer_t *buffer);
+/*
+ * hb_buffer_t
+ */
 
-HB_INTERNAL void
-_hb_buffer_clear_output (hb_buffer_t *buffer);
-
-HB_INTERNAL void
-_hb_buffer_add_output_glyphs (hb_buffer_t *buffer,
-			      unsigned int num_in,
-			      unsigned int num_out,
-			      const hb_codepoint_t *glyph_data,
-			      unsigned short component,
-			      unsigned short ligID);
-
-HB_INTERNAL void
-_hb_buffer_add_output_glyphs_be16 (hb_buffer_t *buffer,
-				   unsigned int num_in,
-				   unsigned int num_out,
-				   const uint16_t *glyph_data_be,
-				   unsigned short component,
-				   unsigned short ligID);
-
-HB_INTERNAL void
-_hb_buffer_add_output_glyph (hb_buffer_t *buffer,
-			     hb_codepoint_t glyph_index,
-			     unsigned short component,
-			     unsigned short ligID);
-
-HB_INTERNAL void
-_hb_buffer_next_glyph (hb_buffer_t *buffer);
-
-
-HB_INTERNAL void
-_hb_buffer_clear_masks (hb_buffer_t *buffer);
-
-HB_INTERNAL void
-_hb_buffer_set_masks (hb_buffer_t *buffer,
-		      hb_mask_t    value,
-		      hb_mask_t    mask,
-		      unsigned int cluster_start,
-		      unsigned int cluster_end);
-
-
-struct _hb_buffer_t {
-  hb_reference_count_t ref_count;
+struct hb_buffer_t {
+  hb_object_header_t header;
+  ASSERT_POD ();
 
   /* Information about how the text in the buffer should be treated */
-  hb_unicode_funcs_t *unicode;
-  hb_direction_t      direction;
-  hb_script_t         script;
-  hb_language_t       language;
+
+  hb_unicode_funcs_t *unicode; /* Unicode functions */
+  hb_segment_properties_t props; /* Script, language, direction */
+  hb_buffer_flags_t flags; /* BOT / EOT / etc. */
 
   /* Buffer contents */
 
-  unsigned int allocated; /* Length of allocated arrays */
+  hb_buffer_content_type_t content_type;
 
-  hb_bool_t have_output; /* Whether we have an output buffer going on */
-  hb_bool_t have_positions; /* Whether we have positions */
-  hb_bool_t in_error; /* Allocation failed */
+  bool in_error; /* Allocation failed */
+  bool have_output; /* Whether we have an output buffer going on */
+  bool have_positions; /* Whether we have positions */
 
-  unsigned int i; /* Cursor into ->info and ->pos arrays */
+  unsigned int idx; /* Cursor into ->info and ->pos arrays */
   unsigned int len; /* Length of ->info and ->pos arrays */
-  unsigned int out_len; /* Length of ->out array */
+  unsigned int out_len; /* Length of ->out array if have_output */
 
-  hb_internal_glyph_info_t     *info;
-  hb_internal_glyph_info_t     *out_info;
-  hb_internal_glyph_position_t *pos;
+  unsigned int allocated; /* Length of allocated arrays */
+  hb_glyph_info_t     *info;
+  hb_glyph_info_t     *out_info;
+  hb_glyph_position_t *pos;
 
-  /* Other stuff */
+  inline hb_glyph_info_t &cur (unsigned int i = 0) { return info[idx + i]; }
+  inline hb_glyph_info_t cur (unsigned int i = 0) const { return info[idx + i]; }
 
-  unsigned int max_lig_id;
+  inline hb_glyph_position_t &cur_pos (unsigned int i = 0) { return pos[idx + i]; }
+  inline hb_glyph_position_t cur_pos (unsigned int i = 0) const { return pos[idx + i]; }
+
+  inline hb_glyph_info_t &prev (void) { return out_info[out_len - 1]; }
+  inline hb_glyph_info_t prev (void) const { return info[out_len - 1]; }
+
+  unsigned int serial;
+
+  /* These reflect current allocations of the bytes in glyph_info_t's var1 and var2. */
+  uint8_t allocated_var_bytes[8];
+  const char *allocated_var_owner[8];
+
+  /* Text before / after the main buffer contents.
+   * Always in Unicode, and ordered outward.
+   * Index 0 is for "pre-context", 1 for "post-context". */
+  static const unsigned int CONTEXT_LENGTH = 5;
+  hb_codepoint_t context[2][CONTEXT_LENGTH];
+  unsigned int context_len[2];
 
 
   /* Methods */
-  inline unsigned int allocate_lig_id (void) { return max_lig_id++; }
-  inline void swap (void) { _hb_buffer_swap (this); }
-  inline void clear_output (void) { _hb_buffer_clear_output (this); }
-  inline void next_glyph (void) { _hb_buffer_next_glyph (this); }
-  inline void add_output_glyphs (unsigned int num_in,
-				 unsigned int num_out,
-				 const hb_codepoint_t *glyph_data,
-				 unsigned short component,
-				 unsigned short ligID)
-  { _hb_buffer_add_output_glyphs (this, num_in, num_out, glyph_data, component, ligID); }
-  inline void add_output_glyphs_be16 (unsigned int num_in,
-				      unsigned int num_out,
-				      const uint16_t *glyph_data_be,
-				      unsigned short component,
-				      unsigned short ligID)
-  { _hb_buffer_add_output_glyphs_be16 (this, num_in, num_out, glyph_data_be, component, ligID); }
-  inline void add_output_glyph (hb_codepoint_t glyph_index,
-				unsigned short component = 0xFFFF,
-				unsigned short ligID = 0xFFFF)
-  { _hb_buffer_add_output_glyph (this, glyph_index, component, ligID); }
-  inline void replace_glyph (hb_codepoint_t glyph_index) { add_output_glyph (glyph_index); }
 
-  inline void clear_masks (void) { _hb_buffer_clear_masks (this); }
-  inline void set_masks (hb_mask_t    value,
-			 hb_mask_t mask,
-			 unsigned int cluster_start,
-			 unsigned int cluster_end)
-  { _hb_buffer_set_masks (this, value, mask, cluster_start, cluster_end); }
+  HB_INTERNAL void reset (void);
+  HB_INTERNAL void clear (void);
 
+  inline unsigned int backtrack_len (void) const
+  { return have_output? out_len : idx; }
+  inline unsigned int next_serial (void) { return serial++; }
+
+  HB_INTERNAL void allocate_var (unsigned int byte_i, unsigned int count, const char *owner);
+  HB_INTERNAL void deallocate_var (unsigned int byte_i, unsigned int count, const char *owner);
+  HB_INTERNAL void assert_var (unsigned int byte_i, unsigned int count, const char *owner);
+  HB_INTERNAL void deallocate_var_all (void);
+
+  HB_INTERNAL void add (hb_codepoint_t  codepoint,
+			unsigned int    cluster);
+
+  HB_INTERNAL void reverse_range (unsigned int start, unsigned int end);
+  HB_INTERNAL void reverse (void);
+  HB_INTERNAL void reverse_clusters (void);
+  HB_INTERNAL void guess_segment_properties (void);
+
+  HB_INTERNAL void swap_buffers (void);
+  HB_INTERNAL void remove_output (void);
+  HB_INTERNAL void clear_output (void);
+  HB_INTERNAL void clear_positions (void);
+
+  HB_INTERNAL void replace_glyphs (unsigned int num_in,
+				   unsigned int num_out,
+				   const hb_codepoint_t *glyph_data);
+
+  HB_INTERNAL void replace_glyph (hb_codepoint_t glyph_index);
+  /* Makes a copy of the glyph at idx to output and replace glyph_index */
+  HB_INTERNAL void output_glyph (hb_codepoint_t glyph_index);
+  HB_INTERNAL void output_info (hb_glyph_info_t &glyph_info);
+  /* Copies glyph at idx to output but doesn't advance idx */
+  HB_INTERNAL void copy_glyph (void);
+  /* Copies glyph at idx to output and advance idx.
+   * If there's no output, just advance idx. */
+  inline void
+  next_glyph (void)
+  {
+    if (have_output)
+    {
+      if (unlikely (out_info != info || out_len != idx)) {
+	if (unlikely (!make_room_for (1, 1))) return;
+	out_info[out_len] = info[idx];
+      }
+      out_len++;
+    }
+
+    idx++;
+  }
+
+  /* Advance idx without copying to output. */
+  inline void skip_glyph (void) { idx++; }
+
+  inline void reset_masks (hb_mask_t mask)
+  {
+    for (unsigned int j = 0; j < len; j++)
+      info[j].mask = mask;
+  }
+  inline void add_masks (hb_mask_t mask)
+  {
+    for (unsigned int j = 0; j < len; j++)
+      info[j].mask |= mask;
+  }
+  HB_INTERNAL void set_masks (hb_mask_t value,
+			      hb_mask_t mask,
+			      unsigned int cluster_start,
+			      unsigned int cluster_end);
+
+  HB_INTERNAL void merge_clusters (unsigned int start,
+				   unsigned int end);
+  HB_INTERNAL void merge_out_clusters (unsigned int start,
+				       unsigned int end);
+
+  /* Internal methods */
+  HB_INTERNAL bool enlarge (unsigned int size);
+
+  inline bool ensure (unsigned int size)
+  { return likely (size < allocated) ? true : enlarge (size); }
+
+  HB_INTERNAL bool make_room_for (unsigned int num_in, unsigned int num_out);
+
+  HB_INTERNAL void *get_scratch_buffer (unsigned int *size);
+
+  inline void clear_context (unsigned int side) { context_len[side] = 0; }
 };
 
 
-HB_END_DECLS
+#define HB_BUFFER_XALLOCATE_VAR(b, func, var, owner) \
+  b->func (offsetof (hb_glyph_info_t, var) - offsetof(hb_glyph_info_t, var1), \
+	   sizeof (b->info[0].var), owner)
+#define HB_BUFFER_ALLOCATE_VAR(b, var) \
+	HB_BUFFER_XALLOCATE_VAR (b, allocate_var, var (), #var)
+#define HB_BUFFER_DEALLOCATE_VAR(b, var) \
+	HB_BUFFER_XALLOCATE_VAR (b, deallocate_var, var (), #var)
+#define HB_BUFFER_ASSERT_VAR(b, var) \
+	HB_BUFFER_XALLOCATE_VAR (b, assert_var, var (), #var)
 
-#endif /* HB_BUFFER_PRIVATE_H */
+
+#endif /* HB_BUFFER_PRIVATE_HH */

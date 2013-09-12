@@ -17,15 +17,16 @@ public:
     TestSanityParent();
     virtual ~TestSanityParent();
 
+    static bool RunTestInProcesses() { return true; }
+    static bool RunTestInThreads() { return true; }
+
     void Main();
 
 protected:    
-    NS_OVERRIDE
     virtual bool RecvPong(const int& one, const float& zeroPtTwoFive,
-                          const PRUint8& dummy);
+                          const uint8_t& dummy) MOZ_OVERRIDE;
 
-    NS_OVERRIDE
-    virtual void ActorDestroy(ActorDestroyReason why)
+    virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE
     {
         if (NormalShutdown != why)
             fail("unexpected destruction!");  
@@ -43,12 +44,10 @@ public:
     virtual ~TestSanityChild();
 
 protected:
-    NS_OVERRIDE
     virtual bool RecvPing(const int& zero, const float& zeroPtFive,
-                          const PRInt8& dummy);
+                          const int8_t& dummy) MOZ_OVERRIDE;
 
-    NS_OVERRIDE
-    virtual void ActorDestroy(ActorDestroyReason why)
+    virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE
     {
         if (NormalShutdown != why)
             fail("unexpected destruction!");

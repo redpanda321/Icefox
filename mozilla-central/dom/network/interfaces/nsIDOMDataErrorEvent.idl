@@ -1,0 +1,11 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "nsIDOMEvent.idl"
+
+[scriptable, builtinclass, uuid(494cf68f-0ca8-4cf9-924b-84cf379c9631)]
+interface nsIDOMDataErrorEvent : nsIDOMEvent
+{
+  readonly attribute DOMString message;
+};

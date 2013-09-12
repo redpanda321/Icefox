@@ -33,11 +33,11 @@
 class nsIWebBrowserChrome;
 
 namespace AppCallbacks {
-  nsresult CreateBrowserWindow(PRUint32 aChromeFlags,
+  nsresult CreateBrowserWindow(uint32_t aChromeFlags,
              nsIWebBrowserChrome *aParent,
              nsIWebBrowserChrome **aNewWindow);
 
-  void     EnableChromeWindow(nsIWebBrowserChrome *aWindow, PRBool aEnabled);
+  void     EnableChromeWindow(nsIWebBrowserChrome *aWindow, bool aEnabled);
 
-  PRUint32 RunEventLoop(PRBool &aRunCondition);
+  uint32_t RunEventLoop(bool &aRunCondition);
 }

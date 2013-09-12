@@ -1,67 +1,40 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla code.
- *
- * The Initial Developer of the Original Code is
- * the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dan Mosedale <dmose@mozilla.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // handlerApp.xhtml grabs this for verification purposes via window.opener
 var testURI = "webcal://127.0.0.1/rheeeeet.html";
 
+const Cc = SpecialPowers.Cc;
+
 function test() {
 
-  netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect'); 
+  const isOSXMtnLion = navigator.userAgent.indexOf("Mac OS X 10.8") != -1;
+  if (isOSXMtnLion) {
+    todo(false, "This test fails on OS X 10.8, see bug 786938");
+    SimpleTest.finish();
+    return;
+  }
 
   // set up the web handler object
-  var webHandler = 
-    Components.classes["@mozilla.org/uriloader/web-handler-app;1"].
-    createInstance(Components.interfaces.nsIWebHandlerApp);
+  var webHandler = Cc["@mozilla.org/uriloader/web-handler-app;1"].
+    createInstance(SpecialPowers.Ci.nsIWebHandlerApp);
   webHandler.name = "Test Web Handler App";
   webHandler.uriTemplate =
       "http://mochi.test:8888/tests/uriloader/exthandler/tests/mochitest/" + 
       "handlerApp.xhtml?uri=%s";
   
   // set up the uri to test with
-  var ioService = Components.classes["@mozilla.org/network/io-service;1"].
-    getService(Components.interfaces.nsIIOService);
+  var ioService = Cc["@mozilla.org/network/io-service;1"].
+    getService(SpecialPowers.Ci.nsIIOService);
   var uri = ioService.newURI(testURI, null, null);
 
   // create a window, and launch the handler in it
   var newWindow = window.open("", "handlerWindow", "height=300,width=300");
   var windowContext = 
-    newWindow.QueryInterface(Components.interfaces.nsIInterfaceRequestor). 
-    getInterface(Components.interfaces.nsIWebNavigation).
-    QueryInterface(Components.interfaces.nsIDocShell);
+    SpecialPowers.wrap(newWindow).QueryInterface(SpecialPowers.Ci.nsIInterfaceRequestor).
+    getInterface(SpecialPowers.Ci.nsIWebNavigation).
+    QueryInterface(SpecialPowers.Ci.nsIDocShell);
  
   webHandler.launchWithURI(uri, windowContext); 
 
@@ -76,20 +49,19 @@ function test() {
   ok(true, "webHandler launchWithURI (new window/tab) test started");
 
   // set up the local handler object
-  var localHandler = 
-    Components.classes["@mozilla.org/uriloader/local-handler-app;1"].
-    createInstance(Components.interfaces.nsILocalHandlerApp);
+  var localHandler = Cc["@mozilla.org/uriloader/local-handler-app;1"].
+    createInstance(SpecialPowers.Ci.nsILocalHandlerApp);
   localHandler.name = "Test Local Handler App";
   
   // get a local app that we know will be there and do something sane
-  var osString = Components.classes["@mozilla.org/xre/app-info;1"].
-                 getService(Components.interfaces.nsIXULRuntime).OS;
+  var osString = Cc["@mozilla.org/xre/app-info;1"].
+                 getService(SpecialPowers.Ci.nsIXULRuntime).OS;
 
-  var dirSvc = Components.classes["@mozilla.org/file/directory_service;1"].
-               getService(Components.interfaces.nsIDirectoryServiceProvider);
+  var dirSvc = Cc["@mozilla.org/file/directory_service;1"].
+               getService(SpecialPowers.Ci.nsIDirectoryServiceProvider);
   if (osString == "WINNT") {
     var windowsDir = dirSvc.getFile("WinD", {});
-    var exe = windowsDir.clone().QueryInterface(Components.interfaces.nsILocalFile);
+    var exe = windowsDir.clone().QueryInterface(SpecialPowers.Ci.nsILocalFile);
     exe.appendRelativePath("SYSTEM32\\HOSTNAME.EXE");
 
   } else if (osString == "Darwin") { 
@@ -99,10 +71,21 @@ function test() {
                             // seems better than explicitly killing it, since
                             // developers who run the tests locally may well
                             // information in their running copy of iCal
+
+    if (navigator.userAgent.match(/ SeaMonkey\//)) {
+      // SeaMonkey tinderboxes don't like to have iCal lingering (and focused)
+      // on next test suite run(s).
+      todo(false, "On SeaMonkey, testing OS X as generic Unix. (Bug 749872)");
+
+      // assume a generic UNIX variant
+      exe = Cc["@mozilla.org/file/local;1"].
+            createInstance(SpecialPowers.Ci.nsILocalFile);
+      exe.initWithPath("/bin/echo");
+    }
   } else {
     // assume a generic UNIX variant
-    exe = Components.classes["@mozilla.org/file/local;1"].
-          createInstance(Components.interfaces.nsILocalFile);
+    exe = Cc["@mozilla.org/file/local;1"].
+          createInstance(SpecialPowers.Ci.nsILocalFile);
     exe.initWithPath("/bin/echo");
   }
 
@@ -116,12 +99,12 @@ function test() {
   // the if statement below from "NOTDarwin" to "Darwin"
   if (osString == "NOTDarwin") {
 
-    var killall = Components.classes["@mozilla.org/file/local;1"].
-                  createInstance(Components.interfaces.nsILocalFile);
+    var killall = Cc["@mozilla.org/file/local;1"].
+                  createInstance(SpecialPowers.Ci.nsILocalFile);
     killall.initWithPath("/usr/bin/killall");
   
-    var process = Components.classes["@mozilla.org/process/util;1"].
-                  createInstance(Components.interfaces.nsIProcess);
+    var process = Cc["@mozilla.org/process/util;1"].
+                  createInstance(SpecialPowers.Ci.nsIProcess);
     process.init(killall);
     
     var args = ['iCal'];

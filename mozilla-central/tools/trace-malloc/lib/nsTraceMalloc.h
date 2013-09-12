@@ -1,44 +1,12 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is nsTraceMalloc.c/bloatblame.c code, released
- * April 19, 2000.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Brendan Eich, 14-April-2000
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef nsTraceMalloc_h___
 #define nsTraceMalloc_h___
+
+#include "mozilla/StandardInteger.h"
 
 #include <stdio.h> /* for FILE */
 #include "prtypes.h"
@@ -47,7 +15,9 @@
 #define setlinebuf(stream) setvbuf((stream), (char *)NULL, _IOLBF, 0)
 #endif
 
-PR_BEGIN_EXTERN_C
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * Magic "number" at start of a trace-malloc log file.  Inspired by the PNG
@@ -62,26 +32,26 @@ PR_BEGIN_EXTERN_C
  * Trace-malloc stats, traced via the 'Z' event at the end of a log file.
  */
 typedef struct nsTMStats {
-    uint32 calltree_maxstack;
-    uint32 calltree_maxdepth;
-    uint32 calltree_parents;
-    uint32 calltree_maxkids;
-    uint32 calltree_kidhits;
-    uint32 calltree_kidmisses;
-    uint32 calltree_kidsteps;
-    uint32 callsite_recurrences;
-    uint32 backtrace_calls;
-    uint32 backtrace_failures;
-    uint32 btmalloc_failures;
-    uint32 dladdr_failures;
-    uint32 malloc_calls;
-    uint32 malloc_failures;
-    uint32 calloc_calls;
-    uint32 calloc_failures;
-    uint32 realloc_calls;
-    uint32 realloc_failures;
-    uint32 free_calls;
-    uint32 null_free_calls;
+    uint32_t calltree_maxstack;
+    uint32_t calltree_maxdepth;
+    uint32_t calltree_parents;
+    uint32_t calltree_maxkids;
+    uint32_t calltree_kidhits;
+    uint32_t calltree_kidmisses;
+    uint32_t calltree_kidsteps;
+    uint32_t callsite_recurrences;
+    uint32_t backtrace_calls;
+    uint32_t backtrace_failures;
+    uint32_t btmalloc_failures;
+    uint32_t dladdr_failures;
+    uint32_t malloc_calls;
+    uint32_t malloc_failures;
+    uint32_t calloc_calls;
+    uint32_t calloc_failures;
+    uint32_t realloc_calls;
+    uint32_t realloc_failures;
+    uint32_t free_calls;
+    uint32_t null_free_calls;
 } nsTMStats;
 
 #define NS_TMSTATS_STATIC_INITIALIZER {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}
@@ -250,6 +220,8 @@ NS_TraceMallocGetStackTrace(void);
 PR_EXTERN(void)
 NS_TraceMallocPrintStackTrace(FILE *ofp, nsTMStackTraceID id);
 
-PR_END_EXTERN_C
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* nsTraceMalloc_h___ */

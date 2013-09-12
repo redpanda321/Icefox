@@ -1,26 +1,65 @@
 #filter substitution
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-      package="org.mozilla.@MOZ_APP_NAME@"
+      package="@ANDROID_PACKAGE_NAME@"
       android:installLocation="auto"
-      android:versionCode="1"
-      android:versionName=@MOZ_APP_VERSION@
-      android:sharedUserId="org.mozilla.sharedID">
+      android:versionCode="@ANDROID_VERSION_CODE@"
+      android:versionName="@MOZ_APP_VERSION@"
+#ifdef MOZ_ANDROID_SHARED_ID
+      android:sharedUserId="@MOZ_ANDROID_SHARED_ID@"
+#endif
+      >
+
     <uses-sdk android:minSdkVersion="5"
-              android:targetSdkVersion="5"/>
+              android:targetSdkVersion="11"/>
 
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/> 
-    <uses-permission android:name="android.permission.INTERNET"/> 
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/> 
+    <compatible-screens>
+        <!-- all xlarge size screens -->
+        <screen android:screenSize="xlarge" android:screenDensity="ldpi" />
+        <screen android:screenSize="xlarge" android:screenDensity="mdpi" />
+        <screen android:screenSize="xlarge" android:screenDensity="hdpi" />
+        <screen android:screenSize="xlarge" android:screenDensity="xhdpi" />
+    </compatible-screens>
 
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT"/>
+
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
+
+#ifdef MOZ_WEBSMS_BACKEND
+    <!-- WebSMS -->
+    <uses-permission android:name="android.permission.SEND_SMS"/>
+    <uses-permission android:name="android.permission.RECEIVE_SMS"/>
+    <uses-permission android:name="android.permission.WRITE_SMS"/>
+    <uses-permission android:name="android.permission.READ_SMS"/>
+#endif
+
+    <uses-feature android:name="android.hardware.location" android:required="false"/>
+    <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
+    <uses-feature android:name="android.hardware.touchscreen"/>
+
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
+ 
     <application android:label="@MOZ_APP_DISPLAYNAME@"
-		 android:icon="@drawable/icon"
-		 android:debuggable="true">
+                 android:icon="@drawable/icon"
+#if MOZILLA_OFFICIAL
+                 android:debuggable="false">
+#else
+                 android:debuggable="true">
+#endif
+
         <activity android:name="App"
                   android:label="@MOZ_APP_DISPLAYNAME@"
-                  android:configChanges="keyboard|keyboardHidden|orientation|mcc|mnc"
+                  android:configChanges="keyboard|keyboardHidden|mcc|mnc"
                   android:windowSoftInputMode="stateUnspecified|adjustResize"
-                  android:launchMode="singleInstance">
+                  android:launchMode="singleTask"
+                  android:theme="@style/GreyTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -40,6 +79,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="file" />
                 <data android:scheme="http" />
                 <data android:scheme="https" />
                 <data android:mimeType="text/html"/>
@@ -61,10 +101,49 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
-	<receiver android:enabled="true" android:name="Restarter">
-	  <intent-filter>
-            <action android:name="org.mozilla.gecko.restart@MOZ_APP_NAME@" />
-	  </intent-filter>
-	</receiver>
+
+        <receiver android:name="NotificationHandler">
+            <intent-filter>
+                <action android:name="org.mozilla.gecko.ACTION_ALERT_CLICK" />
+                <action android:name="org.mozilla.gecko.ACTION_ALERT_CLEAR" />
+            </intent-filter>
+        </receiver>
+
+        <activity android:name="Restarter"
+                  android:process="@ANDROID_PACKAGE_NAME@Restarter"
+                  android:theme="@style/GreyTheme"
+                  android:excludeFromRecents="true">
+          <intent-filter>
+            <action android:name="org.mozilla.gecko.restart"/>
+          </intent-filter>
+        </activity>
+
+#if MOZ_CRASHREPORTER
+  <activity android:name="CrashReporter"
+            android:label="@string/crash_reporter_title"
+            android:icon="@drawable/crash_reporter"
+            android:excludeFromRecents="true">
+          <intent-filter>
+            <action android:name="org.mozilla.gecko.reportCrash" />
+          </intent-filter>
+        </activity>
+#endif
+
+        <activity android:name="LauncherShortcuts"
+                  android:label="@string/launcher_shortcuts_title"
+                  android:theme="@android:style/Theme.Translucent">
+            <!--  This intent-filter allows your shortcuts to be created in the launcher. -->
+            <intent-filter>
+                <action android:name="android.intent.action.CREATE_SHORTCUT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <activity android:name="org.mozilla.gecko.VideoPlayer"
+                  android:configChanges="keyboard|keyboardHidden|mcc|mnc|orientation" 
+                  android:theme="@android:style/Theme.NoTitleBar" >
+            <intent-filter>
+                <action android:name="org.mozilla.gecko.PLAY_VIDEO" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest> 

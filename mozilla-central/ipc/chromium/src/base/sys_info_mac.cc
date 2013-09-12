@@ -4,19 +4,22 @@
 
 #include "base/sys_info.h"
 
+#ifdef XP_MACOSX
 #include <CoreServices/CoreServices.h>
+#endif
 
 namespace base {
 
 // static
-void SysInfo::OperatingSystemVersionNumbers(int32 *major_version,
-                                            int32 *minor_version,
-                                            int32 *bugfix_version) {
+void SysInfo::OperatingSystemVersionNumbers(int32_t *major_version,
+                                            int32_t *minor_version,
+                                            int32_t *bugfix_version) {
   static bool is_initialized = false;
-  static int32 major_version_cached = 0;
-  static int32 minor_version_cached = 0;
-  static int32 bugfix_version_cached = 0;
+  static int32_t major_version_cached = 0;
+  static int32_t minor_version_cached = 0;
+  static int32_t bugfix_version_cached = 0;
 
+#ifdef XP_MACOSX
   if (!is_initialized) {
     // Gestalt can't be called in the sandbox, so we cache its return value.
     Gestalt(gestaltSystemVersionMajor,
@@ -27,6 +30,7 @@ void SysInfo::OperatingSystemVersionNumbers(int32 *major_version,
         reinterpret_cast<SInt32*>(&bugfix_version_cached));
     is_initialized = true;
   }
+#endif
 
   *major_version = major_version_cached;
   *minor_version = minor_version_cached;
@@ -39,7 +43,7 @@ void SysInfo::CacheSysInfo() {
   // from functions we know to be called in the renderer & fail when the sandbox
   // is enabled.
   NumberOfProcessors();
-  int32 dummy;
+  int32_t dummy;
   OperatingSystemVersionNumbers(&dummy, &dummy, &dummy);
 }
 

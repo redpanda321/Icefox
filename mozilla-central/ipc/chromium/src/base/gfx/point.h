@@ -7,12 +7,16 @@
 
 #include "build/build_config.h"
 
-#include <iostream>
+#include <ostream>
 
 #if defined(OS_WIN)
 typedef struct tagPOINT POINT;
 #elif defined(OS_MACOSX)
+#if defined(XP_MACOSX)
 #include <ApplicationServices/ApplicationServices.h>
+#else
+#include <CoreGraphics/CoreGraphics.h>
+#endif
 #endif
 
 namespace gfx {

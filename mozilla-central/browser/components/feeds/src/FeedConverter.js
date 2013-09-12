@@ -1,41 +1,7 @@
-# -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is the Feed Stream Converter.
-#
-# The Initial Developer of the Original Code is Google Inc.
-# Portions created by the Initial Developer are Copyright (C) 2006
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Ben Goodger <beng@google.com>
-#   Jeff Walden <jwalden+code@mit.edu>
-#   Will Guaraldi <will.guaraldi@pculture.org>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK ***** */
+/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */ 
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 Components.utils.import("resource://gre/modules/XPCOMUtils.jsm");
 Components.utils.import("resource://gre/modules/debug.js");
@@ -315,6 +281,13 @@ FeedConverter.prototype = {
     // The value doesn't matter.
     try {
       var httpChannel = channel.QueryInterface(Ci.nsIHttpChannel);
+      // Make sure to check requestSucceeded before the potentially-throwing
+      // getResponseHeader.
+      if (!httpChannel.requestSucceeded) {
+        // Just give up, but don't forget to cancel the channel first!
+        request.cancel(Cr.NS_BINDING_ABORTED);
+        return;
+      }
       var noSniff = httpChannel.getResponseHeader("X-Moz-Is-Feed");
     }
     catch (ex) {
@@ -546,52 +519,36 @@ GenericProtocolHandler.prototype = {
   },
   
   newURI: function GPH_newURI(spec, originalCharset, baseURI) {
-    // See bug 408599 - feed URIs can be either standard URLs of the form
-    // feed://example.com, in which case the real protocol is http, or nested
-    // URIs of the form feed:realscheme:. When realscheme is either http or
-    // https, we deal with the way that creates a standard URL with the
-    // realscheme as the host by unmangling in newChannel; for others, we fail
-    // rather than let it wind up loading something like www.realscheme.com//foo
+    // Feed URIs can be either nested URIs of the form feed:realURI (in which
+    // case we create a nested URI for the realURI) or feed://example.com, in
+    // which case we create a nested URI for the real protocol which is http.
 
-    const feedSlashes = "feed://";
-    const feedHttpSlashes = "feed:http://";
-    const feedHttpsSlashes = "feed:https://";
-    const NS_ERROR_MALFORMED_URI = 0x804B000A;
+    var scheme = this._scheme + ":";
+    if (spec.substr(0, scheme.length) != scheme)
+      throw Cr.NS_ERROR_MALFORMED_URI;
 
-    if (spec.substr(0, feedSlashes.length) != feedSlashes &&
-        spec.substr(0, feedHttpSlashes.length) != feedHttpSlashes &&
-        spec.substr(0, feedHttpsSlashes.length) != feedHttpsSlashes)
-      throw NS_ERROR_MALFORMED_URI;
+    var prefix = spec.substr(scheme.length, 2) == "//" ? "http:" : "";
+    var inner = Cc["@mozilla.org/network/io-service;1"].
+                getService(Ci.nsIIOService).newURI(spec.replace(scheme, prefix),
+                                                   originalCharset, baseURI);
+    var netutil = Cc["@mozilla.org/network/util;1"].getService(Ci.nsINetUtil);
+    const URI_INHERITS_SECURITY_CONTEXT = Ci.nsIProtocolHandler
+                                            .URI_INHERITS_SECURITY_CONTEXT;
+    if (netutil.URIChainHasFlags(inner, URI_INHERITS_SECURITY_CONTEXT))
+      throw Cr.NS_ERROR_MALFORMED_URI;
 
-    var uri = 
-        Cc["@mozilla.org/network/standard-url;1"].
-        createInstance(Ci.nsIStandardURL);
-    uri.init(Ci.nsIStandardURL.URLTYPE_STANDARD, 80, spec, originalCharset,
-             baseURI);
+    var uri = netutil.newSimpleNestedURI(inner);
+    uri.spec = inner.spec.replace(prefix, scheme);
     return uri;
   },
   
   newChannel: function GPH_newChannel(aUri) {
-    var ios = 
-        Cc["@mozilla.org/network/io-service;1"].
-        getService(Ci.nsIIOService);
-    // feed: URIs either start feed://, in which case the real scheme is http:
-    // or feed:http(s)://, (which by now we've changed to feed://realscheme//)
-    var feedSpec = aUri.spec;
-    const httpsChunk = "feed://https//";
-    const httpChunk = "feed://http//";
-    if (feedSpec.substr(0, httpsChunk.length) == httpsChunk)
-      feedSpec = "https://" + feedSpec.substr(httpsChunk.length);
-    else if (feedSpec.substr(0, httpChunk.length) == httpChunk)
-      feedSpec = "http://" + feedSpec.substr(httpChunk.length);
-    else
-      feedSpec = feedSpec.replace(/^feed/, "http");
-
-    var uri = ios.newURI(feedSpec, aUri.originCharset, null);
-    var channel =
-      ios.newChannelFromURI(uri, null).QueryInterface(Ci.nsIHttpChannel);
-    // Set this so we know this is supposed to be a feed
-    channel.setRequestHeader("X-Moz-Is-Feed", "1", false);
+    var inner = aUri.QueryInterface(Ci.nsINestedURI).innerURI;
+    var channel = Cc["@mozilla.org/network/io-service;1"].
+                  getService(Ci.nsIIOService).newChannelFromURI(inner, null);
+    if (channel instanceof Components.interfaces.nsIHttpChannel)
+      // Set this so we know this is supposed to be a feed
+      channel.setRequestHeader("X-Moz-Is-Feed", "1", false);
     channel.originalURI = aUri;
     return channel;
   },
@@ -622,4 +579,4 @@ var components = [FeedConverter,
                   PodCastProtocolHandler];
 
 
-const NSGetFactory = XPCOMUtils.generateNSGetFactory(components);
+this.NSGetFactory = XPCOMUtils.generateNSGetFactory(components);

@@ -1,44 +1,13 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef nsIDocumentObserver_h___
 #define nsIDocumentObserver_h___
 
 #include "nsISupports.h"
 #include "nsIMutationObserver.h"
+#include "nsEventStates.h"
 
 class nsIAtom;
 class nsIContent;
@@ -48,15 +17,14 @@ class nsString;
 class nsIDocument;
 
 #define NS_IDOCUMENT_OBSERVER_IID \
-{ 0x4e14e321, 0xa4bb, 0x49f8, \
-  { 0xa5, 0x7a, 0x23, 0x63, 0x66, 0x8d, 0x14, 0xd0 } }
+{ 0x900bc4bc, 0x8b6c, 0x4cba, \
+ { 0x82, 0xfa, 0x56, 0x8a, 0x80, 0xff, 0xfd, 0x3e } }
 
-typedef PRUint32 nsUpdateType;
+typedef uint32_t nsUpdateType;
 
 #define UPDATE_CONTENT_MODEL 0x00000001
 #define UPDATE_STYLE         0x00000002
-#define UPDATE_CONTENT_STATE 0x00000004
-#define UPDATE_ALL (UPDATE_CONTENT_MODEL | UPDATE_STYLE | UPDATE_CONTENT_STATE)
+#define UPDATE_ALL (UPDATE_CONTENT_MODEL | UPDATE_STYLE)
 
 // Document observer interface
 class nsIDocumentObserver : public nsIMutationObserver
@@ -102,20 +70,12 @@ public:
    * added/removed from the document or the content itself changed 
    * (the other notifications are used for that).
    *
-   * The optional second content node is to allow optimization
-   * of the case where state moves from one node to another
-   * (as is likely for :focus and :hover)
-   *
-   * Either content node may be nsnull, but not both
-   *
    * @param aDocument The document being observed
-   * @param aContent1 the piece of content that changed
-   * @param aContent2 optional second piece of content that changed
+   * @param aContent the piece of content that changed
    */
-  virtual void ContentStatesChanged(nsIDocument* aDocument,
-                                    nsIContent* aContent1,
-                                    nsIContent* aContent2,
-                                    PRInt32 aStateMask) = 0;
+  virtual void ContentStateChanged(nsIDocument* aDocument,
+                                   nsIContent* aContent,
+                                   nsEventStates aStateMask) = 0;
 
   /**
    * Notification that the state of the document has changed.
@@ -124,7 +84,7 @@ public:
    * @param aStateMask the state that changed
    */
   virtual void DocumentStatesChanged(nsIDocument* aDocument,
-                                     PRInt32 aStateMask) = 0;
+                                     nsEventStates aStateMask) = 0;
 
   /**
    * A StyleSheet has just been added to the document.  This method is
@@ -139,7 +99,7 @@ public:
    */
   virtual void StyleSheetAdded(nsIDocument *aDocument,
                                nsIStyleSheet* aStyleSheet,
-                               PRBool aDocumentSheet) = 0;
+                               bool aDocumentSheet) = 0;
 
   /**
    * A StyleSheet has just been removed from the document.  This
@@ -154,7 +114,7 @@ public:
    */
   virtual void StyleSheetRemoved(nsIDocument *aDocument,
                                  nsIStyleSheet* aStyleSheet,
-                                 PRBool aDocumentSheet) = 0;
+                                 bool aDocumentSheet) = 0;
   
   /**
    * A StyleSheet has just changed its applicable state.
@@ -165,12 +125,12 @@ public:
    *
    * @param aDocument The document being observed
    * @param aStyleSheet the StyleSheet that has changed state
-   * @param aApplicable PR_TRUE if the sheet is applicable, PR_FALSE if
+   * @param aApplicable true if the sheet is applicable, false if
    *        it is not applicable
    */
   virtual void StyleSheetApplicableStateChanged(nsIDocument *aDocument,
                                                 nsIStyleSheet* aStyleSheet,
-                                                PRBool aApplicable) = 0;
+                                                bool aApplicable) = 0;
 
   /**
    * A StyleRule has just been modified within a style sheet.
@@ -233,36 +193,72 @@ public:
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsIDocumentObserver, NS_IDOCUMENT_OBSERVER_IID)
 
-#define NS_DECL_NSIDOCUMENTOBSERVER                                          \
-    virtual void BeginUpdate(nsIDocument* aDocument, nsUpdateType aUpdateType);\
-    virtual void EndUpdate(nsIDocument* aDocument, nsUpdateType aUpdateType);\
-    virtual void BeginLoad(nsIDocument* aDocument);                          \
-    virtual void EndLoad(nsIDocument* aDocument);                            \
-    virtual void ContentStatesChanged(nsIDocument* aDocument,                \
-                                      nsIContent* aContent1,                 \
-                                      nsIContent* aContent2,                 \
-                                      PRInt32 aStateMask);                   \
+#define NS_DECL_NSIDOCUMENTOBSERVER_BEGINUPDATE                              \
+    virtual void BeginUpdate(nsIDocument* aDocument,                         \
+                             nsUpdateType aUpdateType);
+
+#define NS_DECL_NSIDOCUMENTOBSERVER_ENDUPDATE                                \
+    virtual void EndUpdate(nsIDocument* aDocument, nsUpdateType aUpdateType);
+
+#define NS_DECL_NSIDOCUMENTOBSERVER_BEGINLOAD                                \
+    virtual void BeginLoad(nsIDocument* aDocument);
+
+#define NS_DECL_NSIDOCUMENTOBSERVER_ENDLOAD                                  \
+    virtual void EndLoad(nsIDocument* aDocument);
+
+#define NS_DECL_NSIDOCUMENTOBSERVER_CONTENTSTATECHANGED                      \
+    virtual void ContentStateChanged(nsIDocument* aDocument,                 \
+                                     nsIContent* aContent,                   \
+                                     nsEventStates aStateMask);
+
+#define NS_DECL_NSIDOCUMENTOBSERVER_DOCUMENTSTATESCHANGED                    \
     virtual void DocumentStatesChanged(nsIDocument* aDocument,               \
-                                       PRInt32 aStateMask);                  \
+                                       nsEventStates aStateMask);
+
+#define NS_DECL_NSIDOCUMENTOBSERVER_STYLESHEETADDED                          \
     virtual void StyleSheetAdded(nsIDocument* aDocument,                     \
                                  nsIStyleSheet* aStyleSheet,                 \
-                                 PRBool aDocumentSheet);                     \
+                                 bool aDocumentSheet);
+
+#define NS_DECL_NSIDOCUMENTOBSERVER_STYLESHEETREMOVED                        \
     virtual void StyleSheetRemoved(nsIDocument* aDocument,                   \
                                    nsIStyleSheet* aStyleSheet,               \
-                                   PRBool aDocumentSheet);                   \
+                                   bool aDocumentSheet);
+
+#define NS_DECL_NSIDOCUMENTOBSERVER_STYLESHEETAPPLICABLESTATECHANGED         \
     virtual void StyleSheetApplicableStateChanged(nsIDocument* aDocument,    \
                                                   nsIStyleSheet* aStyleSheet,\
-                                                  PRBool aApplicable);       \
+                                                  bool aApplicable);
+
+#define NS_DECL_NSIDOCUMENTOBSERVER_STYLERULECHANGED                         \
     virtual void StyleRuleChanged(nsIDocument* aDocument,                    \
                                   nsIStyleSheet* aStyleSheet,                \
                                   nsIStyleRule* aOldStyleRule,               \
-                                  nsIStyleRule* aNewStyleRule);              \
+                                  nsIStyleRule* aNewStyleRule);
+
+#define NS_DECL_NSIDOCUMENTOBSERVER_STYLERULEADDED                           \
     virtual void StyleRuleAdded(nsIDocument* aDocument,                      \
                                 nsIStyleSheet* aStyleSheet,                  \
-                                nsIStyleRule* aStyleRule);                   \
+                                nsIStyleRule* aStyleRule);
+
+#define NS_DECL_NSIDOCUMENTOBSERVER_STYLERULEREMOVED                         \
     virtual void StyleRuleRemoved(nsIDocument* aDocument,                    \
                                   nsIStyleSheet* aStyleSheet,                \
-                                  nsIStyleRule* aStyleRule);                 \
+                                  nsIStyleRule* aStyleRule);
+
+#define NS_DECL_NSIDOCUMENTOBSERVER                                          \
+    NS_DECL_NSIDOCUMENTOBSERVER_BEGINUPDATE                                  \
+    NS_DECL_NSIDOCUMENTOBSERVER_ENDUPDATE                                    \
+    NS_DECL_NSIDOCUMENTOBSERVER_BEGINLOAD                                    \
+    NS_DECL_NSIDOCUMENTOBSERVER_ENDLOAD                                      \
+    NS_DECL_NSIDOCUMENTOBSERVER_CONTENTSTATECHANGED                          \
+    NS_DECL_NSIDOCUMENTOBSERVER_DOCUMENTSTATESCHANGED                        \
+    NS_DECL_NSIDOCUMENTOBSERVER_STYLESHEETADDED                              \
+    NS_DECL_NSIDOCUMENTOBSERVER_STYLESHEETREMOVED                            \
+    NS_DECL_NSIDOCUMENTOBSERVER_STYLESHEETAPPLICABLESTATECHANGED             \
+    NS_DECL_NSIDOCUMENTOBSERVER_STYLERULECHANGED                             \
+    NS_DECL_NSIDOCUMENTOBSERVER_STYLERULEADDED                               \
+    NS_DECL_NSIDOCUMENTOBSERVER_STYLERULEREMOVED                             \
     NS_DECL_NSIMUTATIONOBSERVER
 
 
@@ -289,16 +285,15 @@ _class::EndLoad(nsIDocument* aDocument)                                   \
 
 #define NS_IMPL_NSIDOCUMENTOBSERVER_STATE_STUB(_class)                    \
 void                                                                      \
-_class::ContentStatesChanged(nsIDocument* aDocument,                      \
-                             nsIContent* aContent1,                       \
-                             nsIContent* aContent2,                       \
-                             PRInt32 aStateMask)                          \
+_class::ContentStateChanged(nsIDocument* aDocument,                       \
+                             nsIContent* aContent,                        \
+                             nsEventStates aStateMask)                    \
 {                                                                         \
 }                                                                         \
                                                                           \
 void                                                                      \
 _class::DocumentStatesChanged(nsIDocument* aDocument,                     \
-                              PRInt32 aStateMask)                         \
+                              nsEventStates aStateMask)                   \
 {                                                                         \
 }
 
@@ -309,19 +304,19 @@ NS_IMPL_NSIMUTATIONOBSERVER_CONTENT(_class)
 void                                                                      \
 _class::StyleSheetAdded(nsIDocument* aDocument,                           \
                         nsIStyleSheet* aStyleSheet,                       \
-                        PRBool aDocumentSheet)                            \
+                        bool aDocumentSheet)                            \
 {                                                                         \
 }                                                                         \
 void                                                                      \
 _class::StyleSheetRemoved(nsIDocument* aDocument,                         \
                           nsIStyleSheet* aStyleSheet,                     \
-                          PRBool aDocumentSheet)                          \
+                          bool aDocumentSheet)                          \
 {                                                                         \
 }                                                                         \
 void                                                                      \
 _class::StyleSheetApplicableStateChanged(nsIDocument* aDocument,          \
                                          nsIStyleSheet* aStyleSheet,      \
-                                         PRBool aApplicable)              \
+                                         bool aApplicable)              \
 {                                                                         \
 }                                                                         \
 void                                                                      \

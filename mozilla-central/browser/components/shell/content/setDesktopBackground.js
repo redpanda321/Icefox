@@ -1,41 +1,6 @@
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is Mozilla Firebird about dialog.
-#
-# The Initial Developer of the Original Code is
-# Blake Ross (blake@blakeross.com).
-# Portions created by the Initial Developer are Copyright (C) 2002
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Blake Ross <blake@blakeross.com>
-#   Ben Goodger <ben@mozilla.org>
-#   Dão Gottwald <dao@design-noir.de>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the LGPL or the GPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 var Ci = Components.interfaces;
 
@@ -67,6 +32,18 @@ var gSetBackground = {
 #endif
     if (this._screenWidth / this._screenHeight >= 1.6)
       document.getElementById("monitor").setAttribute("aspectratio", "16:10");
+
+#ifdef XP_WIN
+    // hide fill + fit options if <win7 since don't work 
+    var version = Components.classes["@mozilla.org/system-info;1"]
+                  .getService(Ci.nsIPropertyBag2)
+                  .getProperty("version");
+    var isWindows7OrHigher = (parseFloat(version) >= 6.1);
+    if (!isWindows7OrHigher) {
+      document.getElementById("fillPosition").hidden = true;
+      document.getElementById("fitPosition").hidden = true;
+    }
+#endif
 
     // make sure that the correct dimensions will be used
     setTimeout(function(self) {
@@ -198,6 +175,39 @@ var gSetBackground = {
         var x = (this._screenWidth - this._image.naturalWidth) / 2;
         var y = (this._screenHeight - this._image.naturalHeight) / 2;
         ctx.drawImage(this._image, x, y);
+        break;
+      case "FILL":
+        //Try maxing width first, overflow height
+        var widthRatio = this._screenWidth / this._image.naturalWidth;
+        var width = this._image.naturalWidth * widthRatio;
+        var height = this._image.naturalHeight * widthRatio;
+        if (height < this._screenHeight) {
+          //height less than screen, max height and overflow width
+          var heightRatio = this._screenHeight / this._image.naturalHeight;
+          width = this._image.naturalWidth * heightRatio;
+          height = this._image.naturalHeight * heightRatio;
+        }
+        var x = (this._screenWidth - width) / 2;
+        var y = (this._screenHeight - height) / 2;
+        ctx.drawImage(this._image, x, y, width, height);
+        break;
+      case "FIT":
+        //Try maxing width first, top and bottom borders
+        var widthRatio = this._screenWidth / this._image.naturalWidth;
+        var width = this._image.naturalWidth * widthRatio;
+        var height = this._image.naturalHeight * widthRatio;
+        var x = 0;
+        var y = (this._screenHeight - height) / 2;
+        if (height > this._screenHeight) {
+          //height overflow, maximise height, side borders
+          var heightRatio = this._screenHeight / this._image.naturalHeight;
+          width = this._image.naturalWidth * heightRatio;
+          height = this._image.naturalHeight * heightRatio;
+          x = (this._screenWidth - width) / 2;
+          y = 0;
+        }
+        ctx.drawImage(this._image, x, y, width, height);
+        break;      
     }
   }
 };

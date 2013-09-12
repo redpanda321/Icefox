@@ -1,34 +1,6 @@
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# Contributor(s):
-#   Chris Jones <jones.chris.g@gmail.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either of the GNU General Public License Version 2 or later (the "GPL"),
-# or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import os, sys
 
@@ -116,6 +88,9 @@ class TypeVisitor:
 
     def visitShmemChmodType(self, c, *args):
         c.shmem.accept(self)
+
+    def visitFDType(self, s, *args):
+        pass
 
 
 class Type:
@@ -224,6 +199,7 @@ class IPDLType(Type):
     def isCompound(self): return False
     def isShmem(self): return False
     def isChmod(self): return False
+    def isFD(self): return False
 
     def isAsync(self): return self.sendSemantics is ASYNC
     def isSync(self): return self.sendSemantics is SYNC
@@ -252,7 +228,7 @@ class StateType(IPDLType):
 
 class MessageType(IPDLType):
     def __init__(self, sendSemantics, direction,
-                 ctor=False, dtor=False, cdtype=None):
+                 ctor=False, dtor=False, cdtype=None, compress=False):
         assert not (ctor and dtor)
         assert not (ctor or dtor) or type is not None
 
@@ -263,6 +239,7 @@ class MessageType(IPDLType):
         self.ctor = ctor
         self.dtor = dtor
         self.cdtype = cdtype
+        self.compress = compress
     def isMessage(self): return True
 
     def isCtor(self): return self.ctor
@@ -294,11 +271,12 @@ class ProtocolType(IPDLType):
         self.qname = qname
         self.sendSemantics = sendSemantics
         self.spawns = set()             # ProtocolType
-        self.bridges = set()            # [ Bridge ]
+        self.opens = set()              # ProtocolType
         self.managers = set()           # ProtocolType
         self.manages = [ ]
         self.stateless = stateless
         self.hasDelete = False
+        self.hasReentrantDelete = False
     def isProtocol(self): return True
 
     def name(self):
@@ -314,8 +292,9 @@ class ProtocolType(IPDLType):
         assert self.isToplevel() and  ptype.isToplevel()
         self.spawns.add(ptype)
 
-    def addBridge(self, parentPType, childPType):
-        self.bridges.add(Bridge(parentPType, childPType))
+    def addOpen(self, ptype):
+        assert self.isToplevel() and  ptype.isToplevel()
+        self.opens.add(ptype)
 
     def managedBy(self, mgr):
         self.managers = mgr
@@ -367,7 +346,7 @@ class _CompoundType(IPDLType):
     def isCompound(self):
         return True
     def itercomponents(self):
-        raise '"pure virtual" method'
+        raise Exception('"pure virtual" method')
 
     def mutuallyRecursiveWith(self, t, exploring=None):
         '''|self| is mutually recursive with |t| iff |self| and |t|
@@ -443,6 +422,16 @@ class ShmemType(IPDLType):
     def fullname(self):
         return str(self.qname)
 
+class FDType(IPDLType):
+    def __init__(self, qname):
+        self.qname = qname
+    def isFD(self): return True
+
+    def name(self):
+        return self.qname.baseid
+    def fullname(self):
+        return str(self.qname)
+
 def iteractortypes(t, visited=None):
     """Iterate over any actor(s) buried in |type|."""
     if visited is None:
@@ -474,6 +463,17 @@ def hasshmem(type):
         def visitShmemType(self, s):  raise found()
     try:
         type.accept(findShmem())
+    except found:
+        return True
+    return False
+
+def hasfd(type):
+    """Return true iff |type| is fd or has it buried within."""
+    class found: pass
+    class findFD(TypeVisitor):
+        def visitFDType(self, s):  raise found()
+    try:
+        type.accept(findFD())
     except found:
         return True
     return False
@@ -593,7 +593,8 @@ With this information, it finally type checks the AST.'''
                 and runpass(CheckProcessGraph(self.errors))):
             return False
 
-        if (len(tu.protocol.startStates)
+        if (tu.protocol
+            and len(tu.protocol.startStates)
             and not runpass(CheckStateMachine(self.errors))):
             return False
         return True
@@ -637,105 +638,142 @@ class GatherDecls(TcheckVisitor):
 
         # pretend like the translation unit "using"-ed these for the
         # sake of type checking and C++ code generation
-        tu.using = self.builtinUsing + tu.using
+        tu.builtinUsing = self.builtinUsing
 
-        p = tu.protocol
-
-        # for everyone's sanity, enforce that the filename and
-        # protocol name match
+        # for everyone's sanity, enforce that the filename and tu name
+        # match
         basefilename = os.path.basename(tu.filename)
-        expectedfilename = '%s.ipdl'% (p.name)
-
+        expectedfilename = '%s.ipdl'% (tu.name)
+        if not tu.protocol:
+            # header
+            expectedfilename += 'h'
         if basefilename != expectedfilename:
-            self.error(p.loc,
-                       "expected file defining protocol `%s' to be named `%s'; instead it's named `%s'",
-                       p.name, expectedfilename, basefilename)
+            self.error(tu.loc,
+                       "expected file for translation unit `%s' to be named `%s'; instead it's named `%s'",
+                       tu.name, expectedfilename, basefilename)
 
-        # FIXME/cjones: it's a little weird and counterintuitive to put
-        # both the namespace and non-namespaced name in the global scope.
-        # try to figure out something better; maybe a type-neutral |using|
-        # that works for C++ and protocol types?
-        qname = p.qname()
-        if 0 == len(qname.quals):
-            fullname = None
-        else:
-            fullname = str(qname)
-        p.decl = self.declare(
-            loc=p.loc,
-            type=ProtocolType(qname, p.sendSemantics,
-                              stateless=(0 == len(p.transitionStmts))),
-            shortname=p.name,
-            fullname=fullname)
+        if tu.protocol:
+            assert tu.name == tu.protocol.name
 
-        # XXX ugh, this sucks.  but we need this information to compute
-        # what friend decls we need in generated C++
-        p.decl.type._p = p
+            p = tu.protocol
+
+            # FIXME/cjones: it's a little weird and counterintuitive
+            # to put both the namespace and non-namespaced name in the
+            # global scope.  try to figure out something better; maybe
+            # a type-neutral |using| that works for C++ and protocol
+            # types?
+            qname = p.qname()
+            if 0 == len(qname.quals):
+                fullname = None
+            else:
+                fullname = str(qname)
+            p.decl = self.declare(
+                loc=p.loc,
+                type=ProtocolType(qname, p.sendSemantics,
+                                  stateless=(0 == len(p.transitionStmts))),
+                shortname=p.name,
+                fullname=fullname)
+
+            # XXX ugh, this sucks.  but we need this information to compute
+            # what friend decls we need in generated C++
+            p.decl.type._ast = p
 
         # make sure we have decls for all dependent protocols
-        for pinc in tu.protocolIncludes:
+        for pinc in tu.includes:
             pinc.accept(self)
 
         # declare imported (and builtin) C++ types
+        for using in tu.builtinUsing:
+            using.accept(self)
         for using in tu.using:
             using.accept(self)
 
         # first pass to "forward-declare" all structs and unions in
         # order to support recursive definitions
         for su in tu.structsAndUnions:
-            qname = su.qname()
-            if 0 == len(qname.quals):
-                fullname = None
-            else:
-                fullname = str(qname)
-
-            if isinstance(su, StructDecl):
-                sutype = StructType(qname, [ ])
-            elif isinstance(su, UnionDecl):
-                sutype = UnionType(qname, [ ])
-            else: assert 0 and 'unknown type'
-
-            su.decl = self.declare(
-                loc=su.loc,
-                type=sutype,
-                shortname=su.name,
-                fullname=fullname)
+            self.declareStructOrUnion(su)
 
         # second pass to check each definition
         for su in tu.structsAndUnions:
             su.accept(self)
+        for inc in tu.includes:
+            if inc.tu.filetype == 'header':
+                for su in inc.tu.structsAndUnions:
+                    su.accept(self)
 
-        # grab symbols in the protocol itself
-        p.accept(self)
+        if tu.protocol:
+            # grab symbols in the protocol itself
+            p.accept(self)
+
 
         tu.type = VOID
 
         self.symtab = savedSymtab
 
+    def declareStructOrUnion(self, su):
+        if hasattr(su, 'decl'):
+            self.symtab.declare(su.decl)
+            return
 
-    def visitProtocolInclude(self, pi):
-        if pi.tu is None:
+        qname = su.qname()
+        if 0 == len(qname.quals):
+            fullname = None
+        else:
+            fullname = str(qname)
+
+        if isinstance(su, StructDecl):
+            sutype = StructType(qname, [ ])
+        elif isinstance(su, UnionDecl):
+            sutype = UnionType(qname, [ ])
+        else: assert 0 and 'unknown type'
+
+        # XXX more suckage.  this time for pickling structs/unions
+        # declared in headers.
+        sutype._ast = su
+
+        su.decl = self.declare(
+            loc=su.loc,
+            type=sutype,
+            shortname=su.name,
+            fullname=fullname)
+
+
+    def visitInclude(self, inc):
+        if inc.tu is None:
             self.error(
-                pi.loc,
+                inc.loc,
                 "(type checking here will be unreliable because of an earlier error)")
             return
-        pi.tu.accept(self)
-        self.symtab.declare(pi.tu.protocol.decl)
+        inc.tu.accept(self)
+        if inc.tu.protocol:
+            self.symtab.declare(inc.tu.protocol.decl)
+        else:
+            # This is a header.  Import its "exported" globals into
+            # our scope.
+            for using in inc.tu.using:
+                using.accept(self)
+            for su in inc.tu.structsAndUnions:
+                self.declareStructOrUnion(su)
 
     def visitStructDecl(self, sd):
+        # If we've already processed this struct, don't do it again.
+        if hasattr(sd, 'symtab'):
+            return
+
         stype = sd.decl.type
 
         self.symtab.enterScope(sd)
 
         for f in sd.fields:
-            ftypedecl = self.symtab.lookup(str(f.type))
+            ftypedecl = self.symtab.lookup(str(f.typespec))
             if ftypedecl is None:
                 self.error(f.loc, "field `%s' of struct `%s' has unknown type `%s'",
-                           f.name, sd.name, str(f.type))
+                           f.name, sd.name, str(f.typespec))
                 continue
 
             f.decl = self.declare(
                 loc=f.loc,
-                type=self._canonicalType(ftypedecl.type, f.type),
+                type=self._canonicalType(ftypedecl.type, f.typespec),
                 shortname=f.name,
                 fullname=None)
             stype.fields.append(f.decl.type)
@@ -744,6 +782,10 @@ class GatherDecls(TcheckVisitor):
 
     def visitUnionDecl(self, ud):
         utype = ud.decl.type
+
+        # If we've already processed this union, don't do it again.
+        if len(utype.components):
+            return
         
         for c in ud.components:
             cdecl = self.symtab.lookup(str(c))
@@ -759,8 +801,14 @@ class GatherDecls(TcheckVisitor):
             fullname = None
         if fullname == 'mozilla::ipc::Shmem':
             ipdltype = ShmemType(using.type.spec)
+        elif fullname == 'mozilla::ipc::FileDescriptor':
+            ipdltype = FDType(using.type.spec)
         else:
             ipdltype = ImportedCxxType(using.type.spec)
+            existingType = self.symtab.lookup(ipdltype.fullname())
+            if existingType and existingType.fullname == ipdltype.fullname():
+                using.decl = existingType
+                return
         using.decl = self.declare(
             loc=using.loc,
             type=ipdltype,
@@ -776,6 +824,9 @@ class GatherDecls(TcheckVisitor):
 
         for bridges in p.bridgesStmts:
             bridges.accept(self)
+
+        for opens in p.opensStmts:
+            opens.accept(self)
 
         seenmgrs = set()
         for mgr in p.managers:
@@ -809,6 +860,8 @@ class GatherDecls(TcheckVisitor):
                 "destructor declaration `%s(...)' required for managed protocol `%s'",
                 _DELETE_MSG, p.name)
 
+        p.decl.type.hasReentrantDelete = p.decl.type.hasDelete and self.symtab.lookup(_DELETE_MSG).type.isRpc()
+
         for managed in p.managesStmts:
             mgdname = managed.name
             ctordecl = self.symtab.lookup(mgdname +'Constructor')
@@ -827,13 +880,17 @@ class GatherDecls(TcheckVisitor):
             if 0 == len(p.startStates):
                 p.startStates = [ p.transitionStmts[0] ]
 
-        # declare implicit "any" and "dead" states
+        # declare implicit "any", "dead", and "dying" states
         self.declare(loc=State.ANY.loc,
                      type=StateType(p.decl.type, State.ANY.name, start=False),
                      progname=State.ANY.name)
         self.declare(loc=State.DEAD.loc,
                      type=StateType(p.decl.type, State.DEAD.name, start=False),
                      progname=State.DEAD.name)
+        if p.decl.type.hasReentrantDelete:
+            self.declare(loc=State.DYING.loc,
+                         type=StateType(p.decl.type, State.DYING.name, start=False),
+                         progname=State.DYING.name)
 
         # declare each state before decorating their mention
         for trans in p.transitionStmts:
@@ -853,6 +910,9 @@ class GatherDecls(TcheckVisitor):
             # add a special state |state DEAD: null goto DEAD;|
             deadtrans = TransitionStmt.makeNullStmt(State.DEAD)
             p.states[State.DEAD] = deadtrans           
+            if p.decl.type.hasReentrantDelete:
+                dyingtrans = TransitionStmt.makeNullStmt(State.DYING)
+                p.states[State.DYING] = dyingtrans
 
         # visit the message decls once more and resolve the state names
         # attached to actor params and returns
@@ -926,6 +986,14 @@ class GatherDecls(TcheckVisitor):
             return decl
         bridges.parentSide = lookup(bridges.parentSide)
         bridges.childSide = lookup(bridges.childSide)
+
+    def visitOpensStmt(self, opens):
+        pname = opens.proto
+        opens.proto = self.symtab.lookup(pname)
+        if opens.proto is None:
+            self.error(opens.loc,
+                       "opened protocol `%s' has not been declared",
+                       pname)
 
 
     def visitManager(self, mgr):
@@ -1001,7 +1069,8 @@ class GatherDecls(TcheckVisitor):
         self.symtab.enterScope(md)
 
         msgtype = MessageType(md.sendSemantics, md.direction,
-                              ctor=isctor, dtor=isdtor, cdtype=cdtype)
+                              ctor=isctor, dtor=isdtor, cdtype=cdtype,
+                              compress=(md.compress == 'compress'))
 
         # replace inparam Param nodes with proper Decls
         def paramToDecl(param):
@@ -1200,11 +1269,12 @@ class CheckTypes(TcheckVisitor):
         self.visited = set()
         self.ptype = None
 
-    def visitProtocolInclude(self, inc):
+    def visitInclude(self, inc):
         if inc.tu.filename in self.visited:
             return
         self.visited.add(inc.tu.filename)
-        inc.tu.protocol.accept(self)
+        if inc.tu.protocol:
+            inc.tu.protocol.accept(self)
 
 
     def visitStructDecl(self, sd):
@@ -1232,6 +1302,11 @@ class CheckTypes(TcheckVisitor):
         if len(p.bridgesStmts) and not ptype.isToplevel():
             self.error(p.decl.loc,
                        "protocol `%s' is not top-level and so cannot declare |bridges|",
+                       pname)
+
+        if len(p.opensStmts) and not ptype.isToplevel():
+            self.error(p.decl.loc,
+                       "protocol `%s' is not top-level and so cannot declare |opens|",
                        pname)
 
         for mgrtype in ptype.managers:
@@ -1300,8 +1375,23 @@ class CheckTypes(TcheckVisitor):
             self.error(bridges.loc,
                        "cannot bridge non-top-level-protocol(s) `%s' and `%s'",
                        parentType.name(), childType.name())
+
+
+    def visitOpensStmt(self, opens):
+        if not self.ptype.isToplevel():
+            self.error(opens.loc,
+                       "only top-level protocols can have |opens| statements; `%s' cannot",
+                       self.ptype.name())
+            return
+
+        openedType = opens.proto.type
+        if not (openedType.isIPDL() and openedType.isProtocol()
+                and openedType.isToplevel()):
+            self.error(opens.loc,
+                       "cannot open non-top-level-protocol `%s'",
+                       openedType.name())
         else:
-            self.ptype.addBridge(parentType, childType)
+            self.ptype.addOpen(openedType)
 
 
     def visitManagesStmt(self, mgs):
@@ -1369,6 +1459,13 @@ class CheckTypes(TcheckVisitor):
             self.error(loc,
                        "asynchronous message `%s' declares return values",
                        mname)
+
+        if (mtype.compress and
+            (not mtype.isAsync() or mtype.isCtor() or mtype.isDtor())):
+            self.error(
+                loc,
+                "message `%s' in protocol `%s' requests compression but is not async or is special (ctor or dtor)",
+                mname[:-len('constructor')], pname)
 
         if mtype.isCtor() and not ptype.isManagerOf(mtype.constructedType()):
             self.error(
@@ -1442,6 +1539,8 @@ class Actor:
         self.ptype = ptype
         self.side = side
 
+    def asType(self):
+        return ActorType(self.ptype)
     def other(self):
         return Actor(self.ptype, _otherside(self.side))
 
@@ -1471,11 +1570,20 @@ class BridgeEdge:
             self.parent, self.bridgeProto.name(), self.child)
     def __str__(self):  return repr(self)
 
+class OpensEdge:
+    def __init__(self, opener, openedProto):
+        self.opener = opener            # Actor
+        self.openedProto = openedProto  # ProtocolType
+    def __repr__(self):
+        return '(%r)--opens-->(%s)'% (self.opener, self.openedProto.name())
+    def __str__(self):  return repr(self)
+
 # "singleton" class with state that persists across type checking of
 # all protocols
 class ProcessGraph:
     processes = set()                   # set(Process)
-    bridges = { }                       # ProtocolType -> BridgeEdge
+    bridges = { }                       # ProtocolType -> [ BridgeEdge ]
+    opens = { }                         # ProtocolType -> [ OpensEdge ]
     actorToProcess = { }                # Actor -> Process
     visitedSpawns = set()               # set(ActorType)
     visitedBridges = set()              # set(ActorType)
@@ -1494,6 +1602,48 @@ class ProcessGraph:
         return cls.actorToProcess[actor]
 
     @classmethod
+    def bridgesOf(cls, bridgeP):
+        return cls.bridges.get(bridgeP, [])
+
+    @classmethod
+    def bridgeEndpointsOf(cls, ptype, side):
+        actor = Actor(ptype, side)
+        endpoints = []
+        for b in cls.iterbridges():
+            if b.parent == actor:
+                endpoints.append(Actor(b.bridgeProto, 'parent'))
+            elif b.child == actor:
+                endpoints.append(Actor(b.bridgeProto, 'child'))
+        return endpoints
+
+    @classmethod
+    def iterbridges(cls):
+        for edges in cls.bridges.itervalues():
+            for bridge in edges:
+                yield bridge
+
+    @classmethod
+    def opensOf(cls, openedP):
+        return cls.opens.get(openedP, [])
+
+    @classmethod
+    def opensEndpointsOf(cls, ptype, side):
+        actor = Actor(ptype, side)
+        endpoints = []
+        for o in cls.iteropens():
+            if actor == o.opener:
+                endpoints.append(Actor(o.openedProto, o.opener.side))
+            elif actor == o.opener.other():
+                endpoints.append(Actor(o.openedProto, o.opener.other().side))
+        return endpoints
+
+    @classmethod
+    def iteropens(cls):
+        for edges in cls.opens.itervalues():
+            for opens in edges:
+                yield opens
+
+    @classmethod
     def spawn(cls, spawner, remoteSpawn):
         localSpawn = remoteSpawn.other()
         spawnerProcess = ProcessGraph.getProcess(spawner)
@@ -1502,7 +1652,26 @@ class ProcessGraph:
 
     @classmethod
     def bridge(cls, parent, child, bridgeP):
-        cls.bridges[bridgeP] = BridgeEdge(bridgeP, parent, child)
+        bridgeParent = Actor(bridgeP, 'parent')
+        parentProcess = ProcessGraph.getProcess(parent)
+        parentProcess.merge(ProcessGraph.getProcess(bridgeParent))
+        bridgeChild = Actor(bridgeP, 'child')
+        childProcess = ProcessGraph.getProcess(child)
+        childProcess.merge(ProcessGraph.getProcess(bridgeChild))
+        if bridgeP not in cls.bridges:
+            cls.bridges[bridgeP] = [ ]
+        cls.bridges[bridgeP].append(BridgeEdge(bridgeP, parent, child))
+
+    @classmethod
+    def open(cls, opener, opened, openedP):
+        remoteOpener, remoteOpened, = opener.other(), opened.other()
+        openerProcess = ProcessGraph.getProcess(opener)
+        openerProcess.merge(ProcessGraph.getProcess(opened))
+        remoteOpenerProcess = ProcessGraph.getProcess(remoteOpener)
+        remoteOpenerProcess.merge(ProcessGraph.getProcess(remoteOpened))
+        if openedP not in cls.opens:
+            cls.opens[openedP] = [ ]
+        cls.opens[openedP].append(OpensEdge(opener, openedP))
 
 
 class BuildProcessGraph(TcheckVisitor):
@@ -1513,8 +1682,9 @@ class BuildProcessGraph(TcheckVisitor):
         def visitTranslationUnit(self, tu):
             TcheckVisitor.visitTranslationUnit(self, tu)
 
-        def visitProtocolInclude(self, pi):
-            pi.tu.protocol.accept(self)
+        def visitInclude(self, inc):
+            if inc.tu.protocol:
+                inc.tu.protocol.accept(self)
 
         def visitProtocol(self, p):
             ptype = p.decl.type
@@ -1550,8 +1720,9 @@ class BuildProcessGraph(TcheckVisitor):
         tu.accept(self.findSpawns(self.errors))
         TcheckVisitor.visitTranslationUnit(self, tu)
 
-    def visitProtocolInclude(self, pi):
-        pi.tu.protocol.accept(self)
+    def visitInclude(self, inc):
+        if inc.tu.protocol:
+            inc.tu.protocol.accept(self)
 
     def visitProtocol(self, p):
         ptype = p.decl.type
@@ -1610,6 +1781,22 @@ class BuildProcessGraph(TcheckVisitor):
 
         ProcessGraph.bridge(parentSideActor, childSideActor, bridgeProto)
 
+    def visitOpensStmt(self, opens):
+        openedP = opens.proto.type
+        opener = Actor(self.visiting, opens.side)
+        opened = Actor(openedP, opens.side)
+
+        # The picture here is:
+        #  [ opener       | opened ]   (process 1)
+        #      |               |
+        #      |               |
+        #  [ remoteOpener | remoteOpened ]  (process 2)
+        #
+        # An opens stmt tells us that the pairs |opener|/|opened|
+        # and |remoteOpener|/|remoteOpened| are each in the same
+        # process.
+        ProcessGraph.open(opener, opened, openedP)
+
 
 class CheckProcessGraph(TcheckVisitor):
     def __init__(self, errors):
@@ -1625,8 +1812,13 @@ class CheckProcessGraph(TcheckVisitor):
                 for edge in process.iteredges():
                     print '    ', edge
             print 'Bridges'
-            for bridge in ProcessGraph.bridges.itervalues():
-                print '  ', bridge
+            for bridgeList in ProcessGraph.bridges.itervalues():
+                for bridge in bridgeList:
+                    print '  ', bridge
+            print 'Opens'
+            for opensList in ProcessGraph.opens.itervalues():
+                for opens in opensList:
+                    print '  ', opens
 
 ##-----------------------------------------------------------------------------
 

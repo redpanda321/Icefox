@@ -1,41 +1,7 @@
 # -*- Mode: Java; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1998
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Dan Mills <thunder@mozilla.com> (Ported from history-panel.js)
-#   Marco Bonardo <mak77@supereva.it>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 var SidebarUtils = {
   handleTreeClick: function SU_handleTreeClick(aTree, aEvent, aGutterSelect) {
@@ -86,7 +52,7 @@ var SidebarUtils = {
     else if (!mouseInGutter && openInTabs &&
             aEvent.originalTarget.localName == "treechildren") {
       tbo.view.selection.select(row.value);
-      PlacesUIUtils.openContainerNodeInTabs(aTree.selectedNode, aEvent);
+      PlacesUIUtils.openContainerNodeInTabs(aTree.selectedNode, aEvent, aTree);
     }
     else if (!mouseInGutter && !isContainer &&
              aEvent.originalTarget.localName == "treechildren") {
@@ -94,13 +60,18 @@ var SidebarUtils = {
       // do this *before* attempting to load the link since openURL uses
       // selection as an indication of which link to load.
       tbo.view.selection.select(row.value);
-      PlacesUIUtils.openNodeWithEvent(aTree.selectedNode, aEvent);
+      PlacesUIUtils.openNodeWithEvent(aTree.selectedNode, aEvent, aTree);
     }
   },
 
   handleTreeKeyPress: function SU_handleTreeKeyPress(aEvent) {
-    if (aEvent.keyCode == KeyEvent.DOM_VK_RETURN)
-      PlacesUIUtils.openNodeWithEvent(aEvent.target.selectedNode, aEvent);
+    // XXX Bug 627901: Post Fx4, this method should take a tree parameter.
+    let tree = aEvent.target;
+    let node = tree.selectedNode;
+    if (node) {
+      if (aEvent.keyCode == KeyEvent.DOM_VK_RETURN)
+        PlacesUIUtils.openNodeWithEvent(node, aEvent, tree);
+    }
   },
 
   /**
@@ -117,21 +88,25 @@ var SidebarUtils = {
     tbo.getCellAt(aEvent.clientX, aEvent.clientY, row, col, obj);
 
     // row.value is -1 when the mouse is hovering an empty area within the tree.
-    // To avoid showing a URL from a previously hovered node,
-    // for a currently hovered non-url node, we must clear the URL from the
-    // status bar in these cases.
+    // To avoid showing a URL from a previously hovered node for a currently
+    // hovered non-url node, we must clear the moused-over URL in these cases.
     if (row.value != -1) {
-      var cell = tree.view.nodeForTreeIndex(row.value);
-      if (PlacesUtils.nodeIsURI(cell))
-        window.top.XULBrowserWindow.setOverLink(cell.uri, null);
+      var node = tree.view.nodeForTreeIndex(row.value);
+      if (PlacesUtils.nodeIsURI(node))
+        this.setMouseoverURL(node.uri);
       else
-        this.clearURLFromStatusBar();
+        this.setMouseoverURL("");
     }
     else
-      this.clearURLFromStatusBar();
+      this.setMouseoverURL("");
   },
 
-  clearURLFromStatusBar: function SU_clearURLFromStatusBar() {
-    window.top.XULBrowserWindow.setOverLink("", null);
+  setMouseoverURL: function SU_setMouseoverURL(aURL) {
+    // When the browser window is closed with an open sidebar, the sidebar
+    // unload event happens after the browser's one.  In this case
+    // top.XULBrowserWindow has been nullified already.
+    if (top.XULBrowserWindow) {
+      top.XULBrowserWindow.setOverLink(aURL, null);
+    }
   }
 };

@@ -1,60 +1,24 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is TransforMiiX XSLT processor code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Peter Van der Beken <peterv@propagandism.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsXPathExpression.h"
 #include "txExpr.h"
 #include "txExprResult.h"
-#include "nsDOMError.h"
+#include "nsError.h"
 #include "nsIDOMCharacterData.h"
-#include "nsIDOMClassInfo.h"
+#include "nsDOMClassInfoID.h"
 #include "nsIDOMDocument.h"
 #include "nsIDOMXPathNamespace.h"
 #include "nsXPathResult.h"
-#include "nsDOMError.h"
 #include "txURIUtils.h"
 #include "txXPathTreeWalker.h"
 
 NS_IMPL_CYCLE_COLLECTION_1(nsXPathExpression, mDocument)
 
-NS_IMPL_CYCLE_COLLECTING_ADDREF_AMBIGUOUS(nsXPathExpression,
-                                          nsIDOMXPathExpression)
-NS_IMPL_CYCLE_COLLECTING_RELEASE_AMBIGUOUS(nsXPathExpression,
-                                           nsIDOMXPathExpression)
+NS_IMPL_CYCLE_COLLECTING_ADDREF(nsXPathExpression)
+NS_IMPL_CYCLE_COLLECTING_RELEASE(nsXPathExpression)
 
 DOMCI_DATA(XPathExpression, nsXPathExpression)
 
@@ -76,7 +40,7 @@ nsXPathExpression::nsXPathExpression(nsAutoPtr<Expr>& aExpression,
 
 NS_IMETHODIMP
 nsXPathExpression::Evaluate(nsIDOMNode *aContextNode,
-                            PRUint16 aType,
+                            uint16_t aType,
                             nsISupports *aInResult,
                             nsISupports **aResult)
 {
@@ -85,9 +49,9 @@ nsXPathExpression::Evaluate(nsIDOMNode *aContextNode,
 
 NS_IMETHODIMP
 nsXPathExpression::EvaluateWithContext(nsIDOMNode *aContextNode,
-                                       PRUint32 aContextPosition,
-                                       PRUint32 aContextSize,
-                                       PRUint16 aType,
+                                       uint32_t aContextPosition,
+                                       uint32_t aContextSize,
+                                       uint16_t aType,
                                        nsISupports *aInResult,
                                        nsISupports **aResult)
 {
@@ -109,10 +73,7 @@ nsXPathExpression::EvaluateWithContext(nsIDOMNode *aContextNode,
         }
     }
 
-    nsresult rv;
-    PRUint16 nodeType;
-    rv = aContextNode->GetNodeType(&nodeType);
-    NS_ENSURE_SUCCESS(rv, rv);
+    uint16_t nodeType = context->NodeType();
 
     if (nodeType == nsIDOMNode::TEXT_NODE ||
         nodeType == nsIDOMNode::CDATA_SECTION_NODE) {
@@ -120,7 +81,7 @@ nsXPathExpression::EvaluateWithContext(nsIDOMNode *aContextNode,
         NS_ENSURE_TRUE(textNode, NS_ERROR_FAILURE);
 
         if (textNode) {
-            PRUint32 textLength;
+            uint32_t textLength;
             textNode->GetLength(&textLength);
             if (textLength == 0)
                 return NS_ERROR_DOM_NOT_SUPPORTED_ERR;
@@ -139,7 +100,7 @@ nsXPathExpression::EvaluateWithContext(nsIDOMNode *aContextNode,
     }
 
     NS_ENSURE_ARG(aResult);
-    *aResult = nsnull;
+    *aResult = nullptr;
 
     nsAutoPtr<txXPathNode> contextNode(txXPathNativeNode::createXPathNode(aContextNode));
     if (!contextNode) {
@@ -149,10 +110,10 @@ nsXPathExpression::EvaluateWithContext(nsIDOMNode *aContextNode,
     EvalContextImpl eContext(*contextNode, aContextPosition, aContextSize,
                              mRecycler);
     nsRefPtr<txAExprResult> exprResult;
-    rv = mExpression->evaluate(&eContext, getter_AddRefs(exprResult));
+    nsresult rv = mExpression->evaluate(&eContext, getter_AddRefs(exprResult));
     NS_ENSURE_SUCCESS(rv, rv);
 
-    PRUint16 resultType = aType;
+    uint16_t resultType = aType;
     if (aType == nsIDOMXPathResult::ANY_TYPE) {
         short exprResultType = exprResult->getResultType();
         switch (exprResultType) {
@@ -193,7 +154,7 @@ nsXPathExpression::EvaluateWithContext(nsIDOMNode *aContextNode,
  */
 
 nsresult
-nsXPathExpression::EvalContextImpl::getVariable(PRInt32 aNamespace,
+nsXPathExpression::EvalContextImpl::getVariable(int32_t aNamespace,
                                                 nsIAtom* aLName,
                                                 txAExprResult*& aResult)
 {
@@ -201,15 +162,15 @@ nsXPathExpression::EvalContextImpl::getVariable(PRInt32 aNamespace,
     return NS_ERROR_INVALID_ARG;
 }
 
-MBool nsXPathExpression::EvalContextImpl::isStripSpaceAllowed(const txXPathNode& aNode)
+bool nsXPathExpression::EvalContextImpl::isStripSpaceAllowed(const txXPathNode& aNode)
 {
-    return MB_FALSE;
+    return false;
 }
 
 void* nsXPathExpression::EvalContextImpl::getPrivateContext()
 {
     // we don't have a private context here.
-    return nsnull;
+    return nullptr;
 }
 
 txResultRecycler* nsXPathExpression::EvalContextImpl::recycler()
@@ -229,12 +190,12 @@ const txXPathNode& nsXPathExpression::EvalContextImpl::getContextNode()
     return mContextNode;
 }
 
-PRUint32 nsXPathExpression::EvalContextImpl::size()
+uint32_t nsXPathExpression::EvalContextImpl::size()
 {
     return mContextSize;
 }
 
-PRUint32 nsXPathExpression::EvalContextImpl::position()
+uint32_t nsXPathExpression::EvalContextImpl::position()
 {
     return mContextPosition;
 }

@@ -1,45 +1,14 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is frightening to behold.
- *
- * The Initial Developer of the Original Code is
- * Jonas Sicking.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Jonas Sicking <sicking@bigfoot.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  * The MIME stream separates headers and a datastream. It also allows
  * automatic creation of the content-length header.
  */
+
+#include "ipc/IPCMessageUtils.h"
 
 #include "nsCOMPtr.h"
 #include "nsComponentManagerUtils.h"
@@ -48,9 +17,16 @@
 #include "nsISeekableStream.h"
 #include "nsIStringStream.h"
 #include "nsString.h"
+#include "nsMIMEInputStream.h"
+#include "nsIClassInfoImpl.h"
+#include "nsIIPCSerializableInputStream.h"
+#include "mozilla/ipc/InputStreamUtils.h"
+
+using namespace mozilla::ipc;
 
 class nsMIMEInputStream : public nsIMIMEInputStream,
-                          public nsISeekableStream
+                          public nsISeekableStream,
+                          public nsIIPCSerializableInputStream
 {
 public:
     nsMIMEInputStream();
@@ -60,7 +36,8 @@ public:
     NS_DECL_NSIINPUTSTREAM
     NS_DECL_NSIMIMEINPUTSTREAM
     NS_DECL_NSISEEKABLESTREAM
-    
+    NS_DECL_NSIIPCSERIALIZABLEINPUTSTREAM
+
     NS_METHOD Init();
 
 private:
@@ -73,8 +50,8 @@ private:
         void* mClosure;
     };
     static NS_METHOD ReadSegCb(nsIInputStream* aIn, void* aClosure,
-                               const char* aFromRawSegment, PRUint32 aToOffset,
-                               PRUint32 aCount, PRUint32 *aWriteCount);
+                               const char* aFromRawSegment, uint32_t aToOffset,
+                               uint32_t aCount, uint32_t *aWriteCount);
 
     nsCString mHeaders;
     nsCOMPtr<nsIStringInputStream> mHeaderStream;
@@ -84,17 +61,28 @@ private:
     
     nsCOMPtr<nsIInputStream> mData;
     nsCOMPtr<nsIMultiplexInputStream> mStream;
-    PRPackedBool mAddContentLength;
-    PRPackedBool mStartedReading;
+    bool mAddContentLength;
+    bool mStartedReading;
 };
 
-NS_IMPL_THREADSAFE_ISUPPORTS3(nsMIMEInputStream,
-                              nsIMIMEInputStream,
-                              nsIInputStream,
-                              nsISeekableStream)
+NS_IMPL_THREADSAFE_ADDREF(nsMIMEInputStream)
+NS_IMPL_THREADSAFE_RELEASE(nsMIMEInputStream)
 
-nsMIMEInputStream::nsMIMEInputStream() : mAddContentLength(PR_FALSE),
-                                         mStartedReading(PR_FALSE)
+NS_IMPL_CLASSINFO(nsMIMEInputStream, NULL, nsIClassInfo::THREADSAFE,
+                  NS_MIMEINPUTSTREAM_CID)
+
+NS_IMPL_QUERY_INTERFACE4_CI(nsMIMEInputStream,
+                            nsIMIMEInputStream,
+                            nsIInputStream,
+                            nsISeekableStream,
+                            nsIIPCSerializableInputStream)
+NS_IMPL_CI_INTERFACE_GETTER3(nsMIMEInputStream,
+                             nsIMIMEInputStream,
+                             nsIInputStream,
+                             nsISeekableStream)
+
+nsMIMEInputStream::nsMIMEInputStream() : mAddContentLength(false),
+                                         mStartedReading(false)
 {
 }
 
@@ -127,13 +115,13 @@ NS_METHOD nsMIMEInputStream::Init()
 
 /* attribute boolean addContentLength; */
 NS_IMETHODIMP
-nsMIMEInputStream::GetAddContentLength(PRBool *aAddContentLength)
+nsMIMEInputStream::GetAddContentLength(bool *aAddContentLength)
 {
     *aAddContentLength = mAddContentLength;
     return NS_OK;
 }
 NS_IMETHODIMP
-nsMIMEInputStream::SetAddContentLength(PRBool aAddContentLength)
+nsMIMEInputStream::SetAddContentLength(bool aAddContentLength)
 {
     NS_ENSURE_FALSE(mStartedReading, NS_ERROR_FAILURE);
     mAddContentLength = aAddContentLength;
@@ -179,16 +167,16 @@ void nsMIMEInputStream::InitStreams()
     NS_ASSERTION(!mStartedReading,
                  "Don't call initStreams twice without rewinding");
 
-    mStartedReading = PR_TRUE;
+    mStartedReading = true;
 
     // We'll use the content-length stream to add the final \r\n
     if (mAddContentLength) {
-        PRUint32 cl = 0;
+        uint64_t cl = 0;
         if (mData) {
             mData->Available(&cl);
         }
         mContentLength.AssignLiteral("Content-Length: ");
-        mContentLength.AppendInt((PRInt32)cl);
+        mContentLength.AppendInt(cl);
         mContentLength.AppendLiteral("\r\n\r\n");
     }
     else {
@@ -207,14 +195,14 @@ if (!mStartedReading) {     \
 
 // Reset mStartedReading when Seek-ing to start
 NS_IMETHODIMP
-nsMIMEInputStream::Seek(PRInt32 whence, PRInt64 offset)
+nsMIMEInputStream::Seek(int32_t whence, int64_t offset)
 {
     nsresult rv;
     nsCOMPtr<nsISeekableStream> stream = do_QueryInterface(mStream);
-    if (whence == NS_SEEK_SET && LL_EQ(offset, LL_Zero())) {
+    if (whence == NS_SEEK_SET && offset == 0) {
         rv = stream->Seek(whence, offset);
         if (NS_SUCCEEDED(rv))
-            mStartedReading = PR_FALSE;
+            mStartedReading = false;
     }
     else {
         INITSTREAMS;
@@ -226,8 +214,8 @@ nsMIMEInputStream::Seek(PRInt32 whence, PRInt64 offset)
 
 // Proxy ReadSegments since we need to be a good little nsIInputStream
 NS_IMETHODIMP nsMIMEInputStream::ReadSegments(nsWriteSegmentFun aWriter,
-                                              void *aClosure, PRUint32 aCount,
-                                              PRUint32 *_retval)
+                                              void *aClosure, uint32_t aCount,
+                                              uint32_t *_retval)
 {
     INITSTREAMS;
     ReadSegmentsState state;
@@ -240,8 +228,8 @@ NS_IMETHODIMP nsMIMEInputStream::ReadSegments(nsWriteSegmentFun aWriter,
 NS_METHOD
 nsMIMEInputStream::ReadSegCb(nsIInputStream* aIn, void* aClosure,
                              const char* aFromRawSegment,
-                             PRUint32 aToOffset, PRUint32 aCount,
-                             PRUint32 *aWriteCount)
+                             uint32_t aToOffset, uint32_t aCount,
+                             uint32_t *aWriteCount)
 {
     ReadSegmentsState* state = (ReadSegmentsState*)aClosure;
     return  (state->mWriter)(state->mThisStream,
@@ -258,12 +246,12 @@ nsMIMEInputStream::ReadSegCb(nsIInputStream* aIn, void* aClosure,
 
 // nsIInputStream
 NS_IMETHODIMP nsMIMEInputStream::Close(void) { INITSTREAMS; return mStream->Close(); }
-NS_IMETHODIMP nsMIMEInputStream::Available(PRUint32 *_retval) { INITSTREAMS; return mStream->Available(_retval); }
-NS_IMETHODIMP nsMIMEInputStream::Read(char * buf, PRUint32 count, PRUint32 *_retval) { INITSTREAMS; return mStream->Read(buf, count, _retval); }
-NS_IMETHODIMP nsMIMEInputStream::IsNonBlocking(PRBool *aNonBlocking) { INITSTREAMS; return mStream->IsNonBlocking(aNonBlocking); }
+NS_IMETHODIMP nsMIMEInputStream::Available(uint64_t *_retval) { INITSTREAMS; return mStream->Available(_retval); }
+NS_IMETHODIMP nsMIMEInputStream::Read(char * buf, uint32_t count, uint32_t *_retval) { INITSTREAMS; return mStream->Read(buf, count, _retval); }
+NS_IMETHODIMP nsMIMEInputStream::IsNonBlocking(bool *aNonBlocking) { INITSTREAMS; return mStream->IsNonBlocking(aNonBlocking); }
 
 // nsISeekableStream
-NS_IMETHODIMP nsMIMEInputStream::Tell(PRInt64 *_retval)
+NS_IMETHODIMP nsMIMEInputStream::Tell(int64_t *_retval)
 {
     INITSTREAMS;
     nsCOMPtr<nsISeekableStream> stream = do_QueryInterface(mStream);
@@ -283,7 +271,7 @@ NS_IMETHODIMP nsMIMEInputStream::SetEOF(void) {
 nsresult
 nsMIMEInputStreamConstructor(nsISupports *outer, REFNSIID iid, void **result)
 {
-    *result = nsnull;
+    *result = nullptr;
 
     if (outer)
         return NS_ERROR_NO_AGGREGATION;
@@ -304,4 +292,81 @@ nsMIMEInputStreamConstructor(nsISupports *outer, REFNSIID iid, void **result)
     NS_RELEASE(inst);
 
     return rv;
+}
+
+void
+nsMIMEInputStream::Serialize(InputStreamParams& aParams)
+{
+    MIMEInputStreamParams params;
+
+    if (mData) {
+        nsCOMPtr<nsIIPCSerializableInputStream> stream =
+            do_QueryInterface(mData);
+        NS_ASSERTION(stream, "Wrapped stream is not serializable!");
+
+        InputStreamParams wrappedParams;
+        stream->Serialize(wrappedParams);
+
+        NS_ASSERTION(wrappedParams.type() != InputStreamParams::T__None,
+                     "Wrapped stream failed to serialize!");
+
+        params.optionalStream() = wrappedParams;
+    }
+    else {
+        params.optionalStream() = mozilla::void_t();
+    }
+
+    params.headers() = mHeaders;
+    params.contentLength() = mContentLength;
+    params.startedReading() = mStartedReading;
+    params.addContentLength() = mAddContentLength;
+
+    aParams = params;
+}
+
+bool
+nsMIMEInputStream::Deserialize(const InputStreamParams& aParams)
+{
+    if (aParams.type() != InputStreamParams::TMIMEInputStreamParams) {
+        NS_ERROR("Received unknown parameters from the other process!");
+        return false;
+    }
+
+    const MIMEInputStreamParams& params =
+        aParams.get_MIMEInputStreamParams();
+    const OptionalInputStreamParams& wrappedParams = params.optionalStream();
+
+    mHeaders = params.headers();
+    mContentLength = params.contentLength();
+    mStartedReading = params.startedReading();
+
+    // nsMIMEInputStream::Init() already appended mHeaderStream & mCLStream
+    mHeaderStream->ShareData(mHeaders.get(),
+                             mStartedReading ? mHeaders.Length() : 0);
+    mCLStream->ShareData(mContentLength.get(),
+                         mStartedReading ? mContentLength.Length() : 0);
+
+    nsCOMPtr<nsIInputStream> stream;
+    if (wrappedParams.type() == OptionalInputStreamParams::TInputStreamParams) {
+        stream = DeserializeInputStream(wrappedParams.get_InputStreamParams());
+        if (!stream) {
+            NS_WARNING("Failed to deserialize wrapped stream!");
+            return false;
+        }
+
+        mData = stream;
+
+        if (NS_FAILED(mStream->AppendStream(mData))) {
+            NS_WARNING("Failed to append stream!");
+            return false;
+        }
+    }
+    else {
+        NS_ASSERTION(wrappedParams.type() == OptionalInputStreamParams::Tvoid_t,
+                     "Unknown type for OptionalInputStreamParams!");
+    }
+
+    mAddContentLength = params.addContentLength();
+
+    return true;
 }

@@ -19,11 +19,12 @@
         <link>http://localhost:4444/repo/1/secondDeveloper.html</link>
       </author>
     </authors>
-    <summary>Repo Add-on 1 - Description</summary>
-    <description>Repo Add-on 1 - Full Description</description>
+    <summary>Repo Add-on 1 - Description&lt;br&gt;Second line</summary>
+    <description>&lt;p&gt;Repo Add-on 1 - Full Description &amp;amp; some extra&lt;/p&gt;</description>
     <eula>Repo Add-on 1 - EULA</eula>
-    <developer_comments>Repo Add-on 1 - Developer Comments</developer_comments>
-    <icon>http://localhost:4444/repo/1/icon.png</icon>
+    <developer_comments>Repo Add-on 1
+                        Developer Comments</developer_comments>
+    <icon size="32">http://localhost:4444/repo/1/icon.png</icon>
     <status id="4">Public</status>
     <rating>1</rating>
     <learnmore>http://localhost:4444/repo/1/learnmore.html</learnmore>
@@ -65,7 +66,7 @@
     <description>Repo Add-on 2 - Full Description</description>
     <eula>Repo Add-on 2 - EULA</eula>
     <developer_comments>Repo Add-on 2 - Developer Comments</developer_comments>
-    <icon>http://localhost:4444/repo/2/icon.png</icon>
+    <icon size="32">http://localhost:4444/repo/2/icon.png</icon>
     <status id="9">Unknown</status>
     <previews>
       <preview primary="1">
@@ -85,7 +86,6 @@
     <support>http://localhost:4444/repo/2/support.html</support>
     <contribution_data>
       <link>http://localhost:4444/repo/2/contribution.html</link>
-      <suggested_amount currency="USD">$11.12</suggested_amount>
       <meet_developers>http://localhost:4444/repo/2/meetDevelopers.html</meet_developers>
     </contribution_data>
     <reviews num="1112">http://localhost:4444/repo/2/review.html</reviews>
@@ -101,7 +101,7 @@
     <type id="9999">Unknown</type>
     <guid>test_AddonRepository_3@tests.mozilla.org</guid>
     <version>2.3</version>
-    <icon>http://localhost:4444/repo/3/icon.png</icon>
+    <icon size="32">http://localhost:4444/repo/3/icon.png</icon>
     <previews>
       <preview primary="1">
         <full type="image/png">http://localhost:4444/repo/3/firstFull.png</full>
@@ -115,5 +115,68 @@
       </preview>
     </previews>
   </addon>
+
+  <addon_compatibility hosted="true" id="123">
+    <guid>test_AddonRepository_1@tests.mozilla.org</guid>
+    <name>PASS</name>
+    <version_ranges>
+      <!-- Will be included -->
+      <version_range type="incompatible">
+        <min_version>0.1</min_version>
+        <max_version>0.2</max_version>
+        <compatible_applications>
+          <application>
+            <name>XPCShell</name>
+            <application_id>666</application_id>
+            <min_version>3.0</min_version>
+            <max_version>4.0</max_version>
+            <appID>xpcshell@tests.mozilla.org</appID>
+          </application>
+        </compatible_applications>
+      </version_range>
+      <!-- Will be included -->
+      <version_range type="incompatible">
+        <min_version>0.2</min_version>
+        <max_version>0.3</max_version>
+        <compatible_applications>
+          <application>
+            <name>XPCShell</name>
+            <application_id>666</application_id>
+            <min_version>5.0</min_version>
+            <max_version>6.0</max_version>
+            <appID>xpcshell@tests.mozilla.org</appID>
+          </application>
+        </compatible_applications>
+      </version_range>
+      <!-- Won't be included - invalid type attribute -->
+      <version_range type="unknown">
+        <min_version>9</min_version>
+        <max_version>10</max_version>
+        <compatible_applications>
+          <application>
+            <name>XPCShell</name>
+            <application_id>666</application_id>
+            <min_version>10.0</min_version>
+            <max_version>11.0</max_version>
+            <appID>xpcshell@tests.mozilla.org</appID>
+          </application>
+        </compatible_applications>
+      </version_range>
+      <!-- Won't be included - no matching appID -->
+      <version_range type="incompatible">
+        <min_version>0.2</min_version>
+        <max_version>0.3</max_version>
+        <compatible_applications>
+          <application>
+            <name>Unknown App</name>
+            <application_id>123</application_id>
+            <min_version>1.0</min_version>
+            <max_version>999.0</max_version>
+            <appID>unknown-app@tests.mozilla.org</appID>
+          </application>
+        </compatible_applications>
+      </version_range>
+    </version_ranges>
+  </addon_compatibility>
 </searchresults>
 

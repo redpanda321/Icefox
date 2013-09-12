@@ -20,56 +20,6 @@
 #include "chrome/common/ipc_sync_message.h"
 #include "chrome/common/thumbnail_score.h"
 #include "chrome/common/transport_dib.h"
-#ifndef CHROMIUM_MOZILLA_BUILD
-#include "webkit/glue/webcursor.h"
-#include "webkit/glue/window_open_disposition.h"
-
-// Forward declarations.
-class GURL;
-class SkBitmap;
-
-namespace gfx {
-class Point;
-class Rect;
-class Size;
-}  // namespace gfx
-
-namespace webkit_glue {
-struct WebApplicationInfo;
-}  // namespace webkit_glue
-
-// Used by IPC_BEGIN_MESSAGES so that each message class starts from a unique
-// base.  Messages have unique IDs across channels in order for the IPC logging
-// code to figure out the message class from its ID.
-enum IPCMessageStart {
-  // By using a start value of 0 for automation messages, we keep backward
-  // compatibility with old builds.
-  AutomationMsgStart = 0,
-  ViewMsgStart,
-  ViewHostMsgStart,
-  PluginProcessMsgStart,
-  PluginProcessHostMsgStart,
-  PluginMsgStart,
-  PluginHostMsgStart,
-  NPObjectMsgStart,
-  TestMsgStart,
-  DevToolsAgentMsgStart,
-  DevToolsClientMsgStart,
-  WorkerProcessMsgStart,
-  WorkerProcessHostMsgStart,
-  WorkerMsgStart,
-  WorkerHostMsgStart,
-  // NOTE: When you add a new message class, also update
-  // IPCStatusView::IPCStatusView to ensure logging works.
-  // NOTE: this enum is used by IPC_MESSAGE_MACRO to generate a unique message
-  // id.  Only 4 bits are used for the message type, so if this enum needs more
-  // than 16 entries, that code needs to be updated.
-  LastMsgIndex
-};
-
-COMPILE_ASSERT(LastMsgIndex <= 16, need_to_update_IPC_MESSAGE_MACRO);
-
-#endif /* CHROMIUM_MOZILLA_BUILD */
 
 namespace IPC {
 
@@ -150,8 +100,8 @@ struct ParamTraits<bool> {
 };
 
 template <>
-struct ParamTraits<int16> {
-  typedef int16 param_type;
+struct ParamTraits<int16_t> {
+  typedef int16_t param_type;
   static void Write(Message* m, const param_type& p) {
     m->WriteInt(p);
   }
@@ -164,8 +114,8 @@ struct ParamTraits<int16> {
 };
 
 template <>
-struct ParamTraits<uint16> {
-  typedef uint16 param_type;
+struct ParamTraits<uint16_t> {
+  typedef uint16_t param_type;
   static void Write(Message* m, const param_type& p) {
     m->WriteInt(p);
   }
@@ -219,7 +169,71 @@ struct ParamTraits<unsigned long> {
   }
 };
 
-#if !(defined(OS_MACOSX) || (defined(CHROMIUM_MOZILLA_BUILD) && (defined(OS_LINUX) || defined(OS_WIN)) && defined(ARCH_CPU_64_BITS)))
+template <>
+struct ParamTraits<nsresult> {
+  typedef nsresult param_type;
+  static void Write(Message* m, const param_type& p) {
+    m->WriteUInt32(static_cast<uint32_t>(p));
+  }
+  static bool Read(const Message* m, void** iter, param_type* r) {
+    return m->ReadUInt32(iter, reinterpret_cast<uint32_t*>(r));
+  }
+  static void Log(const param_type& p, std::wstring* l) {
+    l->append(StringPrintf(L"%u", static_cast<uint32_t>(p)));
+  }
+};
+
+#if (defined(OS_OPENBSD) && defined(ARCH_CPU_64_BITS))
+// On OpenBSD, uint64_t is unsigned long long
+// see https://bugzilla.mozilla.org/show_bug.cgi?id=648735#c27
+template <>
+struct ParamTraits<unsigned long long> {
+  typedef unsigned long long param_type;
+  static void Write(Message* m, const param_type& p) {
+    m->WriteData(reinterpret_cast<const char*>(&p), sizeof(param_type));
+ }
+  static bool Read(const Message* m, void** iter, param_type* r) {
+    const char *data;
+    int data_size = 0;
+    bool result = m->ReadData(iter, &data, &data_size);
+    if (result && data_size == sizeof(param_type)) {
+      memcpy(r, data, sizeof(param_type));
+    } else {
+      result = false;
+      NOTREACHED();
+    }
+    return result;
+  }
+  static void Log(const param_type& p, std::wstring* l) {
+    l->append(StringPrintf(L"%ull", p));
+  }
+};
+
+template <>
+struct ParamTraits<long long> {
+  typedef long long param_type;
+  static void Write(Message* m, const param_type& p) {
+    m->WriteData(reinterpret_cast<const char*>(&p), sizeof(param_type));
+ }
+  static bool Read(const Message* m, void** iter, param_type* r) {
+    const char *data;
+    int data_size = 0;
+    bool result = m->ReadData(iter, &data, &data_size);
+    if (result && data_size == sizeof(param_type)) {
+      memcpy(r, data, sizeof(param_type));
+    } else {
+      result = false;
+      NOTREACHED();
+    }
+    return result;
+  }
+  static void Log(const param_type& p, std::wstring* l) {
+    l->append(StringPrintf(L"%ll", p));
+  }
+};
+#endif
+
+#if !(defined(OS_MACOSX) || defined(OS_OPENBSD) || defined(OS_WIN) || ((defined(OS_BSD) || defined(OS_LINUX)) && defined(ARCH_CPU_64_BITS)) || defined(ARCH_CPU_S390))
 // There size_t is a synonym for |unsigned long| ...
 template <>
 struct ParamTraits<size_t> {
@@ -239,8 +253,8 @@ struct ParamTraits<size_t> {
 // ... so we need to define traits for |unsigned int|.
 // XXX duplicating OS_MACOSX version below so as not to conflict
 template <>
-struct ParamTraits<uint32> {
-  typedef uint32 param_type;
+struct ParamTraits<uint32_t> {
+  typedef uint32_t param_type;
   static void Write(Message* m, const param_type& p) {
     m->WriteUInt32(p);
   }
@@ -252,14 +266,14 @@ struct ParamTraits<uint32> {
   }
 };
 
-#endif // if !((defined(OS_LINUX) || defined(OS_WIN)) && defined(ARCH_CPU_64_BITS))
+#endif // if !(defined(OS_LINUX) && defined(ARCH_CPU_64_BITS))
 
 #if defined(OS_MACOSX)
-// On Linux size_t & uint32 can be the same type.
+// On Linux size_t & uint32_t can be the same type.
 // TODO(playmobil): Fix compilation if this is not the case.
 template <>
-struct ParamTraits<uint32> {
-  typedef uint32 param_type;
+struct ParamTraits<uint32_t> {
+  typedef uint32_t param_type;
   static void Write(Message* m, const param_type& p) {
     m->WriteUInt32(p);
   }
@@ -272,11 +286,11 @@ struct ParamTraits<uint32> {
 };
 #endif  // defined(OS_MACOSX)
 
-#if !(defined(CHROMIUM_MOZILLA_BUILD) && defined(OS_LINUX) && defined(ARCH_CPU_64_BITS))
-// int64 is |long int| on 64-bit systems, uint64 is |unsigned long|
+#if !((defined(OS_BSD) || defined(OS_LINUX)) && defined(ARCH_CPU_64_BITS))
+// int64_t is |long int| on 64-bit systems, uint64_t is |unsigned long|
 template <>
-struct ParamTraits<int64> {
-  typedef int64 param_type;
+struct ParamTraits<int64_t> {
+  typedef int64_t param_type;
   static void Write(Message* m, const param_type& p) {
     m->WriteInt64(p);
   }
@@ -284,32 +298,24 @@ struct ParamTraits<int64> {
     return m->ReadInt64(iter, r);
   }
   static void Log(const param_type& p, std::wstring* l) {
-#ifndef CHROMIUM_MOZILLA_BUILD
-    l->append(StringPrintf(L"%I64d", p));
-#else
     l->append(StringPrintf(L"%" PRId64L, p));
-#endif // ifndef CHROMIUM_MOZILLA_BUILD
   }
 };
 
 template <>
-struct ParamTraits<uint64> {
-  typedef uint64 param_type;
+struct ParamTraits<uint64_t> {
+  typedef uint64_t param_type;
   static void Write(Message* m, const param_type& p) {
-    m->WriteInt64(static_cast<int64>(p));
+    m->WriteInt64(static_cast<int64_t>(p));
   }
   static bool Read(const Message* m, void** iter, param_type* r) {
-    return m->ReadInt64(iter, reinterpret_cast<int64*>(r));
+    return m->ReadInt64(iter, reinterpret_cast<int64_t*>(r));
   }
   static void Log(const param_type& p, std::wstring* l) {
-#ifndef CHROMIUM_MOZILLA_BUILD
-    l->append(StringPrintf(L"%I64u", p));
-#else
     l->append(StringPrintf(L"%" PRIu64L, p));
-#endif // ifndef CHROMIUM_MOZILLA_BUILD
   }
 };
-#endif // if !(defined(CHROMIUM_MOZILLA_BUILD) && defined(OS_LINUX) && defined(ARCH_CPU_64_BITS))
+#endif // if !(defined(OS_LINUX) && defined(ARCH_CPU_64_BITS))
 
 template <>
 struct ParamTraits<double> {
@@ -335,47 +341,21 @@ struct ParamTraits<double> {
   }
 };
 
-#ifndef CHROMIUM_MOZILLA_BUILD
-template <>
-struct ParamTraits<wchar_t> {
-  typedef wchar_t param_type;
-  static void Write(Message* m, const param_type& p) {
-    m->WriteData(reinterpret_cast<const char*>(&p), sizeof(param_type));
-  }
-  static bool Read(const Message* m, void** iter, param_type* r) {
-    const char *data;
-    int data_size = 0;
-    bool result = m->ReadData(iter, &data, &data_size);
-    if (result && data_size == sizeof(param_type)) {
-      memcpy(r, data, sizeof(param_type));
-    } else {
-      result = false;
-      NOTREACHED();
-    }
-
-    return result;
-  }
-  static void Log(const param_type& p, std::wstring* l) {
-    l->append(StringPrintf(L"%lc", p));
-  }
-};
-#endif /* CHROMIUM_MOZILLA_BUILD */
-
 template <>
 struct ParamTraits<base::Time> {
   typedef base::Time param_type;
   static void Write(Message* m, const param_type& p) {
-    ParamTraits<int64>::Write(m, p.ToInternalValue());
+    ParamTraits<int64_t>::Write(m, p.ToInternalValue());
   }
   static bool Read(const Message* m, void** iter, param_type* r) {
-    int64 value;
-    if (!ParamTraits<int64>::Read(m, iter, &value))
+    int64_t value;
+    if (!ParamTraits<int64_t>::Read(m, iter, &value))
       return false;
     *r = base::Time::FromInternalValue(value);
     return true;
   }
   static void Log(const param_type& p, std::wstring* l) {
-    ParamTraits<int64>::Log(p.ToInternalValue(), l);
+    ParamTraits<int64_t>::Log(p.ToInternalValue(), l);
   }
 };
 
@@ -425,20 +405,6 @@ struct ParamTraits<MSG> {
   }
 };
 #endif  // defined(OS_WIN)
-
-#ifndef CHROMIUM_MOZILLA_BUILD
-template <>
-struct ParamTraits<SkBitmap> {
-  typedef SkBitmap param_type;
-  static void Write(Message* m, const param_type& p);
-
-  // Note: This function expects parameter |r| to be of type &SkBitmap since
-  // r->SetConfig() and r->SetPixels() are called.
-  static bool Read(const Message* m, void** iter, param_type* r);
-
-  static void Log(const param_type& p, std::wstring* l);
-};
-#endif /* CHROMIUM_MOZILLA_BUILD */
 
 template <>
 struct ParamTraits<std::string> {
@@ -609,16 +575,6 @@ struct ParamTraits<string16> {
 };
 #endif
 
-#ifndef CHROMIUM_MOZILLA_BUILD
-template <>
-struct ParamTraits<GURL> {
-  typedef GURL param_type;
-  static void Write(Message* m, const param_type& p);
-  static bool Read(const Message* m, void** iter, param_type* p);
-  static void Log(const param_type& p, std::wstring* l);
-};
-#endif /* CHROMIUM_MOZILLA_BUILD */
-
 // and, a few more useful types...
 #if defined(OS_WIN)
 template <>
@@ -717,32 +673,6 @@ struct ParamTraits<FilePath> {
   }
 };
 
-#ifndef CHROMIUM_MOZILLA_BUILD
-template <>
-struct ParamTraits<gfx::Point> {
-  typedef gfx::Point param_type;
-  static void Write(Message* m, const param_type& p);
-  static bool Read(const Message* m, void** iter, param_type* r);
-  static void Log(const param_type& p, std::wstring* l);
-};
-
-template <>
-struct ParamTraits<gfx::Rect> {
-  typedef gfx::Rect param_type;
-  static void Write(Message* m, const param_type& p);
-  static bool Read(const Message* m, void** iter, param_type* r);
-  static void Log(const param_type& p, std::wstring* l);
-};
-
-template <>
-struct ParamTraits<gfx::Size> {
-  typedef gfx::Size param_type;
-  static void Write(Message* m, const param_type& p);
-  static bool Read(const Message* m, void** iter, param_type* r);
-  static void Log(const param_type& p, std::wstring* l);
-};
-#endif /* CHROMIUM_MOZILLA_BUILD */
-
 #if defined(OS_POSIX)
 // FileDescriptors may be serialised over IPC channels on POSIX. On the
 // receiving side, the FileDescriptor is a valid duplicate of the file
@@ -825,25 +755,6 @@ struct ParamTraits<ThumbnailScore> {
   }
 };
 
-#ifndef CHROMIUM_MOZILLA_BUILD
-template <>
-struct ParamTraits<WindowOpenDisposition> {
-  typedef WindowOpenDisposition param_type;
-  static void Write(Message* m, const param_type& p) {
-    m->WriteInt(p);
-  }
-  static bool Read(const Message* m, void** iter, param_type* r) {
-    int temp;
-    bool res = m->ReadInt(iter, &temp);
-    *r = static_cast<WindowOpenDisposition>(temp);
-    return res;
-  }
-  static void Log(const param_type& p, std::wstring* l) {
-    l->append(StringPrintf(L"%d", p));
-  }
-};
-#endif
-
 #if defined(OS_WIN)
 template <>
 struct ParamTraits<XFORM> {
@@ -870,31 +781,15 @@ struct ParamTraits<XFORM> {
 };
 #endif  // defined(OS_WIN)
 
-#ifndef CHROMIUM_MOZILLA_BUILD
-template <>
-struct ParamTraits<WebCursor> {
-  typedef WebCursor param_type;
-  static void Write(Message* m, const param_type& p) {
-    p.Serialize(m);
-  }
-  static bool Read(const Message* m, void** iter, param_type* r) {
-    return r->Deserialize(m, iter);
-  }
-  static void Log(const param_type& p, std::wstring* l) {
-    l->append(L"<WebCursor>");
-  }
-};
-#endif
-
 struct LogData {
   std::wstring channel;
-  int32 routing_id;
-  uint16 type;
+  int32_t routing_id;
+  uint16_t type;
   std::wstring flags;
-  int64 sent;  // Time that the message was sent (i.e. at Send()).
-  int64 receive;  // Time before it was dispatched (i.e. before calling
+  int64_t sent;  // Time that the message was sent (i.e. at Send()).
+  int64_t receive;  // Time before it was dispatched (i.e. before calling
                   // OnMessageReceived).
-  int64 dispatch;  // Time after it was dispatched (i.e. after calling
+  int64_t dispatch;  // Time after it was dispatched (i.e. after calling
                    // OnMessageReceived).
   std::wstring message_name;
   std::wstring params;
@@ -914,33 +809,23 @@ struct ParamTraits<LogData> {
     WriteParam(m, p.params);
   }
   static bool Read(const Message* m, void** iter, param_type* r) {
-    int type;
+    int type = 0;
     bool result =
       ReadParam(m, iter, &r->channel) &&
-      ReadParam(m, iter, &r->routing_id);
+      ReadParam(m, iter, &r->routing_id) &&
       ReadParam(m, iter, &type) &&
       ReadParam(m, iter, &r->flags) &&
       ReadParam(m, iter, &r->sent) &&
       ReadParam(m, iter, &r->receive) &&
       ReadParam(m, iter, &r->dispatch) &&
       ReadParam(m, iter, &r->params);
-    r->type = static_cast<uint16>(type);
+    r->type = static_cast<uint16_t>(type);
     return result;
   }
   static void Log(const param_type& p, std::wstring* l) {
     // Doesn't make sense to implement this!
   }
 };
-
-#ifndef CHROMIUM_MOZILLA_BUILD
-template <>
-struct ParamTraits<webkit_glue::WebApplicationInfo> {
-  typedef webkit_glue::WebApplicationInfo param_type;
-  static void Write(Message* m, const param_type& p);
-  static bool Read(const Message* m, void** iter, param_type* r);
-  static void Log(const param_type& p, std::wstring* l);
-};
-#endif /* CHROMIUM_MOZILLA_BUILD */
 
 #if defined(OS_WIN)
 template<>
@@ -1152,7 +1037,7 @@ class MessageWithTuple : public Message {
  public:
   typedef ParamType Param;
 
-  MessageWithTuple(int32 routing_id, uint16 type, const Param& p)
+  MessageWithTuple(int32_t routing_id, uint16_t type, const Param& p)
       : Message(routing_id, type, PRIORITY_NORMAL) {
     WriteParam(this, p);
   }
@@ -1314,7 +1199,7 @@ class MessageWithReply : public SyncMessage {
   typedef SendParamType SendParam;
   typedef ReplyParamType ReplyParam;
 
-  MessageWithReply(int32 routing_id, uint16 type,
+  MessageWithReply(int32_t routing_id, uint16_t type,
                    const SendParam& send, const ReplyParam& reply)
       : SyncMessage(routing_id, type, PRIORITY_NORMAL,
                     new ParamDeserializer<ReplyParam>(reply)) {

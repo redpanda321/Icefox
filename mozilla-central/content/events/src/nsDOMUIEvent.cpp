@@ -1,70 +1,41 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Steve Clark (buster@netscape.com)
- *   Ilya Konstantinov (mozilla-code@future.shiny.co.il)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifdef MOZ_IPC
 #include "base/basictypes.h"
-#include "IPC/IPCMessageUtils.h"
-#endif
+#include "ipc/IPCMessageUtils.h"
 #include "nsCOMPtr.h"
 #include "nsDOMUIEvent.h"
 #include "nsIPresShell.h"
 #include "nsIInterfaceRequestorUtils.h"
-#include "nsIDOMWindowInternal.h"
+#include "nsIDOMWindow.h"
 #include "nsIDOMNode.h"
 #include "nsIContent.h"
 #include "nsContentUtils.h"
-#include "nsIEventStateManager.h"
+#include "nsEventStateManager.h"
 #include "nsIFrame.h"
-#include "nsLayoutUtils.h"
 #include "nsIScrollableFrame.h"
+#include "DictionaryHelpers.h"
+#include "mozilla/Util.h"
+#include "mozilla/Assertions.h"
+#include "nsDOMClassInfoID.h"
+
+using namespace mozilla;
 
 nsDOMUIEvent::nsDOMUIEvent(nsPresContext* aPresContext, nsGUIEvent* aEvent)
   : nsDOMEvent(aPresContext, aEvent ?
                static_cast<nsEvent *>(aEvent) :
-               static_cast<nsEvent *>(new nsUIEvent(PR_FALSE, 0, 0)))
-  , mClientPoint(0, 0), mLayerPoint(0, 0), mPagePoint(0, 0)
+               static_cast<nsEvent *>(new nsUIEvent(false, 0, 0)))
+  , mClientPoint(0, 0), mLayerPoint(0, 0), mPagePoint(0, 0), mMovementPoint(0, 0)
+  , mIsPointerLocked(nsEventStateManager::sIsPointerLocked)
+  , mLastClientPoint(nsEventStateManager::sLastClientPoint)
 {
   if (aEvent) {
-    mEventIsInternal = PR_FALSE;
+    mEventIsInternal = false;
   }
   else {
-    mEventIsInternal = PR_TRUE;
+    mEventIsInternal = true;
     mEvent->time = PR_Now();
   }
   
@@ -82,7 +53,7 @@ nsDOMUIEvent::nsDOMUIEvent(nsPresContext* aPresContext, nsGUIEvent* aEvent)
     case NS_SCROLLPORT_EVENT:
     {
       nsScrollPortEvent* scrollEvent = static_cast<nsScrollPortEvent*>(mEvent);
-      mDetail = (PRInt32)scrollEvent->orient;
+      mDetail = (int32_t)scrollEvent->orient;
       break;
     }
 
@@ -91,13 +62,13 @@ nsDOMUIEvent::nsDOMUIEvent(nsPresContext* aPresContext, nsGUIEvent* aEvent)
       break;
   }
 
-  mView = nsnull;
+  mView = nullptr;
   if (mPresContext)
   {
     nsCOMPtr<nsISupports> container = mPresContext->GetContainer();
     if (container)
     {
-       nsCOMPtr<nsIDOMWindowInternal> window = do_GetInterface(container);
+       nsCOMPtr<nsIDOMWindow> window = do_GetInterface(container);
        if (window)
           mView = do_QueryInterface(window);
     }
@@ -107,11 +78,11 @@ nsDOMUIEvent::nsDOMUIEvent(nsPresContext* aPresContext, nsGUIEvent* aEvent)
 NS_IMPL_CYCLE_COLLECTION_CLASS(nsDOMUIEvent)
 
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(nsDOMUIEvent, nsDOMEvent)
-  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mView)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK(mView)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(nsDOMUIEvent, nsDOMEvent)
-  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mView)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mView)
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
 NS_IMPL_ADDREF_INHERITED(nsDOMUIEvent, nsDOMEvent)
@@ -121,64 +92,51 @@ DOMCI_DATA(UIEvent, nsDOMUIEvent)
 
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION_INHERITED(nsDOMUIEvent)
   NS_INTERFACE_MAP_ENTRY(nsIDOMUIEvent)
-  NS_INTERFACE_MAP_ENTRY(nsIDOMNSUIEvent)
   NS_DOM_INTERFACE_MAP_ENTRY_CLASSINFO(UIEvent)
 NS_INTERFACE_MAP_END_INHERITING(nsDOMEvent)
 
-nsIntPoint
-nsDOMUIEvent::GetScreenPoint()
+static nsIntPoint
+DevPixelsToCSSPixels(const nsIntPoint& aPoint, nsPresContext* aContext)
 {
-  if (!mEvent || 
-       (mEvent->eventStructType != NS_MOUSE_EVENT &&
-        mEvent->eventStructType != NS_POPUP_EVENT &&
-        mEvent->eventStructType != NS_MOUSE_SCROLL_EVENT &&
-        mEvent->eventStructType != NS_MOZTOUCH_EVENT &&
-        mEvent->eventStructType != NS_DRAG_EVENT &&
-        mEvent->eventStructType != NS_SIMPLE_GESTURE_EVENT)) {
+  return nsIntPoint(aContext->DevPixelsToIntCSSPixels(aPoint.x),
+                    aContext->DevPixelsToIntCSSPixels(aPoint.y));
+}
+
+nsIntPoint
+nsDOMUIEvent::GetMovementPoint()
+{
+  if (mPrivateDataDuplicated) {
+    return mMovementPoint;
+  }
+
+  if (!mEvent ||
+      (mEvent->eventStructType != NS_MOUSE_EVENT &&
+       mEvent->eventStructType != NS_MOUSE_SCROLL_EVENT &&
+       mEvent->eventStructType != NS_WHEEL_EVENT &&
+       mEvent->eventStructType != NS_DRAG_EVENT &&
+       mEvent->eventStructType != NS_SIMPLE_GESTURE_EVENT) ||
+       !(static_cast<nsGUIEvent*>(mEvent)->widget)) {
     return nsIntPoint(0, 0);
   }
 
-  if (!((nsGUIEvent*)mEvent)->widget ) {
-    return mEvent->refPoint;
-  }
-
-  nsIntPoint offset = mEvent->refPoint + 
-    ((nsGUIEvent*)mEvent)->widget->WidgetToScreenOffset();
-  nscoord factor = mPresContext->DeviceContext()->UnscaledAppUnitsPerDevPixel();
-  return nsIntPoint(nsPresContext::AppUnitsToIntCSSPixels(offset.x * factor),
-                    nsPresContext::AppUnitsToIntCSSPixels(offset.y * factor));
+  // Calculate the delta between the last screen point and the current one.
+  nsIntPoint current = DevPixelsToCSSPixels(mEvent->refPoint, mPresContext);
+  nsIntPoint last = DevPixelsToCSSPixels(mEvent->lastRefPoint, mPresContext);
+  return current - last;
 }
 
 nsIntPoint
 nsDOMUIEvent::GetClientPoint()
 {
-  if (!mEvent ||
-      (mEvent->eventStructType != NS_MOUSE_EVENT &&
-       mEvent->eventStructType != NS_POPUP_EVENT &&
-       mEvent->eventStructType != NS_MOUSE_SCROLL_EVENT &&
-       mEvent->eventStructType != NS_MOZTOUCH_EVENT &&
-       mEvent->eventStructType != NS_DRAG_EVENT &&
-       mEvent->eventStructType != NS_SIMPLE_GESTURE_EVENT) ||
-      !mPresContext ||
-      !((nsGUIEvent*)mEvent)->widget) {
-    return mClientPoint;
+  if (mIsPointerLocked) {
+    return mLastClientPoint;
   }
 
-  nsPoint pt(0, 0);
-  nsIPresShell* shell = mPresContext->GetPresShell();
-  if (!shell) {
-    return nsIntPoint(0, 0);
-  }
-  nsIFrame* rootFrame = shell->GetRootFrame();
-  if (rootFrame)
-    pt = nsLayoutUtils::GetEventCoordinatesRelativeTo(mEvent, rootFrame);
-
-  return nsIntPoint(nsPresContext::AppUnitsToIntCSSPixels(pt.x),
-                    nsPresContext::AppUnitsToIntCSSPixels(pt.y));
+  return CalculateClientPoint(mPresContext, mEvent, &mClientPoint);
 }
 
 NS_IMETHODIMP
-nsDOMUIEvent::GetView(nsIDOMAbstractView** aView)
+nsDOMUIEvent::GetView(nsIDOMWindow** aView)
 {
   *aView = mView;
   NS_IF_ADDREF(*aView);
@@ -186,15 +144,23 @@ nsDOMUIEvent::GetView(nsIDOMAbstractView** aView)
 }
 
 NS_IMETHODIMP
-nsDOMUIEvent::GetDetail(PRInt32* aDetail)
+nsDOMUIEvent::GetDetail(int32_t* aDetail)
 {
   *aDetail = mDetail;
   return NS_OK;
 }
 
 NS_IMETHODIMP
-nsDOMUIEvent::InitUIEvent(const nsAString & typeArg, PRBool canBubbleArg, PRBool cancelableArg, nsIDOMAbstractView *viewArg, PRInt32 detailArg)
+nsDOMUIEvent::InitUIEvent(const nsAString& typeArg,
+                          bool canBubbleArg,
+                          bool cancelableArg,
+                          nsIDOMWindow* viewArg,
+                          int32_t detailArg)
 {
+  if (viewArg) {
+    nsCOMPtr<nsPIDOMWindow> view = do_QueryInterface(viewArg);
+    NS_ENSURE_TRUE(view, NS_ERROR_INVALID_ARG);
+  }
   nsresult rv = nsDOMEvent::InitEvent(typeArg, canBubbleArg, cancelableArg);
   NS_ENSURE_SUCCESS(rv, rv);
   
@@ -202,6 +168,16 @@ nsDOMUIEvent::InitUIEvent(const nsAString & typeArg, PRBool canBubbleArg, PRBool
   mView = viewArg;
 
   return NS_OK;
+}
+
+nsresult
+nsDOMUIEvent::InitFromCtor(const nsAString& aType,
+                           JSContext* aCx, jsval* aVal)
+{
+  mozilla::dom::UIEventInit d;
+  nsresult rv = d.Init(aCx, aVal);
+  NS_ENSURE_SUCCESS(rv, rv);
+  return InitUIEvent(aType, d.bubbles, d.cancelable, d.view, d.detail);
 }
 
 // ---- nsDOMNSUIEvent implementation -------------------
@@ -229,47 +205,62 @@ nsDOMUIEvent::GetPagePoint()
 }
 
 NS_IMETHODIMP
-nsDOMUIEvent::GetPageX(PRInt32* aPageX)
+nsDOMUIEvent::GetPageX(int32_t* aPageX)
 {
   NS_ENSURE_ARG_POINTER(aPageX);
-  *aPageX = GetPagePoint().x;
+  if (mPrivateDataDuplicated) {
+    *aPageX = mPagePoint.x;
+  } else {
+    *aPageX = nsDOMEvent::GetPageCoords(mPresContext,
+                                        mEvent,
+                                        mEvent->refPoint,
+                                        mClientPoint).x;
+  }
   return NS_OK;
 }
 
 NS_IMETHODIMP
-nsDOMUIEvent::GetPageY(PRInt32* aPageY)
+nsDOMUIEvent::GetPageY(int32_t* aPageY)
 {
   NS_ENSURE_ARG_POINTER(aPageY);
-  *aPageY = GetPagePoint().y;
+  if (mPrivateDataDuplicated) {
+    *aPageY = mPagePoint.y;
+  } else {
+    *aPageY = nsDOMEvent::GetPageCoords(mPresContext,
+                                        mEvent,
+                                        mEvent->refPoint,
+                                        mClientPoint).y;
+  }
   return NS_OK;
 }
 
 NS_IMETHODIMP
-nsDOMUIEvent::GetWhich(PRUint32* aWhich)
+nsDOMUIEvent::GetWhich(uint32_t* aWhich)
 {
-  NS_ENSURE_ARG_POINTER(aWhich);
-  // Usually we never reach here, as this is reimplemented for mouse and keyboard events.
-  *aWhich = 0;
-  return NS_OK;
+  return Which(aWhich);
 }
 
 NS_IMETHODIMP
 nsDOMUIEvent::GetRangeParent(nsIDOMNode** aRangeParent)
 {
   NS_ENSURE_ARG_POINTER(aRangeParent);
-  nsIFrame* targetFrame = nsnull;
+  nsIFrame* targetFrame = nullptr;
 
   if (mPresContext) {
-    mPresContext->EventStateManager()->GetEventTarget(&targetFrame);
+    targetFrame = mPresContext->EventStateManager()->GetEventTarget();
   }
 
-  *aRangeParent = nsnull;
+  *aRangeParent = nullptr;
 
   if (targetFrame) {
     nsPoint pt = nsLayoutUtils::GetEventCoordinatesRelativeTo(mEvent,
                                                               targetFrame);
     nsCOMPtr<nsIContent> parent = targetFrame->GetContentOffsetsFromPoint(pt).content;
     if (parent) {
+      if (parent->ChromeOnlyAccess() &&
+          !nsContentUtils::CanAccessNativeAnon()) {
+        return NS_OK;
+      }
       return CallQueryInterface(parent, aRangeParent);
     }
   }
@@ -278,13 +269,13 @@ nsDOMUIEvent::GetRangeParent(nsIDOMNode** aRangeParent)
 }
 
 NS_IMETHODIMP
-nsDOMUIEvent::GetRangeOffset(PRInt32* aRangeOffset)
+nsDOMUIEvent::GetRangeOffset(int32_t* aRangeOffset)
 {
   NS_ENSURE_ARG_POINTER(aRangeOffset);
-  nsIFrame* targetFrame = nsnull;
+  nsIFrame* targetFrame = nullptr;
 
   if (mPresContext) {
-    mPresContext->EventStateManager()->GetEventTarget(&targetFrame);
+    targetFrame = mPresContext->EventStateManager()->GetEventTarget();
   }
 
   if (targetFrame) {
@@ -298,22 +289,17 @@ nsDOMUIEvent::GetRangeOffset(PRInt32* aRangeOffset)
 }
 
 NS_IMETHODIMP
-nsDOMUIEvent::GetCancelBubble(PRBool* aCancelBubble)
+nsDOMUIEvent::GetCancelBubble(bool* aCancelBubble)
 {
   NS_ENSURE_ARG_POINTER(aCancelBubble);
-  *aCancelBubble =
-    (mEvent->flags & NS_EVENT_FLAG_STOP_DISPATCH) ? PR_TRUE : PR_FALSE;
+  *aCancelBubble = mEvent->mFlags.mPropagationStopped;
   return NS_OK;
 }
 
 NS_IMETHODIMP
-nsDOMUIEvent::SetCancelBubble(PRBool aCancelBubble)
+nsDOMUIEvent::SetCancelBubble(bool aCancelBubble)
 {
-  if (aCancelBubble) {
-    mEvent->flags |= NS_EVENT_FLAG_STOP_DISPATCH;
-  } else {
-    mEvent->flags &= ~NS_EVENT_FLAG_STOP_DISPATCH;
-  }
+  mEvent->mFlags.mPropagationStopped = aCancelBubble;
   return NS_OK;
 }
 
@@ -322,9 +308,9 @@ nsDOMUIEvent::GetLayerPoint()
 {
   if (!mEvent ||
       (mEvent->eventStructType != NS_MOUSE_EVENT &&
-       mEvent->eventStructType != NS_POPUP_EVENT &&
        mEvent->eventStructType != NS_MOUSE_SCROLL_EVENT &&
-       mEvent->eventStructType != NS_MOZTOUCH_EVENT &&
+       mEvent->eventStructType != NS_WHEEL_EVENT &&
+       mEvent->eventStructType != NS_TOUCH_EVENT &&
        mEvent->eventStructType != NS_DRAG_EVENT &&
        mEvent->eventStructType != NS_SIMPLE_GESTURE_EVENT) ||
       !mPresContext ||
@@ -332,8 +318,7 @@ nsDOMUIEvent::GetLayerPoint()
     return mLayerPoint;
   }
   // XXX I'm not really sure this is correct; it's my best shot, though
-  nsIFrame* targetFrame;
-  mPresContext->EventStateManager()->GetEventTarget(&targetFrame);
+  nsIFrame* targetFrame = mPresContext->EventStateManager()->GetEventTarget();
   if (!targetFrame)
     return mLayerPoint;
   nsIFrame* layer = nsLayoutUtils::GetClosestLayer(targetFrame);
@@ -343,7 +328,7 @@ nsDOMUIEvent::GetLayerPoint()
 }
 
 NS_IMETHODIMP
-nsDOMUIEvent::GetLayerX(PRInt32* aLayerX)
+nsDOMUIEvent::GetLayerX(int32_t* aLayerX)
 {
   NS_ENSURE_ARG_POINTER(aLayerX);
   *aLayerX = GetLayerPoint().x;
@@ -351,7 +336,7 @@ nsDOMUIEvent::GetLayerX(PRInt32* aLayerX)
 }
 
 NS_IMETHODIMP
-nsDOMUIEvent::GetLayerY(PRInt32* aLayerY)
+nsDOMUIEvent::GetLayerY(int32_t* aLayerY)
 {
   NS_ENSURE_ARG_POINTER(aLayerY);
   *aLayerY = GetLayerPoint().y;
@@ -359,7 +344,7 @@ nsDOMUIEvent::GetLayerY(PRInt32* aLayerY)
 }
 
 NS_IMETHODIMP
-nsDOMUIEvent::GetIsChar(PRBool* aIsChar)
+nsDOMUIEvent::GetIsChar(bool* aIsChar)
 {
   switch(mEvent->eventStructType)
   {
@@ -370,19 +355,28 @@ nsDOMUIEvent::GetIsChar(PRBool* aIsChar)
       *aIsChar = ((nsTextEvent*)mEvent)->isChar;
       return NS_OK;
     default:
-      *aIsChar = PR_FALSE;
+      *aIsChar = false;
       return NS_OK;
   }
 }
 
-NS_METHOD
+NS_IMETHODIMP
 nsDOMUIEvent::DuplicatePrivateData()
 {
-  mClientPoint = GetClientPoint();
+  mClientPoint = nsDOMEvent::GetClientCoords(mPresContext,
+                                             mEvent,
+                                             mEvent->refPoint,
+                                             mClientPoint);
+  mMovementPoint = GetMovementPoint();
   mLayerPoint = GetLayerPoint();
-  mPagePoint = GetPagePoint();
+  mPagePoint = nsDOMEvent::GetPageCoords(mPresContext,
+                                         mEvent,
+                                         mEvent->refPoint,
+                                         mClientPoint);
   // GetScreenPoint converts mEvent->refPoint to right coordinates.
-  nsIntPoint screenPoint = GetScreenPoint();
+  nsIntPoint screenPoint = nsDOMEvent::GetScreenCoords(mPresContext,
+                                                       mEvent,
+                                                       mEvent->refPoint);
   nsresult rv = nsDOMEvent::DuplicatePrivateData();
   if (NS_SUCCEEDED(rv)) {
     mEvent->refPoint = screenPoint;
@@ -390,38 +384,132 @@ nsDOMUIEvent::DuplicatePrivateData()
   return rv;
 }
 
-#ifdef MOZ_IPC
-void
-nsDOMUIEvent::Serialize(IPC::Message* aMsg, PRBool aSerializeInterfaceType)
+NS_IMETHODIMP_(void)
+nsDOMUIEvent::Serialize(IPC::Message* aMsg, bool aSerializeInterfaceType)
 {
   if (aSerializeInterfaceType) {
     IPC::WriteParam(aMsg, NS_LITERAL_STRING("uievent"));
   }
 
-  nsDOMEvent::Serialize(aMsg, PR_FALSE);
+  nsDOMEvent::Serialize(aMsg, false);
 
-  PRInt32 detail = 0;
+  int32_t detail = 0;
   GetDetail(&detail);
   IPC::WriteParam(aMsg, detail);
 }
 
-PRBool
+NS_IMETHODIMP_(bool)
 nsDOMUIEvent::Deserialize(const IPC::Message* aMsg, void** aIter)
 {
-  NS_ENSURE_TRUE(nsDOMEvent::Deserialize(aMsg, aIter), PR_FALSE);
-  NS_ENSURE_TRUE(IPC::ReadParam(aMsg, aIter, &mDetail), PR_FALSE);
-  return PR_TRUE;
+  NS_ENSURE_TRUE(nsDOMEvent::Deserialize(aMsg, aIter), false);
+  NS_ENSURE_TRUE(IPC::ReadParam(aMsg, aIter, &mDetail), false);
+  return true;
 }
-#endif
+
+// XXX Following struct and array are used only in
+//     nsDOMUIEvent::ComputeModifierState(), but if we define them in it,
+//     we fail to build on Mac at calling mozilla::ArrayLength().
+struct nsModifierPair
+{
+  mozilla::widget::Modifier modifier;
+  const char* name;
+};
+static const nsModifierPair kPairs[] = {
+  { widget::MODIFIER_ALT,        NS_DOM_KEYNAME_ALT },
+  { widget::MODIFIER_ALTGRAPH,   NS_DOM_KEYNAME_ALTGRAPH },
+  { widget::MODIFIER_CAPSLOCK,   NS_DOM_KEYNAME_CAPSLOCK },
+  { widget::MODIFIER_CONTROL,    NS_DOM_KEYNAME_CONTROL },
+  { widget::MODIFIER_FN,         NS_DOM_KEYNAME_FN },
+  { widget::MODIFIER_META,       NS_DOM_KEYNAME_META },
+  { widget::MODIFIER_NUMLOCK,    NS_DOM_KEYNAME_NUMLOCK },
+  { widget::MODIFIER_SCROLLLOCK, NS_DOM_KEYNAME_SCROLLLOCK },
+  { widget::MODIFIER_SHIFT,      NS_DOM_KEYNAME_SHIFT },
+  { widget::MODIFIER_SYMBOLLOCK, NS_DOM_KEYNAME_SYMBOLLOCK },
+  { widget::MODIFIER_OS,         NS_DOM_KEYNAME_OS }
+};
+
+/* static */
+mozilla::widget::Modifiers
+nsDOMUIEvent::ComputeModifierState(const nsAString& aModifiersList)
+{
+  if (aModifiersList.IsEmpty()) {
+    return 0;
+  }
+
+  // Be careful about the performance.  If aModifiersList is too long,
+  // parsing it needs too long time.
+  // XXX Should we abort if aModifiersList is too long?
+
+  Modifiers modifiers = 0;
+
+  nsAString::const_iterator listStart, listEnd;
+  aModifiersList.BeginReading(listStart);
+  aModifiersList.EndReading(listEnd);
+
+  for (uint32_t i = 0; i < mozilla::ArrayLength(kPairs); i++) {
+    nsAString::const_iterator start(listStart), end(listEnd);
+    if (!FindInReadable(NS_ConvertASCIItoUTF16(kPairs[i].name), start, end)) {
+      continue;
+    }
+
+    if ((start != listStart && !NS_IsAsciiWhitespace(*(--start))) ||
+        (end != listEnd && !NS_IsAsciiWhitespace(*(end)))) {
+      continue;
+    }
+    modifiers |= kPairs[i].modifier;
+  }
+
+  return modifiers;
+}
+
+bool
+nsDOMUIEvent::GetModifierStateInternal(const nsAString& aKey)
+{
+  nsInputEvent* inputEvent = static_cast<nsInputEvent*>(mEvent);
+  if (aKey.EqualsLiteral(NS_DOM_KEYNAME_SHIFT)) {
+    return inputEvent->IsShift();
+  }
+  if (aKey.EqualsLiteral(NS_DOM_KEYNAME_CONTROL)) {
+    return inputEvent->IsControl();
+  }
+  if (aKey.EqualsLiteral(NS_DOM_KEYNAME_META)) {
+    return inputEvent->IsMeta();
+  }
+  if (aKey.EqualsLiteral(NS_DOM_KEYNAME_ALT)) {
+    return inputEvent->IsAlt();
+  }
+
+  if (aKey.EqualsLiteral(NS_DOM_KEYNAME_ALTGRAPH)) {
+    return inputEvent->IsAltGraph();
+  }
+  if (aKey.EqualsLiteral(NS_DOM_KEYNAME_OS)) {
+    return inputEvent->IsOS();
+  }
+
+  if (aKey.EqualsLiteral(NS_DOM_KEYNAME_CAPSLOCK)) {
+    return inputEvent->IsCapsLocked();
+  }
+  if (aKey.EqualsLiteral(NS_DOM_KEYNAME_NUMLOCK)) {
+    return inputEvent->IsNumLocked();
+  }
+
+  if (aKey.EqualsLiteral(NS_DOM_KEYNAME_FN)) {
+    return inputEvent->IsFn();
+  }
+  if (aKey.EqualsLiteral(NS_DOM_KEYNAME_SCROLLLOCK)) {
+    return inputEvent->IsScrollLocked();
+  }
+  if (aKey.EqualsLiteral(NS_DOM_KEYNAME_SYMBOLLOCK)) {
+    return inputEvent->IsSymbolLocked();
+  }
+  return false;
+}
+
 
 nsresult NS_NewDOMUIEvent(nsIDOMEvent** aInstancePtrResult,
                           nsPresContext* aPresContext,
                           nsGUIEvent *aEvent) 
 {
   nsDOMUIEvent* it = new nsDOMUIEvent(aPresContext, aEvent);
-  if (nsnull == it) {
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
-
   return CallQueryInterface(it, aInstancePtrResult);
 }

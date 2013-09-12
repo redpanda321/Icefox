@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 
@@ -102,22 +69,22 @@ private:
 
     nsresult Init();
 
-    nsresult Renumber(PRInt32 aStartIndex, PRInt32 aIncrement);
-    nsresult SetNextValue(PRInt32 aIndex);
+    nsresult Renumber(int32_t aStartIndex, int32_t aIncrement);
+    nsresult SetNextValue(int32_t aIndex);
     nsresult GetNextValue(nsIRDFResource** aResult);
     
     nsIRDFDataSource* mDataSource;
     nsIRDFResource*   mContainer;
 
     // pseudo constants
-    static PRInt32 gRefCnt;
+    static int32_t gRefCnt;
     static nsIRDFService*        gRDFService;
     static nsIRDFContainerUtils* gRDFContainerUtils;
     static nsIRDFResource*       kRDF_nextVal;
 };
 
 
-PRInt32               RDFContainerImpl::gRefCnt = 0;
+int32_t               RDFContainerImpl::gRefCnt = 0;
 nsIRDFService*        RDFContainerImpl::gRDFService;
 nsIRDFContainerUtils* RDFContainerImpl::gRDFContainerUtils;
 nsIRDFResource*       RDFContainerImpl::kRDF_nextVal;
@@ -153,16 +120,16 @@ RDFContainerImpl::GetResource(nsIRDFResource** _retval)
 NS_IMETHODIMP
 RDFContainerImpl::Init(nsIRDFDataSource *aDataSource, nsIRDFResource *aContainer)
 {
-    NS_PRECONDITION(aDataSource != nsnull, "null ptr");
+    NS_PRECONDITION(aDataSource != nullptr, "null ptr");
     if (! aDataSource)
         return NS_ERROR_NULL_POINTER;
 
-    NS_PRECONDITION(aContainer != nsnull, "null ptr");
+    NS_PRECONDITION(aContainer != nullptr, "null ptr");
     if (! aContainer)
         return NS_ERROR_NULL_POINTER;
 
     nsresult rv;
-    PRBool isContainer;
+    bool isContainer;
     rv = gRDFContainerUtils->IsContainer(aDataSource, aContainer, &isContainer);
     if (NS_FAILED(rv)) return rv;
 
@@ -184,7 +151,7 @@ RDFContainerImpl::Init(nsIRDFDataSource *aDataSource, nsIRDFResource *aContainer
 
 
 NS_IMETHODIMP
-RDFContainerImpl::GetCount(PRInt32 *aCount)
+RDFContainerImpl::GetCount(int32_t *aCount)
 {
     if (!mDataSource || !mContainer)
         return NS_ERROR_NOT_INITIALIZED;
@@ -200,7 +167,7 @@ RDFContainerImpl::GetCount(PRInt32 *aCount)
     // GetTargets() that enumerates all of the values and picks the
     // largest one.
     nsCOMPtr<nsIRDFNode> nextValNode;
-    rv = mDataSource->GetTarget(mContainer, kRDF_nextVal, PR_TRUE, getter_AddRefs(nextValNode));
+    rv = mDataSource->GetTarget(mContainer, kRDF_nextVal, true, getter_AddRefs(nextValNode));
     if (NS_FAILED(rv)) return rv;
 
     if (rv == NS_RDF_NO_VALUE)
@@ -216,8 +183,8 @@ RDFContainerImpl::GetCount(PRInt32 *aCount)
 
     nsAutoString nextValStr(s);
 
-    PRInt32 nextVal;
-    PRInt32 err;
+    int32_t nextVal;
+    nsresult err;
     nextVal = nextValStr.ToInteger(&err);
     if (NS_FAILED(err))
         return NS_ERROR_UNEXPECTED;
@@ -243,7 +210,7 @@ RDFContainerImpl::AppendElement(nsIRDFNode *aElement)
     if (!mDataSource || !mContainer)
         return NS_ERROR_NOT_INITIALIZED;
 
-    NS_PRECONDITION(aElement != nsnull, "null ptr");
+    NS_PRECONDITION(aElement != nullptr, "null ptr");
     if (! aElement)
         return NS_ERROR_NULL_POINTER;
 
@@ -253,7 +220,7 @@ RDFContainerImpl::AppendElement(nsIRDFNode *aElement)
     rv = GetNextValue(getter_AddRefs(nextVal));
     if (NS_FAILED(rv)) return rv;
 
-    rv = mDataSource->Assert(mContainer, nextVal, aElement, PR_TRUE);
+    rv = mDataSource->Assert(mContainer, nextVal, aElement, true);
     if (NS_FAILED(rv)) return rv;
 
     return NS_OK;
@@ -261,18 +228,18 @@ RDFContainerImpl::AppendElement(nsIRDFNode *aElement)
 
 
 NS_IMETHODIMP
-RDFContainerImpl::RemoveElement(nsIRDFNode *aElement, PRBool aRenumber)
+RDFContainerImpl::RemoveElement(nsIRDFNode *aElement, bool aRenumber)
 {
     if (!mDataSource || !mContainer)
         return NS_ERROR_NOT_INITIALIZED;
 
-    NS_PRECONDITION(aElement != nsnull, "null ptr");
+    NS_PRECONDITION(aElement != nullptr, "null ptr");
     if (! aElement)
         return NS_ERROR_NULL_POINTER;
 
     nsresult rv;
 
-    PRInt32 idx;
+    int32_t idx;
     rv = IndexOf(aElement, &idx);
     if (NS_FAILED(rv)) return rv;
 
@@ -301,12 +268,12 @@ RDFContainerImpl::RemoveElement(nsIRDFNode *aElement, PRBool aRenumber)
 
 
 NS_IMETHODIMP
-RDFContainerImpl::InsertElementAt(nsIRDFNode *aElement, PRInt32 aIndex, PRBool aRenumber)
+RDFContainerImpl::InsertElementAt(nsIRDFNode *aElement, int32_t aIndex, bool aRenumber)
 {
     if (!mDataSource || !mContainer)
         return NS_ERROR_NOT_INITIALIZED;
 
-    NS_PRECONDITION(aElement != nsnull, "null ptr");
+    NS_PRECONDITION(aElement != nullptr, "null ptr");
     if (! aElement)
         return NS_ERROR_NULL_POINTER;
 
@@ -316,7 +283,7 @@ RDFContainerImpl::InsertElementAt(nsIRDFNode *aElement, PRInt32 aIndex, PRBool a
 
     nsresult rv;
 
-    PRInt32 count;
+    int32_t count;
     rv = GetCount(&count);
     if (NS_FAILED(rv)) return rv;
 
@@ -336,26 +303,26 @@ RDFContainerImpl::InsertElementAt(nsIRDFNode *aElement, PRInt32 aIndex, PRBool a
     rv = gRDFContainerUtils->IndexToOrdinalResource(aIndex, getter_AddRefs(ordinal));
     if (NS_FAILED(rv)) return rv;
 
-    rv = mDataSource->Assert(mContainer, ordinal, aElement, PR_TRUE);
+    rv = mDataSource->Assert(mContainer, ordinal, aElement, true);
     if (NS_FAILED(rv)) return rv;
 
     return NS_OK;
 }
 
 NS_IMETHODIMP
-RDFContainerImpl::RemoveElementAt(PRInt32 aIndex, PRBool aRenumber, nsIRDFNode** _retval)
+RDFContainerImpl::RemoveElementAt(int32_t aIndex, bool aRenumber, nsIRDFNode** _retval)
 {
     if (!mDataSource || !mContainer)
         return NS_ERROR_NOT_INITIALIZED;
 
-    *_retval = nsnull;
+    *_retval = nullptr;
 
     if (aIndex< 1)
         return NS_ERROR_ILLEGAL_VALUE;
 
     nsresult rv;
 
-    PRInt32 count;
+    int32_t count;
     rv = GetCount(&count);
     if (NS_FAILED(rv)) return rv;
 
@@ -367,7 +334,7 @@ RDFContainerImpl::RemoveElementAt(PRInt32 aIndex, PRBool aRenumber, nsIRDFNode**
     if (NS_FAILED(rv)) return rv;
 
     nsCOMPtr<nsIRDFNode> old;
-    rv = mDataSource->GetTarget(mContainer, ordinal, PR_TRUE, getter_AddRefs(old));
+    rv = mDataSource->GetTarget(mContainer, ordinal, true, getter_AddRefs(old));
     if (NS_FAILED(rv)) return rv;
 
     if (rv == NS_OK) {
@@ -389,7 +356,7 @@ RDFContainerImpl::RemoveElementAt(PRInt32 aIndex, PRBool aRenumber, nsIRDFNode**
 }
 
 NS_IMETHODIMP
-RDFContainerImpl::IndexOf(nsIRDFNode *aElement, PRInt32 *aIndex)
+RDFContainerImpl::IndexOf(nsIRDFNode *aElement, int32_t *aIndex)
 {
     if (!mDataSource || !mContainer)
         return NS_ERROR_NOT_INITIALIZED;
@@ -403,7 +370,7 @@ RDFContainerImpl::IndexOf(nsIRDFNode *aElement, PRInt32 *aIndex)
 
 
 RDFContainerImpl::RDFContainerImpl()
-    : mDataSource(nsnull), mContainer(nsnull)
+    : mDataSource(nullptr), mContainer(nullptr)
 {
 }
 
@@ -491,7 +458,7 @@ NS_NewRDFContainer(nsIRDFDataSource* aDataSource,
 
 
 nsresult
-RDFContainerImpl::Renumber(PRInt32 aStartIndex, PRInt32 aIncrement)
+RDFContainerImpl::Renumber(int32_t aStartIndex, int32_t aIncrement)
 {
     if (!mDataSource || !mContainer)
         return NS_ERROR_NOT_INITIALIZED;
@@ -511,7 +478,7 @@ RDFContainerImpl::Renumber(PRInt32 aStartIndex, PRInt32 aIncrement)
     if (! aIncrement)
         return NS_OK;
 
-    PRInt32 count;
+    int32_t count;
     rv = GetCount(&count);
     if (NS_FAILED(rv)) return rv;
 
@@ -524,7 +491,7 @@ RDFContainerImpl::Renumber(PRInt32 aStartIndex, PRInt32 aIncrement)
         if (NS_FAILED(rv)) return rv;
     }
 
-    PRInt32 i;
+    int32_t i;
     if (aIncrement < 0) {
         i = aStartIndex;
     }
@@ -537,17 +504,17 @@ RDFContainerImpl::Renumber(PRInt32 aStartIndex, PRInt32 aIncrement)
     nsCOMPtr<nsIRDFPropagatableDataSource> propagatable =
         do_QueryInterface(mDataSource);
     if (propagatable) {
-        propagatable->SetPropagateChanges(PR_FALSE);
+        propagatable->SetPropagateChanges(false);
     }
 
-    PRBool  err = PR_FALSE;
+    bool    err = false;
     while (!err && ((aIncrement < 0) ? (i <= count) : (i >= aStartIndex)))
     {
         nsCOMPtr<nsIRDFResource> oldOrdinal;
         rv = gRDFContainerUtils->IndexToOrdinalResource(i, getter_AddRefs(oldOrdinal));
         if (NS_FAILED(rv))
         {
-            err = PR_TRUE;
+            err = true;
             continue;
         }
 
@@ -555,7 +522,7 @@ RDFContainerImpl::Renumber(PRInt32 aStartIndex, PRInt32 aIncrement)
         rv = gRDFContainerUtils->IndexToOrdinalResource(i + aIncrement, getter_AddRefs(newOrdinal));
         if (NS_FAILED(rv))
         {
-            err = PR_TRUE;
+            err = true;
             continue;
         }
 
@@ -566,19 +533,19 @@ RDFContainerImpl::Renumber(PRInt32 aStartIndex, PRInt32 aIncrement)
         // attempt to "clean up" the duplicate numbering. (Doing so
         // would require two passes.)
         nsCOMPtr<nsISimpleEnumerator> targets;
-        rv = mDataSource->GetTargets(mContainer, oldOrdinal, PR_TRUE, getter_AddRefs(targets));
+        rv = mDataSource->GetTargets(mContainer, oldOrdinal, true, getter_AddRefs(targets));
         if (NS_FAILED(rv))
         {
-            err = PR_TRUE;
+            err = true;
             continue;
         }
 
         while (1) {
-            PRBool hasMore;
+            bool hasMore;
             rv = targets->HasMoreElements(&hasMore);
             if (NS_FAILED(rv))
             {
-                err = PR_TRUE;
+                err = true;
                 break;
             }
 
@@ -589,15 +556,15 @@ RDFContainerImpl::Renumber(PRInt32 aStartIndex, PRInt32 aIncrement)
             rv = targets->GetNext(getter_AddRefs(isupports));
             if (NS_FAILED(rv))
             {
-                err = PR_TRUE;
+                err = true;
                 break;
             }
 
             nsCOMPtr<nsIRDFNode> element( do_QueryInterface(isupports) );
-            NS_ASSERTION(element != nsnull, "something funky in the enumerator");
+            NS_ASSERTION(element != nullptr, "something funky in the enumerator");
             if (! element)
             {
-                err = PR_TRUE;
+                err = true;
                 rv = NS_ERROR_UNEXPECTED;
                 break;
             }
@@ -605,14 +572,14 @@ RDFContainerImpl::Renumber(PRInt32 aStartIndex, PRInt32 aIncrement)
             rv = mDataSource->Unassert(mContainer, oldOrdinal, element);
             if (NS_FAILED(rv))
             {
-                err = PR_TRUE;
+                err = true;
                 break;
             }
 
-            rv = mDataSource->Assert(mContainer, newOrdinal, element, PR_TRUE);
+            rv = mDataSource->Assert(mContainer, newOrdinal, element, true);
             if (NS_FAILED(rv))
             {
-                err = PR_TRUE;
+                err = true;
                 break;
             }
         }
@@ -629,13 +596,13 @@ RDFContainerImpl::Renumber(PRInt32 aStartIndex, PRInt32 aIncrement)
         rv = SetNextValue(count + aIncrement + 1);
         if (NS_FAILED(rv))
         {
-            err = PR_TRUE;
+            err = true;
         }
     }
 
     // Note: MUST enable notifications before exiting this method
     if (propagatable) {
-        propagatable->SetPropagateChanges(PR_TRUE);
+        propagatable->SetPropagateChanges(true);
     }
 
     if (err) return(rv);
@@ -646,7 +613,7 @@ RDFContainerImpl::Renumber(PRInt32 aStartIndex, PRInt32 aIncrement)
 
 
 nsresult
-RDFContainerImpl::SetNextValue(PRInt32 aIndex)
+RDFContainerImpl::SetNextValue(int32_t aIndex)
 {
     if (!mDataSource || !mContainer)
         return NS_ERROR_NOT_INITIALIZED;
@@ -657,7 +624,7 @@ RDFContainerImpl::SetNextValue(PRInt32 aIndex)
     nsCOMPtr<nsIRDFNode> nextValNode;
     if (NS_SUCCEEDED(rv = mDataSource->GetTarget(mContainer,
                                                  kRDF_nextVal,
-                                                 PR_TRUE,
+                                                 true,
                                                  getter_AddRefs(nextValNode)))) {
         if (NS_FAILED(rv = mDataSource->Unassert(mContainer, kRDF_nextVal, nextValNode))) {
             NS_ERROR("unable to update nextVal");
@@ -674,7 +641,7 @@ RDFContainerImpl::SetNextValue(PRInt32 aIndex)
         return rv;
     }
 
-    rv = mDataSource->Assert(mContainer, kRDF_nextVal, nextVal, PR_TRUE);
+    rv = mDataSource->Assert(mContainer, kRDF_nextVal, nextVal, true);
     if (rv != NS_RDF_ASSERTION_ACCEPTED) {
         NS_ERROR("unable to update nextVal");
         return NS_ERROR_FAILURE;
@@ -695,7 +662,7 @@ RDFContainerImpl::GetNextValue(nsIRDFResource** aResult)
     // Get the next value, which hangs off of the bag via the
     // RDF:nextVal property.
     nsCOMPtr<nsIRDFNode> nextValNode;
-    rv = mDataSource->GetTarget(mContainer, kRDF_nextVal, PR_TRUE, getter_AddRefs(nextValNode));
+    rv = mDataSource->GetTarget(mContainer, kRDF_nextVal, true, getter_AddRefs(nextValNode));
     if (NS_FAILED(rv)) return rv;
 
     if (rv == NS_RDF_NO_VALUE)
@@ -709,7 +676,7 @@ RDFContainerImpl::GetNextValue(nsIRDFResource** aResult)
     rv = nextValLiteral->GetValueConst(&s);
     if (NS_FAILED(rv)) return rv;
 
-    PRInt32 nextVal = 0;
+    int32_t nextVal = 0;
     {
         for (const PRUnichar* p = s; *p != 0; ++p) {
             NS_ASSERTION(*p >= '0' && *p <= '9', "not a digit");
@@ -741,7 +708,7 @@ RDFContainerImpl::GetNextValue(nsIRDFResource** aResult)
     rv = gRDFService->GetLiteral(NS_ConvertASCIItoUTF16(nextValStr).get(), getter_AddRefs(nextValLiteral));
     if (NS_FAILED(rv)) return rv;
 
-    rv = mDataSource->Assert(mContainer, kRDF_nextVal, nextValLiteral, PR_TRUE);
+    rv = mDataSource->Assert(mContainer, kRDF_nextVal, nextValLiteral, true);
     if (NS_FAILED(rv)) return rv;
 
     if (RDF_SEQ_LIST_LIMIT == nextVal)

@@ -1,43 +1,11 @@
 /* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 4 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Oracle Corporation code.
- *
- * The Initial Developer of the Original Code is Oracle Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Stuart Parmenter <pavlov@pavlov.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "gfxMatrix.h"
-#include "gfx3DMatrix.h"
 #include "cairo.h"
+#include "mozilla/gfx/Tools.h"
 
 #define CAIRO_MATRIX(x) reinterpret_cast<cairo_matrix_t*>((x))
 #define CONST_CAIRO_MATRIX(x) reinterpret_cast<const cairo_matrix_t*>((x))
@@ -110,7 +78,7 @@ gfxMatrix::Transform(const gfxSize& size) const
 gfxRect
 gfxMatrix::Transform(const gfxRect& rect) const
 {
-    return gfxRect(Transform(rect.pos), Transform(rect.size));
+    return gfxRect(Transform(rect.TopLeft()), Transform(rect.Size()));
 }
 
 gfxRect
@@ -122,20 +90,20 @@ gfxMatrix::TransformBounds(const gfxRect& rect) const
     double min_x, max_x;
     double min_y, max_y;
 
-    quad_x[0] = rect.pos.x;
-    quad_y[0] = rect.pos.y;
+    quad_x[0] = rect.X();
+    quad_y[0] = rect.Y();
     cairo_matrix_transform_point (CONST_CAIRO_MATRIX(this), &quad_x[0], &quad_y[0]);
 
-    quad_x[1] = rect.pos.x + rect.size.width;
-    quad_y[1] = rect.pos.y;
+    quad_x[1] = rect.XMost();
+    quad_y[1] = rect.Y();
     cairo_matrix_transform_point (CONST_CAIRO_MATRIX(this), &quad_x[1], &quad_y[1]);
 
-    quad_x[2] = rect.pos.x;
-    quad_y[2] = rect.pos.y + rect.size.height;
+    quad_x[2] = rect.X();
+    quad_y[2] = rect.YMost();
     cairo_matrix_transform_point (CONST_CAIRO_MATRIX(this), &quad_x[2], &quad_y[2]);
 
-    quad_x[3] = rect.pos.x + rect.size.width;
-    quad_y[3] = rect.pos.y + rect.size.height;
+    quad_x[3] = rect.XMost();
+    quad_y[3] = rect.YMost();
     cairo_matrix_transform_point (CONST_CAIRO_MATRIX(this), &quad_x[3], &quad_y[3]);
 
     min_x = max_x = quad_x[0];
@@ -153,43 +121,24 @@ gfxMatrix::TransformBounds(const gfxRect& rect) const
             max_y = quad_y[i];
     }
 
-    // we don't compute this now
-#if 0
-    if (is_tight) {
-        /* it's tight if and only if the four corner points form an axis-aligned
-           rectangle.
-           And that's true if and only if we can derive corners 0 and 3 from
-           corners 1 and 2 in one of two straightforward ways...
-           We could use a tolerance here but for now we'll fall back to FALSE in the case
-           of floating point error.
-        */
-        *is_tight =
-            (quad_x[1] == quad_x[0] && quad_y[1] == quad_y[3] &&
-             quad_x[2] == quad_x[3] && quad_y[2] == quad_y[0]) ||
-            (quad_x[1] == quad_x[3] && quad_y[1] == quad_y[0] &&
-             quad_x[2] == quad_x[0] && quad_y[2] == quad_y[3]);
-    }
-#endif
-
     return gfxRect(min_x, min_y, max_x - min_x, max_y - min_y);
 }
 
-PRBool
-gfx3DMatrix::Is2D(gfxMatrix* aMatrix) const
+
+static void NudgeToInteger(double *aVal)
 {
-  if (_13 != 0.0f || _14 != 0.0f ||
-      _23 != 0.0f || _24 != 0.0f ||
-      _31 != 0.0f || _32 != 0.0f || _33 != 1.0f || _34 != 0.0f ||
-      _43 != 0.0f || _44 != 1.0f) {
-    return PR_FALSE;
-  }
-  if (aMatrix) {
-    aMatrix->xx = _11;
-    aMatrix->yx = _12;
-    aMatrix->xy = _21;
-    aMatrix->yy = _22;
-    aMatrix->x0 = _41;
-    aMatrix->y0 = _42;
-  }
-  return PR_TRUE;
+    float f = float(*aVal);
+    mozilla::gfx::NudgeToInteger(&f);
+    *aVal = f;
+}
+
+void
+gfxMatrix::NudgeToIntegers(void)
+{
+    NudgeToInteger(&xx);
+    NudgeToInteger(&xy);
+    NudgeToInteger(&yx);
+    NudgeToInteger(&yy);
+    NudgeToInteger(&x0);
+    NudgeToInteger(&y0);
 }

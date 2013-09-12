@@ -5,6 +5,7 @@
 #ifndef CHROME_COMMON_IPC_CHANNEL_H_
 #define CHROME_COMMON_IPC_CHANNEL_H_
 
+#include <queue>
 #include "chrome/common/ipc_message.h"
 
 namespace IPC {
@@ -26,11 +27,15 @@ class Channel : public Message::Sender {
 
     // Called when the channel is connected and we have received the internal
     // Hello message from the peer.
-    virtual void OnChannelConnected(int32 peer_pid) {}
+    virtual void OnChannelConnected(int32_t peer_pid) {}
 
     // Called when an error is detected that causes the channel to close.
     // This method is not called when a channel is closed normally.
     virtual void OnChannelError() {}
+
+    // If the listener has queued messages, swap them for |queue| like so
+    //   swap(impl->my_queued_messages, queue);
+    virtual void GetQueuedMessages(std::queue<Message>& queue) {}
   };
 
   enum Mode {
@@ -59,6 +64,18 @@ class Channel : public Message::Sender {
   //
   Channel(const std::wstring& channel_id, Mode mode, Listener* listener);
 
+  // XXX it would nice not to have yet more platform-specific code in
+  // here but it's just not worth the trouble.
+# if defined(OS_POSIX)
+  // Connect to a pre-created channel |fd| as |mode|.
+  Channel(int fd, Mode mode, Listener* listener);
+# elif defined(OS_WIN)
+  // Connect to a pre-created channel as |mode|.  Clients connect to
+  // the pre-existing server pipe, and servers take over |server_pipe|.
+  Channel(const std::wstring& channel_id, void* server_pipe,
+	  Mode mode, Listener* listener);
+# endif
+
   ~Channel();
 
   // Connect the pipe.  On the server side, this will initiate
@@ -72,11 +89,7 @@ class Channel : public Message::Sender {
   void Close();
 
   // Modify the Channel's listener.
-#ifdef CHROMIUM_MOZILLA_BUILD
   Listener* set_listener(Listener* listener);
-#else
-  void set_listener(Listener* listener);
-#endif
 
   // Send a message over the Channel to the listener on the other end.
   //
@@ -99,6 +112,12 @@ class Channel : public Message::Sender {
   // a named FIFO is used as the channel transport mechanism rather than a
   // socketpair() in which case this method returns -1 for both parameters.
   void GetClientFileDescriptorMapping(int *src_fd, int *dest_fd) const;
+
+  // Return the server side of the socketpair.
+  int GetServerFileDescriptor() const;
+#elif defined(OS_WIN)
+  // Return the server pipe handle.
+  void* GetServerPipeHandle() const;
 #endif  // defined(OS_POSIX)
 
  private:
@@ -111,7 +130,7 @@ class Channel : public Message::Sender {
   // just the process id (pid).  The message has a special routing_id
   // (MSG_ROUTING_NONE) and type (HELLO_MESSAGE_TYPE).
   enum {
-    HELLO_MESSAGE_TYPE = kuint16max  // Maximum value of message type (uint16),
+    HELLO_MESSAGE_TYPE = kuint16max  // Maximum value of message type (uint16_t),
                                      // to avoid conflicting with normal
                                      // message types, which are enumeration
                                      // constants starting from 0.

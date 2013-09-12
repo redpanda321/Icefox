@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=372964
 -->
 <head>
   <title>Test for Bug 372964</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -32,9 +31,10 @@ function eventHandler(evt) {
 
 function test(trusted, type, removeAddedListener, removeSetListener, allowUntrusted) {
   if (trusted) {
-    netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
+    var x1 = SpecialPowers.wrap(new XMLHttpRequest());
+  } else {
+    x1 = new XMLHttpRequest();
   }
-  var x1 = new XMLHttpRequest();
 
   var handlerCount = 0;
   if (trusted || allowUntrusted || allowUntrusted == undefined) {
@@ -106,7 +106,7 @@ function test(trusted, type, removeAddedListener, removeSetListener, allowUntrus
 }
 
 var events =
-  ["load", "error", "progress", "uploadprogress", "readystatechange", "foo"];
+  ["load", "error", "progress", "readystatechange", "foo"];
 
 do {
   var e = events.shift();

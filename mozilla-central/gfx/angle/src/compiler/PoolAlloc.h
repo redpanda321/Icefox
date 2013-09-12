@@ -115,7 +115,7 @@ private:
 //
 class TPoolAllocator {
 public:
-    TPoolAllocator(bool global = false, int growthIncrement = 8*1024, int allocationAlignment = 16);
+    TPoolAllocator(int growthIncrement = 8*1024, int allocationAlignment = 16);
 
     //
     // Don't call the destructor just to free up the memory, call pop()
@@ -157,11 +157,12 @@ protected:
     
     struct tHeader {
         tHeader(tHeader* nextPage, size_t pageCount) :
-#ifdef GUARD_BLOCKS
-            lastAllocation(0),
-#endif
             nextPage(nextPage),
-            pageCount(pageCount) { }
+            pageCount(pageCount)
+#ifdef GUARD_BLOCKS
+          , lastAllocation(0)
+#endif
+            { }
 
         ~tHeader() {
 #ifdef GUARD_BLOCKS
@@ -193,7 +194,6 @@ protected:
         return TAllocation::offsetAllocation(memory);
     }
 
-    bool global;            // should be true if this object is globally scoped
     size_t pageSize;        // granularity of allocation from the OS
     size_t alignment;       // all returned allocations will be aligned at 
                             // this granularity, which will be a power of 2
@@ -219,17 +219,14 @@ private:
 // different times.  But a simple use is to have a global pop
 // with everyone using the same global allocator.
 //
-typedef TPoolAllocator* PoolAllocatorPointer;
 extern TPoolAllocator& GetGlobalPoolAllocator();
+extern void SetGlobalPoolAllocator(TPoolAllocator* poolAllocator);
 #define GlobalPoolAllocator GetGlobalPoolAllocator()
-
 
 struct TThreadGlobalPools
 {
     TPoolAllocator* globalPoolAllocator;
 };
-
-void SetGlobalPoolAllocatorPtr(TPoolAllocator* poolAllocator);
 
 //
 // This STL compatible allocator is intended to be used as the allocator
@@ -256,21 +253,30 @@ public:
     pointer address(reference x) const { return &x; }
     const_pointer address(const_reference x) const { return &x; }
 
-    pool_allocator() : allocator(GlobalPoolAllocator) { }
-    pool_allocator(TPoolAllocator& a) : allocator(a) { }
+    pool_allocator() : allocator(&GlobalPoolAllocator) { }
+    pool_allocator(TPoolAllocator& a) : allocator(&a) { }
     pool_allocator(const pool_allocator<T>& p) : allocator(p.allocator) { }
 
-    template<class Other>
-    pool_allocator(const pool_allocator<Other>& p) : allocator(p.getAllocator()) { }
+    template <class Other>
+    pool_allocator<T>& operator=(const pool_allocator<Other>& p) {
+      allocator = p.allocator;
+      return *this;
+    }
 
-#if defined(__SUNPRO_CC) && !defined( _RWSTD_ALLOCATOR)
-    // libCStd on Solaris has a differenet interface of allocate()
+    template<class Other>
+    pool_allocator(const pool_allocator<Other>& p) : allocator(&p.getAllocator()) { }
+
+#if defined(__SUNPRO_CC) && !defined(_RWSTD_ALLOCATOR)
+    // libCStd on some platforms have a different allocate/deallocate interface.
+    // Caller pre-bakes sizeof(T) into 'n' which is the number of bytes to be
+    // allocated, not the number of elements.
     void* allocate(size_type n) { 
         return getAllocator().allocate(n);
     }
-    void* allocate(size_type n, const void*) { 
+    void* allocate(size_type n, const void*) {
         return getAllocator().allocate(n);
     }
+    void deallocate(void*, size_type) {}
 #else
     pointer allocate(size_type n) { 
         return reinterpret_cast<pointer>(getAllocator().allocate(n * sizeof(T)));
@@ -278,14 +284,8 @@ public:
     pointer allocate(size_type n, const void*) { 
         return reinterpret_cast<pointer>(getAllocator().allocate(n * sizeof(T)));
     }
-#endif
-
-    void deallocate(void*, size_type) { }
-    void deallocate(pointer, size_type) { }
-
-    pointer _Charalloc(size_t n) {
-        return reinterpret_cast<pointer>(getAllocator().allocate(n));
-    }
+    void deallocate(pointer, size_type) {}
+#endif  // _RWSTD_ALLOCATOR
 
     void construct(pointer p, const T& val) { new ((void *)p) T(val); }
     void destroy(pointer p) { p->T::~T(); }
@@ -296,11 +296,11 @@ public:
     size_type max_size() const { return static_cast<size_type>(-1) / sizeof(T); }
     size_type max_size(int size) const { return static_cast<size_type>(-1) / size; }
 
-    void setAllocator(TPoolAllocator* a) { allocator = *a; }
-    TPoolAllocator& getAllocator() const { return allocator; }
+    void setAllocator(TPoolAllocator* a) { allocator = a; }
+    TPoolAllocator& getAllocator() const { return *allocator; }
 
 protected:
-    TPoolAllocator& allocator;
+    TPoolAllocator* allocator;
 };
 
 #endif // _POOLALLOC_INCLUDED_

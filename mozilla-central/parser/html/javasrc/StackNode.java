@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2007 Henri Sivonen
- * Copyright (c) 2007-2009 Mozilla Foundation
+ * Copyright (c) 2007-2011 Mozilla Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a 
  * copy of this software and associated documentation files (the "Software"), 
@@ -23,11 +23,12 @@
 
 package nu.validator.htmlparser.impl;
 
+import nu.validator.htmlparser.annotation.Inline;
 import nu.validator.htmlparser.annotation.Local;
 import nu.validator.htmlparser.annotation.NsUri;
 
 final class StackNode<T> {
-    final int group;
+    final int flags;
 
     final @Local String name;
 
@@ -37,131 +38,240 @@ final class StackNode<T> {
 
     final T node;
 
-    final boolean scoping;
-
-    final boolean special;
-
-    final boolean fosterParenting;
-    
     // Only used on the list of formatting elements
     HtmlAttributes attributes;
 
     private int refcount = 1;
+
+    // [NOCPP[
+
+    private final TaintableLocatorImpl locator;
     
+    public TaintableLocatorImpl getLocator() {
+        return locator;
+    }
+
+    // ]NOCPP]
+
+    @Inline public int getFlags() {
+        return flags;
+    }
+
+    public int getGroup() {
+        return flags & ElementName.GROUP_MASK;
+    }
+
+    public boolean isScoping() {
+        return (flags & ElementName.SCOPING) != 0;
+    }
+
+    public boolean isSpecial() {
+        return (flags & ElementName.SPECIAL) != 0;
+    }
+
+    public boolean isFosterParenting() {
+        return (flags & ElementName.FOSTER_PARENTING) != 0;
+    }
+
+    public boolean isHtmlIntegrationPoint() {
+        return (flags & ElementName.HTML_INTEGRATION_POINT) != 0;
+    }
+
+    // [NOCPP[
+    
+    public boolean isOptionalEndTag() {
+        return (flags & ElementName.OPTIONAL_END_TAG) != 0;
+    }
+    
+    // ]NOCPP]
+
     /**
-     * @param group
-     *            TODO
+     * Constructor for copying. This doesn't take another <code>StackNode</code>
+     * because in C++ the caller is reponsible for reobtaining the local names
+     * from another interner.
+     * 
+     * @param flags
+     * @param ns
      * @param name
      * @param node
-     * @param scoping
-     * @param special
      * @param popName
-     *            TODO
+     * @param attributes
      */
-    StackNode(int group, final @NsUri String ns, final @Local String name, final T node,
-            final boolean scoping, final boolean special,
-            final boolean fosterParenting, final @Local String popName, HtmlAttributes attributes) {
-        this.group = group;
+    StackNode(int flags, @NsUri String ns, @Local String name, T node,
+            @Local String popName, HtmlAttributes attributes
+            // [NOCPP[
+            , TaintableLocatorImpl locator
+    // ]NOCPP]
+    ) {
+        this.flags = flags;
         this.name = name;
         this.popName = popName;
         this.ns = ns;
         this.node = node;
-        this.scoping = scoping;
-        this.special = special;
-        this.fosterParenting = fosterParenting;
         this.attributes = attributes;
         this.refcount = 1;
-        Portability.retainLocal(name);
-        Portability.retainLocal(popName);
-        Portability.retainElement(node);
-        // not retaining namespace for now        
+        // [NOCPP[
+        this.locator = locator;
+        // ]NOCPP]
     }
 
     /**
+     * Short hand for well-known HTML elements.
+     * 
      * @param elementName
-     *            TODO
      * @param node
      */
-    StackNode(final @NsUri String ns, ElementName elementName, final T node) {
-        this.group = elementName.group;
+    StackNode(ElementName elementName, T node
+    // [NOCPP[
+            , TaintableLocatorImpl locator
+    // ]NOCPP]
+    ) {
+        this.flags = elementName.getFlags();
         this.name = elementName.name;
         this.popName = elementName.name;
-        this.ns = ns;
+        this.ns = "http://www.w3.org/1999/xhtml";
         this.node = node;
-        this.scoping = elementName.scoping;
-        this.special = elementName.special;
-        this.fosterParenting = elementName.fosterParenting;
         this.attributes = null;
         this.refcount = 1;
-        Portability.retainLocal(name);
-        Portability.retainLocal(popName);
-        Portability.retainElement(node);
-        // not retaining namespace for now        
+        assert !elementName.isCustom() : "Don't use this constructor for custom elements.";
+        // [NOCPP[
+        this.locator = locator;
+        // ]NOCPP]
     }
 
-    StackNode(final @NsUri String ns, ElementName elementName, final T node, HtmlAttributes attributes) {
-        this.group = elementName.group;
+    /**
+     * Constructor for HTML formatting elements.
+     * 
+     * @param elementName
+     * @param node
+     * @param attributes
+     */
+    StackNode(ElementName elementName, T node, HtmlAttributes attributes
+    // [NOCPP[
+            , TaintableLocatorImpl locator
+    // ]NOCPP]
+    ) {
+        this.flags = elementName.getFlags();
         this.name = elementName.name;
         this.popName = elementName.name;
-        this.ns = ns;
+        this.ns = "http://www.w3.org/1999/xhtml";
         this.node = node;
-        this.scoping = elementName.scoping;
-        this.special = elementName.special;
-        this.fosterParenting = elementName.fosterParenting;
         this.attributes = attributes;
         this.refcount = 1;
-        Portability.retainLocal(name);
-        Portability.retainLocal(popName);
-        Portability.retainElement(node);
-        // not retaining namespace for now        
+        assert !elementName.isCustom() : "Don't use this constructor for custom elements.";
+        // [NOCPP[
+        this.locator = locator;
+        // ]NOCPP]
     }
 
-    StackNode(final @NsUri String ns, ElementName elementName, final T node, @Local String popName) {
-        this.group = elementName.group;
+    /**
+     * The common-case HTML constructor.
+     * 
+     * @param elementName
+     * @param node
+     * @param popName
+     */
+    StackNode(ElementName elementName, T node, @Local String popName
+    // [NOCPP[
+            , TaintableLocatorImpl locator
+    // ]NOCPP]
+    ) {
+        this.flags = elementName.getFlags();
         this.name = elementName.name;
         this.popName = popName;
-        this.ns = ns;
+        this.ns = "http://www.w3.org/1999/xhtml";
         this.node = node;
-        this.scoping = elementName.scoping;
-        this.special = elementName.special;
-        this.fosterParenting = elementName.fosterParenting;
         this.attributes = null;
         this.refcount = 1;
-        Portability.retainLocal(name);
-        Portability.retainLocal(popName);
-        Portability.retainElement(node);
-        // not retaining namespace for now        
+        // [NOCPP[
+        this.locator = locator;
+        // ]NOCPP]
     }
 
-    StackNode(final @NsUri String ns, ElementName elementName, final T node, @Local String popName, boolean scoping) {
-        this.group = elementName.group;
+    /**
+     * Constructor for SVG elements. Note that the order of the arguments is
+     * what distinguishes this from the HTML constructor. This is ugly, but
+     * AFAICT the least disruptive way to make this work with Java's generics
+     * and without unnecessary branches. :-(
+     * 
+     * @param elementName
+     * @param popName
+     * @param node
+     */
+    StackNode(ElementName elementName, @Local String popName, T node
+    // [NOCPP[
+            , TaintableLocatorImpl locator
+    // ]NOCPP]
+    ) {
+        this.flags = prepareSvgFlags(elementName.getFlags());
         this.name = elementName.name;
         this.popName = popName;
-        this.ns = ns;
+        this.ns = "http://www.w3.org/2000/svg";
         this.node = node;
-        this.scoping = scoping;
-        this.special = false;
-        this.fosterParenting = false;
         this.attributes = null;
         this.refcount = 1;
-        Portability.retainLocal(name);
-        Portability.retainLocal(popName);
-        Portability.retainElement(node);
-        // not retaining namespace for now        
+        // [NOCPP[
+        this.locator = locator;
+        // ]NOCPP]
     }
-    
+
+    /**
+     * Constructor for MathML.
+     * 
+     * @param elementName
+     * @param node
+     * @param popName
+     * @param markAsIntegrationPoint
+     */
+    StackNode(ElementName elementName, T node, @Local String popName,
+            boolean markAsIntegrationPoint
+            // [NOCPP[
+            , TaintableLocatorImpl locator
+    // ]NOCPP]
+    ) {
+        this.flags = prepareMathFlags(elementName.getFlags(),
+                markAsIntegrationPoint);
+        this.name = elementName.name;
+        this.popName = popName;
+        this.ns = "http://www.w3.org/1998/Math/MathML";
+        this.node = node;
+        this.attributes = null;
+        this.refcount = 1;
+        // [NOCPP[
+        this.locator = locator;
+        // ]NOCPP]
+    }
+
+    private static int prepareSvgFlags(int flags) {
+        flags &= ~(ElementName.FOSTER_PARENTING | ElementName.SCOPING
+                | ElementName.SPECIAL | ElementName.OPTIONAL_END_TAG);
+        if ((flags & ElementName.SCOPING_AS_SVG) != 0) {
+            flags |= (ElementName.SCOPING | ElementName.SPECIAL | ElementName.HTML_INTEGRATION_POINT);
+        }
+        return flags;
+    }
+
+    private static int prepareMathFlags(int flags,
+            boolean markAsIntegrationPoint) {
+        flags &= ~(ElementName.FOSTER_PARENTING | ElementName.SCOPING
+                | ElementName.SPECIAL | ElementName.OPTIONAL_END_TAG);
+        if ((flags & ElementName.SCOPING_AS_MATHML) != 0) {
+            flags |= (ElementName.SCOPING | ElementName.SPECIAL);
+        }
+        if (markAsIntegrationPoint) {
+            flags |= ElementName.HTML_INTEGRATION_POINT;
+        }
+        return flags;
+    }
+
     @SuppressWarnings("unused") private void destructor() {
-        Portability.releaseLocal(name);
-        Portability.releaseLocal(popName);
-        Portability.releaseElement(node);
-        // not releasing namespace for now
         Portability.delete(attributes);
     }
-    
+
     public void dropAttributes() {
         attributes = null;
     }
-    
+
     // [NOCPP[
     /**
      * @see java.lang.Object#toString()
@@ -169,12 +279,13 @@ final class StackNode<T> {
     @Override public @Local String toString() {
         return name;
     }
+
     // ]NOCPP]
-    
-    public void retain() {   
+
+    public void retain() {
         refcount++;
     }
-    
+
     public void release() {
         refcount--;
         if (refcount == 0) {

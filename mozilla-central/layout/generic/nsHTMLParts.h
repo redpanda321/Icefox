@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* factory functions for rendering object classes */
 
@@ -62,6 +30,10 @@ class nsTableColFrame;
  * Additional frame-state bits used by nsBlockFrame
  * See the meanings at http://www.mozilla.org/newlayout/doc/block-and-line.html
  *
+ * NS_BLOCK_CLIP_PAGINATED_OVERFLOW is only set in paginated prescontexts, on
+ *  blocks which were forced to not have scrollframes but still need to clip
+ *  the display of their kids.
+ *
  * NS_BLOCK_HAS_FIRST_LETTER_STYLE means that the block has first-letter style,
  *  even if it has no actual first-letter frame among its descendants.
  *
@@ -69,31 +41,48 @@ class nsTableColFrame;
  *  frame among the block's descendants. If there is a floating first-letter
  *  frame, or the block has first-letter style but has no first letter, this
  *  bit is not set. This bit is set on the first continuation only.
+ *
+ * NS_BLOCK_FRAME_HAS_OUTSIDE_BULLET and NS_BLOCK_FRAME_HAS_INSIDE_BULLET
+ * means the block has an associated bullet frame, they are mutually exclusive.
+ *
  */
 #define NS_BLOCK_MARGIN_ROOT              NS_FRAME_STATE_BIT(22)
 #define NS_BLOCK_FLOAT_MGR                NS_FRAME_STATE_BIT(23)
+#define NS_BLOCK_CLIP_PAGINATED_OVERFLOW  NS_FRAME_STATE_BIT(28)
 #define NS_BLOCK_HAS_FIRST_LETTER_STYLE   NS_FRAME_STATE_BIT(29)
 #define NS_BLOCK_FRAME_HAS_OUTSIDE_BULLET NS_FRAME_STATE_BIT(30)
 #define NS_BLOCK_HAS_FIRST_LETTER_CHILD   NS_FRAME_STATE_BIT(31)
-// These are the bits that get inherited from a block frame to its
-// next-in-flows and are not private to blocks
-#define NS_BLOCK_FLAGS_MASK               (NS_BLOCK_MARGIN_ROOT | \
-                                           NS_BLOCK_FLOAT_MGR | \
-                                           NS_BLOCK_HAS_FIRST_LETTER_STYLE | \
-                                           NS_BLOCK_FRAME_HAS_OUTSIDE_BULLET | \
-                                           NS_BLOCK_HAS_FIRST_LETTER_CHILD)
+#define NS_BLOCK_FRAME_HAS_INSIDE_BULLET  NS_FRAME_STATE_BIT(63)
+// These are all the block specific frame bits, they are copied from
+// the prev-in-flow to a newly created next-in-flow, except for the
+// NS_BLOCK_FLAGS_NON_INHERITED_MASK bits below.
+#define NS_BLOCK_FLAGS_MASK (NS_BLOCK_MARGIN_ROOT              | \
+                             NS_BLOCK_FLOAT_MGR                | \
+                             NS_BLOCK_CLIP_PAGINATED_OVERFLOW  | \
+                             NS_BLOCK_HAS_FIRST_LETTER_STYLE   | \
+                             NS_BLOCK_FRAME_HAS_OUTSIDE_BULLET | \
+                             NS_BLOCK_HAS_FIRST_LETTER_CHILD   | \
+                             NS_BLOCK_FRAME_HAS_INSIDE_BULLET)
+
+// This is the subset of NS_BLOCK_FLAGS_MASK that is NOT inherited
+// by default.  They should only be set on the first-in-flow.
+// See nsBlockFrame::Init.
+#define NS_BLOCK_FLAGS_NON_INHERITED_MASK                        \
+                            (NS_BLOCK_FRAME_HAS_OUTSIDE_BULLET | \
+                             NS_BLOCK_HAS_FIRST_LETTER_CHILD   | \
+                             NS_BLOCK_FRAME_HAS_INSIDE_BULLET)
 
 // Factory methods for creating html layout objects
 
 // Create a frame that supports "display: block" layout behavior
 nsIFrame*
-NS_NewBlockFrame(nsIPresShell* aPresShell, nsStyleContext* aContext, PRUint32 aFlags = 0);
+NS_NewBlockFrame(nsIPresShell* aPresShell, nsStyleContext* aContext, uint32_t aFlags = 0);
 
 // Special Generated Content Node. It contains text taken from an
 // attribute of its *grandparent* content node. 
 nsresult
 NS_NewAttributeContent(nsNodeInfoManager *aNodeInfoManager,
-                       PRInt32 aNameSpaceID, nsIAtom* aAttrName,
+                       int32_t aNameSpaceID, nsIAtom* aAttrName,
                        nsIContent** aResult);
 
 // Create a basic area frame but the GetFrameForPoint is overridden to always
@@ -101,7 +90,7 @@ NS_NewAttributeContent(nsNodeInfoManager *aNodeInfoManager,
 // By default, area frames will extend
 // their height to cover any children that "stick out".
 nsIFrame*
-NS_NewSelectsAreaFrame(nsIPresShell* aPresShell, nsStyleContext* aContext, PRUint32 aFlags);
+NS_NewSelectsAreaFrame(nsIPresShell* aPresShell, nsStyleContext* aContext, uint32_t aFlags);
 
 // Create a block formatting context blockframe
 inline nsIFrame* NS_NewBlockFormattingContext(nsIPresShell* aPresShell,
@@ -133,8 +122,6 @@ NS_NewImageFrame(nsIPresShell* aPresShell, nsStyleContext* aContext);
 nsIFrame*
 NS_NewInlineFrame(nsIPresShell* aPresShell, nsStyleContext* aContext);
 nsIFrame*
-NS_NewPositionedInlineFrame(nsIPresShell* aPresShell, nsStyleContext* aContext);
-nsIFrame*
 NS_NewObjectFrame(nsIPresShell* aPresShell, nsStyleContext* aContext);
 nsIFrame*
 NS_NewTextFrame(nsIPresShell* aPresShell, nsStyleContext* aContext);
@@ -148,7 +135,7 @@ NS_NewWBRFrame(nsIPresShell* aPresShell, nsStyleContext* aContext) {
 }
 
 nsIFrame*
-NS_NewColumnSetFrame(nsIPresShell* aPresShell, nsStyleContext* aContext, PRUint32 aStateFlags);
+NS_NewColumnSetFrame(nsIPresShell* aPresShell, nsStyleContext* aContext, uint32_t aStateFlags);
 
 nsIFrame*
 NS_NewSimplePageSequenceFrame(nsIPresShell* aPresShell, nsStyleContext* aContext);
@@ -197,9 +184,11 @@ NS_NewNativeSelectControlFrame(nsIPresShell* aPresShell, nsStyleContext* aContex
 nsIFrame*
 NS_NewListControlFrame(nsIPresShell* aPresShell, nsStyleContext* aContext);
 nsIFrame*
-NS_NewComboboxControlFrame(nsIPresShell* aPresShell, nsStyleContext* aContext, PRUint32 aFlags);
+NS_NewComboboxControlFrame(nsIPresShell* aPresShell, nsStyleContext* aContext, uint32_t aFlags);
 nsIFrame*
-NS_NewIsIndexFrame(nsIPresShell* aPresShell, nsStyleContext* aContext);
+NS_NewProgressFrame(nsIPresShell* aPresShell, nsStyleContext* aContext);
+nsIFrame*
+NS_NewMeterFrame(nsIPresShell* aPresShell, nsStyleContext* aContext);
 
 // Table frame factories
 nsIFrame*
@@ -217,7 +206,7 @@ NS_NewTableRowFrame(nsIPresShell* aPresShell, nsStyleContext* aContext);
 nsIFrame*
 NS_NewTableRowGroupFrame(nsIPresShell* aPresShell, nsStyleContext* aContext);
 nsIFrame*
-NS_NewTableCellFrame(nsIPresShell* aPresShell, nsStyleContext* aContext, PRBool aIsBorderCollapse);
+NS_NewTableCellFrame(nsIPresShell* aPresShell, nsStyleContext* aContext, bool aIsBorderCollapse);
 
 nsresult
 NS_NewHTMLContentSink(nsIHTMLContentSink** aInstancePtrResult,
@@ -229,12 +218,4 @@ NS_NewHTMLFragmentContentSink(nsIFragmentContentSink** aInstancePtrResult);
 nsresult
 NS_NewHTMLFragmentContentSink2(nsIFragmentContentSink** aInstancePtrResult);
 
-// This strips all but a whitelist of elements and attributes defined
-// in nsContentSink.h
-nsresult
-NS_NewHTMLParanoidFragmentSink(nsIFragmentContentSink** aInstancePtrResult);
-nsresult
-NS_NewHTMLParanoidFragmentSink2(nsIFragmentContentSink** aInstancePtrResult);
-void
-NS_HTMLParanoidFragmentSinkShutdown();
 #endif /* nsHTMLParts_h___ */

@@ -1,51 +1,17 @@
 <?xml version="1.0"?>
 <?xml-stylesheet href="chrome://global/skin" type="text/css"?>
-<!-- ***** BEGIN LICENSE BLOCK *****
-   - Version: MPL 1.1/GPL 2.0/LGPL 2.1
-   -
-   - The contents of this file are subject to the Mozilla Public License Version
-   - 1.1 (the "License"); you may not use this file except in compliance with
-   - the License. You may obtain a copy of the License at
-   - http://www.mozilla.org/MPL/
-   -
-   - Software distributed under the License is distributed on an "AS IS" basis,
-   - WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-   - for the specific language governing rights and limitations under the
-   - License.
-   -
-   - The Original Code is Browser Test Harness.
-   -
-   - The Initial Developer of the Original Code is
-   - Mozilla Corporation.
-   -
-   - Portions created by the Initial Developer are Copyright (C) 2007
-   - the Initial Developer. All Rights Reserved.
-   -
-   - Contributor(s):
-   -      Gavin Sharp <gavin@gavinsharp.com> (original author)
-   -      Ehsan Akhgari <ehsan.akhgari@gmail.com>
-   -
-   - Alternatively, the contents of this file may be used under the terms of
-   - either the GNU General Public License Version 2 or later (the "GPL"), or
-   - the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-   - in which case the provisions of the GPL or the LGPL are applicable instead
-   - of those above. If you wish to allow use of your version of this file only
-   - under the terms of either the GPL or the LGPL, and not to allow others to
-   - use your version of this file under the terms of the MPL, indicate your
-   - decision by deleting the provisions above and replace them with the notice
-   - and other provisions required by the LGPL or the GPL. If you do not delete
-   - the provisions above, a recipient may use your version of this file under
-   - the terms of any one of the MPL, the GPL or the LGPL.
-   -
-   - ***** END LICENSE BLOCK ***** -->
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
 
 <window id="browserTestHarness"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         onload="TestStart();"
         title="Browser chrome tests"
         width="1024">
-  <script src="chrome://mochikit/content/tests/SimpleTest/MozillaFileLogger.js"/>
-  <script src="chrome://mochikit/content/tests/SimpleTest/quit.js"/>
+  <script src="chrome://mochikit/content/tests/SimpleTest/MozillaLogger.js"/>
+  <script src="chrome://mochikit/content/tests/SimpleTest/LogController.js"/>
+  <script src="chrome://mochikit/content/chrome-harness.js"/>
   <style xmlns="http://www.w3.org/1999/xhtml"><![CDATA[
     #results {
       margin: 5px;
@@ -86,20 +52,29 @@
     p {
       margin: 0.1em;
     }
+
+    a {
+      color: blue;
+      text-decoration: underline;
+    }
   ]]></style>
   <script type="application/javascript;version=1.7"><![CDATA[
+    if (Cc === undefined) {
+      var Cc = Components.classes;
+      var Ci = Components.interfaces;
+    }
+    
     var gConfig;
 
     var gDumper = {
       get fileLogger() {
         let logger = null;
-        if (gConfig.logPath) {
+        if (gConfig.logFile) {
           try {
-            MozillaFileLogger.init(gConfig.logPath);
-            logger = MozillaFileLogger;
+            logger = new MozillaFileLogger(gConfig.logFile)
           } catch (ex) {
             dump("TEST-UNEXPECTED-FAIL | (browser-harness.xul) | " +
-                 "Error trying to log to " + gConfig.logPath + ": " + ex + "\n");
+                 "Error trying to log to " + gConfig.logFile + ": " + ex + "\n");
           }
         }
         delete this.fileLogger;
@@ -129,62 +104,18 @@
         document.getElementById("runTestsButton").label =
           "Run " + gConfig.testPath + " tests";
 
-      if (gConfig.autoRun)
+      if (gConfig.autorun)
         setTimeout(runTests, 0);
     }
 
-    function readConfig() {
-      var fileLocator = Cc["@mozilla.org/file/directory_service;1"].
-                        getService(Ci.nsIProperties);
-      var configFile = fileLocator.get("ProfD", Ci.nsIFile);
-      configFile.append("testConfig.js");
-
-      if (!configFile.exists())
-        return;
-
-      var fileInStream = Cc["@mozilla.org/network/file-input-stream;1"].
-                         createInstance(Ci.nsIFileInputStream);
-      var sstream = Cc["@mozilla.org/scriptableinputstream;1"].
-                    createInstance(Ci.nsIScriptableInputStream);
-      fileInStream.init(configFile, -1, 0, 0);
-      sstream.init(fileInStream);
-
-      var config = "";
-      var str = sstream.read(4096);
-      while (str.length > 0) {
-        config += str;
-        str = sstream.read(4096);
-      }
-
-      sstream.close();
-      fileInStream.close();
-
-      return eval(config);
-    }
-
-    function getChromeDir() {
-      const Cc = Components.classes; const Ci = Components.interfaces;
-
-      /** Find our chrome dir **/
-      var ios = Cc["@mozilla.org/network/io-service;1"].
-                  getService(Ci.nsIIOService);
-      var chromeURI = ios.newURI("chrome://mochikit/content/",
-                                 null, null);
-      var resolvedURI = Cc["@mozilla.org/chrome/chrome-registry;1"].
-                        getService(Ci.nsIChromeRegistry).
-                        convertChromeURL(chromeURI);
-      var fileHandler = Cc["@mozilla.org/network/protocol;1?name=file"].
-                        getService(Ci.nsIFileProtocolHandler);
-      var chromeDir = fileHandler.getFileFromURLSpec(resolvedURI.spec);
-
-      return chromeDir.parent.QueryInterface(Ci.nsILocalFile);
-    }
+    var gErrorCount = 0;
 
     function browserTest(aTestFile) {
       this.path = aTestFile;
       this.dumper = gDumper;
       this.results = [];
       this.scope = null;
+      this.duration = 0;
     }
     browserTest.prototype = {
       get passCount() {
@@ -203,6 +134,10 @@
         this.dumper.dump(result.result + " | " + this.path + " | " + result.msg + "\n");
       },
 
+      setDuration: function setDuration(duration) {
+        this.duration = duration;
+      },
+
       get htmlLog() {
         let txtToHTML = Cc["@mozilla.org/txttohtmlconv;1"].
                         getService(Ci.mozITXTToHTMLConv);
@@ -210,59 +145,39 @@
           return txtToHTML.scanTXT(str, Ci.mozITXTToHTMLConv.kEntities);
         }
         var path = _entityEncode(this.path);
-        return this.results.map(function (t) {
-          var class = t.info ? "info" : "result " + (t.pass ? "passed" : "failed");
-          return "<p class=\"" + class + "\">" + t.result + " | " + path +
-                 " | " + _entityEncode(t.msg) + "</p>";
+        var html = this.results.map(function (t) {
+          var classname = t.info ? "info" : "result " + (t.pass ? "passed" : "failed");
+          var text = t.result + " | " + path + " | " + _entityEncode(t.msg);
+          if (!t.info && !t.pass) {
+            return '<p class="' + classname + '" id=\"ERROR' + (gErrorCount++) + '">' +
+                   text + " <a href=\"javascript:scrollTo('ERROR" + gErrorCount + "')\">NEXT ERROR</a></p>";
+          }
+          return '<p class="' + classname + '">' + text + "</p>";
         }).join("\n");
+        if (this.duration) {
+          html += "<p class=\"info\">TEST-END | " + path + " | finished in " +
+                  this.duration + " ms</p>";
+        }
+        return html;
       }
     };
 
     // Returns an array of browserTest objects for all the selected tests
     function listTests() {
-      const Cc = Components.classes; const Ci = Components.interfaces;
-
-      var ioSvc = Cc["@mozilla.org/network/io-service;1"].
-                  getService(Ci.nsIIOService);
-
-      var testsDir = getChromeDir();
-      testsDir.appendRelativePath("browser");
-
-      var requestPath = "chrome://mochikit/content/browser";
-      var fileNameRegexp = /browser_.+\.js$/;
-
-      if (gConfig.testPath) {
-        var testsDirURI = ioSvc.newFileURI(testsDir);
-        testsDir = ioSvc.newURI(gConfig.testPath, null, testsDirURI)
-                        .QueryInterface(Ci.nsIFileURL).file;
-
-        // Invalid testPath...
-        if (!testsDir.exists())
-          return [];
-
-        // If we were passed a specific file, run only that test.
-        if (testsDir.isFile()) {
-          if (fileNameRegexp.test(testsDir.leafName))
-            return [new browserTest(requestPath + "/" + gConfig.testPath)];
-
-          // We were passed a file that's not a test...
-          return [];
-        }
-
-        // otherwise, we were passed a directory of tests
-        requestPath += "/" + gConfig.testPath;
-      }
+      [links, singleTestPath] = getTestList();
+      if (!links)
+        return [];
 
       // load server.js in so we can share template functions
       var scriptLoader = Cc["@mozilla.org/moz/jssubscript-loader;1"].
-                         getService(Ci.mozIJSSubScriptLoader);
+                           getService(Ci.mozIJSSubScriptLoader);
       var srvScope = {};
-      scriptLoader.loadSubScript("chrome://mochikit/content/server.js", srvScope);
+      scriptLoader.loadSubScript('chrome://mochikit/content/server.js',
+                                 srvScope);
 
-      var [links, ] = srvScope.list(requestPath, testsDir, true);
       var fileNames = [];
+      var fileNameRegexp = /browser_.+\.js$/;
       srvScope.arrayOfTestFiles(links, fileNames, fileNameRegexp);
-
       return fileNames.map(function (f) new browserTest(f));
     }
 
@@ -273,11 +188,16 @@
     function runTests() {
       var windowMediator = Cc['@mozilla.org/appshell/window-mediator;1'].
                              getService(Ci.nsIWindowMediator);
-      var testWin = windowMediator.getMostRecentWindow("navigator:browser");
+      var winType = gConfig.testRoot == "browser" ? "navigator:browser" :
+                    gConfig.testRoot == "webapprtChrome" ? "webapprt:webapp" :
+                    null;
+      if (!winType) {
+        throw new Error("Unrecognized gConfig.testRoot: " + gConfig.testRoot);
+      }
+      var testWin = windowMediator.getMostRecentWindow(winType);
 
       setStatus("Running...");
       testWin.focus();
-
       var Tester = new testWin.Tester(listTests(), gDumper, testsFinished);
       Tester.start();
     }
@@ -300,7 +220,10 @@
       log += failCount != 0 ? "failure" :
                passCount == 0 ? "todo" : "success";
       log += "\">\n<p>Passed: " + passCount + "</p>\n" +
-             "<p>Failed: " + failCount + "</p>\n" +
+             "<p>Failed: " + failCount;
+      if (failCount > 0)
+        log += " <a href=\"javascript:scrollTo('ERROR0')\">NEXT ERROR</a>";
+      log += "</p>\n" +
              "<p>Todo: " + todoCount + "</p>\n</div>\n<div id=\"log\">\n";
 
       return log + aTests.map(function (f) {
@@ -313,13 +236,24 @@
       window.focus();
 
       if (gConfig.closeWhenDone) {
-        goQuitApplication();
+        let appStartup = Cc["@mozilla.org/toolkit/app-startup;1"].getService(Ci.nsIAppStartup);
+        appStartup.quit(Ci.nsIAppStartup.eForceQuit);
         return;
       }
 
       // UI
       document.getElementById("results").innerHTML = getHTMLLogFromTests(aTests);
       setStatus("Done.");
+    }
+
+    function scrollTo(id) {
+      var line = document.getElementById(id);
+      if (!line)
+        return;
+
+      var boxObject = document.getElementById("results").parentNode.boxObject;
+      boxObject.QueryInterface(Components.interfaces.nsIScrollBoxObject);
+      boxObject.scrollToElement(line);
     }
   ]]></script>
   <button id="runTestsButton" oncommand="runTests();" label="Run All Tests"/>

@@ -55,23 +55,23 @@ namespace {
 
 // From MSDN, FILETIME "Contains a 64-bit value representing the number of
 // 100-nanosecond intervals since January 1, 1601 (UTC)."
-int64 FileTimeToMicroseconds(const FILETIME& ft) {
+int64_t FileTimeToMicroseconds(const FILETIME& ft) {
   // Need to bit_cast to fix alignment, then divide by 10 to convert
   // 100-nanoseconds to milliseconds. This only works on little-endian
   // machines.
-  return bit_cast<int64, FILETIME>(ft) / 10;
+  return bit_cast<int64_t, FILETIME>(ft) / 10;
 }
 
-void MicrosecondsToFileTime(int64 us, FILETIME* ft) {
+void MicrosecondsToFileTime(int64_t us, FILETIME* ft) {
   DCHECK(us >= 0) << "Time is less than 0, negative values are not "
       "representable in FILETIME";
 
   // Multiply by 10 to convert milliseconds to 100-nanoseconds. Bit_cast will
   // handle alignment problems. This only works on little-endian machines.
-  *ft = bit_cast<FILETIME, int64>(us * 10);
+  *ft = bit_cast<FILETIME, int64_t>(us * 10);
 }
 
-int64 CurrentWallclockMicroseconds() {
+int64_t CurrentWallclockMicroseconds() {
   FILETIME ft;
   ::GetSystemTimeAsFileTime(&ft);
   return FileTimeToMicroseconds(ft);
@@ -80,7 +80,7 @@ int64 CurrentWallclockMicroseconds() {
 // Time between resampling the un-granular clock for this API.  60 seconds.
 const int kMaxMillisecondsToAvoidDrift = 60 * Time::kMillisecondsPerSecond;
 
-int64 initial_time = 0;
+int64_t initial_time = 0;
 TimeTicks initial_ticks;
 
 void InitializeClock() {
@@ -97,7 +97,7 @@ void InitializeClock() {
 // number of leap year days between 1601 and 1970: (1970-1601)/4 excluding
 // 1700, 1800, and 1900.
 // static
-const int64 Time::kTimeTToMicrosecondsOffset = GG_INT64_C(11644473600000000);
+const int64_t Time::kTimeTToMicrosecondsOffset = GG_INT64_C(11644473600000000);
 
 // static
 Time Time::Now() {
@@ -227,22 +227,11 @@ DWORD (*tick_function)(void) = &timeGetTimeWrapper;
 // which will roll over the 32-bit value every ~49 days.  We try to track
 // rollover ourselves, which works if TimeTicks::Now() is called at least every
 // 49 days.
-class NowSingleton : public base::SystemMonitor::PowerObserver {
+class NowSingleton {
  public:
   NowSingleton()
     : rollover_(TimeDelta::FromMilliseconds(0)),
-      last_seen_(0),
-      hi_res_clock_enabled_(false) {
-    base::SystemMonitor* system = base::SystemMonitor::Get();
-    system->AddObserver(this);
-    UseHiResClock(!system->BatteryPower());
-  }
-
-  ~NowSingleton() {
-    UseHiResClock(false);
-    base::SystemMonitor* monitor = base::SystemMonitor::Get();
-    if (monitor)
-      monitor->RemoveObserver(this);
+      last_seen_(0) {
   }
 
   TimeDelta Now() {
@@ -251,35 +240,15 @@ class NowSingleton : public base::SystemMonitor::PowerObserver {
     // we keep our last_seen_ stay correctly in sync.
     DWORD now = tick_function();
     if (now < last_seen_)
-      rollover_ += TimeDelta::FromMilliseconds(0x100000000I64);  // ~49.7 days.
+      rollover_ += TimeDelta::FromMilliseconds(GG_LONGLONG(0x100000000));  // ~49.7 days.
     last_seen_ = now;
     return TimeDelta::FromMilliseconds(now) + rollover_;
   }
 
-  // Interfaces for monitoring Power changes.
-  void OnPowerStateChange(base::SystemMonitor* system) {
-    UseHiResClock(!system->BatteryPower());
-  }
-
-  void OnSuspend(base::SystemMonitor* system) {}
-  void OnResume(base::SystemMonitor* system) {}
-
  private:
-  // Enable or disable the faster multimedia timer.
-  void UseHiResClock(bool enabled) {
-    if (enabled == hi_res_clock_enabled_)
-      return;
-    if (enabled)
-      timeBeginPeriod(1);
-    else
-      timeEndPeriod(1);
-    hi_res_clock_enabled_ = enabled;
-  }
-
   Lock lock_;  // To protected last_seen_ and rollover_.
   TimeDelta rollover_;  // Accumulation of time lost due to rollover.
   DWORD last_seen_;  // The last timeGetTime value we saw, to detect rollover.
-  bool hi_res_clock_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(NowSingleton);
 };
@@ -339,7 +308,7 @@ class HighResNowSingleton {
     const int kMaxTimeDrift = 50 * Time::kMicrosecondsPerMillisecond;
 
     if (IsUsingHighResClock()) {
-      int64 now = UnreliableNow();
+      int64_t now = UnreliableNow();
 
       // Verify that QPC does not seem to drift.
       DCHECK(now - ReliableNow() - skew_ < kMaxTimeDrift);
@@ -364,21 +333,21 @@ class HighResNowSingleton {
   }
 
   // Get the number of microseconds since boot in a reliable fashion
-  int64 UnreliableNow() {
+  int64_t UnreliableNow() {
     LARGE_INTEGER now;
     QueryPerformanceCounter(&now);
-    return static_cast<int64>(now.QuadPart / ticks_per_microsecond_);
+    return static_cast<int64_t>(now.QuadPart / ticks_per_microsecond_);
   }
 
   // Get the number of microseconds since boot in a reliable fashion
-  int64 ReliableNow() {
+  int64_t ReliableNow() {
     return Singleton<NowSingleton>::get()->Now().InMicroseconds();
   }
 
   // Cached clock frequency -> microseconds. This assumes that the clock
   // frequency is faster than one microsecond (which is 1MHz, should be OK).
   float ticks_per_microsecond_;  // 0 indicates QPF failed and we're broken.
-  int64 skew_;  // Skew between lo-res and hi-res clocks (for debugging).
+  int64_t skew_;  // Skew between lo-res and hi-res clocks (for debugging).
 
   DISALLOW_COPY_AND_ASSIGN(HighResNowSingleton);
 };

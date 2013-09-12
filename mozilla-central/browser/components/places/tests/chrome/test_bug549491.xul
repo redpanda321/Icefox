@@ -18,8 +18,6 @@
         onload="runTest();">
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js" />
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js" />
 
   <body xmlns="http://www.w3.org/1999/xhtml" />
@@ -53,9 +51,6 @@
     }
 
     function continue_test() {
-      const Cc = Components.classes;
-      const Ci = Components.interfaces;
-      Components.utils.import("resource://gre/modules/Services.jsm");
       PlacesUtils.history
                  .addVisit(Services.io.newURI("http://example.tld/", null, null),
                            Date.now() * 1000, null, PlacesUtils.history.TRANSITION_TYPED, false, 0);

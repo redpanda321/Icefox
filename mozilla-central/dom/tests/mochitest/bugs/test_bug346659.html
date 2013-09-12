@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=346659
 -->
 <head>
   <title>Test for Bug 346659</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
 </head>
@@ -43,7 +42,7 @@ function handleCmd(evt) {
   }  
 
   // Grab privileges so we can access cross-domain windows
-  netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect UniversalBrowserRead UniversalBrowserWrite");
+  netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
 
   if ("load" in cmd) {
     var testNum = cmd.load;
@@ -74,7 +73,7 @@ function handleCmd(evt) {
       } else {
         win.childWin.document.write('<script>window.parent.opener.postMessage(window.parent.testNum + " - " + window.x, "http://mochi.test:8888/"); window.parent.close();<' + '/script>');
       }
-    } catch (e if (e.name == "NS_ERROR_DOM_SECURITY_ERR" && e.code == 1000)) {
+    } catch (e if (e.name == "SecurityError" && e.code == 18)) {
       // Security error on cross-site write() is fine
       if (win.childWin.opener == win) {
         win.childWin.close();

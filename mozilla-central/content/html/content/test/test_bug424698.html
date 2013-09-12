@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=424698
 -->
 <head>
   <title>Test for Bug 424698</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
@@ -77,7 +76,7 @@ is(i.value, "test3", "Setting textarea defaultValue after hide/show should work"
 i = $("target2");
 i.focus(); // Otherwise editor gets confused when we send the key events
 is(i.value, "", "Textarea value should be empty string in second control");
-sendString("2test2", "target2");
+sendString("2test2");
 is(i.value, "2test2", 'We just typed the string "2test2"');
 i.defaultValue = "2test3";
 is(i.value, "2test2", "Setting textarea defaultValue after typing should not work");

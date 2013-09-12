@@ -1,92 +1,61 @@
 <?xml version="1.0"?>
 <?xml-stylesheet href="chrome://global/skin" type="text/css"?>
+<?xml-stylesheet href="chrome://mochikit/content/static/harness.css" 
+                 type="text/css"?>
 
-<overlay id="browserTestOverlay"
+<overlay id="chromeTestOverlay"
          xmlns:html="http://www.w3.org/1999/xhtml"
          xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
          xmlns:xul="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
 
 <window>
-  <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js" />
+  <script type="text/javascript"
+          src="chrome://mochikit/content/tests/SimpleTest/LogController.js"/>
+  <script type="text/javascript"
+          src="chrome://mochikit/content/tests/SimpleTest/specialpowersAPI.js"/>
+  <script type="text/javascript"
+          src="chrome://mochikit/content/tests/SimpleTest/SpecialPowersObserverAPI.js"/>
+  <script type="text/javascript"
+          src="chrome://mochikit/content/tests/SimpleTest/ChromePowers.js"/>
   <script type="text/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/TestRunner.js"/>
   <script type="text/javascript"
-          src="chrome://mochikit/content/tests/SimpleTest/MozillaFileLogger.js"/>
-  <script type="text/javascript"
-          src="chrome://mochikit/content/tests/SimpleTest/quit.js" />
+          src="chrome://mochikit/content/tests/SimpleTest/MozillaLogger.js"/>
+  <script type="application/javascript"
+          src="chrome://mochikit/content/chrome-harness.js" />
   <script type="text/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/setup.js" />
   <script type="application/javascript;version=1.7"><![CDATA[
-    function loadTests()
-    {
-      window.removeEventListener("load", loadTests, false);
 
-      var dir = document.documentElement.getAttribute('directory');
-      var url = "chrome://mochikit/content/" + dir + "/";
-      // Find our chrome dir
-      var ios = Cc["@mozilla.org/network/io-service;1"].
-                  getService(Ci.nsIIOService);
-      var chromeURI = ios.newURI("chrome://mochikit/content/",
-                                 null, null);
-      var resolvedURI = Cc["@mozilla.org/chrome/chrome-registry;1"].
-                          getService(Ci.nsIChromeRegistry).
-                          convertChromeURL(chromeURI);
-      var fileHandler = Cc["@mozilla.org/network/protocol;1?name=file"].
-                          getService(Ci.nsIFileProtocolHandler);
-      var chromeDir = fileHandler.getFileFromURLSpec(resolvedURI.spec);
-      chromeDir = chromeDir.parent.QueryInterface(Ci.nsILocalFile);
-      chromeDir.appendRelativePath(dir);
+if (Cc === undefined) {
+  var Cc = Components.classes;
+  var Ci = Components.interfaces;
+}
 
-      var singleTestPath;
-      if ("testPath" in params && params.testPath) {
-        var extraPath = params.testPath;
-        var pathToCheck = chromeDir.clone().QueryInterface(Ci.nsILocalFile);
-        var pathIsFile = false;
-        try {
-          var pathParts = extraPath.toString().split("/");
-          for each (var part in pathParts) {
-            pathToCheck.append(part);
-          }          
-          if (pathToCheck.isDirectory()) {
-            for each (var part in pathParts) {
-              chromeDir.append(part);
-            }          
-            url += extraPath + "/";
-          }
-          else {
-            pathIsFile = true;
-          }
-        }
-        catch (e) {
-          pathIsFile = true;
-        }
-        if (pathIsFile) {
-          singleTestPath = url + params.testPath;
-        }
-      }
-      // load server.js in so we can share template functions
-      var scriptLoader = Cc["@mozilla.org/moz/jssubscript-loader;1"].
-                           getService(Ci.mozIJSSubScriptLoader);
-      var srvScope = {};
-      scriptLoader.loadSubScript("chrome://mochikit/content/server.js",
-                                 srvScope);
+function loadTests()
+{
+  window.removeEventListener("load", loadTests, false);
+  [links, singleTestPath] = getTestList();
+ 
+  // load server.js in so we can share template functions
+  var scriptLoader = Cc["@mozilla.org/moz/jssubscript-loader;1"].
+                       getService(Ci.mozIJSSubScriptLoader);
+  var srvScope = {};
+  scriptLoader.loadSubScript('chrome://mochikit/content/server.js',
+                             srvScope);
 
-      // generate our test list
-      srvScope.makeTags();
-      var [links, count] = srvScope.list(url, chromeDir, true);
-      var tableContent = srvScope.linksToTableRows(links, 0);
-      function populate() {
-        $("test-table").innerHTML += tableContent;
-      }
-      gTestList = eval(srvScope.jsonArrayOfTestFiles(links));
-      populate();
-      hookup();
+  // generate our test list
+  srvScope.makeTags();
+  var tableContent = srvScope.linksToTableRows(links, 0);
 
-      // if we got passed a test path, just run that single test
-      if (singleTestPath)
-        window.location.href = singleTestPath;
-    }
+  function populate() {
+    document.getElementById("test-table").innerHTML += tableContent;
+  }
+  gTestList = eval(srvScope.jsonArrayOfTestFiles(links));
+  populate();
+
+  hookup();
+}
 
     window.addEventListener("load", loadTests, false);
   ]]>
@@ -96,6 +65,7 @@
     <button label="Run Chrome Tests" id="runtests" flex="1"/>
 
     <body xmlns="http://www.w3.org/1999/xhtml" id="xulharness">
+      <!--TODO: this should be separated into a file that both this file and server.js uses-->
       <div class="container">
         <p style="float:right;">
           <small>Based on the MochiKit unit tests.</small>
@@ -112,7 +82,7 @@
         </div>
         <div class="clear"></div>
         <div class="frameholder">
-          <iframe scrolling="no" id="testframe" width="500"></iframe>
+          <iframe type="content" scrolling="no" id="testframe" width="550" height="350"></iframe>
         </div>
         <div class="clear"></div>
         <div class="toggle">
@@ -129,6 +99,12 @@
                 <td>Todo</td>
                 <td>Test Files</td>
               </tr>
+            </tbody>
+          </table>
+          <br/>
+          <table cellpadding="0" cellspacing="0" border="1" bordercolor="red">
+          <!-- tbody needed to avoid bug 494546 causing performance problems -->
+            <tbody id="fail-table">
             </tbody>
           </table>
         </div>

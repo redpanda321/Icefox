@@ -7,16 +7,14 @@
         href="chrome://mochikit/content/tests/SimpleTest/test.css" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/EventUtils.js"></script>
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js"></script>
+          src="../common.js"></script>
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/events.js"></script>
+          src="../events.js"></script>
 
   <script type="application/javascript">
 
@@ -328,7 +326,7 @@
     // Do tests.
 
     var gQueue = null;
-    // var gA11yEventDumpID = "eventdump"; // debug stuff
+    //gA11yEventDumpToConsole = true; // debug stuff
 
     function doTests()
     {
@@ -364,6 +362,11 @@
      href="https://bugzilla.mozilla.org/show_bug.cgi?id=513213"
      title="coalesce events when new event is appended to the queue">
     Mozilla Bug 513213
+  </a><br>
+  <a target="_blank"
+     title="Rework accessible tree update code"
+     href="https://bugzilla.mozilla.org/show_bug.cgi?id=570275">
+    Mozilla Bug 570275
   </a>
 
   <p id="display"></p>

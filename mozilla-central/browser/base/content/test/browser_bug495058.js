@@ -26,25 +26,18 @@ function next() {
 
   function detach() {
     var win = gBrowser.replaceTabWithWindow(tab);
-    win.addEventListener("load", function () {
-      win.removeEventListener("load", arguments.callee, false);
 
-      var _delayedStartup = win.delayedStartup;
-      win.delayedStartup = function delayedStartup() {
-        _delayedStartup.apply(win, arguments);
-        win.delayedStartup = _delayedStartup;
+    whenDelayedStartupFinished(win, function () {
+      is(win.gBrowser.currentURI.spec, uri, uri + ": uri loaded in detached tab");
+      is(win.document.activeElement, win.gBrowser.selectedBrowser, uri + ": browser is focused");
+      is(win.gURLBar.value, "", uri + ": urlbar is empty");
+      ok(win.gURLBar.placeholder, uri + ": placeholder text is present");
 
-        is(win.gBrowser.currentURI.spec, uri, uri + ": uri loaded in detached tab");
-        is(win.document.activeElement, win.gBrowser.selectedBrowser, uri + ": browser is focused");
-        is(win.gURLBar.value, "", uri + ": urlbar is empty");
-        ok(win.gURLBar.placeholder, uri + ": placeholder text is present");
-
-        win.close();
-        if (uris.length)
-          next();
-        else
-          executeSoon(finish);
-      };
-    }, false);
+      win.close();
+      if (uris.length)
+        next();
+      else
+        executeSoon(finish);
+    });
   }
 }

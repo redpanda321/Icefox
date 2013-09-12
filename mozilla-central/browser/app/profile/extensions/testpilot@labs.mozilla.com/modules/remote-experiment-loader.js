@@ -1,44 +1,15 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Test Pilot.
- *
- * The Initial Developer of the Original Code is Mozilla.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Jono X <jono@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 const BASE_URL_PREF = "extensions.testpilot.indexBaseURL";
+const SSL_DOWNLOAD_REQUIRED_PREF = "extensions.testpilot.ssldownloadrequired";
+
 var Cuddlefish = require("cuddlefish");
 var resolveUrl = require("url").resolve;
 var SecurableModule = require("securable-module");
 let JarStore = require("jar-code-store").JarStore;
+let prefs = require("preferences-service");
 
 /* Security info should look like this:
  * Security Info:
@@ -135,8 +106,13 @@ function downloadFile(url, cb, lastModified) {
   req.onreadystatechange = function(aEvt) {
     if (req.readyState == 4) {
       if (req.status == 200) {
-        // check security channel:
-        if (verifyChannelSecurity(req.channel)) {
+        // check security channel, unless the user is ignoring that.
+        let ssldownloadrequired= prefs.get(SSL_DOWNLOAD_REQUIRED_PREF,true);
+        if (!ssldownloadrequired) {
+            dump("not requiring ssl download for experiements.  use at your own risk!\n");
+            dump("change this with: " + SSL_DOWNLOAD_REQUIRED_PREF + "\n");
+        }
+        if (!ssldownloadrequired | verifyChannelSecurity(req.channel)) {
           cb(req.responseText);
         } else {
           cb(null);
@@ -176,8 +152,6 @@ exports.RemoteExperimentLoader.prototype = {
   _init: function(logRepo, fileGetterFunction) {
     this._logger = logRepo.getLogger("TestPilot.Loader");
     this._expLogger = logRepo.getLogger("TestPilot.RemoteCode");
-    this._studyResults = [];
-    this._legacyStudies = [];
     let prefs = require("preferences-service");
     this._baseUrl = prefs.get(BASE_URL_PREF, "");
     if (fileGetterFunction != undefined) {
@@ -185,9 +159,8 @@ exports.RemoteExperimentLoader.prototype = {
     } else {
       this._fileGetter = downloadFile;
     }
-    this._logger.trace("About to instantiate preferences store.");
+    this._logger.trace("About to instantiate jar store.");
     this._jarStore = new JarStore();
-    this._experimentFileNames = [];
     let self = this;
     this._logger.trace("About to instantiate cuddlefish loader.");
     this._refreshLoader();
@@ -217,6 +190,12 @@ exports.RemoteExperimentLoader.prototype = {
          [self._jarStore, Cuddlefish.parentLoader.fs]),
        console: this._expLogger
       });
+
+    // Clear all of our lists of studies/surveys/results when refreshing loader
+    this._studyResults = [];
+    this._legacyStudies = [];
+    this._experimentFileNames = [];
+    this._loadErrors = [];
   },
 
   getLocalizedStudyInfo: function(studiesIndex) {
@@ -260,12 +239,34 @@ exports.RemoteExperimentLoader.prototype = {
     this._studyResults = data.results;
     this._legacyStudies = data.legacy;
 
-    /* Go through each record indicated in index.json for our locale;
-     * download the specified .jar file (replacing any version on disk)
+
+    /* Look in the "maintain_experiments" section of the index file.  Experiments
+     * listed here should be run IF we alrady have the code present on disk, but should
+     * not be downloaded if we don't already have them.
+     */
+    if (data.maintain_experiments) {
+      this._logger.trace(data.maintain_experiments.length + " files to maintain.\n");
+      for each (let studyFile in data.maintain_experiments) {
+        this._experimentFileNames.push(studyFile);
+      }
+    }
+
+    /* Look in the "new_experiments" section of the index file for new jar files
+     * to download. Go through each record indicated in index.json, look up the
+     * .jar file specified for our locale, and download it (replacing any version
+     * on disk)
      */
     let jarFiles = this.getLocalizedStudyInfo(data.new_experiments);
     let numFilesToDload = jarFiles.length;
+    this._logger.trace(numFilesToDload + " files to download.\n");
     let self = this;
+
+    if (numFilesToDload == 0) {
+      this._logger.trace("Num files to download is 0, bailing\n");
+      // nothing has changed --> callback false
+      callback(false);
+      return;
+    }
 
     for each (let j in jarFiles) {
       let filename = j.jarfile;
@@ -310,6 +311,13 @@ exports.RemoteExperimentLoader.prototype = {
     this._studyResults = data.results;
     this._legacyStudies = data.legacy;
 
+    // Studies to be maintained:
+    if (data.maintain_experiments) {
+      for each (let studyFile in data.maintain_experiments) {
+        this._experimentFileNames.push(studyFile);
+      }
+    }
+
     // Read names of experiment modules from index.
     let jarFiles = this.getLocalizedStudyInfo(data.new_experiments);
     for each (let j in jarFiles) {
@@ -324,11 +332,17 @@ exports.RemoteExperimentLoader.prototype = {
 
   // TODO a bad thing that can go wrong: If we have a net connection but the index file
   // has not changed, we currently don't try to download anything...
+  // The logic is bad because executeCachedIndexFile is called in two different
+  // cases: the one with no network, and the one with network but unchanged file.
 
   // Another bad thing: If there's a jar download that's corrupt or unreadable or has
-    // the wrong permissions or something, we need to kill it and download a new one.
+  // the wrong permissions or something, we need to kill it and download a new one.
+  // Should also try to download a new jar if any required modules are missing
+  // (Which is currently the case!)
 
-  // WTF every jar file I'm downloading appears as 0 bytes with __x__x___ permissions!
+  // (module "about_firefox.js" is not found; there is no about_firefox.jar on disk,
+  // indicating it didn't download, and we're not trying again because index-dev is
+  // unmodified.  Hmmm.)
 
   _cachedIndexNsiFile: null,
   get cachedIndexNsiFile() {
@@ -371,7 +385,7 @@ exports.RemoteExperimentLoader.prototype = {
       let foStream = Cc["@mozilla.org/network/file-output-stream;1"].
                                createInstance(Ci.nsIFileOutputStream);
 
-      foStream.init(file, 0x02 | 0x08 | 0x20, 0666, 0);
+      foStream.init(file, 0x02 | 0x08 | 0x20, parseInt("0666", 8), 0);
       // write, create, truncate
       let converter = Cc["@mozilla.org/intl/converter-output-stream;1"].
                                 createInstance(Ci.nsIConverterOutputStream);
@@ -441,9 +455,11 @@ exports.RemoteExperimentLoader.prototype = {
     let url = resolveUrl(self._baseUrl, indexFileName);
     self._fileGetter(url, function onDone(data) {
       if (data) {
+        self._logger.trace("Index file updated on server.\n");
         self._executeFreshIndexFile(data, callback);
         // cache index file contents so we can read them later if we can't get online.
         self._cacheIndexFile(data);
+        // executeFreshIndexFile will call the callback.
       } else {
         self._logger.info("Could not download index.json, using cached version.");
         let data = self._loadCachedIndexFile();
@@ -465,14 +481,22 @@ exports.RemoteExperimentLoader.prototype = {
      * the module name and value = the module object. */
     this._logger.trace("GetExperiments called.");
     let remoteExperiments = {};
+    this._loadErrors = [];
     for each (filename in this._experimentFileNames) {
       this._logger.debug("GetExperiments is loading " + filename);
       try {
         remoteExperiments[filename] = this._loader.require(filename);
         this._logger.info("Loaded " + filename + " OK.");
       } catch(e) {
+        /* Turn the load-time errors into strings and store them, so we can display
+         * them on a debug page or include them with a data upload!  (Don't store
+         * exception objects directly as that causes garbage collector problems-
+         * aka bug 646122) */
+        let errStr = e.name + " on line " + e.lineNumber + " of file " +
+          e.fileName + ": " + e.message;
+        this._loadErrors.push(errStr);
         this._logger.warn("Error loading " + filename);
-        this._logger.warn(e);
+        this._logger.warn(errStr);
       }
     }
     return remoteExperiments;
@@ -484,6 +508,10 @@ exports.RemoteExperimentLoader.prototype = {
 
   getLegacyStudies: function() {
     return this._legacyStudies;
+  },
+
+  getLoadErrors: function() {
+    return this._loadErrors;
   }
 };
 
@@ -495,4 +523,3 @@ exports.RemoteExperimentLoader.prototype = {
 
 // TODO but once the study is expired, should delete the jar for it and
 // just load the LegacyStudy version.
-

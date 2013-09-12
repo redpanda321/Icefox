@@ -1,74 +1,13 @@
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is Private Browsing.
-#
-# The Initial Developer of the Original Code is
-# Ehsan Akhgari.
-# Portions created by the Initial Developer are Copyright (C) 2008
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#  Ehsan Akhgari <ehsan.akhgari@gmail.com> (Original Author)
-#  Simon Bünzli <zeniko@gmail.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 Components.utils.import("resource://gre/modules/XPCOMUtils.jsm");
+Components.utils.import("resource://gre/modules/Services.jsm");
 
 #ifndef XP_WIN
 #define BROKEN_WM_Z_ORDER
 #endif
-
-////////////////////////////////////////////////////////////////////////////////
-//// Utilities
-
-/**
- * Returns true if the string passed in is part of the root domain of the
- * current string.  For example, if this is "www.mozilla.org", and we pass in
- * "mozilla.org", this will return true.  It would return false the other way
- * around.
- */
-String.prototype.hasRootDomain = function hasRootDomain(aDomain)
-{
-  let index = this.indexOf(aDomain);
-  // If aDomain is not found, we know we do not have it as a root domain.
-  if (index == -1)
-    return false;
-
-  // If the strings are the same, we obviously have a match.
-  if (this == aDomain)
-    return true;
-
-  // Otherwise, we have aDomain as our root domain iff the index of aDomain is
-  // aDomain.length subtracted from our length and (since we do not have an
-  // exact match) the character before the index is a dot or slash.
-  let prevChar = this[index - 1];
-  return (index == (this.length - aDomain.length)) &&
-         (prevChar == "." || prevChar == "/");
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Constants
@@ -94,6 +33,9 @@ function PrivateBrowsingService() {
   this._obs.addObserver(this, "private-browsing", true);
   this._obs.addObserver(this, "command-line-startup", true);
   this._obs.addObserver(this, "sessionstore-browser-state-restored", true);
+
+  // List of nsIXULWindows we are going to be closing during the transition
+  this._windowsToClose = [];
 }
 
 PrivateBrowsingService.prototype = {
@@ -126,13 +68,17 @@ PrivateBrowsingService.prototype = {
   // List of view source window URIs for restoring later
   _viewSrcURLs: [],
 
-  // List of nsIXULWindows we are going to be closing during the transition
-  _windowsToClose: [],
+  // Whether private browsing has been turned on from the command line
+  _lastChangedByCommandLine: false,
+
+  // Telemetry measurements
+  _enterTimestamps: {},
+  _exitTimestamps: {},
 
   // XPCOM registration
   classID: Components.ID("{c31f4883-839b-45f6-82ad-a6a9bc5ad599}"),
 
-  QueryInterface: XPCOMUtils.generateQI([Ci.nsIPrivateBrowsingService, 
+  QueryInterface: XPCOMUtils.generateQI([Ci.nsIPrivateBrowsingService,
                                          Ci.nsIObserver,
                                          Ci.nsISupportsWeakReference,
                                          Ci.nsICommandLineHandler]),
@@ -144,7 +90,31 @@ PrivateBrowsingService.prototype = {
       this.privateBrowsingEnabled = false;
   },
 
+  _setPerWindowPBFlag: function PBS__setPerWindowPBFlag(aWindow, aFlag) {
+    aWindow.QueryInterface(Ci.nsIInterfaceRequestor)
+           .getInterface(Ci.nsIWebNavigation)
+           .QueryInterface(Ci.nsIDocShellTreeItem)
+           .treeOwner
+           .QueryInterface(Ci.nsIInterfaceRequestor)
+           .getInterface(Ci.nsIXULWindow)
+           .docShell.QueryInterface(Ci.nsILoadContext)
+           .usePrivateBrowsing = aFlag;
+  },
+
+  _adjustPBFlagOnExistingWindows: function PBS__adjustPBFlagOnExistingWindows() {
+    var windowsEnum = Services.wm.getEnumerator(null);
+    while (windowsEnum.hasMoreElements()) {
+      var window = windowsEnum.getNext();
+      this._setPerWindowPBFlag(window, this._inPrivateBrowsing);
+    }
+  },
+
   _onBeforePrivateBrowsingModeChange: function PBS__onBeforePrivateBrowsingModeChange() {
+    // If we're about to enter PB mode, adjust the flags now
+    if (this._inPrivateBrowsing) {
+      this._adjustPBFlagOnExistingWindows();
+    }
+
     // nothing needs to be done here if we're enabling at startup
     if (!this._autoStarted) {
       let ss = Cc["@mozilla.org/browser/sessionstore;1"].
@@ -173,9 +143,7 @@ PrivateBrowsingService.prototype = {
       this._closePageInfoWindows();
 
       // save view-source windows URIs and close them
-      let viewSrcWindowsEnum = Cc["@mozilla.org/appshell/window-mediator;1"].
-                               getService(Ci.nsIWindowMediator).
-                               getEnumerator("navigator:view-source");
+      let viewSrcWindowsEnum = Services.wm.getEnumerator("navigator:view-source");
       while (viewSrcWindowsEnum.hasMoreElements()) {
         let win = viewSrcWindowsEnum.getNext();
         if (this._inPrivateBrowsing) {
@@ -219,6 +187,11 @@ PrivateBrowsingService.prototype = {
     }
     else
       this._saveSession = false;
+
+    // If we're about to leave PB mode, adjust the flags now
+    if (!this._inPrivateBrowsing) {
+      this._adjustPBFlagOnExistingWindows();
+    }
   },
 
   _onAfterPrivateBrowsingModeChange: function PBS__onAfterPrivateBrowsingModeChange() {
@@ -231,6 +204,9 @@ PrivateBrowsingService.prototype = {
       // to be restored, do it now
       if (!this._inPrivateBrowsing) {
         this._currentStatus = STATE_WAITING_FOR_RESTORE;
+        if (!this._getBrowserWindow()) {
+          ss.init(null);
+        }
         ss.setBrowserState(this._savedBrowserState);
         this._savedBrowserState = null;
 
@@ -273,6 +249,9 @@ PrivateBrowsingService.prototype = {
         };
         // Transition into private browsing mode
         this._currentStatus = STATE_WAITING_FOR_RESTORE;
+        if (!this._getBrowserWindow()) {
+          ss.init(null);
+        }
         ss.setBrowserState(JSON.stringify(privateBrowsingState));
       }
     }
@@ -286,6 +265,7 @@ PrivateBrowsingService.prototype = {
         // restore has been completed
         this._currentStatus = STATE_IDLE;
         this._obs.notifyObservers(null, "private-browsing-transition-complete", "");
+        this._recordTransitionTime("completed");
         break;
       case STATE_WAITING_FOR_RESTORE:
         // too soon to notify...
@@ -301,6 +281,51 @@ PrivateBrowsingService.prototype = {
     }
   },
 
+  _recordTransitionTime: function PBS__recordTransitionTime(aPhase) {
+    // To record the time spent in private browsing transitions, note that we
+    // cannot use the TelemetryStopwatch module, because it reports its results
+    // immediately when the timer is stopped.  In this case, we need to delay
+    // the actual histogram update after we are out of private browsing mode.
+    if (this._inPrivateBrowsing) {
+      this._enterTimestamps[aPhase] = Date.now();
+    } else {
+      if (this._quitting) {
+        // If we are quitting the browser, we don't care collecting the data,
+        // because we wouldn't be able to record it with telemetry.
+        return;
+      }
+      this._exitTimestamps[aPhase] = Date.now();
+      if (aPhase == "completed") {
+        // After we finished exiting the private browsing mode, we can finally
+        // record the telemetry data, for the enter and the exit processes.
+        this._reportTelemetry();
+      }
+    }
+  },
+
+  _reportTelemetry: function PBS__reportTelemetry() {
+    function reportTelemetryEntry(aHistogramId, aValue) {
+      try {
+        Services.telemetry.getHistogramById(aHistogramId).add(aValue);
+      } catch (ex) {
+        Cu.reportError(ex);
+      }
+    }
+
+    reportTelemetryEntry(
+          "PRIVATE_BROWSING_TRANSITION_ENTER_PREPARATION_MS",
+          this._enterTimestamps.prepared - this._enterTimestamps.started);
+    reportTelemetryEntry(
+          "PRIVATE_BROWSING_TRANSITION_ENTER_TOTAL_MS",
+          this._enterTimestamps.completed - this._enterTimestamps.started);
+    reportTelemetryEntry(
+          "PRIVATE_BROWSING_TRANSITION_EXIT_PREPARATION_MS",
+          this._exitTimestamps.prepared - this._exitTimestamps.started);
+    reportTelemetryEntry(
+          "PRIVATE_BROWSING_TRANSITION_EXIT_TOTAL_MS",
+          this._exitTimestamps.completed - this._exitTimestamps.started);
+  },
+
   _canEnterPrivateBrowsingMode: function PBS__canEnterPrivateBrowsingMode() {
     let cancelEnter = Cc["@mozilla.org/supports-PRBool;1"].
                       createInstance(Ci.nsISupportsPRBool);
@@ -314,6 +339,9 @@ PrivateBrowsingService.prototype = {
                       createInstance(Ci.nsISupportsPRBool);
     cancelLeave.data = false;
     this._obs.notifyObservers(cancelLeave, "private-browsing-cancel-vote", "exit");
+    if (!cancelLeave.data) {
+      this._obs.notifyObservers(cancelLeave, "last-pb-context-exiting", null);
+    }
     return !cancelLeave.data;
   },
 
@@ -411,20 +439,6 @@ PrivateBrowsingService.prototype = {
         this._unload();
         break;
       case "private-browsing":
-        // clear all auth tokens
-        let sdr = Cc["@mozilla.org/security/sdr;1"].
-                  getService(Ci.nsISecretDecoderRing);
-        sdr.logoutAndTeardown();
-    
-        // clear plain HTTP auth sessions
-        let authMgr = Cc['@mozilla.org/network/http-auth-manager;1'].
-                      getService(Ci.nsIHttpAuthManager);
-        authMgr.clearAll();
-
-        try {
-          this._prefs.deleteBranch("geo.wifi.access_token.");
-        } catch (ex) {}
-
         if (!this._inPrivateBrowsing) {
           // Clear the error console
           let consoleService = Cc["@mozilla.org/consoleservice;1"].
@@ -436,9 +450,20 @@ PrivateBrowsingService.prototype = {
       case "command-line-startup":
         this._obs.removeObserver(this, "command-line-startup");
         aSubject.QueryInterface(Ci.nsICommandLine);
+#ifndef MOZ_PER_WINDOW_PRIVATE_BROWSING
         if (aSubject.findFlag("private", false) >= 0) {
+          // Don't need to go into PB mode if it's already set to autostart
+          if (this._autoStarted)
+            aSubject.handleFlag("private", false);
+
           this.privateBrowsingEnabled = true;
           this._autoStarted = true;
+          this._lastChangedByCommandLine = true;
+        }
+        else
+#endif
+        if (aSubject.findFlag("private-toggle", false) >= 0) {
+          this._lastChangedByCommandLine = true;
         }
         break;
       case "sessionstore-browser-state-restored":
@@ -453,11 +478,17 @@ PrivateBrowsingService.prototype = {
   // nsICommandLineHandler
 
   handle: function PBS_handle(aCmdLine) {
+#ifndef MOZ_PER_WINDOW_PRIVATE_BROWSING
     if (aCmdLine.handleFlag("private", false))
-      ; // It has already been handled
-    else if (aCmdLine.handleFlag("private-toggle", false)) {
+      aCmdLine.preventDefault = true; // It has already been handled
+    else
+#endif
+    if (aCmdLine.handleFlag("private-toggle", false)) {
+      if (this._autoStarted) {
+        throw Cr.NS_ERROR_ABORT;
+      }
       this.privateBrowsingEnabled = !this.privateBrowsingEnabled;
-      this._autoStarted = false;
+      this._lastChangedByCommandLine = true;
     }
   },
 
@@ -487,41 +518,47 @@ PrivateBrowsingService.prototype = {
     if (this._currentStatus != STATE_IDLE)
       throw Cr.NS_ERROR_FAILURE;
 
+    if (val == this._inPrivateBrowsing)
+      return;
+
     try {
+      if (val) {
+        if (!this._canEnterPrivateBrowsingMode())
+          return;
+      }
+      else {
+        if (!this._canLeavePrivateBrowsingMode())
+          return;
+      }
+
+      this._ensureCanCloseWindows();
+
+      // start the transition now that we know that we can
       this._currentStatus = STATE_TRANSITION_STARTED;
 
-      if (val != this._inPrivateBrowsing) {
-        if (val) {
-          if (!this._canEnterPrivateBrowsingMode())
-            return;
-        }
-        else {
-          if (!this._canLeavePrivateBrowsingMode())
-            return;
-        }
+      this._autoStarted = this._prefs.getBoolPref("browser.privatebrowsing.autostart");
+      this._inPrivateBrowsing = val != false;
 
-        this._ensureCanCloseWindows();
+      this._recordTransitionTime("started");
 
-        this._autoStarted = this._prefs.getBoolPref("browser.privatebrowsing.autostart");
-        this._inPrivateBrowsing = val != false;
+      let data = val ? "enter" : "exit";
 
-        let data = val ? "enter" : "exit";
+      let quitting = Cc["@mozilla.org/supports-PRBool;1"].
+                     createInstance(Ci.nsISupportsPRBool);
+      quitting.data = this._quitting;
 
-        let quitting = Cc["@mozilla.org/supports-PRBool;1"].
-                       createInstance(Ci.nsISupportsPRBool);
-        quitting.data = this._quitting;
+      // notify observers of the pending private browsing mode change
+      this._obs.notifyObservers(quitting, "private-browsing-change-granted", data);
 
-        // notify observers of the pending private browsing mode change
-        this._obs.notifyObservers(quitting, "private-browsing-change-granted", data);
+      // destroy the current session and start initial cleanup
+      this._onBeforePrivateBrowsingModeChange();
 
-        // destroy the current session and start initial cleanup
-        this._onBeforePrivateBrowsingModeChange();
+      this._obs.notifyObservers(quitting, "private-browsing", data);
 
-        this._obs.notifyObservers(quitting, "private-browsing", data);
+      this._recordTransitionTime("prepared");
 
-        // load the appropriate session
-        this._onAfterPrivateBrowsingModeChange();
-      }
+      // load the appropriate session
+      this._onAfterPrivateBrowsingModeChange();
     } catch (ex) {
       // We aborted the transition to/from private browsing, we must restore the
       // beforeunload handling on all the windows for which we switched it off.
@@ -534,6 +571,7 @@ PrivateBrowsingService.prototype = {
     } finally {
       this._windowsToClose = [];
       this._notifyIfTransitionComplete();
+      this._lastChangedByCommandLine = false;
     }
   },
 
@@ -544,165 +582,12 @@ PrivateBrowsingService.prototype = {
     return this._inPrivateBrowsing && this._autoStarted;
   },
 
-  removeDataFromDomain: function PBS_removeDataFromDomain(aDomain)
-  {
-
-    // clear any and all network geolocation provider sessions
-    try {
-        this._prefs.deleteBranch("geo.wifi.access_token.");
-    } catch (e) {}
-    
-    // History
-    let (bh = Cc["@mozilla.org/browser/global-history;2"].
-              getService(Ci.nsIBrowserHistory)) {
-      bh.removePagesFromHost(aDomain, true);
-    }
-
-    // Cache
-    let (cs = Cc["@mozilla.org/network/cache-service;1"].
-              getService(Ci.nsICacheService)) {
-      // NOTE: there is no way to clear just that domain, so we clear out
-      //       everything)
-      try {
-        cs.evictEntries(Ci.nsICache.STORE_ANYWHERE);
-      } catch (ex) {
-        Cu.reportError("Exception thrown while clearing the cache: " +
-          ex.toString());
-      }
-    }
-
-    // Image Cache
-    let (imageCache = Cc["@mozilla.org/image/cache;1"].
-                      getService(Ci.imgICache)) {
-      try {
-        imageCache.clearCache(false); // true=chrome, false=content
-      } catch (ex) {
-        Cu.reportError("Exception thrown while clearing the image cache: " +
-          ex.toString());
-      }
-    }
-
-    // Cookies
-    let (cm = Cc["@mozilla.org/cookiemanager;1"].
-              getService(Ci.nsICookieManager2)) {
-      let enumerator = cm.getCookiesFromHost(aDomain);
-      while (enumerator.hasMoreElements()) {
-        let cookie = enumerator.getNext().QueryInterface(Ci.nsICookie);
-        cm.remove(cookie.host, cookie.name, cookie.path, false);
-      }
-    }
-
-    // Downloads
-    let (dm = Cc["@mozilla.org/download-manager;1"].
-              getService(Ci.nsIDownloadManager)) {
-      // Active downloads
-      let enumerator = dm.activeDownloads;
-      while (enumerator.hasMoreElements()) {
-        let dl = enumerator.getNext().QueryInterface(Ci.nsIDownload);
-        if (dl.source.host.hasRootDomain(aDomain)) {
-          dm.cancelDownload(dl.id);
-          dm.removeDownload(dl.id);
-        }
-      }
-
-      // Completed downloads
-      let db = dm.DBConnection;
-      // NOTE: This is lossy, but we feel that it is OK to be lossy here and not
-      //       invoke the cost of creating a URI for each download entry and
-      //       ensure that the hostname matches.
-      let stmt = db.createStatement(
-        "DELETE FROM moz_downloads " +
-        "WHERE source LIKE ?1 ESCAPE '/' " +
-        "AND state NOT IN (?2, ?3, ?4)"
-      );
-      let pattern = stmt.escapeStringForLIKE(aDomain, "/");
-      stmt.bindStringParameter(0, "%" + pattern + "%");
-      stmt.bindInt32Parameter(1, Ci.nsIDownloadManager.DOWNLOAD_DOWNLOADING);
-      stmt.bindInt32Parameter(2, Ci.nsIDownloadManager.DOWNLOAD_PAUSED);
-      stmt.bindInt32Parameter(3, Ci.nsIDownloadManager.DOWNLOAD_QUEUED);
-      try {
-        stmt.execute();
-      }
-      finally {
-        stmt.finalize();
-      }
-
-      // We want to rebuild the list if the UI is showing, so dispatch the
-      // observer topic
-      let os = Cc["@mozilla.org/observer-service;1"].
-               getService(Ci.nsIObserverService);
-      os.notifyObservers(null, "download-manager-remove-download", null);
-    }
-
-    // Passwords
-    let (lm = Cc["@mozilla.org/login-manager;1"].
-              getService(Ci.nsILoginManager)) {
-      // Clear all passwords for domain
-      try {
-        let logins = lm.getAllLogins();
-        for (let i = 0; i < logins.length; i++)
-          if (logins[i].hostname.hasRootDomain(aDomain))
-            lm.removeLogin(logins[i]);
-      }
-      // XXXehsan: is there a better way to do this rather than this
-      // hacky comparison?
-      catch (ex if ex.message.indexOf("User canceled Master Password entry") != -1) { }
-
-      // Clear any "do not save for this site" for this domain
-      let disabledHosts = lm.getAllDisabledHosts();
-      for (let i = 0; i < disabledHosts.length; i++)
-        if (disabledHosts[i].hasRootDomain(aDomain))
-          lm.setLoginSavingEnabled(disabledHosts, true);
-    }
-
-    // Permissions
-    let (pm = Cc["@mozilla.org/permissionmanager;1"].
-              getService(Ci.nsIPermissionManager)) {
-      // Enumerate all of the permissions, and if one matches, remove it
-      let enumerator = pm.enumerator;
-      while (enumerator.hasMoreElements()) {
-        let perm = enumerator.getNext().QueryInterface(Ci.nsIPermission);
-        if (perm.host.hasRootDomain(aDomain))
-          pm.remove(perm.host, perm.type);
-      }
-    }
-
-    // Content Preferences
-    let (cp = Cc["@mozilla.org/content-pref/service;1"].
-              getService(Ci.nsIContentPrefService)) {
-      let db = cp.DBConnection;
-      // First we need to get the list of "groups" which are really just domains
-      let names = [];
-      let stmt = db.createStatement(
-        "SELECT name " +
-        "FROM groups " +
-        "WHERE name LIKE ?1 ESCAPE '/'"
-      );
-      let pattern = stmt.escapeStringForLIKE(aDomain, "/");
-      stmt.bindStringParameter(0, "%" + pattern);
-      try {
-        while (stmt.executeStep())
-          if (stmt.getString(0).hasRootDomain(aDomain))
-            names.push(stmt.getString(0));
-      }
-      finally {
-        stmt.finalize();
-      }
-
-      // Now, for each name we got back, remove all of its prefs.
-      for (let i = 0; i < names.length; i++) {
-        let uri = names[i];
-        let enumerator = cp.getPrefs(uri).enumerator;
-        while (enumerator.hasMoreElements()) {
-          let pref = enumerator.getNext().QueryInterface(Ci.nsIProperty);
-          cp.removePref(uri, pref.name);
-        }
-      }
-    }
-
-    // Everybody else (including extensions)
-    this._obs.notifyObservers(null, "browser:purge-domain-data", aDomain);
+  /**
+   * Whether the latest transition was initiated from the command line.
+   */
+  get lastChangedByCommandLine() {
+    return this._lastChangedByCommandLine;
   }
 };
 
-var NSGetFactory = XPCOMUtils.generateNSGetFactory([PrivateBrowsingService]);
+this.NSGetFactory = XPCOMUtils.generateNSGetFactory([PrivateBrowsingService]);

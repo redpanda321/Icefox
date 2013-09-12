@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=563642
 -->
 <head>
   <title>Test for Bug 563642</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
@@ -42,11 +41,11 @@ function pageUpDownTest(id,index) {
   var elm = document.getElementById(id);
   elm.focus();
   elm.selectedIndex = 0;
-  sendKey("page_down", elm);
-  sendKey("page_down", elm);
-  sendKey("page_down", elm);
-  sendKey("page_up", elm);
-  sendKey("page_down", elm);
+  sendKey("page_down");
+  sendKey("page_down");
+  sendKey("page_down");
+  sendKey("page_up");
+  sendKey("page_down");
   is(elm.selectedIndex, index, "pageUpDownTest: selectedIndex for " + id + " is " + index);
 }
 
@@ -54,11 +53,11 @@ function upDownTest(id,index) {
   var elm = document.getElementById(id);
   elm.focus();
   elm.selectedIndex = 0;
-  sendKey("down", elm);
-  sendKey("down", elm);
-  sendKey("down", elm);
-  sendKey("up", elm);
-  sendKey("down", elm);
+  sendKey("down");
+  sendKey("down");
+  sendKey("down");
+  sendKey("up");
+  sendKey("down");
   is(elm.selectedIndex, index, "upDownTest: selectedIndex for " + id + " is " + index);
 }
 

@@ -1,47 +1,16 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Spellchecker Component.
- *
- * The Initial Developer of the Original Code is
- * David Einstein.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s): David Einstein Deinst@world.std.com
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "mozEnglishWordUtils.h"
-#include "nsICharsetAlias.h"
 #include "nsReadableUtils.h"
 #include "nsIServiceManager.h"
 #include "nsUnicharUtils.h"
 #include "nsUnicharUtilCIID.h"
+#include "nsUnicodeProperties.h"
 #include "nsCRT.h"
+#include "mozilla/Likely.h"
 
 NS_IMPL_CYCLE_COLLECTING_ADDREF(mozEnglishWordUtils)
 NS_IMPL_CYCLE_COLLECTING_RELEASE(mozEnglishWordUtils)
@@ -52,8 +21,7 @@ NS_INTERFACE_MAP_BEGIN(mozEnglishWordUtils)
   NS_INTERFACE_MAP_ENTRIES_CYCLE_COLLECTION(mozEnglishWordUtils)
 NS_INTERFACE_MAP_END
 
-NS_IMPL_CYCLE_COLLECTION_2(mozEnglishWordUtils,
-                           mCategories,
+NS_IMPL_CYCLE_COLLECTION_1(mozEnglishWordUtils,
                            mURLDetector)
 
 mozEnglishWordUtils::mozEnglishWordUtils()
@@ -62,7 +30,6 @@ mozEnglishWordUtils::mozEnglishWordUtils()
 
   nsresult rv;
   mURLDetector = do_CreateInstance(MOZ_TXTTOHTMLCONV_CONTRACTID, &rv);
-  mCategories = do_GetService(NS_UNICHARCATEGORY_CONTRACTID);
 }
 
 mozEnglishWordUtils::~mozEnglishWordUtils()
@@ -80,13 +47,13 @@ NS_IMETHODIMP mozEnglishWordUtils::GetLanguage(PRUnichar * *aLanguage)
   return rv;
  }
 
-/* void GetRootForm (in wstring aWord, in PRUint32 type, [array, size_is (count)] out wstring words, out PRUint32 count); */
+/* void GetRootForm (in wstring aWord, in uint32_t type, [array, size_is (count)] out wstring words, out uint32_t count); */
 // return the possible root forms of aWord.
-NS_IMETHODIMP mozEnglishWordUtils::GetRootForm(const PRUnichar *aWord, PRUint32 type, PRUnichar ***words, PRUint32 *count)
+NS_IMETHODIMP mozEnglishWordUtils::GetRootForm(const PRUnichar *aWord, uint32_t type, PRUnichar ***words, uint32_t *count)
 {
   nsAutoString word(aWord);
   PRUnichar **tmpPtr;
-  PRInt32 length = word.Length();
+  int32_t length = word.Length();
 
   *count = 0;
 
@@ -165,14 +132,14 @@ NS_IMETHODIMP mozEnglishWordUtils::GetRootForm(const PRUnichar *aWord, PRUint32 
 }
 
 // This needs vast improvement
-PRBool mozEnglishWordUtils::ucIsAlpha(PRUnichar aChar)
+bool mozEnglishWordUtils::ucIsAlpha(PRUnichar aChar)
 {
   // XXX we have to fix callers to handle the full Unicode range
-  return nsIUGenCategory::kLetter == mCategories->Get(PRUint32(aChar));
+  return nsIUGenCategory::kLetter == mozilla::unicode::GetGenCategory(aChar);
 }
 
-/* void FindNextWord (in wstring word, in PRUint32 length, in PRUint32 offset, out PRUint32 begin, out PRUint32 end); */
-NS_IMETHODIMP mozEnglishWordUtils::FindNextWord(const PRUnichar *word, PRUint32 length, PRUint32 offset, PRInt32 *begin, PRInt32 *end)
+/* void FindNextWord (in wstring word, in uint32_t length, in uint32_t offset, out uint32_t begin, out uint32_t end); */
+NS_IMETHODIMP mozEnglishWordUtils::FindNextWord(const PRUnichar *word, uint32_t length, uint32_t offset, int32_t *begin, int32_t *end)
 {
   const PRUnichar *p = word + offset;
   const PRUnichar *endbuf = word + length;
@@ -207,8 +174,8 @@ NS_IMETHODIMP mozEnglishWordUtils::FindNextWord(const PRUnichar *word, PRUint32 
        
         if (mURLDetector)
         {
-          PRInt32 startPos = -1;
-          PRInt32 endPos = -1;        
+          int32_t startPos = -1;
+          int32_t endPos = -1;        
 
           mURLDetector->FindURLInPlaintext(startWord, endbuf - startWord, p - startWord, &startPos, &endPos);
 
@@ -256,7 +223,7 @@ mozEnglishWordUtils::captype(const nsString &word)
     nsMemory::Free(lword);
     return NoCap;
   }
-  PRInt32 length=word.Length();
+  int32_t length=word.Length();
   if(Substring(word,1,length-1).Equals(lword+1)){
     nsMemory::Free(lword);
     return InitCap;
@@ -267,21 +234,21 @@ mozEnglishWordUtils::captype(const nsString &word)
 
 // Convert the list of words in iwords to the same capitalization aWord and 
 // return them in owords.
-NS_IMETHODIMP mozEnglishWordUtils::FromRootForm(const PRUnichar *aWord, const PRUnichar **iwords, PRUint32 icount, PRUnichar ***owords, PRUint32 *ocount)
+NS_IMETHODIMP mozEnglishWordUtils::FromRootForm(const PRUnichar *aWord, const PRUnichar **iwords, uint32_t icount, PRUnichar ***owords, uint32_t *ocount)
 {
   nsAutoString word(aWord);
   nsresult rv = NS_OK;
 
-  PRInt32 length;
+  int32_t length;
   PRUnichar **tmpPtr  = (PRUnichar **)nsMemory::Alloc(sizeof(PRUnichar *)*icount);
   if (!tmpPtr)
     return NS_ERROR_OUT_OF_MEMORY;
 
   mozEnglishWordUtils::myspCapitalization ct = captype(word);
-  for(PRUint32 i = 0; i < icount; ++i) {
-    length = nsCRT::strlen(iwords[i]);
+  for(uint32_t i = 0; i < icount; ++i) {
+    length = NS_strlen(iwords[i]);
     tmpPtr[i] = (PRUnichar *) nsMemory::Alloc(sizeof(PRUnichar) * (length + 1));
-    if (NS_UNLIKELY(!tmpPtr[i])) {
+    if (MOZ_UNLIKELY(!tmpPtr[i])) {
       NS_FREE_XPCOM_ALLOCATED_POINTER_ARRAY(i, tmpPtr);
       return NS_ERROR_OUT_OF_MEMORY;
     }

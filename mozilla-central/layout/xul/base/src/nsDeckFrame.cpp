@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 //
 // Eric Vaughan
@@ -56,7 +24,7 @@
 #include "nsBoxLayoutState.h"
 #include "nsStackLayout.h"
 #include "nsDisplayList.h"
-#include "nsHTMLContainerFrame.h"
+#include "nsContainerFrame.h"
 
 nsIFrame*
 NS_NewDeckFrame(nsIPresShell* aPresShell, nsStyleContext* aContext)
@@ -66,11 +34,15 @@ NS_NewDeckFrame(nsIPresShell* aPresShell, nsStyleContext* aContext)
 
 NS_IMPL_FRAMEARENA_HELPERS(nsDeckFrame)
 
+NS_QUERYFRAME_HEAD(nsDeckFrame)
+  NS_QUERYFRAME_ENTRY(nsDeckFrame)
+NS_QUERYFRAME_TAIL_INHERITING(nsBoxFrame)
+
 
 nsDeckFrame::nsDeckFrame(nsIPresShell* aPresShell, nsStyleContext* aContext)
   : nsBoxFrame(aPresShell, aContext), mIndex(0)
 {
-  nsCOMPtr<nsIBoxLayout> layout;
+  nsCOMPtr<nsBoxLayout> layout;
   NS_NewStackLayout(aPresShell, layout);
   SetLayoutManager(layout);
 }
@@ -82,9 +54,9 @@ nsDeckFrame::GetType() const
 }
 
 NS_IMETHODIMP
-nsDeckFrame::AttributeChanged(PRInt32         aNameSpaceID,
+nsDeckFrame::AttributeChanged(int32_t         aNameSpaceID,
                               nsIAtom*        aAttribute,
-                              PRInt32         aModType)
+                              int32_t         aModType)
 {
   nsresult rv = nsBoxFrame::AttributeChanged(aNameSpaceID, aAttribute,
                                              aModType);
@@ -92,7 +64,7 @@ nsDeckFrame::AttributeChanged(PRInt32         aNameSpaceID,
 
    // if the index changed hide the old element and make the new element visible
   if (aAttribute == nsGkAtoms::selectedIndex) {
-    IndexChanged(PresContext());
+    IndexChanged();
   }
 
   return rv;
@@ -110,100 +82,42 @@ nsDeckFrame::Init(nsIContent*     aContent,
   return rv;
 }
 
-static void
-CreateViewsForFrames(const nsFrameList& aFrames)
+void
+nsDeckFrame::HideBox(nsIFrame* aBox)
 {
-  for (nsFrameList::Enumerator f(aFrames); !f.AtEnd(); f.Next()) {
-    nsHTMLContainerFrame::CreateViewForFrame(f.get(), PR_TRUE);
-  }
-}
-
-NS_IMETHODIMP
-nsDeckFrame::SetInitialChildList(nsIAtom*        aListName,
-                                 nsFrameList&    aChildList)
-{
-  CreateViewsForFrames(aChildList);
-  return nsBoxFrame::SetInitialChildList(aListName, aChildList);
-}
-
-NS_IMETHODIMP
-nsDeckFrame::AppendFrames(nsIAtom*        aListName,
-                          nsFrameList&    aFrameList)
-{
-  CreateViewsForFrames(aFrameList);
-  return nsBoxFrame::AppendFrames(aListName, aFrameList);
-}
-
-NS_IMETHODIMP
-nsDeckFrame::InsertFrames(nsIAtom*        aListName,
-                          nsIFrame*       aPrevFrame,
-                          nsFrameList&    aFrameList)
-{
-  CreateViewsForFrames(aFrameList);
-  return nsBoxFrame::InsertFrames(aListName, aPrevFrame, aFrameList);
+  nsIPresShell::ClearMouseCapture(aBox);
 }
 
 void
-nsDeckFrame::HideBox(nsPresContext* aPresContext, nsIBox* aBox)
-{
-  nsIView* view = aBox->GetView();
-
-  if (view) {
-    nsIViewManager* viewManager = view->GetViewManager();
-    viewManager->SetViewVisibility(view, nsViewVisibility_kHide);
-    viewManager->ResizeView(view, nsRect(0, 0, 0, 0));
-  }
-}
-
-void
-nsDeckFrame::ShowBox(nsPresContext* aPresContext, nsIBox* aBox)
-{
-  nsRect rect = aBox->GetRect();
-  nsIView* view = aBox->GetView();
-  if (view) {
-    nsIViewManager* viewManager = view->GetViewManager();
-    rect.x = rect.y = 0;
-    viewManager->ResizeView(view, rect);
-    viewManager->SetViewVisibility(view, nsViewVisibility_kShow);
-  }
-}
-
-void
-nsDeckFrame::IndexChanged(nsPresContext* aPresContext)
+nsDeckFrame::IndexChanged()
 {
   //did the index change?
-  PRInt32 index = GetSelectedIndex();
+  int32_t index = GetSelectedIndex();
   if (index == mIndex)
     return;
 
   // redraw
-  nsBoxLayoutState state(aPresContext);
-  Redraw(state);
+  InvalidateFrame();
 
   // hide the currently showing box
-  nsIBox* currentBox = GetSelectedBox();
+  nsIFrame* currentBox = GetSelectedBox();
   if (currentBox) // only hide if it exists
-     HideBox(aPresContext, currentBox);
+    HideBox(currentBox);
 
   mIndex = index;
-
-  // show the new box
-  nsIBox* newBox = GetSelectedBox();
-  if (newBox) // only show if it exists
-     ShowBox(aPresContext, newBox);
 }
 
-PRInt32
+int32_t
 nsDeckFrame::GetSelectedIndex()
 {
   // default index is 0
-  PRInt32 index = 0;
+  int32_t index = 0;
 
   // get the index attribute
   nsAutoString value;
   if (mContent->GetAttr(kNameSpaceID_None, nsGkAtoms::selectedIndex, value))
   {
-    PRInt32 error;
+    nsresult error;
 
     // convert it to an integer
     index = value.ToInteger(&error);
@@ -212,10 +126,10 @@ nsDeckFrame::GetSelectedIndex()
   return index;
 }
 
-nsIBox* 
+nsIFrame* 
 nsDeckFrame::GetSelectedBox()
 {
-  return (mIndex >= 0) ? mFrames.FrameAt(mIndex) : nsnull; 
+  return (mIndex >= 0) ? mFrames.FrameAt(mIndex) : nullptr; 
 }
 
 NS_IMETHODIMP
@@ -238,7 +152,7 @@ nsDeckFrame::BuildDisplayListForChildren(nsDisplayListBuilder*   aBuilder,
                                          const nsDisplayListSet& aLists)
 {
   // only paint the selected box
-  nsIBox* box = GetSelectedBox();
+  nsIFrame* box = GetSelectedBox();
   if (!box)
     return NS_OK;
 
@@ -253,23 +167,21 @@ nsDeckFrame::DoLayout(nsBoxLayoutState& aState)
 {
   // Make sure we tweak the state so it does not resize our children.
   // We will do that.
-  PRUint32 oldFlags = aState.LayoutFlags();
+  uint32_t oldFlags = aState.LayoutFlags();
   aState.SetLayoutFlags(NS_FRAME_NO_SIZE_VIEW | NS_FRAME_NO_VISIBILITY);
 
   // do a normal layout
   nsresult rv = nsBoxFrame::DoLayout(aState);
 
   // run though each child. Hide all but the selected one
-  nsIBox* box = GetChildBox();
+  nsIFrame* box = GetChildBox();
 
   nscoord count = 0;
   while (box) 
   {
     // make collapsed children not show up
-    if (count == mIndex) 
-      ShowBox(aState.PresContext(), box);
-    else
-      HideBox(aState.PresContext(), box);
+    if (count != mIndex) 
+      HideBox(box);
 
     box = box->GetNextBox();
     count++;

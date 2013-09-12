@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Url Classifier code
- *
- * The Initial Developer of the Original Code is
- * Google Inc.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include <stdio.h>
 #include <ctype.h>
@@ -46,7 +14,7 @@
 static int gTotalTests = 0;
 static int gPassedTests = 0;
 
-static char int_to_hex_digit(PRInt32 i) {
+static char int_to_hex_digit(int32_t i) {
   NS_ASSERTION((i >= 0) && (i <= 15), "int too big in int_to_hex_digit");
   return static_cast<char>(((i < 10) ? (i + '0') : ((i - 10) + 'A')));
 }
@@ -78,7 +46,7 @@ void TestUnescape()
 
   // Test docoding of all characters.
   nsCString allCharsEncoded, allCharsEncodedLowercase, allCharsAsString;
-  for (PRInt32 i = 1; i < 256; ++i) {
+  for (int32_t i = 1; i < 256; ++i) {
     allCharsEncoded.Append('%');
     allCharsEncoded.Append(int_to_hex_digit(i / 16));
     allCharsEncoded.Append((int_to_hex_digit(i % 16)));
@@ -120,7 +88,7 @@ void TestEncodeHelper(const char* in, const char* expected)
   nsCString out, strIn(in), strExp(expected);
   nsUrlClassifierUtils utils;
 
-  utils.SpecialEncode(strIn, PR_TRUE, out);
+  utils.SpecialEncode(strIn, true, out);
   CheckEquals(strExp, out);
 }
 
@@ -131,19 +99,19 @@ void TestEnc()
 
   // Test that all characters we shouldn't encode ([33-36],[38,126]) are not.
   nsCString noenc;
-  for (PRInt32 i = 33; i < 127; i++) {
+  for (int32_t i = 33; i < 127; i++) {
     if (i != 37) {                      // skip %
       noenc.Append(static_cast<char>(i));
     }
   }
   nsUrlClassifierUtils utils;
   nsCString out;
-  utils.SpecialEncode(noenc, PR_FALSE, out);
+  utils.SpecialEncode(noenc, false, out);
   CheckEquals(noenc, out);
 
   // Test that all the chars that we should encode [0,32],37,[127,255] are
   nsCString yesAsString, yesExpectedString;
-  for (PRInt32 i = 1; i < 256; i++) {
+  for (int32_t i = 1; i < 256; i++) {
     if (i < 33 || i == 37 || i > 126) {
       yesAsString.Append(static_cast<char>(i));
       yesExpectedString.Append('%');
@@ -153,7 +121,7 @@ void TestEnc()
   }
   
   out.Truncate();
-  utils.SpecialEncode(yesAsString, PR_FALSE, out);
+  utils.SpecialEncode(yesAsString, false, out);
   CheckEquals(yesExpectedString, out);
 
   TestEncodeHelper("blah//blah", "blah/blah");
@@ -221,7 +189,7 @@ void TestParseIPAddress()
   TestParseIPAddressHelper("1.2.3.4", "1.2.3.4");
 }
 
-void TestCanonicalNumHelper(const char *in, PRUint32 bytes,
+void TestCanonicalNumHelper(const char *in, uint32_t bytes,
                             bool allowOctal, const char *expected)
 {
   nsCString out, strIn(in), strExp(expected);
@@ -294,7 +262,7 @@ void TestLongHostname()
   nsUrlClassifierUtils utils;
   utils.Init();
 
-  nsCAutoString out;
+  nsAutoCString out;
   nsDependentCString in(str);
   PRIntervalTime clockStart = PR_IntervalNow();
   utils.CanonicalizeHostname(in, out);

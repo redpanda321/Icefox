@@ -1,41 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Stephen Henson <stephen.henson@gemplus.com>
- *   Dr Vipul Gupta <vipul.gupta@sun.com>, and
- *   Douglas Stebila <douglas@stebila.ca>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * This file contains functions to manage asymetric keys, (public and
  * private keys).
@@ -57,7 +22,7 @@
 #include "sechash.h"
 
 #include "secpkcs5.h"  
-#include "ec.h"
+#include "blapit.h"
 
 static SECItem *
 pk11_MakeIDFromPublicKey(SECKEYPublicKey *pubKey)
@@ -223,6 +188,9 @@ PK11_ImportPublicKey(PK11SlotInfo *slot, SECKEYPublicKey *pubKey,
 	    }
 	    break;
 	default:
+	    if (ckaId) {
+		SECITEM_FreeItem(ckaId,PR_TRUE);
+	    }
 	    PORT_SetError( SEC_ERROR_BAD_KEY );
 	    return CK_INVALID_HANDLE;
 	}
@@ -272,7 +240,7 @@ pk11_Attr2SecItem(PRArenaPool *arena, const CK_ATTRIBUTE *attr, SECItem *item)
 /*
  * get a curve length from a set of ecParams.
  * 
- * We need this so we can reliably determine if a the ecPoint passed to us
+ * We need this so we can reliably determine if the ecPoint passed to us
  * was encoded or not. With out this, for many curves, we would incorrectly
  * identify an unencoded curve as an encoded curve 1 in 65536 times, and for
  * a few we would make that same mistake 1 in 32768 times. These are bad 
@@ -465,7 +433,7 @@ pk11_get_Decoded_ECPoint(PRArenaPool *arena, const SECItem *ecParams,
 	 * form that's correct, with a preference for the encoded form if we
 	 * can't determine for sure. We do this by checking the key we got
 	 * back from SEC_QuickDERDecodeItem for defects. If no defects are
-	 * found, we assume the encoded paramter was was passed to us.
+	 * found, we assume the encoded parameter was was passed to us.
 	 * our defect tests include:
 	 *   1) it didn't decode.
 	 *   2) The decode key had an invalid length (must be odd).
@@ -772,7 +740,7 @@ PK11_MakePrivKey(PK11SlotInfo *slot, KeyType keyType,
 	CK_KEY_TYPE pk11Type = CKK_RSA;
 
 	pk11Type = PK11_ReadULongAttribute(slot,privID,CKA_KEY_TYPE);
-	isTemp = (PRBool)!PK11_HasAttributeSet(slot,privID,CKA_TOKEN);
+	isTemp = (PRBool)!PK11_HasAttributeSet(slot,privID,CKA_TOKEN,PR_FALSE);
 	switch (pk11Type) {
 	case CKK_RSA: keyType = rsaKey; break;
 	case CKK_DSA: keyType = dsaKey; break;
@@ -786,7 +754,7 @@ PK11_MakePrivKey(PK11SlotInfo *slot, KeyType keyType,
 
     /* if the key is private, make sure we are authenticated to the
      * token before we try to use it */
-    isPrivate = (PRBool)PK11_HasAttributeSet(slot,privID,CKA_PRIVATE);
+    isPrivate = (PRBool)PK11_HasAttributeSet(slot,privID,CKA_PRIVATE,PR_FALSE);
     if (isPrivate) {
 	rv = PK11_Authenticate(slot, PR_TRUE, wincx);
  	if (rv != SECSuccess) {
@@ -1464,7 +1432,7 @@ PK11_GenerateKeyPairWithOpFlags(PK11SlotInfo *slot,CK_MECHANISM_TYPE type,
 
     /* set the ID to the public key so we can find it again */
     cka_id = pk11_MakeIDFromPublicKey(*pubKey);
-    pubIsToken = (PRBool)PK11_HasAttributeSet(slot,pubID, CKA_TOKEN);
+    pubIsToken = (PRBool)PK11_HasAttributeSet(slot,pubID, CKA_TOKEN,PR_FALSE);
 
     PK11_SETATTRS(&setTemplate, CKA_ID, cka_id->data, cka_id->len);
 
@@ -1571,12 +1539,35 @@ PK11_MakeKEAPubKey(unsigned char *keyData,int length)
     return pubk;
 }
 
+/*
+ * NOTE: This function doesn't return a SECKEYPrivateKey struct to represent
+ * the new private key object.  If it were to create a session object that
+ * could later be looked up by its nickname, it would leak a SECKEYPrivateKey.
+ * So isPerm must be true.
+ */
 SECStatus 
 PK11_ImportEncryptedPrivateKeyInfo(PK11SlotInfo *slot,
 			SECKEYEncryptedPrivateKeyInfo *epki, SECItem *pwitem,
 			SECItem *nickname, SECItem *publicValue, PRBool isPerm,
 			PRBool isPrivate, KeyType keyType, 
 			unsigned int keyUsage, void *wincx)
+{
+    if (!isPerm) {
+	PORT_SetError(SEC_ERROR_INVALID_ARGS);
+	return SECFailure;
+    }
+    return PK11_ImportEncryptedPrivateKeyInfoAndReturnKey(slot, epki,
+		pwitem, nickname, publicValue, isPerm, isPrivate, keyType,
+		keyUsage, NULL, wincx);
+}
+
+SECStatus
+PK11_ImportEncryptedPrivateKeyInfoAndReturnKey(PK11SlotInfo *slot,
+			SECKEYEncryptedPrivateKeyInfo *epki, SECItem *pwitem,
+			SECItem *nickname, SECItem *publicValue, PRBool isPerm,
+			PRBool isPrivate, KeyType keyType,
+			unsigned int keyUsage, SECKEYPrivateKey **privk,
+			void *wincx)
 {
     CK_MECHANISM_TYPE pbeMechType;
     SECItem *crypto_param = NULL;
@@ -1673,7 +1664,11 @@ try_faulty_3des:
 				 nickname, publicValue, isPerm, isPrivate,
 				 key_type, usage, usageCount, wincx);
     if(privKey) {
-	SECKEY_DestroyPrivateKey(privKey);
+	if (privk) {
+	    *privk = privKey;
+	} else {
+	    SECKEY_DestroyPrivateKey(privKey);
+	}
 	privKey = NULL;
 	rv = SECSuccess;
 	goto done;

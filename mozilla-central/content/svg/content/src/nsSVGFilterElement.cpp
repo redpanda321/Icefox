@@ -1,55 +1,27 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SVG project.
- *
- * The Initial Developer of the Original Code is IBM Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "mozilla/Util.h"
 
 #include "nsGkAtoms.h"
 #include "nsCOMPtr.h"
 #include "nsSVGFilterElement.h"
 #include "nsSVGEffects.h"
 
+using namespace mozilla;
+
 nsSVGElement::LengthInfo nsSVGFilterElement::sLengthInfo[4] =
 {
-  { &nsGkAtoms::x, -10, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::X },
-  { &nsGkAtoms::y, -10, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::Y },
-  { &nsGkAtoms::width, 120, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::X },
-  { &nsGkAtoms::height, 120, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, nsSVGUtils::Y },
+  { &nsGkAtoms::x, -10, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::X },
+  { &nsGkAtoms::y, -10, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::Y },
+  { &nsGkAtoms::width, 120, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::X },
+  { &nsGkAtoms::height, 120, nsIDOMSVGLength::SVG_LENGTHTYPE_PERCENTAGE, SVGContentUtils::Y },
 };
 
-nsSVGElement::IntegerInfo nsSVGFilterElement::sIntegerInfo[2] =
+nsSVGElement::IntegerPairInfo nsSVGFilterElement::sIntegerPairInfo[1] =
 {
-  { &nsGkAtoms::filterRes, 0 },
   { &nsGkAtoms::filterRes, 0 }
 };
 
@@ -67,7 +39,7 @@ nsSVGElement::EnumInfo nsSVGFilterElement::sEnumInfo[2] =
 
 nsSVGElement::StringInfo nsSVGFilterElement::sStringInfo[1] =
 {
-  { &nsGkAtoms::href, kNameSpaceID_XLink }
+  { &nsGkAtoms::href, kNameSpaceID_XLink, true }
 };
 
 NS_IMPL_NS_NEW_SVG_ELEMENT(Filter)
@@ -81,8 +53,9 @@ NS_IMPL_RELEASE_INHERITED(nsSVGFilterElement,nsSVGFilterElementBase)
 DOMCI_NODE_DATA(SVGFilterElement, nsSVGFilterElement)
 
 NS_INTERFACE_TABLE_HEAD(nsSVGFilterElement)
-  NS_NODE_INTERFACE_TABLE5(nsSVGFilterElement, nsIDOMNode, nsIDOMElement,
-                           nsIDOMSVGElement, nsIDOMSVGFilterElement,
+  NS_NODE_INTERFACE_TABLE6(nsSVGFilterElement, nsIDOMNode, nsIDOMElement,
+                           nsIDOMSVGElement, nsIDOMSVGTests,
+                           nsIDOMSVGFilterElement,
                            nsIDOMSVGURIReference)
   NS_DOM_INTERFACE_MAP_ENTRY_CLASSINFO(SVGFilterElement)
 NS_INTERFACE_MAP_END_INHERITING(nsSVGFilterElementBase)
@@ -144,22 +117,25 @@ NS_IMETHODIMP nsSVGFilterElement::GetPrimitiveUnits(nsIDOMSVGAnimatedEnumeration
 /* readonly attribute nsIDOMSVGAnimatedEnumeration filterResY; */
 NS_IMETHODIMP nsSVGFilterElement::GetFilterResX(nsIDOMSVGAnimatedInteger * *aFilterResX)
 {
-  return mIntegerAttributes[FILTERRES_X].ToDOMAnimatedInteger(aFilterResX, this);
+  return mIntegerPairAttributes[FILTERRES].ToDOMAnimatedInteger(aFilterResX,
+                                                                nsSVGIntegerPair::eFirst,
+                                                                this);
 }
 
 /* readonly attribute nsIDOMSVGAnimatedEnumeration filterResY; */
 NS_IMETHODIMP nsSVGFilterElement::GetFilterResY(nsIDOMSVGAnimatedInteger * *aFilterResY)
 {
-  return mIntegerAttributes[FILTERRES_Y].ToDOMAnimatedInteger(aFilterResY, this);
+  return mIntegerPairAttributes[FILTERRES].ToDOMAnimatedInteger(aFilterResY,
+                                                                nsSVGIntegerPair::eSecond,
+                                                                this);
 }
 
 /* void setFilterRes (in unsigned long filterResX, in unsigned long filterResY);
  */
 NS_IMETHODIMP
-nsSVGFilterElement::SetFilterRes(PRUint32 filterResX, PRUint32 filterResY)
+nsSVGFilterElement::SetFilterRes(uint32_t filterResX, uint32_t filterResY)
 {
-  mIntegerAttributes[FILTERRES_X].SetBaseValue(filterResX, this, PR_FALSE);
-  mIntegerAttributes[FILTERRES_Y].SetBaseValue(filterResY, this, PR_FALSE);
+  mIntegerPairAttributes[FILTERRES].SetBaseValues(filterResX, filterResY, this);
   return NS_OK;
 }
 
@@ -176,7 +152,7 @@ nsSVGFilterElement::GetHref(nsIDOMSVGAnimatedString * *aHref)
 //----------------------------------------------------------------------
 // nsIContent methods
 
-NS_IMETHODIMP_(PRBool)
+NS_IMETHODIMP_(bool)
 nsSVGFilterElement::IsAttributeMapped(const nsIAtom* name) const
 {
   static const MappedAttributeEntry* const map[] = {
@@ -189,7 +165,7 @@ nsSVGFilterElement::IsAttributeMapped(const nsIAtom* name) const
     sTextContentElementsMap,
     sViewportsMap
   };
-  return FindAttributeDependence(name, map, NS_ARRAY_LENGTH(map)) ||
+  return FindAttributeDependence(name, map) ||
     nsSVGGraphicElementBase::IsAttributeMapped(name);
 }
 
@@ -212,50 +188,39 @@ nsSVGFilterElement::Invalidate()
 //----------------------------------------------------------------------
 // nsSVGElement methods
 
+/* virtual */ bool
+nsSVGFilterElement::HasValidDimensions() const
+{
+  return (!mLengthAttributes[WIDTH].IsExplicitlySet() ||
+           mLengthAttributes[WIDTH].GetAnimValInSpecifiedUnits() > 0) &&
+         (!mLengthAttributes[HEIGHT].IsExplicitlySet() || 
+           mLengthAttributes[HEIGHT].GetAnimValInSpecifiedUnits() > 0);
+}
+
 nsSVGElement::LengthAttributesInfo
 nsSVGFilterElement::GetLengthInfo()
 {
   return LengthAttributesInfo(mLengthAttributes, sLengthInfo,
-                              NS_ARRAY_LENGTH(sLengthInfo));
+                              ArrayLength(sLengthInfo));
 }
 
-nsSVGElement::IntegerAttributesInfo
-nsSVGFilterElement::GetIntegerInfo()
+nsSVGElement::IntegerPairAttributesInfo
+nsSVGFilterElement::GetIntegerPairInfo()
 {
-  return IntegerAttributesInfo(mIntegerAttributes, sIntegerInfo,
-                               NS_ARRAY_LENGTH(sIntegerInfo));
+  return IntegerPairAttributesInfo(mIntegerPairAttributes, sIntegerPairInfo,
+                                   ArrayLength(sIntegerPairInfo));
 }
 
 nsSVGElement::EnumAttributesInfo
 nsSVGFilterElement::GetEnumInfo()
 {
   return EnumAttributesInfo(mEnumAttributes, sEnumInfo,
-                            NS_ARRAY_LENGTH(sEnumInfo));
+                            ArrayLength(sEnumInfo));
 }
 
 nsSVGElement::StringAttributesInfo
 nsSVGFilterElement::GetStringInfo()
 {
   return StringAttributesInfo(mStringAttributes, sStringInfo,
-                              NS_ARRAY_LENGTH(sStringInfo));
-}
-
-void
-nsSVGFilterElement::DidAnimateLength(PRUint8 aAttrEnum)
-{
-  // nsSVGFilterFrame does not implement a useful AttributeChanged
-  nsIFrame* frame = GetPrimaryFrame();
-  if (frame) {
-    nsSVGEffects::InvalidateRenderingObservers(frame);
-  }
-}
-
-void
-nsSVGFilterElement::DidAnimateEnum(PRUint8 aAttrEnum)
-{
-  // nsSVGFilterFrame does not implement a useful AttributeChanged
-  nsIFrame* frame = GetPrimaryFrame();
-  if (frame) {
-    nsSVGEffects::InvalidateRenderingObservers(frame);
-  }
+                              ArrayLength(sStringInfo));
 }

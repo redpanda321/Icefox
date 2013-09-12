@@ -1,54 +1,21 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Red Hat, Inc.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Kai Engert <kengert@redhat.com>
- *   Ehsan Akhgari <ehsan.akhgari@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef __NSCERTOVERRIDESERVICE_H__
 #define __NSCERTOVERRIDESERVICE_H__
 
+#include "mozilla/ReentrantMonitor.h"
 #include "nsICertOverrideService.h"
 #include "nsTHashtable.h"
 #include "nsIObserver.h"
 #include "nsString.h"
 #include "nsIFile.h"
-#include "prmon.h"
 #include "secoidt.h"
 #include "nsWeakReference.h"
+#include "mozilla/Attributes.h"
 
 class nsCertOverride
 {
@@ -82,8 +49,8 @@ public:
   }
 
   nsCString mAsciiHost;
-  PRInt32 mPort;
-  PRBool mIsTemporary; // true: session only, false: stored on disk
+  int32_t mPort;
+  bool mIsTemporary; // true: session only, false: stored on disk
   nsCString mFingerprint;
   nsCString mFingerprintAlgOID;
   OverrideBits mOverrideBits;
@@ -96,7 +63,7 @@ public:
 
 
 // hash entry class
-class nsCertOverrideEntry : public PLDHashEntryHdr
+class nsCertOverrideEntry MOZ_FINAL : public PLDHashEntryHdr
 {
   public:
     // Hash methods
@@ -128,7 +95,7 @@ class nsCertOverrideEntry : public PLDHashEntryHdr
       return HostWithPortPtr();
     }
 
-    PRBool KeyEquals(KeyTypePointer aKey) const
+    bool KeyEquals(KeyTypePointer aKey) const
     {
       return !strcmp(HostWithPortPtr(), aKey);
     }
@@ -141,11 +108,11 @@ class nsCertOverrideEntry : public PLDHashEntryHdr
     static PLDHashNumber HashKey(KeyTypePointer aKey)
     {
       // PL_DHashStringKey doesn't use the table parameter, so we can safely
-      // pass nsnull
-      return PL_DHashStringKey(nsnull, aKey);
+      // pass nullptr
+      return PL_DHashStringKey(nullptr, aKey);
     }
 
-    enum { ALLOW_MEMMOVE = PR_FALSE };
+    enum { ALLOW_MEMMOVE = false };
 
     // get methods
     inline const nsCString &HostWithPort() const { return mHostWithPort; }
@@ -159,9 +126,9 @@ class nsCertOverrideEntry : public PLDHashEntryHdr
     nsCString mHostWithPort;
 };
 
-class nsCertOverrideService : public nsICertOverrideService
-                            , public nsIObserver
-                            , public nsSupportsWeakReference
+class nsCertOverrideService MOZ_FINAL : public nsICertOverrideService
+                                      , public nsIObserver
+                                      , public nsSupportsWeakReference
 {
 public:
   NS_DECL_ISUPPORTS
@@ -175,8 +142,8 @@ public:
   void RemoveAllTemporaryOverrides();
 
   typedef void 
-  (*PR_CALLBACK CertOverrideEnumerator)(const nsCertOverride &aSettings,
-                                        void *aUserData);
+  (*CertOverrideEnumerator)(const nsCertOverride &aSettings,
+                            void *aUserData);
 
   // aCert == null: return all overrides
   // aCert != null: return overrides that match the given cert
@@ -187,10 +154,10 @@ public:
     // Concates host name and the port number. If the port number is -1 then
     // port 443 is automatically used. This method ensures there is always a port
     // number separated with colon.
-    static void GetHostWithPort(const nsACString & aHostName, PRInt32 aPort, nsACString& _retval);
+    static void GetHostWithPort(const nsACString & aHostName, int32_t aPort, nsACString& _retval);
 
 protected:
-    PRMonitor *monitor;
+    mozilla::ReentrantMonitor monitor;
     nsCOMPtr<nsIFile> mSettingsFile;
     nsTHashtable<nsCertOverrideEntry> mSettingsTable;
 
@@ -200,9 +167,9 @@ protected:
     void RemoveAllFromMemory();
     nsresult Read();
     nsresult Write();
-    nsresult AddEntryToList(const nsACString &host, PRInt32 port,
+    nsresult AddEntryToList(const nsACString &host, int32_t port,
                             nsIX509Cert *aCert,
-                            const PRBool aIsTemporary,
+                            const bool aIsTemporary,
                             const nsACString &algo_oid, 
                             const nsACString &fingerprint,
                             nsCertOverride::OverrideBits ob,

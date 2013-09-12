@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsUnknownDecoder.h"
 #include "nsIServiceManager.h"
@@ -49,7 +17,6 @@
 #include "nsIPrefBranch.h"
 #include "nsICategoryManager.h"
 #include "nsISupportsPrimitives.h"
-#include "nsIContentSniffer.h"
 
 #include "nsCRT.h"
 
@@ -58,18 +25,19 @@
 #include "nsIViewSourceChannel.h"
 #include "nsIHttpChannel.h"
 #include "nsNetCID.h"
+#include "nsNetUtil.h"
 
 
 #define MAX_BUFFER_SIZE 512
 
 nsUnknownDecoder::nsUnknownDecoder()
-  : mBuffer(nsnull)
+  : mBuffer(nullptr)
   , mBufferLen(0)
-  , mRequireHTMLsuffix(PR_FALSE)
+  , mRequireHTMLsuffix(false)
 {
   nsCOMPtr<nsIPrefBranch> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
   if (prefs) {
-    PRBool val;
+    bool val;
     if (NS_SUCCEEDED(prefs->GetBoolPref("security.requireHTMLsuffix", &val)))
       mRequireHTMLsuffix = val;
   }
@@ -79,7 +47,7 @@ nsUnknownDecoder::~nsUnknownDecoder()
 {
   if (mBuffer) {
     delete [] mBuffer;
-    mBuffer = nsnull;
+    mBuffer = nullptr;
   }
 }
 
@@ -142,15 +110,15 @@ NS_IMETHODIMP
 nsUnknownDecoder::OnDataAvailable(nsIRequest* request, 
                                   nsISupports *aCtxt,
                                   nsIInputStream *aStream, 
-                                  PRUint32 aSourceOffset, 
-                                  PRUint32 aCount)
+                                  uint64_t aSourceOffset, 
+                                  uint32_t aCount)
 {
   nsresult rv = NS_OK;
 
   if (!mNextListener) return NS_ERROR_FAILURE;
 
   if (mContentType.IsEmpty()) {
-    PRUint32 count, len;
+    uint32_t count, len;
 
     // If the buffer has not been allocated by now, just fail...
     if (!mBuffer) return NS_ERROR_OUT_OF_MEMORY;
@@ -259,14 +227,14 @@ nsUnknownDecoder::OnStopRequest(nsIRequest* request, nsISupports *aCtxt,
 // ----
 NS_IMETHODIMP
 nsUnknownDecoder::GetMIMETypeFromContent(nsIRequest* aRequest,
-                                         const PRUint8* aData,
-                                         PRUint32 aLength,
+                                         const uint8_t* aData,
+                                         uint32_t aLength,
                                          nsACString& type)
 {
   mBuffer = const_cast<char*>(reinterpret_cast<const char*>(aData));
   mBufferLen = aLength;
   DetermineContentType(aRequest);
-  mBuffer = nsnull;
+  mBuffer = nullptr;
   mBufferLen = 0;
   type.Assign(mContentType);
   mContentType.Truncate();
@@ -276,29 +244,29 @@ nsUnknownDecoder::GetMIMETypeFromContent(nsIRequest* aRequest,
 
 // Actual sniffing code
 
-PRBool nsUnknownDecoder::AllowSniffing(nsIRequest* aRequest)
+bool nsUnknownDecoder::AllowSniffing(nsIRequest* aRequest)
 {
   if (!mRequireHTMLsuffix) {
-    return PR_TRUE;
+    return true;
   }
   
   nsCOMPtr<nsIChannel> channel = do_QueryInterface(aRequest);
   if (!channel) {
     NS_ERROR("QI failed");
-    return PR_FALSE;
+    return false;
   }
 
   nsCOMPtr<nsIURI> uri;
   if (NS_FAILED(channel->GetURI(getter_AddRefs(uri))) || !uri) {
-    return PR_FALSE;
+    return false;
   }
   
-  PRBool isLocalFile = PR_FALSE;
+  bool isLocalFile = false;
   if (NS_FAILED(uri->SchemeIs("file", &isLocalFile)) || isLocalFile) {
-    return PR_FALSE;
+    return false;
   }
 
-  return PR_TRUE;
+  return true;
 }
 
 /**
@@ -306,8 +274,8 @@ PRBool nsUnknownDecoder::AllowSniffing(nsIRequest* aRequest)
  * in the file.  Each entry has either a type associated with it (set
  * these with the SNIFFER_ENTRY macro) or a function to be executed
  * (set these with the SNIFFER_ENTRY_WITH_FUNC macro).  The function
- * should take a single nsIRequest* and returns PRBool -- PR_TRUE if
- * it sets mContentType, PR_FALSE otherwise
+ * should take a single nsIRequest* and returns bool -- true if
+ * it sets mContentType, false otherwise
  */
 nsUnknownDecoder::nsSnifferEntry nsUnknownDecoder::sSnifferEntries[] = {
   SNIFFER_ENTRY("%PDF-", APPLICATION_PDF),
@@ -330,7 +298,7 @@ nsUnknownDecoder::nsSnifferEntry nsUnknownDecoder::sSnifferEntries[] = {
   SNIFFER_ENTRY_WITH_FUNC("<?xml", &nsUnknownDecoder::SniffForXML)
 };
 
-PRUint32 nsUnknownDecoder::sSnifferEntryNum =
+uint32_t nsUnknownDecoder::sSnifferEntryNum =
   sizeof(nsUnknownDecoder::sSnifferEntries) /
     sizeof(nsUnknownDecoder::nsSnifferEntry);
 
@@ -341,15 +309,15 @@ void nsUnknownDecoder::DetermineContentType(nsIRequest* aRequest)
 
   // First, run through all the types we can detect reliably based on
   // magic numbers
-  PRUint32 i;
+  uint32_t i;
   for (i = 0; i < sSnifferEntryNum; ++i) {
     if (mBufferLen >= sSnifferEntries[i].mByteLen &&  // enough data
         memcmp(mBuffer, sSnifferEntries[i].mBytes, sSnifferEntries[i].mByteLen) == 0) {  // and type matches
       NS_ASSERTION(sSnifferEntries[i].mMimeType ||
                    sSnifferEntries[i].mContentTypeSniffer,
                    "Must have either a type string or a function to set the type");
-      NS_ASSERTION(sSnifferEntries[i].mMimeType == nsnull ||
-                   sSnifferEntries[i].mContentTypeSniffer == nsnull,
+      NS_ASSERTION(!sSnifferEntries[i].mMimeType ||
+                   !sSnifferEntries[i].mContentTypeSniffer,
                    "Both a type string and a type sniffing function set;"
                    " using type string");
       if (sSnifferEntries[i].mMimeType) {
@@ -366,9 +334,9 @@ void nsUnknownDecoder::DetermineContentType(nsIRequest* aRequest)
     }
   }
 
-  if (TryContentSniffers(aRequest)) {
-    NS_ASSERTION(!mContentType.IsEmpty(), 
-                 "Content type should be known by now.");
+  NS_SniffContent(NS_DATA_SNIFFER_CATEGORY, aRequest,
+                  (const uint8_t*)mBuffer, mBufferLen, mContentType);
+  if (!mContentType.IsEmpty()) {
     return;
   }
 
@@ -391,50 +359,7 @@ void nsUnknownDecoder::DetermineContentType(nsIRequest* aRequest)
                "Content type should be known by now.");
 }
 
-PRBool nsUnknownDecoder::TryContentSniffers(nsIRequest* aRequest)
-{
-  // Enumerate content sniffers
-  nsCOMPtr<nsICategoryManager> catMan(do_GetService("@mozilla.org/categorymanager;1"));
-  if (!catMan) {
-    return PR_FALSE;
-  }
-
-  nsCOMPtr<nsISimpleEnumerator> sniffers;
-  catMan->EnumerateCategory("content-sniffing-services", getter_AddRefs(sniffers));
-  if (!sniffers) {
-    return PR_FALSE;
-  }
-
-  PRBool hasMore;
-  while (NS_SUCCEEDED(sniffers->HasMoreElements(&hasMore)) && hasMore) {
-    nsCOMPtr<nsISupports> elem;
-    sniffers->GetNext(getter_AddRefs(elem));
-    NS_ASSERTION(elem, "No element even though hasMore returned true!?");
-
-    nsCOMPtr<nsISupportsCString> sniffer_id(do_QueryInterface(elem));
-    NS_ASSERTION(sniffer_id, "element is no nsISupportsCString!?");
-    nsCAutoString contractid;
-    nsresult rv = sniffer_id->GetData(contractid);
-    if (NS_FAILED(rv)) {
-      continue;
-    }
-
-    nsCOMPtr<nsIContentSniffer> sniffer(do_GetService(contractid.get()));
-    if (!sniffer) {
-      continue;
-    }
-
-    rv = sniffer->GetMIMETypeFromContent(aRequest, (const PRUint8*)mBuffer,
-                                         mBufferLen, mContentType);
-    if (NS_SUCCEEDED(rv)) {
-      return PR_TRUE;
-    }
-  }
-
-  return PR_FALSE;
-}
-
-PRBool nsUnknownDecoder::SniffForHTML(nsIRequest* aRequest)
+bool nsUnknownDecoder::SniffForHTML(nsIRequest* aRequest)
 {
   /*
    * To prevent a possible attack, we will not consider this to be
@@ -442,7 +367,7 @@ PRBool nsUnknownDecoder::SniffForHTML(nsIRequest* aRequest)
    * are set right
    */
   if (!AllowSniffing(aRequest)) {
-    return PR_FALSE;
+    return false;
   }
   
   // Now look for HTML.
@@ -456,16 +381,16 @@ PRBool nsUnknownDecoder::SniffForHTML(nsIRequest* aRequest)
 
   // did we find something like a start tag?
   if (str == end || *str != '<' || ++str == end) {
-    return PR_FALSE;
+    return false;
   }
 
   // If we seem to be SGML or XML and we got down here, just pretend we're HTML
   if (*str == '!' || *str == '?') {
     mContentType = TEXT_HTML;
-    return PR_TRUE;
+    return true;
   }
   
-  PRUint32 bufSize = end - str;
+  uint32_t bufSize = end - str;
   // We use sizeof(_tagstr) below because that's the length of _tagstr
   // with the one char " " or ">" appended.
 #define MATCHES_TAG(_tagstr)                                              \
@@ -504,19 +429,19 @@ PRBool nsUnknownDecoder::SniffForHTML(nsIRequest* aRequest)
       MATCHES_TAG("pre")) {
   
     mContentType = TEXT_HTML;
-    return PR_TRUE;
+    return true;
   }
 
 #undef MATCHES_TAG
   
-  return PR_FALSE;
+  return false;
 }
 
-PRBool nsUnknownDecoder::SniffForXML(nsIRequest* aRequest)
+bool nsUnknownDecoder::SniffForXML(nsIRequest* aRequest)
 {
   // Just like HTML, this should be able to be shut off.
   if (!AllowSniffing(aRequest)) {
-    return PR_FALSE;
+    return false;
   }
 
   // First see whether we can glean anything from the uri...
@@ -525,10 +450,10 @@ PRBool nsUnknownDecoder::SniffForXML(nsIRequest* aRequest)
     mContentType = TEXT_XML;
   }
   
-  return PR_TRUE;
+  return true;
 }
 
-PRBool nsUnknownDecoder::SniffURI(nsIRequest* aRequest)
+bool nsUnknownDecoder::SniffURI(nsIRequest* aRequest)
 {
   nsCOMPtr<nsIMIMEService> mimeService(do_GetService("@mozilla.org/mime;1"));
   if (mimeService) {
@@ -537,17 +462,17 @@ PRBool nsUnknownDecoder::SniffURI(nsIRequest* aRequest)
       nsCOMPtr<nsIURI> uri;
       nsresult result = channel->GetURI(getter_AddRefs(uri));
       if (NS_SUCCEEDED(result) && uri) {
-        nsCAutoString type;
+        nsAutoCString type;
         result = mimeService->GetTypeFromURI(uri, type);
         if (NS_SUCCEEDED(result)) {
           mContentType = type;
-          return PR_TRUE;
+          return true;
         }
       }
     }
   }
 
-  return PR_FALSE;
+  return false;
 }
 
 // This macro is based on RFC 2046 Section 4.1.2.  Treat any char 0-31
@@ -556,7 +481,7 @@ PRBool nsUnknownDecoder::SniffURI(nsIRequest* aRequest)
 #define IS_TEXT_CHAR(ch)                                     \
   (((unsigned char)(ch)) > 31 || (9 <= (ch) && (ch) <= 13) || (ch) == 27)
 
-PRBool nsUnknownDecoder::LastDitchSniff(nsIRequest* aRequest)
+bool nsUnknownDecoder::LastDitchSniff(nsIRequest* aRequest)
 {
   // All we can do now is try to guess whether this is text/plain or
   // application/octet-stream
@@ -573,15 +498,17 @@ PRBool nsUnknownDecoder::LastDitchSniff(nsIRequest* aRequest)
         (buf[0] == 0 && buf[1] == 0 && buf[2] == 0xFE && buf[3] == 0xFF)) { // UCS-4, Big Endian
         
       mContentType = TEXT_PLAIN;
-      return PR_TRUE;
+      return true;
     }
   }
   
   // Now see whether the buffer has any non-text chars.  If not, then let's
   // just call it text/plain...
   //
-  PRUint32 i;
-  for (i=0; i<mBufferLen && IS_TEXT_CHAR(mBuffer[i]); i++);
+  uint32_t i;
+  for (i = 0; i < mBufferLen && IS_TEXT_CHAR(mBuffer[i]); i++) {
+    continue;
+  }
 
   if (i == mBufferLen) {
     mContentType = TEXT_PLAIN;
@@ -590,7 +517,7 @@ PRBool nsUnknownDecoder::LastDitchSniff(nsIRequest* aRequest)
     mContentType = APPLICATION_OCTET_STREAM;
   }
 
-  return PR_TRUE;    
+  return true;    
 }
 
 
@@ -638,7 +565,7 @@ nsresult nsUnknownDecoder::FireListenerNotifications(nsIRequest* request,
   // Fire the first OnDataAvailable for the data that was read from the
   // stream into the sniffer buffer...
   if (NS_SUCCEEDED(rv) && (mBufferLen > 0)) {
-    PRUint32 len = 0;
+    uint32_t len = 0;
     nsCOMPtr<nsIInputStream> in;
     nsCOMPtr<nsIOutputStream> out;
 
@@ -660,7 +587,7 @@ nsresult nsUnknownDecoder::FireListenerNotifications(nsIRequest* request,
   }
 
   delete [] mBuffer;
-  mBuffer = nsnull;
+  mBuffer = nullptr;
   mBufferLen = 0;
 
   return rv;
@@ -675,10 +602,10 @@ nsBinaryDetector::DetermineContentType(nsIRequest* aRequest)
   }
 
   // It's an HTTP channel.  Check for the text/plain mess
-  nsCAutoString contentTypeHdr;
+  nsAutoCString contentTypeHdr;
   httpChannel->GetResponseHeader(NS_LITERAL_CSTRING("Content-Type"),
                                  contentTypeHdr);
-  nsCAutoString contentType;
+  nsAutoCString contentType;
   httpChannel->GetContentType(contentType);
 
   // Make sure to do a case-sensitive exact match comparison here.  Apache
@@ -700,7 +627,7 @@ nsBinaryDetector::DetermineContentType(nsIRequest* aRequest)
   // detect the type.
   // XXXbz we could improve this by doing a local decompress if we
   // wanted, I'm sure.  
-  nsCAutoString contentEncoding;
+  nsAutoCString contentEncoding;
   httpChannel->GetResponseHeader(NS_LITERAL_CSTRING("Content-Encoding"),
                                  contentEncoding);
   if (!contentEncoding.IsEmpty()) {

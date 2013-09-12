@@ -2,7 +2,6 @@
 <html>
 <head>
   <title>Test for Form History Autocomplete</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
   <script type="text/javascript" src="satchel_common.js"></script>
@@ -13,7 +12,7 @@ Form History test: form field autocomplete
 <p id="display"></p>
 
 <!-- we presumably can't hide the content for this test. -->
-<div id="content">
+<div id="content" style="direction: rtl;">
   <!-- unused -->
   <form id="unused" onsubmit="return false;">
     <input  type="text" name="field1" value="unused">
@@ -30,15 +29,15 @@ Form History test: form field autocomplete
 <script class="testbody" type="text/javascript">
 
 /** Test for Form History autocomplete **/
-netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
 
 var autocompletePopup = getAutocompletePopup();
+autocompletePopup.style.direction = "ltr";
 
 var input = $_(1, "field1");
 
 // Get the form history service
-var fh = Components.classes["@mozilla.org/satchel/form-history;1"].
-         getService(Components.interfaces.nsIFormHistory2);
+var fh = SpecialPowers.Cc["@mozilla.org/satchel/form-history;1"].
+         getService(SpecialPowers.Ci.nsIFormHistory2);
 ok(fh != null, "got form history service");
 
 fh.removeAllEntries();
@@ -75,7 +74,7 @@ function checkPopupOpen(isOpen, expectedIndex) {
         autocompletePopup.selectedIndex = expectedIndex;
 }
 
-function doKeyUnprivledged(key) {
+function doKeyUnprivileged(key) {
     var keyName = "DOM_VK_" + key.toUpperCase();
     var keycode, charcode, alwaysVal;
 
@@ -104,7 +103,7 @@ function doKeyUnprivledged(key) {
     input.dispatchEvent(upEvent);
 }
 
-function doClickUnprivledged() {
+function doClickUnprivileged() {
     var dnEvent = document.createEvent('MouseEvent');
     var upEvent = document.createEvent('MouseEvent');
     var ckEvent = document.createEvent('MouseEvent');
@@ -126,15 +125,8 @@ function doClickUnprivledged() {
  * setTimeout() calls. The case statements are executed in order, one per
  * timeout.
  */
-var nextTestPrivledged = true;
 function runTest(testNum) {
   ok(true, "Starting test #" + testNum);
-
-  if (nextTestPrivledged) {
-      ok(true, "This test is privledged.");
-      netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
-      nextTestPrivledged = false;
-  }
 
   switch(testNum) {
     //
@@ -152,7 +144,6 @@ function runTest(testNum) {
     // try a focus()
     case 2:
         input.focus();
-        nextTestPrivledged = true;
         break;
     case 3:
         checkPopupOpen(false);
@@ -161,7 +152,6 @@ function runTest(testNum) {
     // try a click()
     case 4:
         input.click();
-        nextTestPrivledged = true;
         break;
     case 5:
         checkPopupOpen(false);
@@ -169,8 +159,7 @@ function runTest(testNum) {
         break;
     // try a mouseclick event
     case 6:
-        doClickUnprivledged();
-        nextTestPrivledged = true;
+        doClickUnprivileged();
         break;
     case 7:
         checkPopupOpen(false);
@@ -178,8 +167,7 @@ function runTest(testNum) {
         break;
     // try a down-arrow
     case 8:
-        doKeyUnprivledged("down");
-        nextTestPrivledged = true;
+        doKeyUnprivileged("down");
         break;
     case 9:
         checkPopupOpen(false);
@@ -187,8 +175,7 @@ function runTest(testNum) {
         break;
     // try a page-down
     case 10:
-        doKeyUnprivledged("page_down");
-        nextTestPrivledged = true;
+        doKeyUnprivileged("page_down");
         break;
     case 11:
         checkPopupOpen(false);
@@ -197,8 +184,7 @@ function runTest(testNum) {
     // try a return
     case 12:
 // XXX this causes later tests to fail for some reason.
-//        doKeyUnprivledged("return"); // not "enter"!
-        nextTestPrivledged = true;
+//        doKeyUnprivileged("return"); // not "enter"!
         break;
     case 13:
         checkPopupOpen(false);
@@ -206,48 +192,37 @@ function runTest(testNum) {
         break;
     // try a keypress
     case 14:
-        doKeyUnprivledged('v');
-        nextTestPrivledged = true;
+        doKeyUnprivileged('v');
         break;
     case 15:
-        // XXX even with patch the popup is still opened.
-        // the keypress triggers a form input oninput / onchange
-        todo(false, "popup should be closed");
-        checkPopupOpen(true, -1);
-        checkForm("v");
+        checkPopupOpen(false);
+        checkForm("");
         break;
     // try a space
     case 16:
-        doKeyUnprivledged(" ");
-        nextTestPrivledged = true;
+        doKeyUnprivileged(" ");
         break;
     case 17:
-        todo(false, "popup should be closed");
-        checkPopupOpen(true, -1);
-        checkForm("v ");
+        checkPopupOpen(false);
+        checkForm("");
         break;
     // backspace
     case 18:
-        doKeyUnprivledged("back_space");
-        nextTestPrivledged = true;
+        doKeyUnprivileged("back_space");
         break;
     case 19:
-        todo(false, "popup should be closed");
-        checkPopupOpen(true, -1);
-        checkForm("v");
-        nextTestPrivledged = true;
+        checkPopupOpen(false);
+        checkForm("");
         break;
     case 20:
-        // We're privledged for this test, so open the popup.
-        todo(false, "popup should be closed");
-        checkPopupOpen(true, -1);
-        checkForm("v");
-//        doKey("down");
-        nextTestPrivledged = true;
+        // We're privileged for this test, so open the popup.
+        checkPopupOpen(false);
+        checkForm("");
+        doKey("down");
         break;
     case 21:
         checkPopupOpen(true, -1);
-        checkForm("v");
+        checkForm("");
         testNum = 99;
         break;
 
@@ -257,58 +232,52 @@ function runTest(testNum) {
 
     // try a down-arrow
     case 100:
-        doKeyUnprivledged("down");
-        nextTestPrivledged = true;
+        doKeyUnprivileged("down");
         break;
     case 101:
         checkPopupOpen(true, -1);
-        checkForm("v");
+        checkForm("");
         break;
     // try a page-down
     case 102:
-        doKeyUnprivledged("page_down");
-        nextTestPrivledged = true;
+        doKeyUnprivileged("page_down");
         break;
     case 103:
         checkPopupOpen(true, -1);
-        checkForm("v");
-        nextTestPrivledged = true;
+        checkForm("");
         break;
     // really adjust the index
     case 104:
+        // (We're privileged for this test.) Try a privileged down-arrow.
         doKey("down");
-        nextTestPrivledged = true;
         break;
     case 105:
         checkPopupOpen(true, 0);
-        checkForm("v");
+        checkForm("");
         break;
     // try a down-arrow
     case 106:
-        doKeyUnprivledged("down");
-        nextTestPrivledged = true;
+        doKeyUnprivileged("down");
         break;
     case 107:
         checkPopupOpen(true, 0);
-        checkForm("v");
+        checkForm("");
         break;
     // try a page-down
     case 108:
-        doKeyUnprivledged("page_down");
-        nextTestPrivledged = true;
+        doKeyUnprivileged("page_down");
         break;
     case 109:
         checkPopupOpen(true, 0);
-        checkForm("v");
+        checkForm("");
     // try a keypress
     case 110:
         // XXX this causes the popup to close, and makes the value "vaa" (sic)
-        //doKeyUnprivledged('a');
-        nextTestPrivledged = true;
+        //doKeyUnprivileged('a');
         break;
     case 111:
         checkPopupOpen(true, 0);
-        checkForm("v");
+        checkForm("");
         testNum = 199;
         break;
 
@@ -317,62 +286,55 @@ function runTest(testNum) {
     //
     // try a right-arrow
     case 200:
-        doKeyUnprivledged("right");
-        nextTestPrivledged = true;
+        doKeyUnprivileged("right");
         break;
     case 201:
         checkPopupOpen(true, 0);
-        checkForm("v");
+        checkForm("");
         break;
     // try a space
     case 202:
-        doKeyUnprivledged(" ");
-        nextTestPrivledged = true;
+        doKeyUnprivileged(" ");
         break;
     case 203:
         // XXX we should ignore this input while popup is open?
-        checkPopupOpen(true, -1);
-        checkForm("v ");
+        checkPopupOpen(true, 0);
+        checkForm("");
         break;
     // backspace
     case 204:
-        doKeyUnprivledged("back_space");
-        nextTestPrivledged = true;
+        doKeyUnprivileged("back_space");
         break;
     case 205:
         // XXX we should ignore this input while popup is open?
-        checkPopupOpen(true, -1);
-        checkForm("v");
-        nextTestPrivledged = true;
+        checkPopupOpen(true, 0);
+        checkForm("");
         break;
-    // Oops, reselect 1st entry
     case 206:
-        doKey("down");
-        nextTestPrivledged = true;
+        // (this space intentionally left blank)
         break;
     case 207:
         checkPopupOpen(true, 0);
-        checkForm("v");
+        checkForm("");
         break;
     // try a return
     case 208:
 // XXX this seems to cause problems with reliably closing the popup
-//        doKeyUnprivledged("return"); // not "enter"!
-        nextTestPrivledged = true;
+//        doKeyUnprivileged("return"); // not "enter"!
         break;
     case 209:
         checkPopupOpen(true, 0);
-        checkForm("v");
+        checkForm("");
         break;
     // Send a real Escape to ensure popup closed at end of test.
     case 210:
+        // Need to use doKey(), even though this test is not privileged.
         doKey("escape");
-        nextTestPrivledged = true;
         break;
     case 211:
         checkPopupOpen(false);
-        checkForm("v");
-
+        checkForm("");
+        is(autocompletePopup.style.direction, "rtl", "direction should have been changed from ltr to rtl");
 
         SimpleTest.finish();
         return;

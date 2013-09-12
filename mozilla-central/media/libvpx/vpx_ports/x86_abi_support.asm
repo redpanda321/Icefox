@@ -1,10 +1,10 @@
 ;
-;  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+;  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
 ;
-;  Use of this source code is governed by a BSD-style license 
+;  Use of this source code is governed by a BSD-style license
 ;  that can be found in the LICENSE file in the root of the source
 ;  tree. An additional intellectual property rights grant can be found
-;  in the file PATENTS.  All contributing project authors may 
+;  in the file PATENTS.  All contributing project authors may
 ;  be found in the AUTHORS file in the root of the source tree.
 ;
 
@@ -36,6 +36,43 @@
 %define rsp esp
 %define rbp ebp
 %define movsxd mov
+%macro movq 2
+  %ifidn %1,eax
+    movd %1,%2
+  %elifidn %2,eax
+    movd %1,%2
+  %elifidn %1,ebx
+    movd %1,%2
+  %elifidn %2,ebx
+    movd %1,%2
+  %elifidn %1,ecx
+    movd %1,%2
+  %elifidn %2,ecx
+    movd %1,%2
+  %elifidn %1,edx
+    movd %1,%2
+  %elifidn %2,edx
+    movd %1,%2
+  %elifidn %1,esi
+    movd %1,%2
+  %elifidn %2,esi
+    movd %1,%2
+  %elifidn %1,edi
+    movd %1,%2
+  %elifidn %2,edi
+    movd %1,%2
+  %elifidn %1,esp
+    movd %1,%2
+  %elifidn %2,esp
+    movd %1,%2
+  %elifidn %1,ebp
+    movd %1,%2
+  %elifidn %2,ebp
+    movd %1,%2
+  %else
+    movq %1,%2
+  %endif
+%endmacro
 %endif
 
 
@@ -90,7 +127,7 @@
 %macro ALIGN_STACK 2
     mov         %2, rsp
     and         rsp, -%1
-    sub         rsp, %1 - REG_SZ_BYTES
+    lea         rsp, [rsp - (%1 - REG_SZ_BYTES)]
     push        %2
 %endmacro
 
@@ -105,55 +142,59 @@
 %idefine XMMWORD
 %idefine MMWORD
 
-
 ; PIC macros
 ;
 %if ABI_IS_32BIT
   %if CONFIG_PIC=1
   %ifidn __OUTPUT_FORMAT__,elf32
+    %define GET_GOT_SAVE_ARG 1
     %define WRT_PLT wrt ..plt
     %macro GET_GOT 1
       extern _GLOBAL_OFFSET_TABLE_
       push %1
       call %%get_got
+      %%sub_offset:
+      jmp %%exitGG
       %%get_got:
-      pop %1
-      add %1, _GLOBAL_OFFSET_TABLE_ + $$ - %%get_got wrt ..gotpc
+      mov %1, [esp]
+      add %1, _GLOBAL_OFFSET_TABLE_ + $$ - %%sub_offset wrt ..gotpc
+      ret
+      %%exitGG:
       %undef GLOBAL
-      %define GLOBAL + %1 wrt ..gotoff
+      %define GLOBAL(x) x + %1 wrt ..gotoff
       %undef RESTORE_GOT
       %define RESTORE_GOT pop %1
     %endmacro
   %elifidn __OUTPUT_FORMAT__,macho32
+    %define GET_GOT_SAVE_ARG 1
     %macro GET_GOT 1
       push %1
       call %%get_got
       %%get_got:
-      pop %1
-      add %1, fake_got - %%get_got
+      pop  %1
       %undef GLOBAL
-      %define GLOBAL + %1 - fake_got
+      %define GLOBAL(x) x + %1 - %%get_got
       %undef RESTORE_GOT
       %define RESTORE_GOT pop %1
     %endmacro
   %endif
   %endif
-  %define HIDDEN_DATA
+  %define HIDDEN_DATA(x) x
 %else
   %macro GET_GOT 1
   %endmacro
-  %define GLOBAL wrt rip
+  %define GLOBAL(x) rel x
   %ifidn __OUTPUT_FORMAT__,elf64
     %define WRT_PLT wrt ..plt
-    %define HIDDEN_DATA :data hidden
+    %define HIDDEN_DATA(x) x:data hidden
   %else
-    %define HIDDEN_DATA
+    %define HIDDEN_DATA(x) x
   %endif
 %endif
 %ifnmacro GET_GOT
     %macro GET_GOT 1
     %endmacro
-    %define GLOBAL
+    %define GLOBAL(x) x
 %endif
 %ifndef RESTORE_GOT
 %define RESTORE_GOT
@@ -203,22 +244,65 @@
         push r9
     %endif
     %if %1 > 6
-        mov rax,[rbp+16]
+      %assign i %1-6
+      %assign off 16
+      %rep i
+        mov rax,[rbp+off]
         push rax
-    %endif
-    %if %1 > 7
-        mov rax,[rbp+24]
-        push rax
-    %endif
-    %if %1 > 8
-        mov rax,[rbp+32]
-        push rax
+        %assign off off+8
+      %endrep
     %endif
   %endm
 %endif
   %define UNSHADOW_ARGS mov rsp, rbp
 %endif
 
+; Win64 ABI requires that XMM6:XMM15 are callee saved
+; SAVE_XMM n, [u]
+; store registers 6-n on the stack
+; if u is specified, use unaligned movs.
+; Win64 ABI requires 16 byte stack alignment, but then pushes an 8 byte return
+; value. Typically we follow this up with 'push rbp' - re-aligning the stack -
+; but in some cases this is not done and unaligned movs must be used.
+%ifidn __OUTPUT_FORMAT__,x64
+%macro SAVE_XMM 1-2 a
+  %if %1 < 6
+    %error Only xmm registers 6-15 must be preserved
+  %else
+    %assign last_xmm %1
+    %define movxmm movdq %+ %2
+    %assign xmm_stack_space ((last_xmm - 5) * 16)
+    sub rsp, xmm_stack_space
+    %assign i 6
+    %rep (last_xmm - 5)
+      movxmm [rsp + ((i - 6) * 16)], xmm %+ i
+      %assign i i+1
+    %endrep
+  %endif
+%endmacro
+%macro RESTORE_XMM 0
+  %ifndef last_xmm
+    %error RESTORE_XMM must be paired with SAVE_XMM n
+  %else
+    %assign i last_xmm
+    %rep (last_xmm - 5)
+      movxmm xmm %+ i, [rsp +((i - 6) * 16)]
+      %assign i i-1
+    %endrep
+    add rsp, xmm_stack_space
+    ; there are a couple functions which return from multiple places.
+    ; otherwise, we could uncomment these:
+    ; %undef last_xmm
+    ; %undef xmm_stack_space
+    ; %undef movxmm
+  %endif
+%endmacro
+%else
+%macro SAVE_XMM 1-2
+%endmacro
+%macro RESTORE_XMM 0
+%endmacro
+%endif
 
 ; Name of the rodata section
 ;
@@ -229,7 +313,6 @@
 %elifidn __OUTPUT_FORMAT__,macho32
 %macro SECTION_RODATA 0
 section .text
-fake_got:
 %endmacro
 %else
 %define SECTION_RODATA section .rodata

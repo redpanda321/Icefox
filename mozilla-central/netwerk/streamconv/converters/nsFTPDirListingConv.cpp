@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Bradley Baetz <bbaetz@student.usyd.edu.au>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsFTPDirListingConv.h"
 #include "nsMemory.h"
@@ -68,7 +35,7 @@
 // this enables PR_LOG_DEBUG level information and places all output in
 // the file nspr.log
 //
-PRLogModuleInfo* gFTPDirListConvLog = nsnull;
+PRLogModuleInfo* gFTPDirListConvLog = nullptr;
 
 #endif /* PR_LOGGING */
 
@@ -110,7 +77,7 @@ nsFTPDirListingConv::AsyncConvertData(const char *aFromType, const char *aToType
 // nsIStreamListener implementation
 NS_IMETHODIMP
 nsFTPDirListingConv::OnDataAvailable(nsIRequest* request, nsISupports *ctxt,
-                                  nsIInputStream *inStr, PRUint32 sourceOffset, PRUint32 count) {
+                                  nsIInputStream *inStr, uint64_t sourceOffset, uint32_t count) {
     NS_ASSERTION(request, "FTP dir listing stream converter needs a request");
     
     nsresult rv;
@@ -118,10 +85,12 @@ nsFTPDirListingConv::OnDataAvailable(nsIRequest* request, nsISupports *ctxt,
     nsCOMPtr<nsIChannel> channel = do_QueryInterface(request, &rv);
     NS_ENSURE_SUCCESS(rv, rv);
     
-    PRUint32 read, streamLen;
+    uint32_t read, streamLen;
 
-    rv = inStr->Available(&streamLen);
+    uint64_t streamLen64;
+    rv = inStr->Available(&streamLen64);
     NS_ENSURE_SUCCESS(rv, rv);
+    streamLen = (uint32_t)NS_MIN(streamLen64, uint64_t(UINT32_MAX - 1));
 
     nsAutoArrayPtr<char> buffer(new char[streamLen + 1]);
     NS_ENSURE_TRUE(buffer, NS_ERROR_OUT_OF_MEMORY);
@@ -132,7 +101,7 @@ nsFTPDirListingConv::OnDataAvailable(nsIRequest* request, nsISupports *ctxt,
     // the dir listings are ascii text, null terminate this sucker.
     buffer[streamLen] = '\0';
 
-    PR_LOG(gFTPDirListConvLog, PR_LOG_DEBUG, ("nsFTPDirListingConv::OnData(request = %x, ctxt = %x, inStr = %x, sourceOffset = %d, count = %d)\n", request, ctxt, inStr, sourceOffset, count));
+    PR_LOG(gFTPDirListConvLog, PR_LOG_DEBUG, ("nsFTPDirListingConv::OnData(request = %x, ctxt = %x, inStr = %x, sourceOffset = %llu, count = %u)\n", request, ctxt, inStr, sourceOffset, count));
 
     if (!mBuffer.IsEmpty()) {
         // we have data left over from a previous OnDataAvailable() call.
@@ -152,7 +121,7 @@ nsFTPDirListingConv::OnDataAvailable(nsIRequest* request, nsISupports *ctxt,
     printf("::OnData() received the following %d bytes...\n\n%s\n\n", streamLen, buffer);
 #endif // DEBUG_dougt
 
-    nsCAutoString indexFormat;
+    nsAutoCString indexFormat;
     if (!mSentHeading) {
         // build up the 300: line
         nsCOMPtr<nsIURI> uri;
@@ -162,7 +131,7 @@ nsFTPDirListingConv::OnDataAvailable(nsIRequest* request, nsISupports *ctxt,
         rv = GetHeaders(indexFormat, uri);
         NS_ENSURE_SUCCESS(rv, rv);
 
-        mSentHeading = PR_TRUE;
+        mSentHeading = true;
     }
 
     char *line = buffer;
@@ -218,8 +187,8 @@ nsFTPDirListingConv::OnStopRequest(nsIRequest* request, nsISupports *ctxt,
 
 // nsFTPDirListingConv methods
 nsFTPDirListingConv::nsFTPDirListingConv() {
-    mFinalListener      = nsnull;
-    mSentHeading        = PR_FALSE;
+    mFinalListener      = nullptr;
+    mSentHeading        = false;
 }
 
 nsFTPDirListingConv::~nsFTPDirListingConv() {
@@ -233,7 +202,7 @@ nsFTPDirListingConv::Init() {
     // Initialize the global PRLogModule for FTP Protocol logging 
     // if necessary...
     //
-    if (nsnull == gFTPDirListConvLog) {
+    if (nullptr == gFTPDirListConvLog) {
         gFTPDirListConvLog = PR_NewLogModule("nsFTPDirListingConv");
     }
 #endif /* PR_LOGGING */
@@ -250,8 +219,8 @@ nsFTPDirListingConv::GetHeaders(nsACString& headers,
     headers.AppendLiteral("300: ");
 
     // Bug 111117 - don't print the password
-    nsCAutoString pw;
-    nsCAutoString spec;
+    nsAutoCString pw;
+    nsAutoCString spec;
     uri->GetPassword(pw);
     if (!pw.IsEmpty()) {
          rv = uri->SetPassword(EmptyCString());
@@ -280,10 +249,9 @@ char *
 nsFTPDirListingConv::DigestBufferLines(char *aBuffer, nsCString &aString) {
     char *line = aBuffer;
     char *eol;
-    PRBool cr = PR_FALSE;
+    bool cr = false;
 
     list_state state;
-    state.magic = 0;
 
     // while we have new lines, parse 'em into application/http-index-format.
     while ( line && (eol = PL_strchr(line, nsCRT::LF)) ) {
@@ -291,10 +259,10 @@ nsFTPDirListingConv::DigestBufferLines(char *aBuffer, nsCString &aString) {
         if (eol > line && *(eol-1) == nsCRT::CR) {
             eol--;
             *eol = '\0';
-            cr = PR_TRUE;
+            cr = true;
         } else {
             *eol = '\0';
-            cr = PR_FALSE;
+            cr = false;
         }
 
         list_result result;
@@ -327,7 +295,7 @@ nsFTPDirListingConv::DigestBufferLines(char *aBuffer, nsCString &aString) {
             }
         }
 
-        nsCAutoString buf;
+        nsAutoCString buf;
         aString.Append('\"');
         aString.Append(NS_EscapeURL(Substring(result.fe_fname, 
                                               result.fe_fname+result.fe_fnlen),
@@ -389,7 +357,7 @@ nsFTPDirListingConv::DigestBufferLines(char *aBuffer, nsCString &aString) {
 nsresult
 NS_NewFTPDirListingConv(nsFTPDirListingConv** aFTPDirListingConv)
 {
-    NS_PRECONDITION(aFTPDirListingConv != nsnull, "null ptr");
+    NS_PRECONDITION(aFTPDirListingConv != nullptr, "null ptr");
     if (! aFTPDirListingConv)
         return NS_ERROR_NULL_POINTER;
 

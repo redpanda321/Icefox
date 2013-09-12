@@ -13,9 +13,14 @@
 #define GL_APICALL
 #include <GLES2/gl2.h>
 
-#include <map>
+#ifdef _MSC_VER
+#include <hash_map>
+#else
+#include <unordered_map>
+#endif
 
 #include "common/angleutils.h"
+#include "libGLESv2/HandleAllocator.h"
 
 namespace gl
 {
@@ -25,12 +30,19 @@ class Program;
 class Texture;
 class Renderbuffer;
 
+enum TextureType
+{
+    TEXTURE_2D,
+    TEXTURE_CUBE,
+
+    TEXTURE_TYPE_COUNT,
+    TEXTURE_UNKNOWN
+};
+
 enum SamplerType
 {
-    SAMPLER_2D,
-    SAMPLER_CUBE,
-
-    SAMPLER_TYPE_COUNT
+    SAMPLER_PIXEL,
+    SAMPLER_VERTEX
 };
 
 class ResourceManager
@@ -63,7 +75,7 @@ class ResourceManager
     void setRenderbuffer(GLuint handle, Renderbuffer *renderbuffer);
 
     void checkBufferAllocation(unsigned int buffer);
-    void checkTextureAllocation(GLuint texture, SamplerType type);
+    void checkTextureAllocation(GLuint texture, TextureType type);
     void checkRenderbufferAllocation(GLuint renderbuffer);
 
   private:
@@ -71,20 +83,32 @@ class ResourceManager
 
     std::size_t mRefCount;
 
-    typedef std::map<GLuint, Buffer*> BufferMap;
-    BufferMap mBufferMap;
+#ifndef HASH_MAP
+# ifdef _MSC_VER
+#  define HASH_MAP stdext::hash_map
+# else
+#  define HASH_MAP std::unordered_map
+# endif
+#endif
 
-    typedef std::map<GLuint, Shader*> ShaderMap;
+    typedef HASH_MAP<GLuint, Buffer*> BufferMap;
+    BufferMap mBufferMap;
+    HandleAllocator mBufferHandleAllocator;
+
+    typedef HASH_MAP<GLuint, Shader*> ShaderMap;
     ShaderMap mShaderMap;
 
-    typedef std::map<GLuint, Program*> ProgramMap;
+    typedef HASH_MAP<GLuint, Program*> ProgramMap;
     ProgramMap mProgramMap;
+    HandleAllocator mProgramShaderHandleAllocator;
 
-    typedef std::map<GLuint, Texture*> TextureMap;
+    typedef HASH_MAP<GLuint, Texture*> TextureMap;
     TextureMap mTextureMap;
+    HandleAllocator mTextureHandleAllocator;
 
-    typedef std::map<GLuint, Renderbuffer*> RenderbufferMap;
+    typedef HASH_MAP<GLuint, Renderbuffer*> RenderbufferMap;
     RenderbufferMap mRenderbufferMap;
+    HandleAllocator mRenderbufferHandleAllocator;
 };
 
 }

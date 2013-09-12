@@ -20,9 +20,9 @@
 
   <script type="application/javascript">
     <![CDATA[
-    var imports = [ "SimpleTest", "is", "isnot", "ok" ];
-    for each (var import in imports) {
-      window[import] = window.opener.wrappedJSObject[import];
+    var imports = [ "SimpleTest", "is", "isnot", "ok", "SpecialPowers" ];
+    for each (var name in imports) {
+      window[name] = window.opener.wrappedJSObject[name];
     }
     
     function runTests() {

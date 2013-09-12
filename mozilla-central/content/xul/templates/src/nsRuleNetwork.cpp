@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Chris Waterson <waterson@netscape.com>
- *   Neil Deakin <enndeakin@sympatico.ca>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 
@@ -50,13 +16,11 @@
 
  */
 
+#include "mozilla/Util.h"
+
 #include "nscore.h"
 #include "nsCOMPtr.h"
-#include "nsCRT.h"
-#include "nsIComponentManager.h"
-#include "nsIContent.h"
 #include "plhash.h"
-#include "nsReadableUtils.h"
 
 #include "prlog.h"
 #ifdef PR_LOGGING
@@ -73,11 +37,13 @@ extern PRLogModuleInfo* gXULTemplateLog;
 #include "nsRDFConMemberTestNode.h"
 #include "nsRDFPropertyTestNode.h"
 
-PRBool MemoryElement::gPoolInited;
+using namespace mozilla;
+
+bool MemoryElement::gPoolInited;
 nsFixedSizeAllocator MemoryElement::gPool;
 
 // static
-PRBool
+bool
 MemoryElement::Init()
 {
     if (!gPoolInited) {
@@ -87,13 +53,13 @@ MemoryElement::Init()
         };
 
         if (NS_FAILED(gPool.Init("MemoryElement", bucketsizes,
-                                 NS_ARRAY_LENGTH(bucketsizes), 256)))
-            return PR_FALSE;
+                                 ArrayLength(bucketsizes), 256)))
+            return false;
 
-        gPoolInited = PR_TRUE;
+        gPoolInited = true;
     }
 
-    return PR_TRUE;
+    return true;
 }
 
 //----------------------------------------------------------------------
@@ -151,74 +117,74 @@ nsAssignmentSet::Add(const nsAssignment& aAssignment)
     return NS_OK;
 }
 
-PRInt32
+int32_t
 nsAssignmentSet::Count() const
 {
-    PRInt32 count = 0;
+    int32_t count = 0;
     for (ConstIterator assignment = First(); assignment != Last(); ++assignment)
         ++count;
 
     return count;
 }
 
-PRBool
+bool
 nsAssignmentSet::HasAssignment(nsIAtom* aVariable, nsIRDFNode* aValue) const
 {
     for (ConstIterator assignment = First(); assignment != Last(); ++assignment) {
         if (assignment->mVariable == aVariable && assignment->mValue == aValue)
-            return PR_TRUE;
+            return true;
     }
 
-    return PR_FALSE;
+    return false;
 }
 
-PRBool
+bool
 nsAssignmentSet::HasAssignmentFor(nsIAtom* aVariable) const
 {
     for (ConstIterator assignment = First(); assignment != Last(); ++assignment) {
         if (assignment->mVariable == aVariable)
-            return PR_TRUE;
+            return true;
     }
 
-    return PR_FALSE;
+    return false;
 }
 
-PRBool
+bool
 nsAssignmentSet::GetAssignmentFor(nsIAtom* aVariable, nsIRDFNode** aValue) const
 {
     for (ConstIterator assignment = First(); assignment != Last(); ++assignment) {
         if (assignment->mVariable == aVariable) {
             *aValue = assignment->mValue;
             NS_IF_ADDREF(*aValue);
-            return PR_TRUE;
+            return true;
         }
     }
 
-    *aValue = nsnull;
-    return PR_FALSE;
+    *aValue = nullptr;
+    return false;
 }
 
-PRBool
+bool
 nsAssignmentSet::Equals(const nsAssignmentSet& aSet) const
 {
     if (aSet.mAssignments == mAssignments)
-        return PR_TRUE;
+        return true;
 
     // If they have a different number of assignments, then they're different.
     if (Count() != aSet.Count())
-        return PR_FALSE;
+        return false;
 
     // XXX O(n^2)! Ugh!
     nsCOMPtr<nsIRDFNode> value;
     for (ConstIterator assignment = First(); assignment != Last(); ++assignment) {
         if (! aSet.GetAssignmentFor(assignment->mVariable, getter_AddRefs(value)))
-            return PR_FALSE;
+            return false;
 
         if (assignment->mValue != value)
-            return PR_FALSE;
+            return false;
     }
 
-    return PR_TRUE;
+    return true;
 }
 
 //----------------------------------------------------------------------
@@ -239,7 +205,7 @@ Instantiation::Hash(const void* aKey)
 }
 
 
-PRIntn
+int
 Instantiation::Compare(const void* aLeft, const void* aRight)
 {
     const Instantiation* left  = static_cast<const Instantiation*>(aLeft);
@@ -325,10 +291,10 @@ InstantiationSet::Erase(Iterator aIterator)
 }
 
 
-PRBool
+bool
 InstantiationSet::HasAssignmentFor(nsIAtom* aVariable) const
 {
-    return !Empty() ? First()->mAssignments.HasAssignmentFor(aVariable) : PR_FALSE;
+    return !Empty() ? First()->mAssignments.HasAssignmentFor(aVariable) : false;
 }
 
 //----------------------------------------------------------------------
@@ -354,14 +320,14 @@ TestNode::TestNode(TestNode* aParent)
 
 nsresult
 TestNode::Propagate(InstantiationSet& aInstantiations,
-                    PRBool aIsUpdate, PRBool& aTakenInstantiations)
+                    bool aIsUpdate, bool& aTakenInstantiations)
 {
     PR_LOG(gXULTemplateLog, PR_LOG_DEBUG,
            ("TestNode[%p]: Propagate() begin", this));
 
-    aTakenInstantiations = PR_FALSE;
+    aTakenInstantiations = false;
 
-    nsresult rv = FilterInstantiations(aInstantiations, nsnull);
+    nsresult rv = FilterInstantiations(aInstantiations, nullptr);
     if (NS_FAILED(rv))
         return rv;
 
@@ -369,7 +335,7 @@ TestNode::Propagate(InstantiationSet& aInstantiations,
     // original set of instantiations from this node, so create a copy in this
     // case. If there is only one child, optimize and just pass the
     // instantiations along to the child without copying
-    PRBool shouldCopy = (mKids.Count() > 1);
+    bool shouldCopy = (mKids.Count() > 1);
 
     // See the header file for details about how instantiation ownership works.
     if (! aInstantiations.Empty()) {
@@ -380,7 +346,7 @@ TestNode::Propagate(InstantiationSet& aInstantiations,
 
             // create a copy of the instantiations
             if (shouldCopy) {
-                PRBool owned = PR_FALSE;
+                bool owned = false;
                 InstantiationSet* instantiations =
                     new InstantiationSet(aInstantiations);
                 if (!instantiations)
@@ -419,11 +385,11 @@ TestNode::Constrain(InstantiationSet& aInstantiations)
     // For this, continue the constrain all the way to the top
     // and then call FilterInstantiations again afterwards. This
     // should fill in any missing information.
-    PRBool cantHandleYet = PR_FALSE;
+    bool cantHandleYet = false;
     rv = FilterInstantiations(aInstantiations, &cantHandleYet);
     if (NS_FAILED(rv)) return rv;
 
-    if ((mParent && ! aInstantiations.Empty()) || cantHandleYet) {
+    if (mParent && (!aInstantiations.Empty() || cantHandleYet)) {
         // if we still have instantiations, or if the instantiations
         // could not be filled in yet, then ride 'em on up to the
         // parent to narrow them.
@@ -434,7 +400,7 @@ TestNode::Constrain(InstantiationSet& aInstantiations)
         rv = mParent->Constrain(aInstantiations);
 
         if (NS_SUCCEEDED(rv) && cantHandleYet)
-            rv = FilterInstantiations(aInstantiations, nsnull);
+            rv = FilterInstantiations(aInstantiations, nullptr);
     }
     else {
         PR_LOG(gXULTemplateLog, PR_LOG_DEBUG,
@@ -450,17 +416,10 @@ TestNode::Constrain(InstantiationSet& aInstantiations)
 }
 
 
-PRBool
-TestNode::HasAncestor(const ReteNode* aNode) const
-{
-    return aNode == this || (mParent && mParent->HasAncestor(aNode));
-}
-
-
 //----------------------------------------------------------------------
 
 ReteNodeSet::ReteNodeSet()
-    : mNodes(nsnull), mCount(0), mCapacity(0)
+    : mNodes(nullptr), mCount(0), mCapacity(0)
 {
 }
 
@@ -472,17 +431,17 @@ ReteNodeSet::~ReteNodeSet()
 nsresult
 ReteNodeSet::Add(ReteNode* aNode)
 {
-    NS_PRECONDITION(aNode != nsnull, "null ptr");
+    NS_PRECONDITION(aNode != nullptr, "null ptr");
     if (! aNode)
         return NS_ERROR_NULL_POINTER;
 
     if (mCount >= mCapacity) {
-        PRInt32 capacity = mCapacity + 4;
+        int32_t capacity = mCapacity + 4;
         ReteNode** nodes = new ReteNode*[capacity];
         if (! nodes)
             return NS_ERROR_OUT_OF_MEMORY;
 
-        for (PRInt32 i = mCount - 1; i >= 0; --i)
+        for (int32_t i = mCount - 1; i >= 0; --i)
             nodes[i] = mNodes[i];
 
         delete[] mNodes;
@@ -499,7 +458,7 @@ nsresult
 ReteNodeSet::Clear()
 {
     delete[] mNodes;
-    mNodes = nsnull;
+    mNodes = nullptr;
     mCount = mCapacity = 0;
     return NS_OK;
 }

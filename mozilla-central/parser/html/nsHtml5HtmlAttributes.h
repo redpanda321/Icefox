@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2007 Henri Sivonen
- * Copyright (c) 2008-2009 Mozilla Foundation
+ * Copyright (c) 2008-2011 Mozilla Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a 
  * copy of this software and associated documentation files (the "Software"), 
@@ -29,23 +29,18 @@
 #ifndef nsHtml5HtmlAttributes_h__
 #define nsHtml5HtmlAttributes_h__
 
-#include "prtypes.h"
 #include "nsIAtom.h"
 #include "nsHtml5AtomTable.h"
 #include "nsString.h"
 #include "nsINameSpaceManager.h"
 #include "nsIContent.h"
-#include "nsIDocument.h"
 #include "nsTraceRefcnt.h"
 #include "jArray.h"
-#include "nsHtml5DocumentMode.h"
 #include "nsHtml5ArrayCopy.h"
-#include "nsHtml5NamedCharacters.h"
-#include "nsHtml5NamedCharactersAccel.h"
+#include "nsAHtml5TreeBuilderState.h"
 #include "nsHtml5Atoms.h"
 #include "nsHtml5ByteReadable.h"
 #include "nsIUnicodeDecoder.h"
-#include "nsAHtml5TreeBuilderState.h"
 #include "nsHtml5Macros.h"
 
 class nsHtml5StreamParser;
@@ -65,36 +60,33 @@ class nsHtml5HtmlAttributes
   public:
     static nsHtml5HtmlAttributes* EMPTY_ATTRIBUTES;
   private:
-    PRInt32 mode;
-    PRInt32 length;
-    jArray<nsHtml5AttributeName*,PRInt32> names;
-    jArray<nsString*,PRInt32> values;
+    int32_t mode;
+    int32_t length;
+    autoJArray<nsHtml5AttributeName*,int32_t> names;
+    autoJArray<nsString*,int32_t> values;
   public:
-    nsHtml5HtmlAttributes(PRInt32 mode);
+    nsHtml5HtmlAttributes(int32_t mode);
     ~nsHtml5HtmlAttributes();
-    PRInt32 getIndex(nsHtml5AttributeName* name);
-    PRInt32 getLength();
-    nsIAtom* getLocalName(PRInt32 index);
-    nsHtml5AttributeName* getAttributeName(PRInt32 index);
-    PRInt32 getURI(PRInt32 index);
-    nsIAtom* getPrefix(PRInt32 index);
-    nsString* getValue(PRInt32 index);
+    int32_t getIndex(nsHtml5AttributeName* name);
     nsString* getValue(nsHtml5AttributeName* name);
+    int32_t getLength();
+    nsIAtom* getLocalNameNoBoundsCheck(int32_t index);
+    int32_t getURINoBoundsCheck(int32_t index);
+    nsIAtom* getPrefixNoBoundsCheck(int32_t index);
+    nsString* getValueNoBoundsCheck(int32_t index);
+    nsHtml5AttributeName* getAttributeNameNoBoundsCheck(int32_t index);
     void addAttribute(nsHtml5AttributeName* name, nsString* value);
-    void clear(PRInt32 m);
-    void releaseValue(PRInt32 i);
+    void clear(int32_t m);
+    void releaseValue(int32_t i);
     void clearWithoutReleasingContents();
-    PRBool contains(nsHtml5AttributeName* name);
+    bool contains(nsHtml5AttributeName* name);
     void adjustForMath();
     void adjustForSvg();
     nsHtml5HtmlAttributes* cloneAttributes(nsHtml5AtomTable* interner);
+    bool equalsAnother(nsHtml5HtmlAttributes* other);
     static void initializeStatics();
     static void releaseStatics();
 };
-
-#ifdef nsHtml5HtmlAttributes_cpp__
-nsHtml5HtmlAttributes* nsHtml5HtmlAttributes::EMPTY_ATTRIBUTES = nsnull;
-#endif
 
 
 

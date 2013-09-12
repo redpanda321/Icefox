@@ -1,43 +1,28 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Download Manager UI Test Code.
- *
- * The Initial Developer of the Original Code is
- * Edward Lee <edward.lee@engineering.uiuc.edu>.
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  * Test bug 251337 to make sure old downloads are expired and removed.
  * Make sure bug 431346 and bug 431597 don't cause crashes when batching.
  */
+
+/**
+ * Returns a PRTime in the past usable to add expirable visits.
+ *
+ * @note Expiration ignores any visit added in the last 7 days, but it's
+ *       better be safe against DST issues, by going back one day more.
+ */
+function getExpirablePRTime() {
+  let dateObj = new Date();
+  // Normalize to midnight
+  dateObj.setHours(0);
+  dateObj.setMinutes(0);
+  dateObj.setSeconds(0);
+  dateObj.setMilliseconds(0);
+  dateObj = new Date(dateObj.getTime() - 8 * 86400000);
+  return dateObj.getTime() * 1000;
+}
 
 function run_test()
 {
@@ -45,6 +30,9 @@ function run_test()
   // (i.e MOZ_PLACES is enabled), so that we don't run this test if it doesn't.
   if (!("@mozilla.org/browser/nav-history-service;1" in Cc))
     return;
+
+  // Ensure places is enabled.
+  Services.prefs.setBoolPref("places.history.enabled", true);
 
   let dm = Cc["@mozilla.org/download-manager;1"].
            getService(Ci.nsIDownloadManager);
@@ -54,28 +42,31 @@ function run_test()
   db.executeSimpleSQL("DELETE FROM moz_downloads");
 
   let stmt = db.createStatement(
-    "INSERT INTO moz_downloads (id, source, target, state) " +
-    "VALUES (?1, ?2, ?3, ?4)");
+    "INSERT INTO moz_downloads (id, source, target, state, guid) " +
+    "VALUES (?1, ?2, ?3, ?4, ?5)");
 
   let iosvc = Cc["@mozilla.org/network/io-service;1"].
               getService(Ci.nsIIOService);
   let theId = 1337;
   let theURI = iosvc.newURI("http://expireme/please", null, null);
+  let theGUID = "a1bcD23eF4g5";
 
   try {
     // Add a download from the URI
-    stmt.bindInt32Parameter(0, theId);
-    stmt.bindStringParameter(1, theURI.spec);
+    stmt.bindByIndex(0, theId);
+    stmt.bindByIndex(1, theURI.spec);
 
     // Give a dummy file name
     let file = Cc["@mozilla.org/file/directory_service;1"].
                getService(Ci.nsIProperties).get("TmpD", Ci.nsIFile);
     file.append("expireTest");
-    stmt.bindStringParameter(2, Cc["@mozilla.org/network/io-service;1"].
+    stmt.bindByIndex(2, Cc["@mozilla.org/network/io-service;1"].
       getService(Ci.nsIIOService).newFileURI(file).spec);
 
     // Give it some state
-    stmt.bindInt32Parameter(3, dm.DOWNLOAD_FINISHED);
+    stmt.bindByIndex(3, dm.DOWNLOAD_FINISHED);
+    
+    stmt.bindByIndex(4, theGUID);
 
     // Add it!
     stmt.execute();
@@ -85,12 +76,10 @@ function run_test()
     stmt.finalize();
   }
 
+  // Add an expirable visit to this download.
   let histsvc = Cc["@mozilla.org/browser/nav-history-service;1"].
                 getService(Ci.nsINavHistoryService);
-  // Add the download to places
-  // Add the visit in the past to circumvent possible VM timing bugs
-  let yesterday = Date.now() - 24 * 60 * 60 * 1000;
-  histsvc.addVisit(theURI, yesterday * 1000, null,
+  histsvc.addVisit(theURI, getExpirablePRTime(), null,
                    histsvc.TRANSITION_DOWNLOAD, false, 0);
 
   // Get the download manager as history observer and batch expirations
@@ -100,15 +89,15 @@ function run_test()
   // Look for the removed download notification
   let obs = Cc["@mozilla.org/observer-service;1"].
             getService(Ci.nsIObserverService);
-  const kRemoveTopic = "download-manager-remove-download";
+  const kRemoveTopic = "download-manager-remove-download-guid";
   let testObs = {
     observe: function(aSubject, aTopic, aData) {
       if (aTopic != kRemoveTopic)
         return;
 
       // Make sure the removed/expired download was the one we added
-      let id = aSubject.QueryInterface(Ci.nsISupportsPRUint32);
-      do_check_eq(id.data, theId);
+      let id = aSubject.QueryInterface(Ci.nsISupportsCString);
+      do_check_eq(id.data, theGUID);
 
       // We're done!
       histobs.onEndUpdateBatch();
@@ -119,13 +108,11 @@ function run_test()
   obs.addObserver(testObs, kRemoveTopic, false);
 
   // Set expiration stuff to 0 to make the download expire
-  let prefs = Cc["@mozilla.org/preferences-service;1"].
-              getService(Ci.nsIPrefBranch);
-  prefs.setIntPref("places.history.expiration.max_pages", 0);
+  Services.prefs.setIntPref("places.history.expiration.max_pages", 0);
 
   // Force a history expiration.
   let expire = Cc["@mozilla.org/places/expiration;1"].getService(Ci.nsIObserver);
-  expire.observe(null, "places-debug-start-expiration", null);
+  expire.observe(null, "places-debug-start-expiration", -1);
 
   // Expiration happens on a timeout, about 3.5s after we set the pref
   do_test_pending();

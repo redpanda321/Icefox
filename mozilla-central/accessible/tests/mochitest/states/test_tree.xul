@@ -2,26 +2,26 @@
 <?xml-stylesheet href="chrome://global/skin" type="text/css"?>
 <?xml-stylesheet href="chrome://mochikit/content/tests/SimpleTest/test.css"
                  type="text/css"?>
-<?xml-stylesheet href="chrome://mochikit/content/a11y/accessible/treeview.css"
+<?xml-stylesheet href="../treeview.css"
                  type="text/css"?>
 
 <window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         title="Accessible XUL tree states tests">
 
-  <script type="application/javascript" 
-          src="chrome://mochikit/content/MochiKit/packed.js" />
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/treeview.js" />
+          src="../treeview.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js" />
+          src="../common.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/states.js" />
+          src="../role.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/events.js" />
+          src="../states.js" />
+  <script type="application/javascript"
+          src="../events.js" />
 
   <script type="application/javascript">
   <![CDATA[
@@ -84,7 +84,7 @@
 
     function doTest()
     {
-      gQueue = new eventQueue("TreeViewChanged");
+      gQueue = new eventQueue(EVENT_REORDER);
       gQueue.push(new statesChecker("tree", new nsTreeTreeView()));
       gQueue.push(new statesChecker("treesingle", new nsTreeTreeView()));
       gQueue.push(new statesChecker("tabletree", new nsTreeTreeView()));

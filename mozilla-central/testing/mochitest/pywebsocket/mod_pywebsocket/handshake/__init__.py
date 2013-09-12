@@ -1,4 +1,4 @@
-# Copyright 2010, Google Inc.
+# Copyright 2011, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -28,68 +28,89 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-"""Web Socket handshaking.
-
-Note: request.connection.write/read are used in this module, even though
-mod_python document says that they should be used only in connection handlers.
-Unfortunately, we have no other options. For example, request.write/read are
-not suitable because they don't allow direct raw bytes writing/reading.
+"""WebSocket opening handshake processor. This class try to apply available
+opening handshake processors for each protocol version until a connection is
+successfully established.
 """
 
 
 import logging
-import re
 
+from mod_pywebsocket import common
 from mod_pywebsocket.handshake import draft75
-from mod_pywebsocket.handshake import handshake
-from mod_pywebsocket.handshake._base import DEFAULT_WEB_SOCKET_PORT
-from mod_pywebsocket.handshake._base import DEFAULT_WEB_SOCKET_SECURE_PORT
-from mod_pywebsocket.handshake._base import WEB_SOCKET_SCHEME
-from mod_pywebsocket.handshake._base import WEB_SOCKET_SECURE_SCHEME
-from mod_pywebsocket.handshake._base import HandshakeError
-from mod_pywebsocket.handshake._base import validate_protocol
+from mod_pywebsocket.handshake import hybi00
+from mod_pywebsocket.handshake import hybi
+# Export AbortedByUserException, HandshakeException, and VersionException
+# symbol from this module.
+from mod_pywebsocket.handshake._base import AbortedByUserException
+from mod_pywebsocket.handshake._base import HandshakeException
+from mod_pywebsocket.handshake._base import VersionException
 
 
-class Handshaker(object):
-    """This class performs Web Socket handshake."""
+_LOGGER = logging.getLogger(__name__)
 
-    def __init__(self, request, dispatcher, allowDraft75=False, strict=False):
-        """Construct an instance.
 
-        Args:
-            request: mod_python request.
-            dispatcher: Dispatcher (dispatch.Dispatcher).
-            allowDraft75: allow draft 75 handshake protocol.
-            strict: Strictly check handshake request in draft 75.
-                Default: False. If True, request.connection must provide
-                get_memorized_lines method.
+def do_handshake(request, dispatcher, allowDraft75=False, strict=False):
+    """Performs WebSocket handshake.
 
-        Handshaker will add attributes such as ws_resource in performing
-        handshake.
-        """
+    Args:
+        request: mod_python request.
+        dispatcher: Dispatcher (dispatch.Dispatcher).
+        allowDraft75: allow draft 75 handshake protocol.
+        strict: Strictly check handshake request in draft 75.
+            Default: False. If True, request.connection must provide
+            get_memorized_lines method.
 
-        self._logger = logging.getLogger("mod_pywebsocket.handshake")
-        self._request = request
-        self._dispatcher = dispatcher
-        self._strict = strict
-        self._handshaker = handshake.Handshaker(request, dispatcher)
-        self._fallbackHandshaker = None
-        if allowDraft75:
-            self._fallbackHandshaker = draft75.Handshaker(
-                request, dispatcher, strict)
+    Handshaker will add attributes such as ws_resource in performing
+    handshake.
+    """
 
-    def do_handshake(self):
-        """Perform Web Socket Handshake."""
+    _LOGGER.debug('Client\'s opening handshake resource: %r', request.uri)
+    # To print mimetools.Message as escaped one-line string, we converts
+    # headers_in to dict object. Without conversion, if we use %r, it just
+    # prints the type and address, and if we use %s, it prints the original
+    # header string as multiple lines.
+    #
+    # Both mimetools.Message and MpTable_Type of mod_python can be
+    # converted to dict.
+    #
+    # mimetools.Message.__str__ returns the original header string.
+    # dict(mimetools.Message object) returns the map from header names to
+    # header values. While MpTable_Type doesn't have such __str__ but just
+    # __repr__ which formats itself as well as dictionary object.
+    _LOGGER.debug(
+        'Client\'s opening handshake headers: %r', dict(request.headers_in))
 
+    handshakers = []
+    handshakers.append(
+        ('RFC 6455', hybi.Handshaker(request, dispatcher)))
+    handshakers.append(
+        ('HyBi 00', hybi00.Handshaker(request, dispatcher)))
+    if allowDraft75:
+        handshakers.append(
+            ('Hixie 75', draft75.Handshaker(request, dispatcher, strict)))
+
+    for name, handshaker in handshakers:
+        _LOGGER.debug('Trying protocol version %s', name)
         try:
-            self._handshaker.do_handshake()
-        except HandshakeError, e:
-            self._logger.error('Handshake error: %s' % e)
-            if self._fallbackHandshaker:
-                self._logger.warning('fallback to old protocol')
-                self._fallbackHandshaker.do_handshake()
-                return
-            raise e
+            handshaker.do_handshake()
+            _LOGGER.info('Established (%s protocol)', name)
+            return
+        except HandshakeException, e:
+            _LOGGER.debug(
+                'Failed to complete opening handshake as %s protocol: %r',
+                name, e)
+            if e.status:
+                raise e
+        except AbortedByUserException, e:
+            raise
+        except VersionException, e:
+            raise
+
+    # TODO(toyoshim): Add a test to cover the case all handshakers fail.
+    raise HandshakeException(
+        'Failed to complete opening handshake for all available protocols',
+        status=common.HTTP_STATUS_BAD_REQUEST)
 
 
 # vi:sts=4 sw=4 et

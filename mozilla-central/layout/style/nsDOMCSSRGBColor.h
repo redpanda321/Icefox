@@ -1,74 +1,70 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Christopher A. Aillon <christopher@aillon.com>
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Christopher A. Aillon <christopher@aillon.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* DOM object representing color values in DOM computed style */
 
 #ifndef nsDOMCSSRGBColor_h__
 #define nsDOMCSSRGBColor_h__
 
+#include "mozilla/Attributes.h"
+#include "nsAutoPtr.h"
 #include "nsISupports.h"
-#include "nsIDOMNSRGBAColor.h"
-#include "nsCOMPtr.h"
+#include "nsWrapperCache.h"
 
-class nsIDOMCSSPrimitiveValue;
+class nsROCSSPrimitiveValue;
 
-class nsDOMCSSRGBColor : public nsIDOMNSRGBAColor {
+class nsDOMCSSRGBColor : public nsISupports,
+                         public nsWrapperCache
+{
 public:
-  nsDOMCSSRGBColor(nsIDOMCSSPrimitiveValue* aRed,
-                   nsIDOMCSSPrimitiveValue* aGreen,
-                   nsIDOMCSSPrimitiveValue* aBlue,
-                   nsIDOMCSSPrimitiveValue* aAlpha,
-                   PRBool aHasAlpha);
+  nsDOMCSSRGBColor(nsROCSSPrimitiveValue* aRed,
+                   nsROCSSPrimitiveValue* aGreen,
+                   nsROCSSPrimitiveValue* aBlue,
+                   nsROCSSPrimitiveValue* aAlpha,
+                   bool aHasAlpha);
 
   virtual ~nsDOMCSSRGBColor(void);
 
-  NS_DECL_ISUPPORTS
-  NS_DECL_NSIDOMRGBCOLOR
-  NS_DECL_NSIDOMNSRGBACOLOR
+  NS_DECL_CYCLE_COLLECTING_ISUPPORTS
 
-  PRBool HasAlpha() const { return mHasAlpha; }
+  NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_CLASS(nsDOMCSSRGBColor)
+
+  bool HasAlpha() const { return mHasAlpha; }
+
+  // RGBColor webidl interface
+  nsROCSSPrimitiveValue* Red() const
+  {
+    return mRed;
+  }
+  nsROCSSPrimitiveValue* Green() const
+  {
+    return mGreen;
+  }
+  nsROCSSPrimitiveValue* Blue() const
+  {
+    return mBlue;
+  }
+  nsROCSSPrimitiveValue* Alpha() const
+  {
+    return mAlpha;
+  }
+
+  nsISupports* GetParentObject() const
+  {
+    return nullptr;
+  }
+
+  virtual JSObject *WrapObject(JSContext *cx, JSObject *aScope, bool *aTried)
+    MOZ_OVERRIDE MOZ_FINAL;
 
 private:
-  nsCOMPtr<nsIDOMCSSPrimitiveValue> mRed;
-  nsCOMPtr<nsIDOMCSSPrimitiveValue> mGreen;
-  nsCOMPtr<nsIDOMCSSPrimitiveValue> mBlue;
-  nsCOMPtr<nsIDOMCSSPrimitiveValue> mAlpha;
-  PRBool mHasAlpha;
+  nsRefPtr<nsROCSSPrimitiveValue> mRed;
+  nsRefPtr<nsROCSSPrimitiveValue> mGreen;
+  nsRefPtr<nsROCSSPrimitiveValue> mBlue;
+  nsRefPtr<nsROCSSPrimitiveValue> mAlpha;
+  bool mHasAlpha;
 };
 
 #endif // nsDOMCSSRGBColor_h__

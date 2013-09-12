@@ -1,43 +1,12 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 @import url(resource://gre-resources/html.css);
 @import url(chrome://global/content/xul.css);
 
 @namespace parsererror url(http://www.mozilla.org/newlayout/xml/parsererror.xml);
+@namespace xul url(http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul);
 
 /* magic -- some of these rules are important to keep pages from overriding
             them
@@ -57,7 +26,7 @@
 
 *|*::-moz-table-outer {
   display: inherit !important; /* table or inline-table */
-  margin: 0 ! important;
+  margin: inherit ! important;
   padding: 0 ! important;
   border: none ! important;
   float: inherit;
@@ -70,8 +39,16 @@
   z-index: inherit;
   page-break-before: inherit;
   page-break-after: inherit;
+  page-break-inside: inherit;
   vertical-align: inherit; /* needed for inline-table */
   line-height: inherit; /* needed for vertical-align on inline-table */
+  align-self: inherit; /* needed for "align-self" to work on table flex items */
+  order: inherit;   /* needed for "order" to work on table flex items */
+  /* Bug 722777 */
+  -moz-transform: inherit;
+  -moz-transform-origin: inherit;
+  /* Bug 724750 */
+  -moz-backface-visibility: inherit;
 }
 
 *|*::-moz-table-row {
@@ -121,6 +98,8 @@
 *|*::-moz-anonymous-block, *|*::-moz-cell-content {
   display: block !important;
   position: static !important;
+  unicode-bidi: inherit;
+  text-overflow: inherit;
 }
 
 *|*::-moz-anonymous-block, *|*::-moz-anonymous-positioned-block {
@@ -130,6 +109,8 @@
   clip-path: inherit;
   filter: inherit;
   mask: inherit;
+  opacity: inherit;
+  text-decoration: inherit;
   -moz-box-ordinal-group: inherit !important;
 }
 
@@ -138,6 +119,7 @@
   position: static ! important;
   float: none ! important;
   -moz-box-ordinal-group: inherit !important;
+  text-overflow: inherit;
 }
 
 *|*::-moz-scrolled-content, *|*::-moz-scrolled-canvas,
@@ -151,9 +133,11 @@
   /* make unicode-bidi inherit, otherwise it has no effect on text inputs and
      blocks with overflow: scroll; */
   unicode-bidi: inherit;
+  text-overflow: inherit;
   -moz-column-count: inherit;
   -moz-column-width: inherit;
   -moz-column-gap: inherit;
+  -moz-column-rule: inherit;
   /* Do not change these. nsCSSFrameConstructor depends on them to create a good
      frame tree. */
   position: static !important;
@@ -167,12 +151,16 @@
 
 *|*::-moz-viewport-scroll {
   overflow: auto;
+%ifdef XP_WIN
+  resize: both;
+%endif
 }
 
 *|*::-moz-column-content { 
   /* the column boxes inside a column-flowed block */
   /* make unicode-bidi inherit, otherwise it has no effect on column boxes */
   unicode-bidi: inherit;
+  text-overflow: inherit;
   /* inherit the outer frame's display, otherwise we turn into an inline */
   display: inherit !important;
   /* Carry through our parent's height so that %-height children get
@@ -180,13 +168,32 @@
   height: 100%;
 }
 
-*|*::-moz-page, *|*::-moz-page-sequence, *|*::-moz-scrolled-page-sequence {
+*|*::-moz-anonymous-flex-item {
+  /* Anonymous blocks that wrap contiguous runs of inline non-replaced
+   * content inside of a flex container. */
+  display: block;
+}
+
+*|*::-moz-page-sequence, *|*::-moz-scrolled-page-sequence {
+  /* Collection of pages in print/print preview. Visual styles may only appear
+   * in print preview. */
   display: block !important;
-  background: transparent;
+  background: -moz-linear-gradient(top, #606060, #8a8a8a) fixed;
+  height: 100%;
+}
+
+*|*::-moz-page {
+  /* Individual page in print/print preview. Visual styles may only appear
+   * in print preview. */
+  display: block !important;
+  background: white;
+  box-shadow: 5px 5px 8px #202020;
+  margin: 0.125in 0.25in;
 }
 
 *|*::-moz-pagecontent {
   display: block !important;
+  margin: auto;
 }
 
 *|*::-moz-pagebreak {
@@ -203,6 +210,8 @@
   z-index: inherit;
   clip: inherit;
   opacity: inherit;
+  unicode-bidi: inherit;
+  text-overflow: inherit;
 }
 
 /* Printing */
@@ -213,6 +222,31 @@
     cursor: default !important;
   }
 
+}
+
+*|*:not(:root):-moz-full-screen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 2147483647 !important;
+  background: black;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  -moz-box-sizing: border-box !important; 
+}
+
+/* If there is a full-screen element that is not the root then
+   we should hide the viewport scrollbar. We exclude the chrome
+   document to prevent reframing of contained plugins. */
+:not(xul|*):root:-moz-full-screen-ancestor {
+  overflow: hidden !important;
 }
 
 /* XML parse error reporting */

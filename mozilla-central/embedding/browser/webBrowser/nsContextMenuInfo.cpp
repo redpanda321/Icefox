@@ -1,48 +1,12 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla browser.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications, Inc.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Chris Saari <saari@netscape.com>
- *   Conrad Carlen <ccarlen@netscape.com>
- *   Pierre Chanial <p_ch@verizon.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsContextMenuInfo.h"
 
 #include "nsIImageLoadingContent.h"
-#include "imgILoader.h"
+#include "imgLoader.h"
 #include "nsIDOMDocument.h"
 #include "nsIDOMHTMLDocument.h"
 #include "nsIDOMHTMLElement.h"
@@ -51,9 +15,7 @@
 #include "nsIDOMHTMLImageElement.h"
 #include "nsIDOMHTMLAreaElement.h"
 #include "nsIDOMHTMLLinkElement.h"
-#include "nsIDOMDocumentView.h"
-#include "nsIDOMAbstractView.h"
-#include "nsIDOMViewCSS.h"
+#include "nsIDOMWindow.h"
 #include "nsIDOMCSSStyleDeclaration.h"
 #include "nsIDOMCSSValue.h"
 #include "nsIDOMCSSPrimitiveValue.h"
@@ -64,6 +26,8 @@
 #include "nsIChannelPolicy.h"
 #include "nsIContentSecurityPolicy.h"
 #include "nsIContentPolicy.h"
+#include "nsAutoPtr.h"
+#include "imgRequestProxy.h"
 
 //*****************************************************************************
 // class nsContextMenuInfo
@@ -114,7 +78,7 @@ nsContextMenuInfo::GetAssociatedLink(nsAString& aHRef)
   if (localName.EqualsLiteral("a") ||
       localName.EqualsLiteral("area") ||
       localName.EqualsLiteral("link")) {
-    PRBool hasAttr;
+    bool hasAttr;
     content->HasAttribute(NS_LITERAL_STRING("href"), &hasAttr);
     if (hasAttr) {
       linkContent = content;
@@ -143,7 +107,7 @@ nsContextMenuInfo::GetAssociatedLink(nsAString& aHRef)
       content->GetLocalName(localName);
       ToLowerCase(localName);
       if (localName.EqualsLiteral("a")) {
-        PRBool hasAttr;
+        bool hasAttr;
         content->HasAttribute(NS_LITERAL_STRING("href"), &hasAttr);
         if (hasAttr) {
           linkContent = content;
@@ -152,7 +116,7 @@ nsContextMenuInfo::GetAssociatedLink(nsAString& aHRef)
             anchor->GetHref(aHRef);
         }
         else
-          linkContent = nsnull; // Links can't be nested.
+          linkContent = nullptr; // Links can't be nested.
         break;
       }
 
@@ -198,7 +162,7 @@ nsContextMenuInfo::GetBackgroundImageContainer(imgIContainer **aImageContainer)
   NS_ENSURE_ARG_POINTER(aImageContainer);
   NS_ENSURE_STATE(mDOMNode);
   
-  nsCOMPtr<imgIRequest> request;
+  nsRefPtr<imgRequestProxy> request;
   GetBackgroundImageRequest(mDOMNode, getter_AddRefs(request));
   if (request)
     return request->GetImage(aImageContainer);
@@ -213,7 +177,7 @@ nsContextMenuInfo::GetBackgroundImageSrc(nsIURI **aURI)
   NS_ENSURE_ARG_POINTER(aURI);
   NS_ENSURE_STATE(mDOMNode);
   
-  nsCOMPtr<imgIRequest> request;
+  nsRefPtr<imgRequestProxy> request;
   GetBackgroundImageRequest(mDOMNode, getter_AddRefs(request));
   if (request)
     return request->GetURI(aURI);
@@ -237,19 +201,19 @@ nsContextMenuInfo::GetImageRequest(nsIDOMNode *aDOMNode, imgIRequest **aRequest)
                              aRequest);
 }
 
-PRBool
+bool
 nsContextMenuInfo::HasBackgroundImage(nsIDOMNode * aDOMNode)
 {
-  NS_ENSURE_TRUE(aDOMNode, PR_FALSE);
+  NS_ENSURE_TRUE(aDOMNode, false);
 
-  nsCOMPtr<imgIRequest> request;
+  nsRefPtr<imgRequestProxy> request;
   GetBackgroundImageRequest(aDOMNode, getter_AddRefs(request));
   
-  return (request != nsnull);
+  return (request != nullptr);
 }
 
 nsresult
-nsContextMenuInfo::GetBackgroundImageRequest(nsIDOMNode *aDOMNode, imgIRequest **aRequest)
+nsContextMenuInfo::GetBackgroundImageRequest(nsIDOMNode *aDOMNode, imgRequestProxy **aRequest)
 {
 
   NS_ENSURE_ARG(aDOMNode);
@@ -284,7 +248,7 @@ nsContextMenuInfo::GetBackgroundImageRequest(nsIDOMNode *aDOMNode, imgIRequest *
 }
 
 nsresult
-nsContextMenuInfo::GetBackgroundImageRequestInternal(nsIDOMNode *aDOMNode, imgIRequest **aRequest)
+nsContextMenuInfo::GetBackgroundImageRequestInternal(nsIDOMNode *aDOMNode, imgRequestProxy **aRequest)
 {
   NS_ENSURE_ARG_POINTER(aDOMNode);
 
@@ -293,13 +257,11 @@ nsContextMenuInfo::GetBackgroundImageRequestInternal(nsIDOMNode *aDOMNode, imgIR
 
   nsCOMPtr<nsIDOMDocument> document;
   domNode->GetOwnerDocument(getter_AddRefs(document));
-  nsCOMPtr<nsIDOMDocumentView> docView(do_QueryInterface(document));
-  NS_ENSURE_TRUE(docView, NS_ERROR_FAILURE);
+  NS_ENSURE_TRUE(document, NS_ERROR_FAILURE);
 
-  nsCOMPtr<nsIDOMAbstractView> defaultView;
-  docView->GetDefaultView(getter_AddRefs(defaultView));
-  nsCOMPtr<nsIDOMViewCSS> defaultCSSView(do_QueryInterface(defaultView));
-  NS_ENSURE_TRUE(defaultCSSView, NS_ERROR_FAILURE);
+  nsCOMPtr<nsIDOMWindow> window;
+  document->GetDefaultView(getter_AddRefs(window));
+  NS_ENSURE_TRUE(window, NS_ERROR_FAILURE);
 
   nsCOMPtr<nsIDOMCSSPrimitiveValue> primitiveValue;
   nsAutoString bgStringValue;
@@ -320,15 +282,15 @@ nsContextMenuInfo::GetBackgroundImageRequestInternal(nsIDOMNode *aDOMNode, imgIR
     }
   }
   
-  while (PR_TRUE) {
+  while (true) {
     nsCOMPtr<nsIDOMElement> domElement(do_QueryInterface(domNode));
     // bail for the parent node of the root element or null argument
     if (!domElement)
       break;
     
     nsCOMPtr<nsIDOMCSSStyleDeclaration> computedStyle;
-    defaultCSSView->GetComputedStyle(domElement, EmptyString(),
-                                     getter_AddRefs(computedStyle));
+    window->GetComputedStyle(domElement, EmptyString(),
+                             getter_AddRefs(computedStyle));
     if (computedStyle) {
       nsCOMPtr<nsIDOMCSSValue> cssValue;
       computedStyle->GetPropertyCSSValue(NS_LITERAL_STRING("background-image"),
@@ -341,13 +303,12 @@ nsContextMenuInfo::GetBackgroundImageRequestInternal(nsIDOMNode *aDOMNode, imgIR
           NS_NewURI(getter_AddRefs(bgUri), bgStringValue);
           NS_ENSURE_TRUE(bgUri, NS_ERROR_FAILURE);
 
-          nsCOMPtr<imgILoader> il(do_GetService(
-                                    "@mozilla.org/image/loader;1"));
+          nsRefPtr<imgLoader> il = imgLoader::GetInstance();
           NS_ENSURE_TRUE(il, NS_ERROR_FAILURE);
 
-          return il->LoadImage(bgUri, nsnull, nsnull, nsnull, nsnull, nsnull,
-                               nsIRequest::LOAD_NORMAL, nsnull, nsnull,
-                               channelPolicy, aRequest);
+          return il->LoadImage(bgUri, nullptr, nullptr, principal, nullptr,
+                               nullptr, nullptr, nsIRequest::LOAD_NORMAL,
+                               nullptr, channelPolicy, aRequest);
         }
       }
 

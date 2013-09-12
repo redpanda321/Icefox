@@ -1,42 +1,8 @@
-/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Places Bookmark Properties dialog.
- *
- * The Initial Developer of the Original Code is Google Inc.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Asaf Romano <mano@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 const LAST_USED_ANNO = "bookmarkPropertiesDialog/folderLastUsed";
-const STATIC_TITLE_ANNO = "bookmarks/staticTitle";
 const MAX_FOLDER_ITEM_IN_MENU_LIST = 5;
 
 var gEditItemOverlay = {
@@ -49,11 +15,11 @@ var gEditItemOverlay = {
   _multiEdit: false,
   _itemType: -1,
   _readOnly: false,
-  _microsummaries: null,
   _hiddenRows: [],
   _observersAdded: false,
   _staticFoldersListBuilt: false,
   _initialized: false,
+  _titleOverride: "",
 
   // the first field which was edited after this panel was initialized for
   // a certain item
@@ -79,9 +45,11 @@ var gEditItemOverlay = {
     if (aInfo && aInfo.hiddenRows)
       this._hiddenRows = aInfo.hiddenRows;
     else
-      this._hiddenRows.splice(0);
+      this._hiddenRows.splice(0, this._hiddenRows.length);
     // force-read-only
     this._readOnly = aInfo && aInfo.forceReadOnly;
+    this._titleOverride = aInfo && aInfo.titleOverride ? aInfo.titleOverride
+                                                       : "";
   },
 
   _showHideRows: function EIO__showHideRows() {
@@ -138,7 +106,7 @@ var gEditItemOverlay = {
       this.uninitPanel(false);
 
     var aItemIdList;
-    if (aFor.length) {
+    if (Array.isArray(aFor)) {
       aItemIdList = aFor;
       aFor = aItemIdList[0];
     }
@@ -162,32 +130,34 @@ var gEditItemOverlay = {
     }
     else {
       this._itemId = aFor;
+      // We can't store information on invalid itemIds.
+      this._readOnly = this._readOnly || this._itemId == -1;
+
       var containerId = PlacesUtils.bookmarks.getFolderIdForItem(this._itemId);
       this._itemType = PlacesUtils.bookmarks.getItemType(this._itemId);
       if (this._itemType == Ci.nsINavBookmarksService.TYPE_BOOKMARK) {
         this._uri = PlacesUtils.bookmarks.getBookmarkURI(this._itemId);
-        if (!this._readOnly) // If readOnly wasn't forced through aInfo
-          this._readOnly = PlacesUtils.itemIsLivemark(containerId);
         this._initTextField("keywordField",
                             PlacesUtils.bookmarks
                                        .getKeywordForBookmark(this._itemId));
-        // Load In Sidebar checkbox
         this._element("loadInSidebarCheckbox").checked =
           PlacesUtils.annotations.itemHasAnnotation(this._itemId,
                                                     PlacesUIUtils.LOAD_IN_SIDEBAR_ANNO);
       }
       else {
-        if (!this._readOnly) // If readOnly wasn't forced through aInfo
-          this._readOnly = false;
-
         this._uri = null;
-        this._isLivemark = PlacesUtils.itemIsLivemark(this._itemId);
-        if (this._isLivemark) {
-          var feedURI = PlacesUtils.livemarks.getFeedURI(this._itemId);
-          var siteURI = PlacesUtils.livemarks.getSiteURI(this._itemId);
-          this._initTextField("feedLocationField", feedURI.spec);
-          this._initTextField("siteLocationField", siteURI ? siteURI.spec : "");
-        }
+        this._isLivemark = false;
+        PlacesUtils.livemarks.getLivemark(
+          {id: this._itemId },
+          (function (aStatus, aLivemark) {
+            if (Components.isSuccessCode(aStatus)) {
+              this._isLivemark = true;
+              this._initTextField("feedLocationField", aLivemark.feedURI.spec, true);
+              this._initTextField("siteLocationField", aLivemark.siteURI ? aLivemark.siteURI.spec : "", true);
+              this._showHideRows();
+            }
+          }).bind(this)
+        );
       }
 
       // folder picker
@@ -211,7 +181,6 @@ var gEditItemOverlay = {
         this._multiEdit = true;
         this._allTags = [];
         this._itemIds = aItemIdList;
-        var nodeToCheck = 0;
         for (var i = 0; i < aItemIdList.length; i++) {
           if (aItemIdList[i] instanceof Ci.nsIURI) {
             this._uris[i] = aItemIdList[i];
@@ -220,14 +189,13 @@ var gEditItemOverlay = {
           else
             this._uris[i] = PlacesUtils.bookmarks.getBookmarkURI(this._itemIds[i]);
           this._tags[i] = PlacesUtils.tagging.getTagsForURI(this._uris[i]);
-          if (this._tags[i].length < this._tags[nodeToCheck].length)
-            nodeToCheck =  i;
         }
-        this._getCommonTags(nodeToCheck);
+        this._allTags = this._getCommonTags();
         this._initTextField("tagsField", this._allTags.join(", "), false);
         this._element("itemsCountText").value =
-          PlacesUIUtils.getFormattedString("detailsPane.multipleItems",
-                                           [this._itemIds.length]);
+          PlacesUIUtils.getPluralString("detailsPane.itemsCountLabel",
+                                        this._itemIds.length,
+                                        [this._itemIds.length]);
       }
 
       // tags selector
@@ -241,7 +209,9 @@ var gEditItemOverlay = {
 
     // observe changes
     if (!this._observersAdded) {
-      if (this._itemId != -1)
+      // Single bookmarks observe any change.  History entries and multiEdit
+      // observe only tags changes, through bookmarks.
+      if (this._itemId != -1 || this._uri || this._multiEdit)
         PlacesUtils.bookmarks.addObserver(this, false);
       window.addEventListener("unload", this, false);
       this._observersAdded = true;
@@ -250,22 +220,19 @@ var gEditItemOverlay = {
     this._initialized = true;
   },
 
-  _getCommonTags: function(aArrIndex) {
-    var tempArray = this._tags[aArrIndex];
-    var isAllTag;
-    for (var k = 0; k < tempArray.length; k++) {
-      isAllTag = true;
-      for (var j = 0; j < this._tags.length; j++) {
-        if (j == aArrIndex)
-          continue;
-        if (this._tags[j].indexOf(tempArray[k]) == -1) {
-          isAllTag = false;
-          break;
-        }
-      }
-      if (isAllTag)
-        this._allTags.push(tempArray[k]);
-    }
+  /**
+   * Finds tags that are in common among this._tags entries that track tags
+   * for each selected uri.
+   * The tags arrays should be kept up-to-date for this to work properly.
+   *
+   * @return array of common tags for the selected uris.
+   */
+  _getCommonTags: function() {
+    return this._tags[0].filter(
+      function (aTag) this._tags.every(
+        function (aTags) aTags.indexOf(aTag) != -1
+      ), this
+    );
   },
 
   _initTextField: function(aTextFieldId, aValue, aReadOnly) {
@@ -371,8 +338,7 @@ var gEditItemOverlay = {
   },
 
   QueryInterface: function EIO_QueryInterface(aIID) {
-    if (aIID.equals(Ci.nsIMicrosummaryObserver) ||
-        aIID.equals(Ci.nsIDOMEventListener) ||
+    if (aIID.equals(Ci.nsIDOMEventListener) ||
         aIID.equals(Ci.nsINavBookmarkObserver) ||
         aIID.equals(Ci.nsISupports))
       return this;
@@ -384,148 +350,29 @@ var gEditItemOverlay = {
     return document.getElementById("editBMPanel_" + aID);
   },
 
-  _createMicrosummaryMenuItem:
-  function EIO__createMicrosummaryMenuItem(aMicrosummary) {
-    var menuItem = document.createElement("menuitem");
-
-    // Store a reference to the microsummary in the menu item, so we know
-    // which microsummary this menu item represents when it's time to
-    // save changes or load its content.
-    menuItem.microsummary = aMicrosummary;
-
-    // Content may have to be generated asynchronously; we don't necessarily
-    // have it now.  If we do, great; otherwise, fall back to the generator
-    // name, then the URI, and we trigger a microsummary content update. Once
-    // the update completes, the microsummary will notify our observer to
-    // update the corresponding menu-item.
-    // XXX Instead of just showing the generator name or (heaven forbid)
-    // its URI when we don't have content, we should tell the user that
-    // we're loading the microsummary, perhaps with some throbbing to let
-    // her know it is in progress.
-    if (aMicrosummary.content)
-      menuItem.setAttribute("label", aMicrosummary.content);
-    else {
-      menuItem.setAttribute("label", aMicrosummary.generator.name ||
-                                     aMicrosummary.generator.uri.spec);
-      aMicrosummary.update();
-    }
-
-    return menuItem;
-  },
-
   _getItemStaticTitle: function EIO__getItemStaticTitle() {
-    if (this._itemId == -1)
-      return PlacesUtils.history.getPageTitle(this._uri);
+    if (this._titleOverride)
+      return this._titleOverride;
 
-    const annos = PlacesUtils.annotations;
-    if (annos.itemHasAnnotation(this._itemId, STATIC_TITLE_ANNO))
-      return annos.getItemAnnotation(this._itemId, STATIC_TITLE_ANNO);
-
-    return PlacesUtils.bookmarks.getItemTitle(this._itemId);
+    let title = "";
+    if (this._itemId == -1) {
+      title = PlacesUtils.history.getPageTitle(this._uri);
+    }
+    else {
+      title = PlacesUtils.bookmarks.getItemTitle(this._itemId);
+    }
+    return title;
   },
 
   _initNamePicker: function EIO_initNamePicker() {
-    var userEnteredNameField = this._element("userEnteredName");
     var namePicker = this._element("namePicker");
-    var droppable = false;
-
-    userEnteredNameField.label = this._getItemStaticTitle();
-
-    // clean up old entries
-    var menupopup = namePicker.menupopup;
-    while (menupopup.childNodes.length > 2)
-      menupopup.removeChild(menupopup.lastChild);
-
-    if (this._microsummaries) {
-      this._microsummaries.removeObserver(this);
-      this._microsummaries = null;
-    }
-
-    var itemToSelect = userEnteredNameField;
-    try {
-      if (this._itemId != -1 &&
-          this._itemType == Ci.nsINavBookmarksService.TYPE_BOOKMARK &&
-          !this._readOnly)
-        this._microsummaries = PlacesUtils.microsummaries
-                                          .getMicrosummaries(this._uri, -1);
-    }
-    catch(ex) {
-      // getMicrosummaries will throw an exception in at least two cases:
-      // 1. the bookmarked URI contains a scheme that the service won't
-      //    download for security reasons (currently it only handles http,
-      //    https, and file);
-      // 2. the page to which the URI refers isn't HTML or XML (the only two
-      //    content types the service knows how to summarize).
-      this._microsummaries = null;
-    }
-
-    if (this._microsummaries) {
-      var enumerator = this._microsummaries.Enumerate();
-
-      if (enumerator.hasMoreElements()) {
-        // Show the drop marker if there are microsummaries
-        droppable = true;
-        while (enumerator.hasMoreElements()) {
-          var microsummary = enumerator.getNext()
-                                       .QueryInterface(Ci.nsIMicrosummary);
-          var menuItem = this._createMicrosummaryMenuItem(microsummary);
-          if (PlacesUtils.microsummaries
-                         .isMicrosummary(this._itemId, microsummary))
-            itemToSelect = menuItem;
-
-          menupopup.appendChild(menuItem);
-        }
-      }
-
-      this._microsummaries.addObserver(this);
-    }
-
-    if (namePicker.selectedItem == itemToSelect)
-      namePicker.value = itemToSelect.label;
-    else
-      namePicker.selectedItem = itemToSelect;
-
-    namePicker.setAttribute("droppable", droppable);
+    namePicker.value = this._getItemStaticTitle();
     namePicker.readOnly = this._readOnly;
 
     // clear the undo stack
     var editor = namePicker.editor;
     if (editor)
       editor.transactionManager.clear();
-  },
-
-  // nsIMicrosummaryObserver
-  onContentLoaded: function EIO_onContentLoaded(aMicrosummary) {
-    var namePicker = this._element("namePicker");
-    var childNodes = namePicker.menupopup.childNodes;
-
-    // 0: user-entered item; 1: separator
-    for (var i = 2; i < childNodes.length; i++) {
-      if (childNodes[i].microsummary == aMicrosummary) {
-        var newLabel = aMicrosummary.content;
-        // XXXmano: non-editable menulist would do this for us, see bug 360220
-        // We should fix editable-menulists to set the DOMAttrModified handler
-        // as well.
-        //
-        // Also note the order importance: if the label of the menu-item is
-        // set to something different than the menulist's current value,
-        // the menulist no longer has selectedItem set
-        if (namePicker.selectedItem == childNodes[i])
-          namePicker.value = newLabel;
-
-        childNodes[i].label = newLabel;
-        return;
-      }
-    }
-  },
-
-  onElementAppended: function EIO_onElementAppended(aMicrosummary) {
-    var namePicker = this._element("namePicker");
-    namePicker.menupopup
-              .appendChild(this._createMicrosummaryMenuItem(aMicrosummary));
-
-    // Make sure the drop-marker is shown
-    namePicker.setAttribute("droppable", "true");
   },
 
   uninitPanel: function EIO_uninitPanel(aHideCollapsibleElements) {
@@ -542,15 +389,12 @@ var gEditItemOverlay = {
     }
 
     if (this._observersAdded) {
-      if (this._itemId != -1)
+      if (this._itemId != -1 || this._uri || this._multiEdit)
         PlacesUtils.bookmarks.removeObserver(this);
 
       this._observersAdded = false;
     }
-    if (this._microsummaries) {
-      this._microsummaries.removeObserver(this);
-      this._microsummaries = null;
-    }
+
     this._itemId = -1;
     this._uri = null;
     this._uris = [];
@@ -560,6 +404,8 @@ var gEditItemOverlay = {
     this._multiEdit = false;
     this._firstEditedField = "";
     this._initialized = false;
+    this._titleOverride = "";
+    this._readOnly = false;
   },
 
   onTagsFieldBlur: function EIO_onTagsFieldBlur() {
@@ -589,15 +435,18 @@ var gEditItemOverlay = {
           tagsToAdd.push(tags[i]);
       }
 
-      if (tagsToRemove.length > 0)
-        txns.push(PlacesUIUtils.ptm.untagURI(this._uri, tagsToRemove));
-      if (tagsToAdd.length > 0)
-        txns.push(PlacesUIUtils.ptm.tagURI(this._uri, tagsToAdd));
+      if (tagsToRemove.length > 0) {
+        let untagTxn = new PlacesUntagURITransaction(this._uri, tagsToRemove);
+        txns.push(untagTxn);
+      }
+      if (tagsToAdd.length > 0) {
+        let tagTxn = new PlacesTagURITransaction(this._uri, tagsToAdd);
+        txns.push(tagTxn);
+      }
 
       if (txns.length > 0) {
-        var aggregate = PlacesUIUtils.ptm.aggregateTransactions("Update tags",
-                                                                txns);
-        PlacesUIUtils.ptm.doTransaction(aggregate);
+        let aggregate = new PlacesAggregatedTransaction("Update tags", txns);
+        PlacesUtils.transactionManager.doTransaction(aggregate);
 
         // Ensure the tagsField is in sync, clean it up from empty tags
         var tags = PlacesUtils.tagging.getTagsForURI(this._uri).join(", ");
@@ -649,25 +498,31 @@ var gEditItemOverlay = {
       }
 
       if (tagsToAdd.length > 0) {
-        for (i = 0; i < this._uris.length; i++) {
-          if (tagsToAdd[i].length > 0)
-            txns.push(PlacesUIUtils.ptm.tagURI(this._uris[i], tagsToAdd[i]));
+        for (let i = 0; i < this._uris.length; i++) {
+          if (tagsToAdd[i].length > 0) {
+            let tagTxn = new PlacesTagURITransaction(this._uris[i],
+                                                     tagsToAdd[i]);
+            txns.push(tagTxn);
+          }
         }
       }
       if (tagsToRemove.length > 0) {
-        for (var i = 0; i < this._uris.length; i++)
-          txns.push(PlacesUIUtils.ptm.untagURI(this._uris[i], tagsToRemove));
+        for (let i = 0; i < this._uris.length; i++) {
+          let untagTxn = new PlacesUntagURITransaction(this._uris[i],
+                                                       tagsToRemove);
+          txns.push(untagTxn);
+        }
       }
 
       if (txns.length > 0) {
-        var aggregate = PlacesUIUtils.ptm.aggregateTransactions("Update tags",
-                                                                txns);
-        PlacesUIUtils.ptm.doTransaction(aggregate);
+        let aggregate = new PlacesAggregatedTransaction("Update tags", txns);
+        PlacesUtils.transactionManager.doTransaction(aggregate);
 
         this._allTags = tags;
         this._tags = [];
-        for (i = 0; i < this._uris.length; i++)
+        for (let i = 0; i < this._uris.length; i++) {
           this._tags[i] = PlacesUtils.tagging.getTagsForURI(this._uris[i]);
+        }
 
         // Ensure the tagsField is in sync, clean it up from empty tags
         this._initTextField("tagsField", tags, false);
@@ -677,61 +532,36 @@ var gEditItemOverlay = {
     return false;
   },
 
-  onNamePickerInput: function EIO_onNamePickerInput() {
-    var title = this._element("namePicker").value;
-    this._element("userEnteredName").label = title;
-  },
-
   onNamePickerChange: function EIO_onNamePickerChange() {
     if (this._itemId == -1)
       return;
 
     var namePicker = this._element("namePicker")
-    var txns = [];
-    const ptm = PlacesUIUtils.ptm;
 
     // Here we update either the item title or its cached static title
-    var newTitle = this._element("userEnteredName").label;
-    if (this._getItemStaticTitle() != newTitle) {
+    var newTitle = namePicker.value;
+    if (!newTitle &&
+        PlacesUtils.bookmarks.getFolderIdForItem(this._itemId) == PlacesUtils.tagsFolderId) {
+      // We don't allow setting an empty title for a tag, restore the old one.
+      this._initNamePicker();
+    }
+    else if (this._getItemStaticTitle() != newTitle) {
       this._mayUpdateFirstEditField("namePicker");
-      if (PlacesUtils.microsummaries.hasMicrosummary(this._itemId)) {
-        // Note: this implicitly also takes care of the microsummary->static
-        // title case, the removeMicorosummary method in the service will set
-        // the item-title to the value of this annotation.
-        //
-        // XXXmano: use a transaction
-        PlacesUtils.setAnnotationsForItem(this._itemId,
-                                          [{name: STATIC_TITLE_ANNO,
-                                            value: newTitle}]);
-      }
-      else
-        txns.push(ptm.editItemTitle(this._itemId, newTitle));
+      let txn = new PlacesEditItemTitleTransaction(this._itemId, newTitle);
+      PlacesUtils.transactionManager.doTransaction(txn);
     }
-
-    var newMicrosummary = namePicker.selectedItem.microsummary;
-
-    // Only add a microsummary update to the transaction if the microsummary
-    // has actually changed, i.e. the user selected no microsummary, but the
-    // bookmark previously had one, or the user selected a microsummary which
-    // is not the one the bookmark previously had
-    if ((newMicrosummary == null &&
-         PlacesUtils.microsummaries.hasMicrosummary(this._itemId)) ||
-        (newMicrosummary != null &&
-         !PlacesUtils.microsummaries
-                     .isMicrosummary(this._itemId, newMicrosummary))) {
-      txns.push(ptm.editBookmarkMicrosummary(this._itemId, newMicrosummary));
-    }
-
-    var aggregate = ptm.aggregateTransactions("Edit Item Title", txns);
-    ptm.doTransaction(aggregate);
   },
 
   onDescriptionFieldBlur: function EIO_onDescriptionFieldBlur() {
     var description = this._element("descriptionField").value;
     if (description != PlacesUIUtils.getItemDescription(this._itemId)) {
-      var txn = PlacesUIUtils.ptm
-                             .editItemDescription(this._itemId, description);
-      PlacesUIUtils.ptm.doTransaction(txn);
+      var annoObj = { name   : PlacesUIUtils.DESCRIPTION_ANNO,
+                      type   : Ci.nsIAnnotationService.TYPE_STRING,
+                      flags  : 0,
+                      value  : description,
+                      expires: Ci.nsIAnnotationService.EXPIRE_NEVER };
+      var txn = new PlacesSetItemAnnotationTransaction(this._itemId, annoObj);
+      PlacesUtils.transactionManager.doTransaction(txn);
     }
   },
 
@@ -743,8 +573,8 @@ var gEditItemOverlay = {
     catch(ex) { return; }
 
     if (!this._uri.equals(uri)) {
-      var txn = PlacesUIUtils.ptm.editBookmarkURI(this._itemId, uri);
-      PlacesUIUtils.ptm.doTransaction(txn);
+      var txn = new PlacesEditBookmarkURITransaction(this._itemId, uri);
+      PlacesUtils.transactionManager.doTransaction(txn);
       this._uri = uri;
     }
   },
@@ -752,45 +582,22 @@ var gEditItemOverlay = {
   onKeywordFieldBlur: function EIO_onKeywordFieldBlur() {
     var keyword = this._element("keywordField").value;
     if (keyword != PlacesUtils.bookmarks.getKeywordForBookmark(this._itemId)) {
-      var txn = PlacesUIUtils.ptm.editBookmarkKeyword(this._itemId, keyword);
-      PlacesUIUtils.ptm.doTransaction(txn);
-    }
-  },
-
-  onFeedLocationFieldBlur: function EIO_onFeedLocationFieldBlur() {
-    var uri;
-    try {
-      uri = PlacesUIUtils.createFixedURI(this._element("feedLocationField").value);
-    }
-    catch(ex) { return; }
-
-    var currentFeedURI = PlacesUtils.livemarks.getFeedURI(this._itemId);
-    if (!currentFeedURI.equals(uri)) {
-      var txn = PlacesUIUtils.ptm.editLivemarkFeedURI(this._itemId, uri);
-      PlacesUIUtils.ptm.doTransaction(txn);
-    }
-  },
-
-  onSiteLocationFieldBlur: function EIO_onSiteLocationFieldBlur() {
-    var uri = null;
-    try {
-      uri = PlacesUIUtils.createFixedURI(this._element("siteLocationField").value);
-    }
-    catch(ex) {  }
-
-    var currentSiteURI = PlacesUtils.livemarks.getSiteURI(this._itemId);
-    if (!uri || !currentSiteURI.equals(uri)) {
-      var txn = PlacesUIUtils.ptm.editLivemarkSiteURI(this._itemId, uri);
-      PlacesUIUtils.ptm.doTransaction(txn);
+      var txn = new PlacesEditBookmarkKeywordTransaction(this._itemId, keyword);
+      PlacesUtils.transactionManager.doTransaction(txn);
     }
   },
 
   onLoadInSidebarCheckboxCommand:
   function EIO_onLoadInSidebarCheckboxCommand() {
     var loadInSidebarChecked = this._element("loadInSidebarCheckbox").checked;
-    var txn = PlacesUIUtils.ptm.setLoadInSidebar(this._itemId,
-                                                 loadInSidebarChecked);
-    PlacesUIUtils.ptm.doTransaction(txn);
+    var annoObj = { name   : PlacesUIUtils.LOAD_IN_SIDEBAR_ANNO,
+                    type   : Ci.nsIAnnotationService.TYPE_INT32,
+                    flags  : 0,
+                    value  : loadInSidebarChecked,
+                    expires: Ci.nsIAnnotationService.EXPIRE_NEVER };
+    var txn = new PlacesSetItemAnnotationTransaction(this._itemId,
+                                                     annoObj);
+    PlacesUtils.transactionManager.doTransaction(txn);
   },
 
   toggleFolderTreeVisibility: function EIO_toggleFolderTreeVisibility() {
@@ -879,8 +686,10 @@ var gEditItemOverlay = {
     // Move the item
     var container = this._getFolderIdFromMenuList();
     if (PlacesUtils.bookmarks.getFolderIdForItem(this._itemId) != container) {
-      var txn = PlacesUIUtils.ptm.moveItem(this._itemId, container, -1);
-      PlacesUIUtils.ptm.doTransaction(txn);
+      var txn = new PlacesMoveItemTransaction(this._itemId, 
+                                              container, 
+                                              PlacesUtils.bookmarks.DEFAULT_INDEX);
+      PlacesUtils.transactionManager.doTransaction(txn);
 
       // Mark the containing folder as recently-used if it isn't in the
       // static list
@@ -927,15 +736,17 @@ var gEditItemOverlay = {
     var anno = this._getLastUsedAnnotationObject(false);
     while (this._recentFolders.length > MAX_FOLDER_ITEM_IN_MENU_LIST) {
       var folderId = this._recentFolders.pop().folderId;
-      txns.push(PlacesUIUtils.ptm.setItemAnnotation(folderId, anno));
+      let annoTxn = new PlacesSetItemAnnotationTransaction(folderId, anno);
+      txns.push(annoTxn);
     }
 
     // Mark folder as recently used
     anno = this._getLastUsedAnnotationObject(true);
-    txns.push(PlacesUIUtils.ptm.setItemAnnotation(aFolderId, anno));
+    let annoTxn = new PlacesSetItemAnnotationTransaction(aFolderId, anno);
+    txns.push(annoTxn);
 
-    var aggregate = PlacesUIUtils.ptm.aggregateTransactions("Update last used folders", txns);
-    PlacesUIUtils.ptm.doTransaction(aggregate);
+    let aggregate = new PlacesAggregatedTransaction("Update last used folders", txns);
+    PlacesUtils.transactionManager.doTransaction(aggregate);
   },
 
   /**
@@ -964,6 +775,12 @@ var gEditItemOverlay = {
     if (tagsSelectorRow.collapsed)
       return;
 
+    // Save the current scroll position and restore it after the rebuild.
+    let firstIndex = tagsSelector.getIndexOfFirstVisibleRow();
+    let selectedIndex = tagsSelector.selectedIndex;
+    let selectedTag = selectedIndex >= 0 ? tagsSelector.selectedItem.label
+                                         : null;
+
     while (tagsSelector.hasChildNodes())
       tagsSelector.removeChild(tagsSelector.lastChild);
 
@@ -976,8 +793,22 @@ var gEditItemOverlay = {
       elt.setAttribute("label", tag);
       if (tagsInField.indexOf(tag) != -1)
         elt.setAttribute("checked", "true");
-
       tagsSelector.appendChild(elt);
+      if (selectedTag === tag)
+        selectedIndex = tagsSelector.getIndexOfItem(elt);
+    }
+
+    // Restore position.
+    // The listbox allows to scroll only if the required offset doesn't
+    // overflow its capacity, thus need to adjust the index for removals.
+    firstIndex =
+      Math.min(firstIndex,
+               tagsSelector.itemCount - tagsSelector.getNumberOfVisibleRows());
+    tagsSelector.scrollToIndex(firstIndex);
+    if (selectedIndex >= 0 && tagsSelector.itemCount > 0) {
+      selectedIndex = Math.min(selectedIndex, tagsSelector.itemCount - 1);
+      tagsSelector.selectedIndex = selectedIndex;
+      tagsSelector.ensureIndexIsVisible(selectedIndex);
     }
   },
 
@@ -1003,20 +834,16 @@ var gEditItemOverlay = {
     }
   },
 
+  /**
+   * Splits "tagsField" element value, returning an array of valid tag strings.
+   *
+   * @return Array of tag strings found in the field value.
+   */
   _getTagsArrayFromTagField: function EIO__getTagsArrayFromTagField() {
-    // we don't require the leading space (after each comma)
-    var tags = this._element("tagsField").value.split(",");
-    for (var i=0; i < tags.length; i++) {
-      // remove trailing and leading spaces
-      tags[i] = tags[i].replace(/^\s+/, "").replace(/\s+$/, "");
-
-      // remove empty entries from the array.
-      if (tags[i] == "") {
-        tags.splice(i, 1);
-        i--;
-      }
-    }
-    return tags;
+    let tags = this._element("tagsField").value;
+    return tags.trim()
+               .split(/\s*,\s*/) // Split on commas and remove spaces.
+               .filter(function (tag) tag.length > 0); // Kill empty tags.
   },
 
   newFolder: function EIO_newFolder() {
@@ -1031,8 +858,8 @@ var gEditItemOverlay = {
 
     // XXXmano: add a separate "New Folder" string at some point...
     var defaultLabel = this._element("newFolderButton").label;
-    var txn = PlacesUIUtils.ptm.createFolder(defaultLabel, ip.itemId, ip.index);
-    PlacesUIUtils.ptm.doTransaction(txn);
+    var txn = new PlacesCreateFolderTransaction(defaultLabel, ip.itemId, ip.index);
+    PlacesUtils.transactionManager.doTransaction(txn);
     this._folderTree.focus();
     this._folderTree.selectItems([this._lastNewItem]);
     this._folderTree.startEditing(this._folderTree.view.selection.currentIndex,
@@ -1068,6 +895,42 @@ var gEditItemOverlay = {
   onItemChanged: function EIO_onItemChanged(aItemId, aProperty,
                                             aIsAnnotationProperty, aValue,
                                             aLastModified, aItemType) {
+    if (aProperty == "tags") {
+      // Tags case is special, since they should be updated if either:
+      // - the notification is for the edited bookmark
+      // - the notification is for the edited history entry
+      // - the notification is for one of edited uris
+      let shouldUpdateTagsField = this._itemId == aItemId;
+      if (this._itemId == -1 || this._multiEdit) {
+        // Check if the changed uri is part of the modified ones.
+        let changedURI = PlacesUtils.bookmarks.getBookmarkURI(aItemId);
+        let uris = this._multiEdit ? this._uris : [this._uri];
+        uris.forEach(function (aURI, aIndex) {
+          if (aURI.equals(changedURI)) {
+            shouldUpdateTagsField = true;
+            if (this._multiEdit) {
+              this._tags[aIndex] = PlacesUtils.tagging.getTagsForURI(this._uris[aIndex]);
+            }
+          }
+        }, this);
+      }
+
+      if (shouldUpdateTagsField) {
+        if (this._multiEdit) {
+          this._allTags = this._getCommonTags();
+          this._initTextField("tagsField", this._allTags.join(", "), false);
+        }
+        else {
+          let tags = PlacesUtils.tagging.getTagsForURI(this._uri).join(", ");
+          this._initTextField("tagsField", tags, false);
+        }
+      }
+
+      // Any tags change should be reflected in the tags selector.
+      this._rebuildTagsSelectorList();
+      return;
+    }
+
     if (this._itemId != aItemId) {
       if (aProperty == "title") {
         // If the title of a folder which is listed within the folders
@@ -1088,20 +951,11 @@ var gEditItemOverlay = {
 
     switch (aProperty) {
     case "title":
-      if (PlacesUtils.annotations.itemHasAnnotation(this._itemId,
-                                                    STATIC_TITLE_ANNO))
-        return;  // onContentLoaded updates microsummary-items
-
-      var userEnteredNameField = this._element("userEnteredName");
-      if (userEnteredNameField.value != aValue) {
-        userEnteredNameField.value = aValue;
-        var namePicker = this._element("namePicker");
-        if (namePicker.selectedItem == userEnteredNameField) {
-          namePicker.label = aValue;
-
-          // clear undo stack
-          namePicker.editor.transactionManager.clear();
-        }
+      var namePicker = this._element("namePicker");
+      if (namePicker.value != aValue) {
+        namePicker.value = aValue;
+        // clear undo stack
+        namePicker.editor.transactionManager.clear();
       }
       break;
     case "uri":
@@ -1111,7 +965,7 @@ var gEditItemOverlay = {
                     getService(Ci.nsIIOService).
                     newURI(aValue, null, null);
         this._initTextField("locationField", this._uri.spec);
-        this._initNamePicker(); // for microsummaries
+        this._initNamePicker();
         this._initTextField("tagsField",
                              PlacesUtils.tagging
                                         .getTagsForURI(this._uri).join(", "),
@@ -1134,15 +988,19 @@ var gEditItemOverlay = {
                                                   PlacesUIUtils.LOAD_IN_SIDEBAR_ANNO);
       break;
     case PlacesUtils.LMANNO_FEEDURI:
-      var feedURISpec = PlacesUtils.livemarks.getFeedURI(this._itemId).spec;
-      this._initTextField("feedLocationField", feedURISpec);
+      let feedURISpec =
+        PlacesUtils.annotations.getItemAnnotation(this._itemId,
+                                                  PlacesUtils.LMANNO_FEEDURI);
+      this._initTextField("feedLocationField", feedURISpec, true);
       break;
     case PlacesUtils.LMANNO_SITEURI:
-      var siteURISpec = "";
-      var siteURI = PlacesUtils.livemarks.getSiteURI(this._itemId);
-      if (siteURI)
-        siteURISpec = siteURI.spec;
-      this._initTextField("siteLocationField", siteURISpec);
+      let siteURISpec = "";
+      try {
+        siteURISpec =
+          PlacesUtils.annotations.getItemAnnotation(this._itemId,
+                                                    PlacesUtils.LMANNO_SITEURI);
+      } catch (ex) {}
+      this._initTextField("siteLocationField", siteURISpec, true);
       break;
     }
   },
@@ -1160,13 +1018,14 @@ var gEditItemOverlay = {
     this._folderMenuList.selectedItem = folderItem;
   },
 
-  onItemAdded: function EIO_onItemAdded(aItemId, aFolder, aIndex, aItemType) {
+  onItemAdded: function EIO_onItemAdded(aItemId, aParentId, aIndex, aItemType,
+                                        aURI) {
     this._lastNewItem = aItemId;
   },
 
+  onItemRemoved: function() { },
   onBeginUpdateBatch: function() { },
   onEndUpdateBatch: function() { },
   onBeforeItemRemoved: function() { },
-  onItemRemoved: function() { },
   onItemVisited: function() { },
 };

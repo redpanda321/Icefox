@@ -34,10 +34,10 @@
  */
 
 #include <stdlib.h>
-#include "prtypes.h"
+#include "nsAlgorithm.h"
 #include "nsQuickSort.h"
 
-PR_BEGIN_EXTERN_C
+extern "C" {
 
 #if !defined(DEBUG) && (defined(__cplusplus) || defined(__gcc))
 # ifndef INLINE
@@ -164,9 +164,9 @@ loop:	SWAPINIT(a, es);
 	}
 
 	pn = (char *)a + n * es;
-	r = PR_MIN(pa - (char *)a, pb - pa);
+	r = NS_MIN(pa - (char *)a, pb - pa);
 	vecswap(a, pb - r, r);
-	r = PR_MIN(pd - pc, (int)(pn - pd - es));
+	r = NS_MIN<size_t>(pd - pc, pn - pd - es);
 	vecswap(pb, pn - r, r);
 	if ((r = pb - pa) > (int)es)
         NS_QuickSort(a, r / es, es, cmp, data);
@@ -179,4 +179,4 @@ loop:	SWAPINIT(a, es);
 /*		NS_QuickSort(pn - r, r / es, es, cmp, data);*/
 }
 
-PR_END_EXTERN_C
+}

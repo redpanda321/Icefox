@@ -9,9 +9,16 @@
 // are documented in the header file.
 //
 
+#if defined(_MSC_VER)
+#pragma warning(disable: 4718)
+#endif
+
 #include "compiler/SymbolTable.h"
 
 #include <stdio.h>
+#include <algorithm>
+
+#include "common/angleutils.h"
 
 //
 // TType helper function needs a place to live.
@@ -50,7 +57,7 @@ void TType::buildMangledName(TString& mangledName)
     mangledName += static_cast<char>('0' + getNominalSize());
     if (isArray()) {
         char buf[20];
-        sprintf(buf, "%d", arraySize);
+        snprintf(buf, sizeof(buf), "%d", arraySize);
         mangledName += '[';
         mangledName += buf;
         mangledName += ']';
@@ -65,10 +72,24 @@ int TType::getStructSize() const
     }
 
     if (structureSize == 0)
-        for (TTypeList::iterator tl = getStruct()->begin(); tl != getStruct()->end(); tl++)
+        for (TTypeList::const_iterator tl = getStruct()->begin(); tl != getStruct()->end(); tl++)
             structureSize += ((*tl).type)->getObjectSize();
 
     return structureSize;
+}
+
+void TType::computeDeepestStructNesting()
+{
+    if (!getStruct()) {
+        return;
+    }
+
+    int maxNesting = 0;
+    for (TTypeList::const_iterator tl = getStruct()->begin(); tl != getStruct()->end(); ++tl) {
+        maxNesting = std::max(maxNesting, ((*tl).type)->getDeepestStructNesting());
+    }
+
+    deepestStructNesting = 1 + maxNesting;
 }
 
 //
@@ -140,6 +161,22 @@ void TSymbolTableLevel::relateToOperator(const char* name, TOperator op)
     }
 }
 
+//
+// Change all function entries in the table with the non-mangled name
+// to be related to the provided built-in extension. This is a low
+// performance operation, and only intended for symbol tables that
+// live across a large number of compiles.
+//
+void TSymbolTableLevel::relateToExtension(const char* name, const TString& ext)
+{
+    for (tLevel::iterator it = level.begin(); it != level.end(); ++it) {
+        if (it->second->isFunction()) {
+            TFunction* function = static_cast<TFunction*>(it->second);
+            if (function->getName() == name)
+                function->relateToExtension(ext);
+        }
+    }
+}
 
 TSymbol::TSymbol(const TSymbol& copyOf)
 {

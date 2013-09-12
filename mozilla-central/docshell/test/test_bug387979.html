@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=387979
 -->
 <head>
   <title>Test for Bug 387979</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>        
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -22,7 +21,7 @@ function a(s) {
 	var r;
 	try { r = frames[0].document.body; }
 	catch (e) { r = e; }
-        is(r instanceof HTMLBodyElement, true,
+        is(r instanceof frames[0].HTMLBodyElement, true,
            "Can't get body" + s);
 }
 var p = 0;

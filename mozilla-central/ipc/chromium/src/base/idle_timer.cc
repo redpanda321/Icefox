@@ -10,7 +10,11 @@
 #define ENABLE_XSS_SUPPORT 0
 
 #if defined(OS_MACOSX)
+#if defined(XP_MACOSX)
 #include <ApplicationServices/ApplicationServices.h>
+#else
+#include <CoreGraphics/CoreGraphics.h>
+#endif
 #endif
 
 #if defined(OS_LINUX) && ENABLE_XSS_SUPPORT
@@ -28,18 +32,18 @@
 namespace base {
 
 #if defined(OS_WIN)
-bool OSIdleTimeSource(int32 *milliseconds_interval_since_last_event) {
+bool OSIdleTimeSource(int32_t *milliseconds_interval_since_last_event) {
   LASTINPUTINFO lastInputInfo;
   lastInputInfo.cbSize = sizeof(lastInputInfo);
   if (GetLastInputInfo(&lastInputInfo) == 0) {
     return false;
   }
-  int32 last_input_time = lastInputInfo.dwTime;
+  int32_t last_input_time = lastInputInfo.dwTime;
 
   // Note: On Windows GetLastInputInfo returns a 32bit value which rolls over
   // ~49days.
-  int32 current_time = GetTickCount();
-  int32 delta = current_time - last_input_time;
+  int32_t current_time = GetTickCount();
+  int32_t delta = current_time - last_input_time;
   // delta will go negative if we've been idle for 2GB of ticks.
   if (delta < 0)
     delta = -delta;
@@ -47,11 +51,16 @@ bool OSIdleTimeSource(int32 *milliseconds_interval_since_last_event) {
   return true;
 }
 #elif defined(OS_MACOSX)
-bool OSIdleTimeSource(int32 *milliseconds_interval_since_last_event) {
+bool OSIdleTimeSource(int32_t *milliseconds_interval_since_last_event) {
   *milliseconds_interval_since_last_event =
+#if defined(XP_MACOSX)
       CGEventSourceSecondsSinceLastEventType(
           kCGEventSourceStateCombinedSessionState,
           kCGAnyInputEventType) * 1000.0;
+#else
+  //TODO: iOS does not support the CGEventSource methods
+      0;
+#endif
   return true;
 }
 #elif defined(OS_LINUX) && ENABLE_XSS_SUPPORT
@@ -72,7 +81,7 @@ class IdleState {
     }
   }
 
-  int32 IdleTime() {
+  int32_t IdleTime() {
     if (have_idle_info_ && idle_info_.Get()) {
       XScreenSaverQueryInfo(GDK_DISPLAY(), GDK_ROOT_WINDOW(),
                             idle_info_.Get());
@@ -88,10 +97,10 @@ class IdleState {
   DISALLOW_COPY_AND_ASSIGN(IdleState);
 };
 
-bool OSIdleTimeSource(int32* milliseconds_interval_since_last_event) {
+bool OSIdleTimeSource(int32_t* milliseconds_interval_since_last_event) {
   static LazyInstance<IdleState> state_instance(base::LINKER_INITIALIZED);
   IdleState* state = state_instance.Pointer();
-  int32 idle_time = state->IdleTime();
+  int32_t idle_time = state->IdleTime();
   if (0 < idle_time) {
     *milliseconds_interval_since_last_event = idle_time;
     return true;
@@ -139,7 +148,7 @@ void IdleTimer::StartTimer() {
 }
 
 TimeDelta IdleTimer::CurrentIdleTime() {
-  int32 interval = 0;
+  int32_t interval = 0;
   if (idle_time_source_(&interval)) {
     return TimeDelta::FromMilliseconds(interval);
   }

@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.
- *
- * The Initial Developer of the Original Code is IBM Corporation.
- * Portions created by IBM Corporation are Copyright (C) 2003
- * IBM Corporation. All Rights Reserved.
- *
- * Contributor(s):
- *   IBM Corp.
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsIEventTarget.h"
 #include "nsIServiceManager.h"
@@ -47,7 +15,7 @@
 //
 // NSPR_LOG_MODULES=nsIOThreadPool:5
 //
-static PRLogModuleInfo *gIOThreadPoolLog = nsnull;
+static PRLogModuleInfo *gIOThreadPoolLog = nullptr;
 #endif
 #define LOG(args) PR_LOG(gIOThreadPoolLog, PR_LOG_DEBUG, args)
 
@@ -91,10 +59,11 @@ private:
     PRLock    *mLock;
     PRCondVar *mIdleThreadCV;   // notified to wake up an idle thread
     PRCondVar *mExitThreadCV;   // notified when a thread exits
-    PRUint32   mNumThreads;     // number of active + idle threads
-    PRUint32   mNumIdleThreads; // number of idle threads
+    uint32_t   mNumThreads;     // number of active + idle threads
+    uint32_t   mNumIdleThreads; // number of idle threads
     PRCList    mEventQ;         // queue of PLEvent structs
-    PRBool     mShutdown;       // set to true if shutting down
+    bool       mShutdown;       // set to true if shutting down
+    nsThreadPoolNaming mNaming; // thread name numbering
 };
 
 NS_IMPL_THREADSAFE_ISUPPORTS2(nsIOThreadPool, nsIEventTarget, nsIObserver)
@@ -109,9 +78,9 @@ nsIOThreadPool::Init()
 
     mNumThreads = 0;
     mNumIdleThreads = 0;
-    mShutdown = PR_FALSE;
+    mShutdown = false;
 
-    mLock = PR_NewLock();
+    mLock = nsAutoLock::NewLock("nsIOThreadPool::mLock");
     if (!mLock)
         return NS_ERROR_OUT_OF_MEMORY;
 
@@ -128,7 +97,7 @@ nsIOThreadPool::Init()
     // We want to shutdown the i/o thread pool at xpcom-shutdown-threads time.
     nsCOMPtr<nsIObserverService> os = mozilla::services::GetObserverService();
     if (os)
-        os->AddObserver(this, "xpcom-shutdown-threads", PR_FALSE);
+        os->AddObserver(this, "xpcom-shutdown-threads", false);
     return NS_OK;
 }
 
@@ -146,7 +115,7 @@ nsIOThreadPool::~nsIOThreadPool()
     if (mExitThreadCV)
         PR_DestroyCondVar(mExitThreadCV);
     if (mLock)
-        PR_DestroyLock(mLock);
+        nsAutoLock::DestroyLock(mLock);
 }
 
 void
@@ -157,7 +126,7 @@ nsIOThreadPool::Shutdown()
     // synchronize with background threads...
     {
         nsAutoLock lock(mLock);
-        mShutdown = PR_TRUE;
+        mShutdown = true;
 
         PR_NotifyAllCondVar(mIdleThreadCV);
 
@@ -209,7 +178,7 @@ nsIOThreadPool::PostEvent(PLEvent *event)
 }
 
 NS_IMETHODIMP
-nsIOThreadPool::IsOnCurrentThread(PRBool *result)
+nsIOThreadPool::IsOnCurrentThread(bool *result)
 {
     // no one should be calling this method.  if this assertion gets hit,
     // then we need to think carefully about what this method should be
@@ -217,7 +186,7 @@ nsIOThreadPool::IsOnCurrentThread(PRBool *result)
     NS_NOTREACHED("nsIOThreadPool::IsOnCurrentThread");
 
     // fudging this a bit since we actually cover several threads...
-    *result = PR_FALSE;
+    *result = false;
     return NS_OK;
 }
 
@@ -233,6 +202,8 @@ void
 nsIOThreadPool::ThreadFunc(void *arg)
 {
     nsIOThreadPool *pool = (nsIOThreadPool *) arg;
+
+    pool->mNaming.SetThreadPoolName("IO Thread");
 
     LOG(("entering ThreadFunc\n"));
 

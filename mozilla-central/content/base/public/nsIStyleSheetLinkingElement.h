@@ -1,46 +1,13 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef nsIStyleSheetLinkingElement_h__
 #define nsIStyleSheetLinkingElement_h__
 
 
 #include "nsISupports.h"
 
-class nsIDocument;
 class nsICSSLoaderObserver;
 class nsIURI;
 
@@ -77,7 +44,7 @@ public:
    * element that would cause a stylesheet to be loaded. Subsequent
    * modifications to the element will not be ignored.
    */
-  NS_IMETHOD InitStyleLinkElement(PRBool aDontLoadStyle) = 0;
+  NS_IMETHOD InitStyleLinkElement(bool aDontLoadStyle) = 0;
 
   /**
    * Tells this element to update the stylesheet.
@@ -94,8 +61,8 @@ public:
    *              meaningful if aWillNotify is true.
    */
   NS_IMETHOD UpdateStyleSheet(nsICSSLoaderObserver* aObserver,
-                              PRBool *aWillNotify,
-                              PRBool *aIsAlternate) = 0;
+                              bool *aWillNotify,
+                              bool *aIsAlternate) = 0;
 
   /**
    * Tells this element whether to update the stylesheet when the
@@ -103,7 +70,7 @@ public:
    *
    * @param aEnableUpdates update on changes or not.
    */
-  NS_IMETHOD SetEnableUpdates(PRBool aEnableUpdates) = 0;
+  NS_IMETHOD SetEnableUpdates(bool aEnableUpdates) = 0;
 
   /**
    * Gets the charset that the element claims the style sheet is in
@@ -117,14 +84,14 @@ public:
    * proper loading of xml-stylesheet processing instructions in XUL overlays
    * and is only currently used by nsXMLStylesheetPI.
    *
-   * @param aNewBaseURI the new base URI, nsnull to use the default base URI.
+   * @param aNewBaseURI the new base URI, nullptr to use the default base URI.
    */
   virtual void OverrideBaseURI(nsIURI* aNewBaseURI) = 0;
 
   // This doesn't entirely belong here since they only make sense for
   // some types of linking elements, but it's a better place than
   // anywhere else.
-  virtual void SetLineNumber(PRUint32 aLineNumber) = 0;
+  virtual void SetLineNumber(uint32_t aLineNumber) = 0;
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsIStyleSheetLinkingElement,

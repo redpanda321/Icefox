@@ -1,42 +1,10 @@
 /* This file implements the SERVER Session ID cache. 
  * NOTE:  The contents of this file are NOT used by the client.
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-/* $Id: sslsnce.c,v 1.54 2010/07/05 19:31:56 alexei.volkov.bugs%sun.com Exp $ */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+/* $Id: sslsnce.c,v 1.63 2012/06/14 19:04:59 wtc%google.com Exp $ */
 
 /* Note: ssl_FreeSID() in sslnonce.c gets used for both client and server 
  * cache sids!
@@ -86,7 +54,12 @@
 #include "pk11func.h"
 #include "base64.h"
 #include "keyhi.h"
+#ifdef NO_PKCS11_BYPASS
+#include "blapit.h"
+#include "sechash.h"
+#else
 #include "blapi.h"
+#endif
 
 #include <stdio.h>
 
@@ -148,17 +121,17 @@ struct sidCacheEntryStr {
 /*  2 */    ssl3CipherSuite  cipherSuite;
 /*  2 */    PRUint16    compression; 	/* SSLCompressionMethod */
 
-/*100 */    ssl3SidKeys keys;	/* keys and ivs, wrapped as needed. */
+/* 52 */    ssl3SidKeys keys;	/* keys, wrapped as needed. */
 
 /*  4 */    PRUint32    masterWrapMech; 
 /*  4 */    SSL3KEAType exchKeyType;
 /*  4 */    PRInt32     certIndex;
 /*  4 */    PRInt32     srvNameIndex;
 /* 32 */    PRUint8     srvNameHash[SHA256_LENGTH]; /* SHA256 name hash */
-/*152 */} ssl3;
+/*104 */} ssl3;
 /* force sizeof(sidCacheEntry) to be a multiple of cache line size */
         struct {
-/*152 */    PRUint8     filler[120]; /* 72+152==224, a multiple of 16 */
+/*120 */    PRUint8     filler[120]; /* 72+120==192, a multiple of 16 */
 	} forceSize;
     } u;
 };
@@ -448,8 +421,12 @@ CacheSrvName(cacheDesc * cache, SECItem *name, sidCacheEntry *sce)
     snce.type = name->type;
     snce.nameLen = name->len;
     PORT_Memcpy(snce.name, name->data, snce.nameLen);
+#ifdef NO_PKCS11_BYPASS
+    HASH_HashBuf(HASH_AlgSHA256, snce.nameHash, name->data, name->len);
+#else
     SHA256_HashBuf(snce.nameHash, (unsigned char*)name->data,
                    name->len);
+#endif
     /* get index of the next name */
     ndx = Get32BitNameHash(name);
     /* get lock on cert cache */
@@ -557,7 +534,7 @@ ConvertToSID(sidCacheEntry *    from,
     sslSessionID *to;
     uint16 version = from->version;
 
-    to = (sslSessionID*) PORT_ZAlloc(sizeof(sslSessionID));
+    to = PORT_ZNew(sslSessionID);
     if (!to) {
 	return 0;
     }
@@ -1026,15 +1003,16 @@ CloseCache(cacheDesc *cache)
     int locks_initialized = cache->numSIDCacheLocksInitialized;
 
     if (cache->cacheMem) {
-	/* If everInherited is true, this shared cache was (and may still
-	** be) in use by multiple processes.  We do not wish to destroy
-	** the mutexes while they are still in use.  
-	*/
-	if (cache->sharedCache &&
-            PR_FALSE == cache->sharedCache->everInherited) {
+	if (cache->sharedCache) {
 	    sidCacheLock *pLock = cache->sidCacheLocks;
 	    for (; locks_initialized > 0; --locks_initialized, ++pLock ) {
-		sslMutex_Destroy(&pLock->mutex);
+		/* If everInherited is true, this shared cache was (and may
+		** still be) in use by multiple processes.  We do not wish to
+		** destroy the mutexes while they are still in use, but we do
+		** want to free mutex resources associated with this process.
+		*/
+		sslMutex_Destroy(&pLock->mutex,
+				 cache->sharedCache->everInherited);
 	    }
 	}
 	if (cache->shared) {
@@ -1327,9 +1305,14 @@ ssl_ConfigServerSessionIDCacheInstanceWithOpt(cacheDesc *cache,
 {
     SECStatus rv;
 
-    PORT_Assert(sizeof(sidCacheEntry) == 224);
+    PORT_Assert(sizeof(sidCacheEntry) == 192);
     PORT_Assert(sizeof(certCacheEntry) == 4096);
     PORT_Assert(sizeof(srvNameCacheEntry) == 1072);
+
+    rv = ssl_Init();
+    if (rv != SECSuccess) {
+	return rv;
+    }
 
     myPid = SSL_GETPID();
     if (!directory) {
@@ -1511,6 +1494,11 @@ SSL_InheritMPServerSIDCacheInstance(cacheDesc *cache, const char * envString)
     int           locks_initialized = 0;
     int           locks_to_initialize = 0;
 #endif
+    SECStatus     status = ssl_Init();
+
+    if (status != SECSuccess) {
+	return status;
+    }
 
     myPid = SSL_GETPID();
 
@@ -1863,17 +1851,25 @@ WrapTicketKey(SECKEYPublicKey *svrPubKey, PK11SymKey *symKey,
 }
 
 static PRBool
-GenerateAndWrapTicketKeys(SECKEYPublicKey *svrPubKey, void *pwArg,
-                          unsigned char *keyName, PK11SymKey **aesKey,
-                          PK11SymKey **macKey)
+GenerateTicketKeys(void *pwArg, unsigned char *keyName, PK11SymKey **aesKey,
+                   PK11SymKey **macKey)
 {
     PK11SlotInfo *slot;
     CK_MECHANISM_TYPE mechanismArray[2];
     PK11SymKey *aesKeyTmp = NULL;
     PK11SymKey *macKeyTmp = NULL;
     cacheDesc *cache = &globalCache;
+    uint8 ticketKeyNameSuffixLocal[SESS_TICKET_KEY_VAR_NAME_LEN];
+    uint8 *ticketKeyNameSuffix;
 
-    if (PK11_GenerateRandom(cache->ticketKeyNameSuffix,
+    if (!cache->cacheMem) {
+        /* cache is not initalized. Use stack buffer */
+        ticketKeyNameSuffix = ticketKeyNameSuffixLocal;
+    } else {
+        ticketKeyNameSuffix = cache->ticketKeyNameSuffix;
+    }
+
+    if (PK11_GenerateRandom(ticketKeyNameSuffix,
 	    SESS_TICKET_KEY_VAR_NAME_LEN) != SECSuccess) {
 	SSL_DBG(("%d: SSL[%s]: Unable to generate random key name bytes.",
 		    SSL_GETPID(), "unknown"));
@@ -1885,9 +1881,10 @@ GenerateAndWrapTicketKeys(SECKEYPublicKey *svrPubKey, void *pwArg,
 
     slot = PK11_GetBestSlotMultiple(mechanismArray, 2, pwArg);
     if (slot) {
-	aesKeyTmp = PK11_KeyGen(slot, mechanismArray[0], NULL, 32, pwArg);
-	macKeyTmp = PK11_KeyGen(slot, mechanismArray[1], NULL, SHA256_LENGTH,
-				pwArg);
+	aesKeyTmp = PK11_KeyGen(slot, mechanismArray[0], NULL,
+                                AES_256_KEY_LENGTH, pwArg);
+	macKeyTmp = PK11_KeyGen(slot, mechanismArray[1], NULL,
+                                SHA256_LENGTH, pwArg);
 	PK11_FreeSlot(slot);
     }
 
@@ -1896,15 +1893,39 @@ GenerateAndWrapTicketKeys(SECKEYPublicKey *svrPubKey, void *pwArg,
 		    SSL_GETPID(), "unknown"));
 	goto loser;
     }
+    PORT_Memcpy(keyName, ticketKeyNameSuffix, SESS_TICKET_KEY_VAR_NAME_LEN);
+    *aesKey = aesKeyTmp;
+    *macKey = macKeyTmp;
+    return PR_TRUE;
 
-    /* Export the keys to the shared cache in wrapped form. */
-    if (!WrapTicketKey(svrPubKey, aesKeyTmp, "enc key", cache->ticketEncKey))
-	goto loser;
-    if (!WrapTicketKey(svrPubKey, macKeyTmp, "mac key", cache->ticketMacKey))
-	goto loser;
+loser:
+    if (aesKeyTmp)
+	PK11_FreeSymKey(aesKeyTmp);
+    if (macKeyTmp)
+	PK11_FreeSymKey(macKeyTmp);
+    return PR_FALSE;
+}
 
-    PORT_Memcpy(keyName, cache->ticketKeyNameSuffix,
-	SESS_TICKET_KEY_VAR_NAME_LEN);
+static PRBool
+GenerateAndWrapTicketKeys(SECKEYPublicKey *svrPubKey, void *pwArg,
+                          unsigned char *keyName, PK11SymKey **aesKey,
+                          PK11SymKey **macKey)
+{
+    PK11SymKey *aesKeyTmp = NULL;
+    PK11SymKey *macKeyTmp = NULL;
+    cacheDesc *cache = &globalCache;
+
+    if (!GenerateTicketKeys(pwArg, keyName, &aesKeyTmp, &macKeyTmp)) {
+        goto loser;
+    }
+
+    if (cache->cacheMem) {
+        /* Export the keys to the shared cache in wrapped form. */
+        if (!WrapTicketKey(svrPubKey, aesKeyTmp, "enc key", cache->ticketEncKey))
+            goto loser;
+        if (!WrapTicketKey(svrPubKey, macKeyTmp, "mac key", cache->ticketMacKey))
+            goto loser;
+    }
     *aesKey = aesKeyTmp;
     *macKey = macKeyTmp;
     return PR_TRUE;
@@ -1971,6 +1992,12 @@ ssl_GetSessionTicketKeysPKCS11(SECKEYPrivateKey *svrPrivKey,
     PRBool keysGenerated = PR_FALSE;
     cacheDesc *cache = &globalCache;
 
+    if (!cache->cacheMem) {
+        /* cache is uninitialized. Generate keys and return them
+         * without caching. */
+        return GenerateTicketKeys(pwArg, keyName, aesKey, macKey);
+    }
+
     now = LockSidCacheLock(cache->keyCacheLock, now);
     if (!now)
 	return rv;
@@ -2000,33 +2027,58 @@ ssl_GetSessionTicketKeys(unsigned char *keyName, unsigned char *encKey,
     PRBool rv = PR_FALSE;
     PRUint32 now = 0;
     cacheDesc *cache = &globalCache;
+    uint8 ticketMacKey[AES_256_KEY_LENGTH], ticketEncKey[SHA256_LENGTH];
+    uint8 ticketKeyNameSuffixLocal[SESS_TICKET_KEY_VAR_NAME_LEN];
+    uint8 *ticketMacKeyPtr, *ticketEncKeyPtr, *ticketKeyNameSuffix;
+    PRBool cacheIsEnabled = PR_TRUE;
 
-    /* Grab lock. */
-    now = LockSidCacheLock(cache->keyCacheLock, now);
-    if (!now)
-	return rv;
+    if (!cache->cacheMem) { /* cache is uninitialized */
+        cacheIsEnabled = PR_FALSE;
+        ticketKeyNameSuffix = ticketKeyNameSuffixLocal;
+        ticketEncKeyPtr = ticketEncKey;
+        ticketMacKeyPtr = ticketMacKey;
+    } else {
+        /* these values have constant memory locations in the cache.
+         * Ok to reference them without holding the lock. */
+        ticketKeyNameSuffix = cache->ticketKeyNameSuffix;
+        ticketEncKeyPtr = cache->ticketEncKey->bytes;
+        ticketMacKeyPtr = cache->ticketMacKey->bytes;
+    }
 
-    if (!*(cache->ticketKeysValid)) {
-	if (PK11_GenerateRandom(cache->ticketKeyNameSuffix,
+    if (cacheIsEnabled) {
+        /* Grab lock if initialized. */
+        now = LockSidCacheLock(cache->keyCacheLock, now);
+        if (!now)
+            return rv;
+    }
+    /* Going to regenerate keys on every call if cache was not
+     * initialized. */
+    if (!cacheIsEnabled || !*(cache->ticketKeysValid)) {
+	if (PK11_GenerateRandom(ticketKeyNameSuffix,
 		SESS_TICKET_KEY_VAR_NAME_LEN) != SECSuccess)
 	    goto loser;
-	if (PK11_GenerateRandom(cache->ticketEncKey->bytes, 32) != SECSuccess)
+	if (PK11_GenerateRandom(ticketEncKeyPtr,
+                                AES_256_KEY_LENGTH) != SECSuccess)
 	    goto loser;
-	if (PK11_GenerateRandom(cache->ticketMacKey->bytes,
-		SHA256_LENGTH) != SECSuccess)
+	if (PK11_GenerateRandom(ticketMacKeyPtr,
+                                SHA256_LENGTH) != SECSuccess)
 	    goto loser;
-	*(cache->ticketKeysValid) = 1;
+        if (cacheIsEnabled) {
+            *(cache->ticketKeysValid) = 1;
+        }
     }
 
     rv = PR_TRUE;
 
  loser:
-    UnlockSidCacheLock(cache->keyCacheLock);
+    if (cacheIsEnabled) {
+        UnlockSidCacheLock(cache->keyCacheLock);
+    }
     if (rv) {
-	PORT_Memcpy(keyName, cache->ticketKeyNameSuffix,
-	    SESS_TICKET_KEY_VAR_NAME_LEN);
-	PORT_Memcpy(encKey, cache->ticketEncKey->bytes, 32);
-	PORT_Memcpy(macKey, cache->ticketMacKey->bytes, SHA256_LENGTH);
+	PORT_Memcpy(keyName, ticketKeyNameSuffix,
+                    SESS_TICKET_KEY_VAR_NAME_LEN);
+	PORT_Memcpy(encKey, ticketEncKeyPtr, AES_256_KEY_LENGTH);
+	PORT_Memcpy(macKey, ticketMacKeyPtr, SHA256_LENGTH);
     }
     return rv;
 }

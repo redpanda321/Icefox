@@ -1,48 +1,15 @@
 /* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 4 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Foundation code.
- *
- * The Initial Developer of the Original Code is Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2005-2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Stuart Parmenter <stuart@mozilla.com>
- *   John Daggett <jdaggett@mozilla.com>
- *   Jonathan Kew <jfkthame@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef GFX_FONT_UTILS_H
 #define GFX_FONT_UTILS_H
 
 #include "gfxTypes.h"
+#include "gfxPlatform.h"
 
-#include "prtypes.h"
+#include "nsAlgorithm.h"
 #include "prcpucfg.h"
 
 #include "nsDataHashtable.h"
@@ -55,6 +22,9 @@
 #include "nsTArray.h"
 #include "nsAutoPtr.h"
 #include "nsIStreamBufferAccess.h"
+#include "mozilla/Likely.h"
+
+#include "zlib.h"
 
 /* Bug 341128 - w32api defines min/max which causes problems with <bitset> */
 #ifdef __MINGW32__
@@ -71,73 +41,100 @@ private:
     struct Block {
         Block(const Block& aBlock) { memcpy(mBits, aBlock.mBits, sizeof(mBits)); }
         Block(unsigned char memsetValue = 0) { memset(mBits, memsetValue, BLOCK_SIZE); }
-        PRUint8 mBits[BLOCK_SIZE];
+        uint8_t mBits[BLOCK_SIZE];
     };
 
 public:
     gfxSparseBitSet() { }
     gfxSparseBitSet(const gfxSparseBitSet& aBitset) {
-        PRUint32 len = aBitset.mBlocks.Length();
+        uint32_t len = aBitset.mBlocks.Length();
         mBlocks.AppendElements(len);
-        for (PRUint32 i = 0; i < len; ++i) {
+        for (uint32_t i = 0; i < len; ++i) {
             Block *block = aBitset.mBlocks[i];
             if (block)
                 mBlocks[i] = new Block(*block);
         }
     }
-    PRBool test(PRUint32 aIndex) const {
+
+    bool Equals(const gfxSparseBitSet *aOther) const {
+        if (mBlocks.Length() != aOther->mBlocks.Length()) {
+            return false;
+        }
+        size_t n = mBlocks.Length();
+        for (size_t i = 0; i < n; ++i) {
+            const Block *b1 = mBlocks[i];
+            const Block *b2 = aOther->mBlocks[i];
+            if (!b1 != !b2) {
+                return false;
+            }
+            if (!b1) {
+                continue;
+            }
+            if (memcmp(&b1->mBits, &b2->mBits, BLOCK_SIZE) != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool test(uint32_t aIndex) const {
         NS_ASSERTION(mBlocks.DebugGetHeader(), "mHdr is null, this is bad");
-        PRUint32 blockIndex = aIndex/BLOCK_SIZE_BITS;
+        uint32_t blockIndex = aIndex/BLOCK_SIZE_BITS;
         if (blockIndex >= mBlocks.Length())
-            return PR_FALSE;
+            return false;
         Block *block = mBlocks[blockIndex];
         if (!block)
-            return PR_FALSE;
+            return false;
         return ((block->mBits[(aIndex>>3) & (BLOCK_SIZE - 1)]) & (1 << (aIndex & 0x7))) != 0;
     }
 
-    PRBool TestRange(PRUint32 aStart, PRUint32 aEnd) {
-        PRUint32 startBlock, endBlock, blockLen;
+#if PR_LOGGING
+    // dump out contents of bitmap
+    void Dump(const char* aPrefix, eGfxLog aWhichLog) const;
+#endif
+
+    bool TestRange(uint32_t aStart, uint32_t aEnd) {
+        uint32_t startBlock, endBlock, blockLen;
         
         // start point is beyond the end of the block array? return false immediately
         startBlock = aStart >> BLOCK_INDEX_SHIFT;
         blockLen = mBlocks.Length();
-        if (startBlock >= blockLen) return PR_FALSE;
+        if (startBlock >= blockLen) return false;
         
         // check for blocks in range, if none, return false
-        PRUint32 blockIndex;
-        PRBool hasBlocksInRange = PR_FALSE;
+        uint32_t blockIndex;
+        bool hasBlocksInRange = false;
 
         endBlock = aEnd >> BLOCK_INDEX_SHIFT;
         blockIndex = startBlock;
         for (blockIndex = startBlock; blockIndex <= endBlock; blockIndex++) {
             if (blockIndex < blockLen && mBlocks[blockIndex])
-                hasBlocksInRange = PR_TRUE;
+                hasBlocksInRange = true;
         }
-        if (!hasBlocksInRange) return PR_FALSE;
+        if (!hasBlocksInRange) return false;
 
         Block *block;
-        PRUint32 i, start, end;
+        uint32_t i, start, end;
         
         // first block, check bits
         if ((block = mBlocks[startBlock])) {
             start = aStart;
-            end = PR_MIN(aEnd, ((startBlock+1) << BLOCK_INDEX_SHIFT) - 1);
+            end = NS_MIN(aEnd, ((startBlock+1) << BLOCK_INDEX_SHIFT) - 1);
             for (i = start; i <= end; i++) {
                 if ((block->mBits[(i>>3) & (BLOCK_SIZE - 1)]) & (1 << (i & 0x7)))
-                    return PR_TRUE;
+                    return true;
             }
         }
-        if (endBlock == startBlock) return PR_FALSE;
+        if (endBlock == startBlock) return false;
 
         // [2..n-1] blocks check bytes
         for (blockIndex = startBlock + 1; blockIndex < endBlock; blockIndex++) {
-            PRUint32 index;
+            uint32_t index;
             
             if (blockIndex >= blockLen || !(block = mBlocks[blockIndex])) continue;
             for (index = 0; index < BLOCK_SIZE; index++) {
                 if (block->mBits[index]) 
-                    return PR_TRUE;
+                    return true;
             }
         }
         
@@ -147,151 +144,186 @@ public:
             end = aEnd;
             for (i = start; i <= end; i++) {
                 if ((block->mBits[(i>>3) & (BLOCK_SIZE - 1)]) & (1 << (i & 0x7)))
-                    return PR_TRUE;
+                    return true;
             }
         }
         
-        return PR_FALSE;
+        return false;
     }
     
-    void set(PRUint32 aIndex) {
-        PRUint32 blockIndex = aIndex/BLOCK_SIZE_BITS;
+    void set(uint32_t aIndex) {
+        uint32_t blockIndex = aIndex/BLOCK_SIZE_BITS;
         if (blockIndex >= mBlocks.Length()) {
             nsAutoPtr<Block> *blocks = mBlocks.AppendElements(blockIndex + 1 - mBlocks.Length());
-            if (NS_UNLIKELY(!blocks)) // OOM
+            if (MOZ_UNLIKELY(!blocks)) // OOM
                 return;
         }
         Block *block = mBlocks[blockIndex];
         if (!block) {
             block = new Block;
-            if (NS_UNLIKELY(!block)) // OOM
-                return;
             mBlocks[blockIndex] = block;
         }
         block->mBits[(aIndex>>3) & (BLOCK_SIZE - 1)] |= 1 << (aIndex & 0x7);
     }
 
-    void set(PRUint32 aIndex, PRBool aValue) {
+    void set(uint32_t aIndex, bool aValue) {
         if (aValue)
             set(aIndex);
         else
             clear(aIndex);
     }
 
-    void SetRange(PRUint32 aStart, PRUint32 aEnd) {
-        const PRUint32 startIndex = aStart/BLOCK_SIZE_BITS;
-        const PRUint32 endIndex = aEnd/BLOCK_SIZE_BITS;
+    void SetRange(uint32_t aStart, uint32_t aEnd) {
+        const uint32_t startIndex = aStart/BLOCK_SIZE_BITS;
+        const uint32_t endIndex = aEnd/BLOCK_SIZE_BITS;
 
         if (endIndex >= mBlocks.Length()) {
-            PRUint32 numNewBlocks = endIndex + 1 - mBlocks.Length();
+            uint32_t numNewBlocks = endIndex + 1 - mBlocks.Length();
             nsAutoPtr<Block> *blocks = mBlocks.AppendElements(numNewBlocks);
-            if (NS_UNLIKELY(!blocks)) // OOM
+            if (MOZ_UNLIKELY(!blocks)) // OOM
                 return;
         }
 
-        for (PRUint32 i = startIndex; i <= endIndex; ++i) {
-            const PRUint32 blockFirstBit = i * BLOCK_SIZE_BITS;
-            const PRUint32 blockLastBit = blockFirstBit + BLOCK_SIZE_BITS - 1;
+        for (uint32_t i = startIndex; i <= endIndex; ++i) {
+            const uint32_t blockFirstBit = i * BLOCK_SIZE_BITS;
+            const uint32_t blockLastBit = blockFirstBit + BLOCK_SIZE_BITS - 1;
 
             Block *block = mBlocks[i];
             if (!block) {
-                PRBool fullBlock = PR_FALSE;
+                bool fullBlock = false;
                 if (aStart <= blockFirstBit && aEnd >= blockLastBit)
-                    fullBlock = PR_TRUE;
+                    fullBlock = true;
 
                 block = new Block(fullBlock ? 0xFF : 0);
-
-                if (NS_UNLIKELY(!block)) // OOM
-                    return;
                 mBlocks[i] = block;
 
                 if (fullBlock)
                     continue;
             }
 
-            const PRUint32 start = aStart > blockFirstBit ? aStart - blockFirstBit : 0;
-            const PRUint32 end = PR_MIN(aEnd - blockFirstBit, BLOCK_SIZE_BITS - 1);
+            const uint32_t start = aStart > blockFirstBit ? aStart - blockFirstBit : 0;
+            const uint32_t end = NS_MIN<uint32_t>(aEnd - blockFirstBit, BLOCK_SIZE_BITS - 1);
 
-            for (PRUint32 bit = start; bit <= end; ++bit) {
+            for (uint32_t bit = start; bit <= end; ++bit) {
                 block->mBits[bit>>3] |= 1 << (bit & 0x7);
             }
         }
     }
 
-    void clear(PRUint32 aIndex) {
-        PRUint32 blockIndex = aIndex/BLOCK_SIZE_BITS;
+    void clear(uint32_t aIndex) {
+        uint32_t blockIndex = aIndex/BLOCK_SIZE_BITS;
         if (blockIndex >= mBlocks.Length()) {
             nsAutoPtr<Block> *blocks = mBlocks.AppendElements(blockIndex + 1 - mBlocks.Length());
-            if (NS_UNLIKELY(!blocks)) // OOM
+            if (MOZ_UNLIKELY(!blocks)) // OOM
                 return;
         }
         Block *block = mBlocks[blockIndex];
         if (!block) {
-            block = new Block;
-            if (NS_UNLIKELY(!block)) // OOM
-                return;
-            mBlocks[blockIndex] = block;
+            return;
         }
         block->mBits[(aIndex>>3) & (BLOCK_SIZE - 1)] &= ~(1 << (aIndex & 0x7));
     }
 
-    void ClearRange(PRUint32 aStart, PRUint32 aEnd) {
-        const PRUint32 startIndex = aStart/BLOCK_SIZE_BITS;
-        const PRUint32 endIndex = aEnd/BLOCK_SIZE_BITS;
+    void ClearRange(uint32_t aStart, uint32_t aEnd) {
+        const uint32_t startIndex = aStart/BLOCK_SIZE_BITS;
+        const uint32_t endIndex = aEnd/BLOCK_SIZE_BITS;
 
         if (endIndex >= mBlocks.Length()) {
-            PRUint32 numNewBlocks = endIndex + 1 - mBlocks.Length();
+            uint32_t numNewBlocks = endIndex + 1 - mBlocks.Length();
             nsAutoPtr<Block> *blocks = mBlocks.AppendElements(numNewBlocks);
-            if (NS_UNLIKELY(!blocks)) // OOM
+            if (MOZ_UNLIKELY(!blocks)) // OOM
                 return;
         }
 
-        for (PRUint32 i = startIndex; i <= endIndex; ++i) {
-            const PRUint32 blockFirstBit = i * BLOCK_SIZE_BITS;
-            const PRUint32 blockLastBit = blockFirstBit + BLOCK_SIZE_BITS - 1;
+        for (uint32_t i = startIndex; i <= endIndex; ++i) {
+            const uint32_t blockFirstBit = i * BLOCK_SIZE_BITS;
 
             Block *block = mBlocks[i];
             if (!block) {
-                PRBool fullBlock = PR_FALSE;
-                if (aStart <= blockFirstBit && aEnd >= blockLastBit)
-                    fullBlock = PR_TRUE;
-
-                block = new Block(fullBlock ? 0xFF : 0);
-
-                if (NS_UNLIKELY(!block)) // OOM
-                    return;
-                mBlocks[i] = block;
-
-                if (fullBlock)
-                    continue;
+                // any nonexistent block is implicitly all clear,
+                // so there's no need to even create it
+                continue;
             }
 
-            const PRUint32 start = aStart > blockFirstBit ? aStart - blockFirstBit : 0;
-            const PRUint32 end = PR_MIN(aEnd - blockFirstBit, BLOCK_SIZE_BITS - 1);
+            const uint32_t start = aStart > blockFirstBit ? aStart - blockFirstBit : 0;
+            const uint32_t end = NS_MIN<uint32_t>(aEnd - blockFirstBit, BLOCK_SIZE_BITS - 1);
 
-            for (PRUint32 bit = start; bit <= end; ++bit) {
+            for (uint32_t bit = start; bit <= end; ++bit) {
                 block->mBits[bit>>3] &= ~(1 << (bit & 0x7));
             }
         }
     }
 
-    PRUint32 GetSize() {
-        PRUint32 size = 0;
-        for (PRUint32 i = 0; i < mBlocks.Length(); i++) {
-            if (mBlocks[i])
-                size += sizeof(Block);
-            size += sizeof(nsAutoPtr<Block>);
+    size_t SizeOfExcludingThis(nsMallocSizeOfFun aMallocSizeOf) const {
+        size_t total = mBlocks.SizeOfExcludingThis(aMallocSizeOf);
+        for (uint32_t i = 0; i < mBlocks.Length(); i++) {
+            if (mBlocks[i]) {
+                total += aMallocSizeOf(mBlocks[i]);
+            }
         }
-        return size;
+        return total;
+    }
+
+    size_t SizeOfIncludingThis(nsMallocSizeOfFun aMallocSizeOf) const {
+        return aMallocSizeOf(this) + SizeOfExcludingThis(aMallocSizeOf);
     }
 
     // clear out all blocks in the array
     void reset() {
-        PRUint32 i;
+        uint32_t i;
         for (i = 0; i < mBlocks.Length(); i++)
-            mBlocks[i] = nsnull;    
+            mBlocks[i] = nullptr;    
     }
-    
+
+    // set this bitset to the union of its current contents and another
+    void Union(const gfxSparseBitSet& aBitset) {
+        // ensure mBlocks is large enough
+        uint32_t blockCount = aBitset.mBlocks.Length();
+        if (blockCount > mBlocks.Length()) {
+            uint32_t needed = blockCount - mBlocks.Length();
+            nsAutoPtr<Block> *blocks = mBlocks.AppendElements(needed);
+            if (MOZ_UNLIKELY(!blocks)) { // OOM
+                return;
+            }
+        }
+        // for each block that may be present in aBitset...
+        for (uint32_t i = 0; i < blockCount; ++i) {
+            // if it is missing (implicitly empty), just skip
+            if (!aBitset.mBlocks[i]) {
+                continue;
+            }
+            // if the block is missing in this set, just copy the other
+            if (!mBlocks[i]) {
+                mBlocks[i] = new Block(*aBitset.mBlocks[i]);
+                continue;
+            }
+            // else set existing block to the union of both
+            uint32_t *dst = reinterpret_cast<uint32_t*>(mBlocks[i]->mBits);
+            const uint32_t *src =
+                reinterpret_cast<const uint32_t*>(aBitset.mBlocks[i]->mBits);
+            for (uint32_t j = 0; j < BLOCK_SIZE / 4; ++j) {
+                dst[j] |= src[j];
+            }
+        }
+    }
+
+    void Compact() {
+        mBlocks.Compact();
+    }
+
+    uint32_t GetChecksum() const {
+        uint32_t check = adler32(0, Z_NULL, 0);
+        for (uint32_t i = 0; i < mBlocks.Length(); i++) {
+            if (mBlocks[i]) {
+                const Block *block = mBlocks[i];
+                check = adler32(check, (uint8_t*) (&i), 4);
+                check = adler32(check, (uint8_t*) block, sizeof(Block));
+            }
+        }
+        return check;
+    }
+
+private:
     nsTArray< nsAutoPtr<Block> > mBlocks;
 };
 
@@ -305,67 +337,82 @@ namespace mozilla {
 
 struct AutoSwap_PRUint16 {
 #ifdef __SUNPRO_CC
-    AutoSwap_PRUint16& operator = (const PRUint16 aValue)
+    AutoSwap_PRUint16& operator = (const uint16_t aValue)
       { this->value = NS_SWAP16(aValue); return *this; }
 #else
-    AutoSwap_PRUint16(PRUint16 aValue) { value = NS_SWAP16(aValue); }
+    AutoSwap_PRUint16(uint16_t aValue) { value = NS_SWAP16(aValue); }
 #endif
-    operator PRUint16() const { return NS_SWAP16(value); }
-    operator PRUint32() const { return NS_SWAP16(value); }
-    operator PRUint64() const { return NS_SWAP16(value); }
-    PRUint16 value;
+    operator uint16_t() const { return NS_SWAP16(value); }
+    operator uint32_t() const { return NS_SWAP16(value); }
+    operator uint64_t() const { return NS_SWAP16(value); }
+    uint16_t value;
 };
 
 struct AutoSwap_PRInt16 {
 #ifdef __SUNPRO_CC
-    AutoSwap_PRInt16& operator = (const PRInt16 aValue)
+    AutoSwap_PRInt16& operator = (const int16_t aValue)
       { this->value = NS_SWAP16(aValue); return *this; }
 #else
-    AutoSwap_PRInt16(PRInt16 aValue) { value = NS_SWAP16(aValue); }
+    AutoSwap_PRInt16(int16_t aValue) { value = NS_SWAP16(aValue); }
 #endif
-    operator PRInt16() const { return NS_SWAP16(value); }
-    operator PRUint32() const { return NS_SWAP16(value); }
-    PRInt16  value;
+    operator int16_t() const { return NS_SWAP16(value); }
+    operator uint32_t() const { return NS_SWAP16(value); }
+    int16_t  value;
 };
 
 struct AutoSwap_PRUint32 {
 #ifdef __SUNPRO_CC
-    AutoSwap_PRUint32& operator = (const PRUint32 aValue)
+    AutoSwap_PRUint32& operator = (const uint32_t aValue)
       { this->value = NS_SWAP32(aValue); return *this; }
 #else
-    AutoSwap_PRUint32(PRUint32 aValue) { value = NS_SWAP32(aValue); }
+    AutoSwap_PRUint32(uint32_t aValue) { value = NS_SWAP32(aValue); }
 #endif
-    operator PRUint32() const { return NS_SWAP32(value); }
-    PRUint32  value;
+    operator uint32_t() const { return NS_SWAP32(value); }
+    uint32_t  value;
 };
 
 struct AutoSwap_PRInt32 {
 #ifdef __SUNPRO_CC
-    AutoSwap_PRInt32& operator = (const PRInt32 aValue)
+    AutoSwap_PRInt32& operator = (const int32_t aValue)
       { this->value = NS_SWAP32(aValue); return *this; }
 #else
-    AutoSwap_PRInt32(PRInt32 aValue) { value = NS_SWAP32(aValue); }
+    AutoSwap_PRInt32(int32_t aValue) { value = NS_SWAP32(aValue); }
 #endif
-    operator PRInt32() const { return NS_SWAP32(value); }
-    PRInt32  value;
+    operator int32_t() const { return NS_SWAP32(value); }
+    int32_t  value;
 };
 
 struct AutoSwap_PRUint64 {
 #ifdef __SUNPRO_CC
-    AutoSwap_PRUint64& operator = (const PRUint64 aValue)
+    AutoSwap_PRUint64& operator = (const uint64_t aValue)
       { this->value = NS_SWAP64(aValue); return *this; }
 #else
-    AutoSwap_PRUint64(PRUint64 aValue) { value = NS_SWAP64(aValue); }
+    AutoSwap_PRUint64(uint64_t aValue) { value = NS_SWAP64(aValue); }
 #endif
-    operator PRUint64() const { return NS_SWAP64(value); }
-    PRUint64  value;
+    operator uint64_t() const { return NS_SWAP64(value); }
+    uint64_t  value;
 };
 
 struct AutoSwap_PRUint24 {
-    operator PRUint32() const { return value[0] << 16 | value[1] << 8 | value[2]; }
+    operator uint32_t() const { return value[0] << 16 | value[1] << 8 | value[2]; }
 private:
     AutoSwap_PRUint24() { }
-    PRUint8  value[3];
+    uint8_t  value[3];
+};
+
+struct SFNTHeader {
+    AutoSwap_PRUint32    sfntVersion;            // Fixed, 0x00010000 for version 1.0.
+    AutoSwap_PRUint16    numTables;              // Number of tables.
+    AutoSwap_PRUint16    searchRange;            // (Maximum power of 2 <= numTables) x 16.
+    AutoSwap_PRUint16    entrySelector;          // Log2(maximum power of 2 <= numTables).
+    AutoSwap_PRUint16    rangeShift;             // NumTables x 16-searchRange.        
+};
+
+struct TableDirEntry {
+    AutoSwap_PRUint32    tag;                    // 4 -byte identifier.
+    AutoSwap_PRUint32    checkSum;               // CheckSum for this table.
+    AutoSwap_PRUint32    offset;                 // Offset from beginning of TrueType font file.
+    AutoSwap_PRUint32    length;                 // Length of this table.        
 };
 
 struct HeadTable {
@@ -411,12 +458,12 @@ struct OS2Table {
     AutoSwap_PRInt16     yStrikeoutSize;
     AutoSwap_PRInt16     yStrikeoutPosition;
     AutoSwap_PRInt16     sFamilyClass;
-    PRUint8              panose[10];
+    uint8_t              panose[10];
     AutoSwap_PRUint32    unicodeRange1;
     AutoSwap_PRUint32    unicodeRange2;
     AutoSwap_PRUint32    unicodeRange3;
     AutoSwap_PRUint32    unicodeRange4;
-    PRUint8              achVendID[4];
+    uint8_t              achVendID[4];
     AutoSwap_PRUint16    fsSelection;
     AutoSwap_PRUint16    usFirstCharIndex;
     AutoSwap_PRUint16    usLastCharIndex;
@@ -502,8 +549,8 @@ struct KernTableSubtableHeaderVersion1 {
 
 // Return just the highest bit of the given value, i.e., the highest
 // power of 2 that is <= value, or zero if the input value is zero.
-inline PRUint32
-FindHighestBit(PRUint32 value)
+inline uint32_t
+FindHighestBit(uint32_t value)
 {
     // propagate highest bit into all lower bits of the value
     value |= (value >> 1);
@@ -520,9 +567,9 @@ FindHighestBit(PRUint32 value)
 // used for overlaying name changes without touching original font data
 struct FontDataOverlay {
     // overlaySrc != 0 ==> use overlay
-    PRUint32  overlaySrc;    // src offset from start of font data
-    PRUint32  overlaySrcLen; // src length
-    PRUint32  overlayDest;   // dest offset from start of font data
+    uint32_t  overlaySrc;    // src offset from start of font data
+    uint32_t  overlaySrcLen; // src length
+    uint32_t  overlayDest;   // dest offset from start of font data
 };
     
 enum gfxUserFontType {
@@ -617,68 +664,69 @@ public:
 
     // for reading big-endian font data on either big or little-endian platforms
 
-    static inline PRUint16
-    ReadShortAt(const PRUint8 *aBuf, PRUint32 aIndex)
+    static inline uint16_t
+    ReadShortAt(const uint8_t *aBuf, uint32_t aIndex)
     {
         return (aBuf[aIndex] << 8) | aBuf[aIndex + 1];
     }
 
-    static inline PRUint16
-    ReadShortAt16(const PRUint16 *aBuf, PRUint32 aIndex)
+    static inline uint16_t
+    ReadShortAt16(const uint16_t *aBuf, uint32_t aIndex)
     {
-        const PRUint8 *buf = reinterpret_cast<const PRUint8*>(aBuf);
-        PRUint32 index = aIndex << 1;
+        const uint8_t *buf = reinterpret_cast<const uint8_t*>(aBuf);
+        uint32_t index = aIndex << 1;
         return (buf[index] << 8) | buf[index+1];
     }
 
-    static inline PRUint32
-    ReadUint24At(const PRUint8 *aBuf, PRUint32 aIndex)
+    static inline uint32_t
+    ReadUint24At(const uint8_t *aBuf, uint32_t aIndex)
     {
         return ((aBuf[aIndex] << 16) | (aBuf[aIndex + 1] << 8) |
                 (aBuf[aIndex + 2]));
     }
 
-    static inline PRUint32
-    ReadLongAt(const PRUint8 *aBuf, PRUint32 aIndex)
+    static inline uint32_t
+    ReadLongAt(const uint8_t *aBuf, uint32_t aIndex)
     {
         return ((aBuf[aIndex] << 24) | (aBuf[aIndex + 1] << 16) | 
                 (aBuf[aIndex + 2] << 8) | (aBuf[aIndex + 3]));
     }
 
     static nsresult
-    ReadCMAPTableFormat12(const PRUint8 *aBuf, PRUint32 aLength, 
+    ReadCMAPTableFormat12(const uint8_t *aBuf, uint32_t aLength, 
                           gfxSparseBitSet& aCharacterMap);
 
     static nsresult 
-    ReadCMAPTableFormat4(const PRUint8 *aBuf, PRUint32 aLength, 
+    ReadCMAPTableFormat4(const uint8_t *aBuf, uint32_t aLength, 
                          gfxSparseBitSet& aCharacterMap);
 
     static nsresult
-    ReadCMAPTableFormat14(const PRUint8 *aBuf, PRUint32 aLength, 
-                          PRUint8*& aTable);
+    ReadCMAPTableFormat14(const uint8_t *aBuf, uint32_t aLength, 
+                          uint8_t*& aTable);
 
-    static PRUint32
-    FindPreferredSubtable(const PRUint8 *aBuf, PRUint32 aBufLength,
-                          PRUint32 *aTableOffset, PRUint32 *aUVSTableOffset,
-                          PRBool *aSymbolEncoding);
+    static uint32_t
+    FindPreferredSubtable(const uint8_t *aBuf, uint32_t aBufLength,
+                          uint32_t *aTableOffset, uint32_t *aUVSTableOffset,
+                          bool *aSymbolEncoding);
 
     static nsresult
-    ReadCMAP(const PRUint8 *aBuf, PRUint32 aBufLength,
+    ReadCMAP(const uint8_t *aBuf, uint32_t aBufLength,
              gfxSparseBitSet& aCharacterMap,
-             PRUint32& aUVSOffset,
-             PRPackedBool& aUnicodeFont, PRPackedBool& aSymbolFont);
+             uint32_t& aUVSOffset,
+             bool& aUnicodeFont, bool& aSymbolFont);
 
-    static PRUint32
-    MapCharToGlyphFormat4(const PRUint8 *aBuf, PRUnichar aCh);
+    static uint32_t
+    MapCharToGlyphFormat4(const uint8_t *aBuf, PRUnichar aCh);
 
-    static PRUint32
-    MapCharToGlyphFormat12(const PRUint8 *aBuf, PRUint32 aCh);
+    static uint32_t
+    MapCharToGlyphFormat12(const uint8_t *aBuf, uint32_t aCh);
 
-    static PRUint16
-    MapUVSToGlyphFormat14(const PRUint8 *aBuf, PRUint32 aCh, PRUint32 aVS);
+    static uint16_t
+    MapUVSToGlyphFormat14(const uint8_t *aBuf, uint32_t aCh, uint32_t aVS);
 
-    static PRUint32
-    MapCharToGlyph(const PRUint8 *aBuf, PRUint32 aBufLength, PRUint32 aCh);
+    static uint32_t
+    MapCharToGlyph(const uint8_t *aCmapBuf, uint32_t aBufLength,
+                   uint32_t aUnicode, uint32_t aVarSelector = 0);
 
 #ifdef XP_WIN
 
@@ -688,52 +736,78 @@ public:
     // the size of the header buffer on input, the actual size of the
     // EOT header on output
     static nsresult
-    MakeEOTHeader(const PRUint8 *aFontData, PRUint32 aFontDataLength,
-                  nsTArray<PRUint8> *aHeader, FontDataOverlay *aOverlay);
+    MakeEOTHeader(const uint8_t *aFontData, uint32_t aFontDataLength,
+                  FallibleTArray<uint8_t> *aHeader, FontDataOverlay *aOverlay);
 
     // determine whether a font (which has already passed ValidateSFNTHeaders)
     // is CFF format rather than TrueType
-    static PRBool
-    IsCffFont(const PRUint8* aFontData);
+    static bool
+    IsCffFont(const uint8_t* aFontData, bool& hasVertical);
 
 #endif
 
     // determine the format of font data
     static gfxUserFontType
-    DetermineFontDataType(const PRUint8 *aFontData, PRUint32 aFontDataLength);
+    DetermineFontDataType(const uint8_t *aFontData, uint32_t aFontDataLength);
 
     // checks for valid SFNT table structure, returns true if valid
-    // does *not* guarantee that all font data is valid
-    static PRBool
-    ValidateSFNTHeaders(const PRUint8 *aFontData, PRUint32 aFontDataLength);
+    // does *not* guarantee that all font data is valid, though it does
+    // check that key tables such as 'name' are present and readable.
+    // XXX to be removed if/when we eliminate the option to disable OTS,
+    // which does more thorough validation.
+    static bool
+    ValidateSFNTHeaders(const uint8_t *aFontData, uint32_t aFontDataLength);
     
+    // Read the fullname from the sfnt data (used to save the original name
+    // prior to renaming the font for installation).
+    // This is called with sfnt data that has already been validated,
+    // so it should always succeed in finding the name table.
+    static nsresult
+    GetFullNameFromSFNT(const uint8_t* aFontData, uint32_t aLength,
+                        nsAString& aFullName);
+
+    // helper to get fullname from name table, constructing from family+style
+    // if no explicit fullname is present
+    static nsresult
+    GetFullNameFromTable(FallibleTArray<uint8_t>& aNameTable,
+                         nsAString& aFullName);
+
+    // helper to get family name from name table
+    static nsresult
+    GetFamilyNameFromTable(FallibleTArray<uint8_t>& aNameTable,
+                           nsAString& aFamilyName);
+
     // create a new name table and build a new font with that name table
     // appended on the end, returns true on success
     static nsresult
-    RenameFont(const nsAString& aName, const PRUint8 *aFontData, 
-               PRUint32 aFontDataLength, nsTArray<PRUint8> *aNewFont);
+    RenameFont(const nsAString& aName, const uint8_t *aFontData, 
+               uint32_t aFontDataLength, FallibleTArray<uint8_t> *aNewFont);
     
     // read all names matching aNameID, returning in aNames array
     static nsresult
-    ReadNames(nsTArray<PRUint8>& aNameTable, PRUint32 aNameID, 
-              PRInt32 aPlatformID, nsTArray<nsString>& aNames);
+    ReadNames(FallibleTArray<uint8_t>& aNameTable, uint32_t aNameID, 
+              int32_t aPlatformID, nsTArray<nsString>& aNames);
       
     // reads English or first name matching aNameID, returning in aName
     // platform based on OS
     static nsresult
-    ReadCanonicalName(nsTArray<PRUint8>& aNameTable, PRUint32 aNameID, 
+    ReadCanonicalName(FallibleTArray<uint8_t>& aNameTable, uint32_t aNameID, 
                       nsString& aName);
       
     // convert a name from the raw name table data into an nsString,
-    // provided we know how; return PR_TRUE if successful, or PR_FALSE
+    // provided we know how; return true if successful, or false
     // if we can't handle the encoding
-    static PRBool
-    DecodeFontName(const PRUint8 *aBuf, PRInt32 aLength, 
-                   PRUint32 aPlatformCode, PRUint32 aScriptCode,
-                   PRUint32 aLangCode, nsAString& dest);
+    static bool
+    DecodeFontName(const uint8_t *aBuf, int32_t aLength, 
+                   uint32_t aPlatformCode, uint32_t aScriptCode,
+                   uint32_t aLangCode, nsAString& dest);
 
-    static inline bool IsJoinCauser(PRUint32 ch) {
+    static inline bool IsJoinCauser(uint32_t ch) {
         return (ch == 0x200D);
+    }
+
+    static inline bool IsJoinControl(uint32_t ch) {
+        return (ch == 0x200C || ch == 0x200D);
     }
 
     enum {
@@ -743,12 +817,12 @@ public:
         kUnicodeVS256 = 0xE01EF
     };
 
-    static inline bool IsVarSelector(PRUint32 ch) {
+    static inline bool IsVarSelector(uint32_t ch) {
         return (ch >= kUnicodeVS1 && ch <= kUnicodeVS16) ||
                (ch >= kUnicodeVS17 && ch <= kUnicodeVS256);
     }
 
-    static inline bool IsInvalid(PRUint32 ch) {
+    static inline bool IsInvalid(uint32_t ch) {
         return (ch == 0xFFFD);
     }
 
@@ -766,30 +840,30 @@ public:
         kUnicodeRLO = 0x202E
     };
 
-    static inline PRBool PotentialRTLChar(PRUnichar aCh) {
+    static inline bool PotentialRTLChar(PRUnichar aCh) {
         if (aCh >= kUnicodeBidiScriptsStart && aCh <= kUnicodeBidiScriptsEnd)
             // bidi scripts Hebrew, Arabic, Syriac, Thaana, N'Ko are all encoded together
-            return PR_TRUE;
+            return true;
 
         if (aCh == kUnicodeRLM || aCh == kUnicodeRLE || aCh == kUnicodeRLO)
             // directional controls that trigger bidi layout
-            return PR_TRUE;
+            return true;
 
         if (aCh >= kUnicodeBidiPresentationStart &&
             aCh <= kUnicodeBidiPresentationEnd)
             // presentation forms of Arabic and Hebrew letters
-            return PR_TRUE;
+            return true;
 
         if ((aCh & 0xFF00) == kUnicodeFirstHighSurrogateBlock)
             // surrogate that could be part of a bidi supplementary char
             // (Cypriot, Aramaic, Phoenecian, etc)
-            return PR_TRUE;
+            return true;
 
         // otherwise we know this char cannot trigger bidi reordering
-        return PR_FALSE;
+        return false;
     }
 
-    static PRUint8 CharRangeBit(PRUint32 ch);
+    static uint8_t CharRangeBit(uint32_t ch);
     
     // for a given font list pref name, set up a list of font names
     static void GetPrefsFontList(const char *aPrefName, 
@@ -800,17 +874,17 @@ public:
 
 protected:
     static nsresult
-    ReadNames(nsTArray<PRUint8>& aNameTable, PRUint32 aNameID, 
-              PRInt32 aLangID, PRInt32 aPlatformID, nsTArray<nsString>& aNames);
+    ReadNames(FallibleTArray<uint8_t>& aNameTable, uint32_t aNameID, 
+              int32_t aLangID, int32_t aPlatformID, nsTArray<nsString>& aNames);
 
     // convert opentype name-table platform/encoding/language values to a charset name
     // we can use to convert the name data to unicode, or "" if data is UTF16BE
     static const char*
-    GetCharsetForFontName(PRUint16 aPlatform, PRUint16 aScript, PRUint16 aLanguage);
+    GetCharsetForFontName(uint16_t aPlatform, uint16_t aScript, uint16_t aLanguage);
 
     struct MacFontNameCharsetMapping {
-        PRUint16    mEncoding;
-        PRUint16    mLanguage;
+        uint16_t    mEncoding;
+        uint16_t    mLanguage;
         const char *mCharsetName;
 
         bool operator<(const MacFontNameCharsetMapping& rhs) const {
@@ -851,7 +925,7 @@ public:
     virtual ~gfxFontInfoLoader() {}
 
     // start timer with an initial delay, then call Run method at regular intervals
-    void StartLoader(PRUint32 aDelay, PRUint32 aInterval) {
+    void StartLoader(uint32_t aDelay, uint32_t aInterval) {
         mInterval = aInterval;
 
         // sanity check
@@ -868,7 +942,7 @@ public:
         }
 
         // need an initial delay?
-        PRUint32 timerInterval;
+        uint32_t timerInterval;
 
         if (aDelay) {
             mState = stateTimerOnDelay;
@@ -881,7 +955,7 @@ public:
         InitLoader();
 
         // start timer
-        mTimer->InitWithFuncCallback(LoaderTimerCallback, this, aDelay, 
+        mTimer->InitWithFuncCallback(LoaderTimerCallback, this, timerInterval,
                                      nsITimer::TYPE_REPEATING_SLACK);
     }
 
@@ -902,7 +976,7 @@ protected:
     virtual void InitLoader() = 0;
 
     // Run - called at intervals, return true to indicate done
-    virtual PRBool RunLoader() = 0;
+    virtual bool RunLoader() = 0;
 
     // Finish - cleanup after done
     virtual void FinishLoader() = 0;
@@ -919,14 +993,14 @@ protected:
             mTimer->SetDelay(mInterval);
         }
 
-        PRBool done = RunLoader();
+        bool done = RunLoader();
         if (done) {
             CancelLoader();
         }
     }
 
     nsCOMPtr<nsITimer> mTimer;
-    PRUint32 mInterval;
+    uint32_t mInterval;
     TimerState mState;
 };
 

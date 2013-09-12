@@ -1,8 +1,3 @@
-//
-// Copyright (c) 2002-2010 The ANGLE Project Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-//
 /****************************************************************************\
 Copyright (c) 2002, NVIDIA Corporation.
 
@@ -110,7 +105,6 @@ Symbol *NewSymbol(SourceLoc *loc, Scope *fScope, int name, symbolkind kind);
 Symbol *AddSymbol(SourceLoc *loc, Scope *fScope, int atom, symbolkind kind);
 Symbol *LookUpLocalSymbol(Scope *fScope, int atom);
 Symbol *LookUpSymbol(Scope *fScope, int atom);
-void CPPErrorToInfoLog(char *);
 
 
 #endif // !defined(__SYMBOLS_H)

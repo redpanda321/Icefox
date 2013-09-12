@@ -1,48 +1,18 @@
 /*
  * Key Derivation that doesn't use PKCS11
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-/* $Id: derive.c,v 1.12 2008/06/06 01:16:31 wtc%google.com Exp $ */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+/* $Id: derive.c,v 1.16 2012/06/11 02:38:30 emaldona%redhat.com Exp $ */
 
 #include "ssl.h" 	/* prereq to sslimpl.h */
 #include "certt.h"	/* prereq to sslimpl.h */
 #include "keythi.h"	/* prereq to sslimpl.h */
 #include "sslimpl.h"
+#ifndef NO_PKCS11_BYPASS
 #include "blapi.h"
+#endif
 
 #include "keyhi.h"
 #include "pk11func.h"
@@ -53,6 +23,7 @@
 #include "sslproto.h"
 #include "sslerr.h"
 
+#ifndef NO_PKCS11_BYPASS
 /* make this a macro! */
 #ifdef NOT_A_MACRO
 static void
@@ -570,6 +541,7 @@ ssl_canExtractMS(PK11SymKey *pms, PRBool isTLS, PRBool isDH, PRBool *pcbp)
     return(rv);
 
 }
+#endif  /* !NO_PKCS11_BYPASS */
 
 /* Check the key exchange algorithm for each cipher in the list to see if
  * a master secret key can be extracted. If the KEA will use keys from the 
@@ -583,11 +555,22 @@ ssl_canExtractMS(PK11SymKey *pms, PRBool isTLS, PRBool isDH, PRBool *pcbp)
  * arguments were all valid but the slot cannot be bypassed.
  */
 
+/* XXX Add SSL_CBP_TLS1_1 and test it in protocolmask when setting isTLS. */
+
 SECStatus 
 SSL_CanBypass(CERTCertificate *cert, SECKEYPrivateKey *srvPrivkey,
 	      PRUint32 protocolmask, PRUint16 *ciphersuites, int nsuites,
               PRBool *pcanbypass, void *pwArg)
-{   SECStatus	      rv;
+{
+#ifdef NO_PKCS11_BYPASS
+    if (!pcanbypass) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
+    *pcanbypass = PR_FALSE;
+    return SECSuccess;
+#else
+    SECStatus	      rv;
     int		      i;
     PRUint16	      suite;
     PK11SymKey *      pms = NULL;
@@ -604,6 +587,9 @@ SSL_CanBypass(CERTCertificate *cert, SECKEYPrivateKey *srvPrivkey,
     PRBool	      testrsa_export = PR_FALSE;
     PRBool	      testecdh = PR_FALSE;
     PRBool	      testecdhe = PR_FALSE;
+#ifdef NSS_ENABLE_ECC
+    SECKEYECParams ecParams = { siBuffer, NULL, 0 };
+#endif
 
     if (!cert || !srvPrivkey || !ciphersuites || !pcanbypass) {
 	PORT_SetError(SEC_ERROR_INVALID_ARGS);
@@ -703,10 +689,15 @@ SSL_CanBypass(CERTCertificate *cert, SECKEYPrivateKey *srvPrivkey,
 	    /* now wrap it */
 	    enc_pms.len  = SECKEY_PublicKeyStrength(srvPubkey);
 	    enc_pms.data = (unsigned char*)PORT_Alloc(enc_pms.len);
+	    if (enc_pms.data == NULL) {
+	        PORT_SetError(PR_OUT_OF_MEMORY_ERROR);
+	        break;
+	    }
 	    irv = PK11_PubWrapSymKey(CKM_RSA_PKCS, srvPubkey, pms, &enc_pms);
 	    if (irv != SECSuccess) 
 		break;
 	    PK11_FreeSymKey(pms);
+	    pms = NULL;
 	    /* now do the server side--check the triple bypass first */
 	    rv = PK11_PrivDecryptPKCS1(srvPrivkey, rsaPmsBuf, &outLen,
 				       sizeof rsaPmsBuf,
@@ -727,6 +718,13 @@ SSL_CanBypass(CERTCertificate *cert, SECKEYPrivateKey *srvPrivkey,
 		goto done;
 	    break;
 	}
+
+	/* Check for NULL to avoid double free. 
+	 * SECItem_FreeItem sets data NULL in secitem.c#265 
+	 */
+	if (enc_pms.data != NULL) {
+	    SECITEM_FreeItem(&enc_pms, PR_FALSE);
+        }
 #ifdef NSS_ENABLE_ECC
 	for (; (privKeytype == ecKey && ( testecdh || testecdhe)) ||
 	       (privKeytype == rsaKey && testecdhe); ) {
@@ -735,8 +733,7 @@ SSL_CanBypass(CERTCertificate *cert, SECKEYPrivateKey *srvPrivkey,
 	    SECKEYPrivateKey *keapriv;
 	    SECKEYPublicKey  *cpub = NULL; /* client's ephemeral ECDH keys */
 	    SECKEYPrivateKey *cpriv = NULL;
-	    SECKEYECParams    ecParams = { siBuffer, NULL, 0 },
-			      *pecParams;
+	    SECKEYECParams   *pecParams = NULL;
 
 	    if (privKeytype == ecKey && testecdhe) {
 		/* TLS_ECDHE_ECDSA */
@@ -821,12 +818,15 @@ SSL_CanBypass(CERTCertificate *cert, SECKEYPrivateKey *srvPrivkey,
 	    if (testecdhe) {
 		SECKEY_DestroyPrivateKey(keapriv);
 		SECKEY_DestroyPublicKey(keapub);
-		if (privKeytype == rsaKey)
-		    PORT_Free(ecParams.data);
 	    }
 	    if (rv == SECSuccess && *pcanbypass == PR_FALSE)
 		goto done;
 	    break;
+	}
+	/* Check for NULL to avoid double free. */
+	if (ecParams.data != NULL) {
+	    PORT_Free(ecParams.data);
+	    ecParams.data = NULL;
 	}
 #endif /* NSS_ENABLE_ECC */
 	if (pms)
@@ -840,7 +840,18 @@ SSL_CanBypass(CERTCertificate *cert, SECKEYPrivateKey *srvPrivkey,
     if (pms)
 	PK11_FreeSymKey(pms);
 
-    SECITEM_FreeItem(&enc_pms, PR_FALSE);
+    /* Check for NULL to avoid double free. 
+     * SECItem_FreeItem sets data NULL in secitem.c#265 
+     */
+    if (enc_pms.data != NULL) {
+    	SECITEM_FreeItem(&enc_pms, PR_FALSE);
+    }
+#ifdef NSS_ENABLE_ECC
+    if (ecParams.data != NULL) {
+        PORT_Free(ecParams.data);
+        ecParams.data = NULL;
+    }
+#endif /* NSS_ENABLE_ECC */
 
     if (srvPubkey) {
     	SECKEY_DestroyPublicKey(srvPubkey);
@@ -849,5 +860,6 @@ SSL_CanBypass(CERTCertificate *cert, SECKEYPrivateKey *srvPrivkey,
 
 
     return rv;
+#endif /* NO_PKCS11_BYPASS */
 }
 

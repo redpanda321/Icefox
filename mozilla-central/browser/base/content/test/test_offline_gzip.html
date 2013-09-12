@@ -32,13 +32,18 @@ SimpleTest.waitForExplicitFinish();
 
 function finishTest() {
   // Clean up after ourselves.
-  netscape.security.PrivilegeManager
-          .enablePrivilege("UniversalXPConnect");
-  var pm = Components.classes["@mozilla.org/permissionmanager;1"].
-           getService(Components.interfaces.nsIPermissionManager);
+  var Cc = SpecialPowers.Cc;
+  var pm = Cc["@mozilla.org/permissionmanager;1"].
+           getService(SpecialPowers.Ci.nsIPermissionManager);
 
-  pm.remove("mochi.test", "offline-app");
-  
+  var uri = Cc["@mozilla.org/network/io-service;1"].getService(SpecialPowers.Ci.nsIIOService)
+              .newURI(window.frames[0].location, null, null);
+  var principal = Cc["@mozilla.org/scriptsecuritymanager;1"]
+                   .getService(SpecialPowers.Ci.nsIScriptSecurityManager)
+                   .getNoAppCodebasePrincipal(uri);
+
+  pm.removeFromPrincipal(principal, "offline-app");
+
   window.removeEventListener("message", handleMessageEvents, false);
 
   SimpleTest.finish();  
@@ -63,8 +68,6 @@ function handleMessageEvents(event) {
       // successfully reloaded), or the string "error" appears
       // in the iframe, as in the case of bug 501422.
       intervalID = setInterval(function() {
-        netscape.security.PrivilegeManager
-                .enablePrivilege("UniversalXPConnect");
         // Sometimes document.body may not exist, and trying to access
         // it will throw an exception, so handle this case.
         try {
@@ -73,7 +76,7 @@ function handleMessageEvents(event) {
         catch (e) {
           var bodyInnerHTML = "";
         }
-        if (cacheCount == 2 || (bodyInnerHTML.indexOf("error") != -1)) {
+        if (cacheCount == 2 || bodyInnerHTML.contains("error")) {
           clearInterval(intervalID);
           is(cacheCount, 2, "frame not reloaded successfully");
           if (cacheCount != 2) {
@@ -96,9 +99,8 @@ function loaded() {
   // Click the notification bar's "Allow" button.  This should kick
   // off updates, which will eventually lead to getting messages from
   // the iframe.
-  netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-  var wm = Components.classes["@mozilla.org/appshell/window-mediator;1"].
-           getService(Components.interfaces.nsIWindowMediator);
+  var wm = SpecialPowers.Cc["@mozilla.org/appshell/window-mediator;1"].
+           getService(SpecialPowers.Ci.nsIWindowMediator);
   var win = wm.getMostRecentWindow("navigator:browser");
   var notificationBox = win.gBrowser.getNotificationBox();
 

@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsJSUtils_h__
 #define nsJSUtils_h__
@@ -44,6 +12,8 @@
  * The goal of the utility functions is to cut down on the size of
  * the generated code itself.
  */
+
+#include "mozilla/Assertions.h"
 
 #include "nsISupports.h"
 #include "jsapi.h"
@@ -58,38 +28,89 @@ class nsJSUtils
 {
 public:
   static JSBool GetCallingLocation(JSContext* aContext, const char* *aFilename,
-                                   PRUint32* aLineno, nsIPrincipal* aPrincipal);
+                                   uint32_t* aLineno);
 
-  static nsIScriptGlobalObject *GetStaticScriptGlobal(JSContext* aContext,
-                                                      JSObject* aObj);
+  static nsIScriptGlobalObject *GetStaticScriptGlobal(JSObject* aObj);
 
-  static nsIScriptContext *GetStaticScriptContext(JSContext* aContext,
-                                                  JSObject* aObj);
+  static nsIScriptContext *GetStaticScriptContext(JSObject* aObj);
 
   static nsIScriptGlobalObject *GetDynamicScriptGlobal(JSContext *aContext);
 
   static nsIScriptContext *GetDynamicScriptContext(JSContext *aContext);
+
+  /**
+   * Retrieve the inner window ID based on the given JSContext.
+   *
+   * @param JSContext aContext
+   *        The JSContext from which you want to find the inner window ID.
+   *
+   * @returns uint64_t the inner window ID.
+   */
+  static uint64_t GetCurrentlyRunningCodeInnerWindowID(JSContext *aContext);
+
+  /**
+   * Report a pending exception on aContext, if any.  Note that this
+   * can be called when the context has a JS stack.  If that's the
+   * case, the stack will be set aside before reporting the exception.
+   */
+  static void ReportPendingException(JSContext *aContext);
 };
 
 
 class nsDependentJSString : public nsDependentString
 {
 public:
-  explicit nsDependentJSString(jsval v)
-    : nsDependentString((PRUnichar *)::JS_GetStringChars(JSVAL_TO_STRING(v)),
-                        ::JS_GetStringLength(JSVAL_TO_STRING(v)))
-  {
-  }
-
+  /**
+   * In the case of string ids, getting the string's chars is infallible, so
+   * the dependent string can be constructed directly.
+   */
   explicit nsDependentJSString(jsid id)
-    : nsDependentString((PRUnichar *)::JS_GetStringChars(JSID_TO_STRING(id)),
-                        ::JS_GetStringLength(JSID_TO_STRING(id)))
+    : nsDependentString(JS_GetInternedStringChars(JSID_TO_STRING(id)),
+                        JS_GetStringLength(JSID_TO_STRING(id)))
   {
   }
 
-  explicit nsDependentJSString(JSString *str)
-    : nsDependentString((PRUnichar *)::JS_GetStringChars(str), ::JS_GetStringLength(str))
+  /**
+   * Ditto for flat strings.
+   */
+  explicit nsDependentJSString(JSFlatString* fstr)
+    : nsDependentString(JS_GetFlatStringChars(fstr),
+                        JS_GetStringLength(JS_FORGET_STRING_FLATNESS(fstr)))
   {
+  }
+
+  /**
+   * For all other strings, the nsDependentJSString object should be default
+   * constructed, which leaves it empty (this->IsEmpty()), and initialized with
+   * one of the init() methods below.
+   */
+
+  nsDependentJSString()
+  {
+  }
+
+  JSBool init(JSContext* aContext, JSString* str)
+  {
+      size_t length;
+      const jschar* chars = JS_GetStringCharsZAndLength(aContext, str, &length);
+      if (!chars)
+          return JS_FALSE;
+
+      NS_ASSERTION(IsEmpty(), "init() on initialized string");
+      nsDependentString* base = this;
+      new(base) nsDependentString(chars, length);
+      return JS_TRUE;
+  }
+
+  JSBool init(JSContext* aContext, const jsval &v)
+  {
+      return init(aContext, JSVAL_TO_STRING(v));
+  }
+
+  void init(JSFlatString* fstr)
+  {
+      MOZ_ASSERT(IsEmpty(), "init() on initialized string");
+      new(this) nsDependentJSString(fstr);
   }
 
   ~nsDependentJSString()

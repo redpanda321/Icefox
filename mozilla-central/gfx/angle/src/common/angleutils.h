@@ -15,4 +15,12 @@
   TypeName(const TypeName&);               \
   void operator=(const TypeName&)
 
+#if defined(_MSC_VER)
+#define snprintf _snprintf
+#endif
+
+#define VENDOR_ID_AMD 0x1002
+#define VENDOR_ID_INTEL 0x8086
+#define VENDOR_ID_NVIDIA 0x10DE
+
 #endif // COMMON_ANGLEUTILS_H_

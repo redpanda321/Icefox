@@ -126,6 +126,9 @@ qcms_profile* qcms_profile_from_memory(const void *mem, size_t size);
 
 qcms_profile* qcms_profile_from_file(FILE *file);
 qcms_profile* qcms_profile_from_path(const char *path);
+#ifdef _WIN32
+qcms_profile* qcms_profile_from_unicode_path(const wchar_t *path);
+#endif
 qcms_profile* qcms_profile_sRGB(void);
 void qcms_profile_release(qcms_profile *profile);
 
@@ -144,7 +147,7 @@ void qcms_transform_release(qcms_transform *);
 
 void qcms_transform_data(qcms_transform *transform, void *src, void *dest, size_t length);
 
-
+void qcms_enable_iccv4();
 
 #ifdef  __cplusplus
 }

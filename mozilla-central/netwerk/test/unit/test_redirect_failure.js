@@ -1,4 +1,9 @@
-do_load_httpd_js();
+const Cc = Components.classes;
+const Ci = Components.interfaces;
+const Cu = Components.utils;
+const Cr = Components.results;
+
+Cu.import("resource://testing-common/httpd.js");
 
 var httpServer = null;
 // Need to randomize, because apparently no one clears our cache
@@ -20,17 +25,19 @@ function redirectHandler(metadata, response)
 
 function finish_test(request, buffer)
 {
+  do_check_eq(request.status, Components.results.NS_ERROR_UNKNOWN_PROTOCOL);
+
   do_check_eq(buffer, "");
   httpServer.stop(do_test_finished);
 }
 
 function run_test()
 {
-  httpServer = new nsHttpServer();
+  httpServer = new HttpServer();
   httpServer.registerPathHandler(randomPath, redirectHandler);
   httpServer.start(4444);
 
   var chan = make_channel(randomURI);
-  chan.asyncOpen(new ChannelListener(finish_test), null);
+  chan.asyncOpen(new ChannelListener(finish_test, null, CL_EXPECT_FAILURE), null);
   do_test_pending();
 }

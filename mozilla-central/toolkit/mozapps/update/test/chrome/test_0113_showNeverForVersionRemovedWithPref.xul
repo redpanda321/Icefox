@@ -11,12 +11,10 @@
 <window title="Update Wizard pages: update available with never pref and without showNeverForVersion"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         onload="runTestDefault();">
-<script type="application/javascript" 
-        src="chrome://mochikit/content/MochiKit/packed.js"/>
 <script type="application/javascript"
         src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"/>
 <script type="application/javascript"
-        src="chrome://mochikit/content/chrome/toolkit/mozapps/update/test/chrome/utils.js"/>
+        src="utils.js"/>
 
 <script type="application/javascript">
 <![CDATA[
@@ -31,11 +29,10 @@ const TESTS = [ {
 } ];
 
 function runTest() {
-  debugDump("Entering runTest");
+  debugDump("entering");
 
   let url = URL_UPDATE + "?showDetails=1&showPrompt=1" + getVersionParams();
   setUpdateURLOverride(url);
-  debugDump("Update URL: " + url);
 
   // add the never preference for this version to verify that checking for
   // updates clears the preference.

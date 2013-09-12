@@ -1,43 +1,13 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Dave Townsend <dtownsend@oxymoronical.com>.
- *
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL
- *
- * ***** END LICENSE BLOCK *****
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 const URI_EXTENSION_BLOCKLIST_DIALOG = "chrome://mozapps/content/extensions/blocklist.xul";
 
-do_load_httpd_js();
+const Ci = Components.interfaces;
+const Cu = Components.utils;
+
+Cu.import("resource://testing-common/httpd.js");
 
 var ADDONS = [{
   id: "test_bug449027_1@tests.mozilla.org",
@@ -405,10 +375,10 @@ var PluginHost = {
   },
 
   QueryInterface: function(iid) {
-    if (iid.equals(Components.interfaces.nsIPluginHost)
-     || iid.equals(Components.interfaces.nsISupports))
+    if (iid.equals(Ci.nsIPluginHost)
+     || iid.equals(Ci.nsISupports))
       return this;
-  
+
     throw Components.results.NS_ERROR_NO_INTERFACE;
   }
 }
@@ -433,16 +403,16 @@ var WindowWatcher = {
 
     gNewBlocks = [];
     var list = args.list;
-    for (var i = 0; i < list.length; i++)
-      gNewBlocks.push(list[i].name + " " + list[i].version);
+    for (let listItem of list)
+      gNewBlocks.push(listItem.name + " " + listItem.version);
 
     // Call the callback after the blocklist has finished up
     do_timeout(0, gCallback);
   },
 
   QueryInterface: function(iid) {
-    if (iid.equals(Components.interfaces.nsIWindowWatcher)
-     || iid.equals(Components.interfaces.nsISupports))
+    if (iid.equals(Ci.nsIWindowWatcher)
+     || iid.equals(Ci.nsISupports))
       return this;
 
     throw Components.results.NS_ERROR_NO_INTERFACE;
@@ -456,7 +426,7 @@ var WindowWatcherFactory = {
     return WindowWatcher.QueryInterface(iid);
   }
 };
-var registrar = Components.manager.QueryInterface(Components.interfaces.nsIComponentRegistrar);
+var registrar = Components.manager.QueryInterface(Ci.nsIComponentRegistrar);
 registrar.registerFactory(Components.ID("{721c3e73-969e-474b-a6dc-059fd288c428}"),
                           "Fake Plugin Host",
                           "@mozilla.org/plugin/host;1", PluginHostFactory);
@@ -488,7 +458,7 @@ function create_addon(addon) {
   target.append("install.rdf");
   target.create(target.NORMAL_FILE_TYPE, 0644);
   var stream = Components.classes["@mozilla.org/network/file-output-stream;1"]
-                         .createInstance(Components.interfaces.nsIFileOutputStream);
+                         .createInstance(Ci.nsIFileOutputStream);
   stream.init(target, 0x04 | 0x08 | 0x20, 0664, 0); // write, create, truncate
   stream.write(installrdf, installrdf.length);
   stream.close();
@@ -539,7 +509,7 @@ function check_state(test, lastTest, callback) {
 function load_blocklist(file) {
   Services.prefs.setCharPref("extensions.blocklist.url", "http://localhost:4444/data/" + file);
   var blocklist = Components.classes["@mozilla.org/extensions/blocklist;1"]
-                            .getService(Components.interfaces.nsITimerCallback);
+                            .getService(Ci.nsITimerCallback);
   blocklist.notify(null);
 }
 
@@ -548,13 +518,13 @@ function run_test() {
   dump("Setting up tests\n");
   // Rather than keeping lots of identical add-ons in version control, just
   // write them into the profile.
-  for (var i = 0; i < ADDONS.length; i++)
-    create_addon(ADDONS[i]);
+  for (let addon of ADDONS)
+    create_addon(addon);
 
   createAppInfo("xpcshell@tests.mozilla.org", "XPCShell", "3", "8");
   startupManager();
 
-  gTestserver = new nsHttpServer();
+  gTestserver = new HttpServer();
   gTestserver.registerDirectory("/data/", do_get_file("data"));
   gTestserver.start(4444);
 

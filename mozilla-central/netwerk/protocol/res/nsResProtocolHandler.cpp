@@ -1,55 +1,15 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@netscape.com>
- *   Benjamin Smedberg <bsmedberg@covad.net>
- *   Daniel Veditz <dveditz@cruzio.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifdef MOZ_IPC
 #include "mozilla/chrome/RegistryMessageUtils.h"
-#endif
 
 #include "nsResProtocolHandler.h"
-#include "nsAutoLock.h"
 #include "nsIURL.h"
 #include "nsIIOService.h"
 #include "nsIServiceManager.h"
-#include "nsILocalFile.h"
 #include "prenv.h"
-#include "prmem.h"
 #include "prprf.h"
 #include "nsXPIDLString.h"
 #include "nsIFile.h"
@@ -62,7 +22,7 @@
 
 static NS_DEFINE_CID(kResURLCID, NS_RESURL_CID);
 
-static nsResProtocolHandler *gResHandler = nsnull;
+static nsResProtocolHandler *gResHandler = nullptr;
 
 #if defined(PR_LOGGING)
 //
@@ -79,8 +39,8 @@ static nsResProtocolHandler *gResHandler = nsnull;
 static PRLogModuleInfo *gResLog;
 #endif
 
+#define kAPP           NS_LITERAL_CSTRING("app")
 #define kGRE           NS_LITERAL_CSTRING("gre")
-#define kGRE_RESOURCES NS_LITERAL_CSTRING("gre-resources")
 
 //----------------------------------------------------------------------------
 // nsResURL : overrides nsStandardURL::GetFile to provide nsIFile resolution
@@ -93,13 +53,13 @@ nsResURL::EnsureFile()
 
     NS_ENSURE_TRUE(gResHandler, NS_ERROR_NOT_AVAILABLE);
 
-    nsCAutoString spec;
+    nsAutoCString spec;
     rv = gResHandler->ResolveURI(this, spec);
     if (NS_FAILED(rv))
         return rv;
 
-    nsCAutoString scheme;
-    rv = net_ExtractURLScheme(spec, nsnull, nsnull, &scheme);
+    nsAutoCString scheme;
+    rv = net_ExtractURLScheme(spec, nullptr, nullptr, &scheme);
     if (NS_FAILED(rv))
         return rv;
 
@@ -113,7 +73,7 @@ nsResURL::EnsureFile()
     rv = net_GetFileFromURLSpec(spec, getter_AddRefs(mFile));
 #ifdef DEBUG_bsmedberg
     if (NS_SUCCEEDED(rv)) {
-        PRBool exists = PR_TRUE;
+        bool exists = true;
         mFile->Exists(&exists);
         if (!exists) {
             printf("resource %s doesn't exist!\n", spec.get());
@@ -154,66 +114,52 @@ nsResProtocolHandler::nsResProtocolHandler()
 
 nsResProtocolHandler::~nsResProtocolHandler()
 {
-    gResHandler = nsnull;
-}
-
-nsresult
-nsResProtocolHandler::AddSpecialDir(const char* aSpecialDir, const nsACString& aSubstitution)
-{
-    nsCOMPtr<nsIFile> file;
-    nsresult rv = NS_GetSpecialDirectory(aSpecialDir, getter_AddRefs(file));
-    NS_ENSURE_SUCCESS(rv, rv);
-
-    nsCOMPtr<nsIURI> uri;
-    rv = mIOService->NewFileURI(file, getter_AddRefs(uri));
-    NS_ENSURE_SUCCESS(rv, rv);
-
-    return SetSubstitution(aSubstitution, uri);
+    gResHandler = nullptr;
 }
 
 nsresult
 nsResProtocolHandler::Init()
 {
-    if (!mSubstitutions.Init(32))
-        return NS_ERROR_UNEXPECTED;
+    mSubstitutions.Init(32);
 
     nsresult rv;
 
     mIOService = do_GetIOService(&rv);
     NS_ENSURE_SUCCESS(rv, rv);
 
-#ifdef MOZ_OMNIJAR
-    nsCOMPtr<nsIFile> omniJar(mozilla::OmnijarPath());
-    if (omniJar)
-        return Init(omniJar);
-#endif
-
-    // these entries should be kept in sync with the omnijar Init function
+    nsAutoCString appURI, greURI;
+    rv = mozilla::Omnijar::GetURIString(mozilla::Omnijar::APP, appURI);
+    NS_ENSURE_SUCCESS(rv, rv);
+    rv = mozilla::Omnijar::GetURIString(mozilla::Omnijar::GRE, greURI);
+    NS_ENSURE_SUCCESS(rv, rv);
 
     //
-    // make resource:/// point to the application directory
+    // make resource:/// point to the application directory or omnijar
     //
-    rv = AddSpecialDir(NS_OS_CURRENT_PROCESS_DIR, EmptyCString());
+    nsCOMPtr<nsIURI> uri;
+    rv = NS_NewURI(getter_AddRefs(uri), appURI.Length() ? appURI : greURI);
+    NS_ENSURE_SUCCESS(rv, rv);
+
+    rv = SetSubstitution(EmptyCString(), uri);
+    NS_ENSURE_SUCCESS(rv, rv);
+
+    //
+    // make resource://app/ point to the application directory or omnijar
+    //
+    rv = SetSubstitution(kAPP, uri);
     NS_ENSURE_SUCCESS(rv, rv);
 
     //
     // make resource://gre/ point to the GRE directory
     //
-    rv = AddSpecialDir(NS_GRE_DIR, kGRE);
+    if (appURI.Length()) { // We already have greURI in uri if appURI.Length() is 0.
+        rv = NS_NewURI(getter_AddRefs(uri), greURI);
+        NS_ENSURE_SUCCESS(rv, rv);
+    }
+
+    rv = SetSubstitution(kGRE, uri);
     NS_ENSURE_SUCCESS(rv, rv);
 
-    // make resource://gre-resources/ point to gre toolkit[.jar]/res
-    nsCOMPtr<nsIURI> greURI;
-    nsCOMPtr<nsIURI> greResURI;
-    GetSubstitution(kGRE, getter_AddRefs(greURI));
-#ifdef MOZ_CHROME_FILE_FORMAT_JAR
-    NS_NAMED_LITERAL_CSTRING(strGRE_RES_URL, "jar:chrome/toolkit.jar!/res/");
-#else
-    NS_NAMED_LITERAL_CSTRING(strGRE_RES_URL, "chrome/toolkit/res/");
-#endif
-    rv = mIOService->NewURI(strGRE_RES_URL, nsnull, greURI,
-                            getter_AddRefs(greResURI));
-    SetSubstitution(kGRE_RESOURCES, greResURI);
     //XXXbsmedberg Neil wants a resource://pchrome/ for the profile chrome dir...
     // but once I finish multiple chrome registration I'm not sure that it is needed
 
@@ -223,41 +169,6 @@ nsResProtocolHandler::Init()
     return rv;
 }
 
-#ifdef MOZ_OMNIJAR
-nsresult
-nsResProtocolHandler::Init(nsIFile *aOmniJar)
-{
-    nsresult rv;
-    nsCOMPtr<nsIURI> uri;
-    nsCAutoString omniJarSpec;
-    NS_GetURLSpecFromActualFile(aOmniJar, omniJarSpec, mIOService);
-
-    nsCAutoString urlStr("jar:");
-    urlStr += omniJarSpec;
-    urlStr += "!/";
-
-    rv = mIOService->NewURI(urlStr, nsnull, nsnull, getter_AddRefs(uri));
-    NS_ENSURE_SUCCESS(rv, rv);
-
-    // these entries should be kept in sync with the normal Init function
-
-    // resource:/// points to jar:omni.jar!/
-    SetSubstitution(EmptyCString(), uri);
-
-    // resource://gre/ points to jar:omni.jar!/
-    SetSubstitution(kGRE, uri);
-
-    urlStr += "chrome/toolkit/res/";
-    rv = mIOService->NewURI(urlStr, nsnull, nsnull, getter_AddRefs(uri));
-    NS_ENSURE_SUCCESS(rv, rv);
-
-    // resource://gre-resources/ points to jar:omni.jar!/chrome/toolkit/res/
-    SetSubstitution(kGRE_RESOURCES, uri);
-    return NS_OK;
-}
-#endif
-
-#ifdef MOZ_IPC
 static PLDHashOperator
 EnumerateSubstitution(const nsACString& aKey,
                       nsIURI* aURI,
@@ -272,18 +183,17 @@ EnumerateSubstitution(const nsACString& aKey,
     }
 
     ResourceMapping resource = {
-        nsDependentCString(aKey), uri
+        nsCString(aKey), uri
     };
     resources->AppendElement(resource);
     return (PLDHashOperator)PL_DHASH_NEXT;
 }
 
 void
-nsResProtocolHandler::CollectSubstitutions(nsTArray<ResourceMapping>& aResources)
+nsResProtocolHandler::CollectSubstitutions(InfallibleTArray<ResourceMapping>& aResources)
 {
     mSubstitutions.EnumerateRead(&EnumerateSubstitution, &aResources);
 }
-#endif
 
 //----------------------------------------------------------------------------
 // nsResProtocolHandler::nsISupports
@@ -306,14 +216,14 @@ nsResProtocolHandler::GetScheme(nsACString &result)
 }
 
 NS_IMETHODIMP
-nsResProtocolHandler::GetDefaultPort(PRInt32 *result)
+nsResProtocolHandler::GetDefaultPort(int32_t *result)
 {
     *result = -1;        // no port for res: URLs
     return NS_OK;
 }
 
 NS_IMETHODIMP
-nsResProtocolHandler::GetProtocolFlags(PRUint32 *result)
+nsResProtocolHandler::GetProtocolFlags(uint32_t *result)
 {
     // XXXbz Is this really true for all resource: URIs?  Could we
     // somehow give different flags to some of them?
@@ -337,7 +247,7 @@ nsResProtocolHandler::NewURI(const nsACString &aSpec,
     // unescape any %2f and %2e to make sure nsStandardURL coalesces them.
     // Later net_GetFileFromURLSpec() will do a full unescape and we want to
     // treat them the same way the file system will. (bugs 380994, 394075)
-    nsCAutoString spec;
+    nsAutoCString spec;
     const char *src = aSpec.BeginReading();
     const char *end = aSpec.EndReading();
     const char *last = src;
@@ -375,22 +285,25 @@ nsResProtocolHandler::NewChannel(nsIURI* uri, nsIChannel* *result)
 {
     NS_ENSURE_ARG_POINTER(uri);
     nsresult rv;
-    nsCAutoString spec;
+    nsAutoCString spec;
 
     rv = ResolveURI(uri, spec);
     if (NS_FAILED(rv)) return rv;
 
-    rv = mIOService->NewChannel(spec, nsnull, nsnull, result);
+    rv = mIOService->NewChannel(spec, nullptr, nullptr, result);
     if (NS_FAILED(rv)) return rv;
 
+    nsLoadFlags loadFlags = 0;
+    (*result)->GetLoadFlags(&loadFlags);
+    (*result)->SetLoadFlags(loadFlags & ~nsIChannel::LOAD_REPLACE);
     return (*result)->SetOriginalURI(uri);
 }
 
 NS_IMETHODIMP 
-nsResProtocolHandler::AllowPort(PRInt32 port, const char *scheme, PRBool *_retval)
+nsResProtocolHandler::AllowPort(int32_t port, const char *scheme, bool *_retval)
 {
     // don't override anything.  
-    *_retval = PR_FALSE;
+    *_retval = false;
     return NS_OK;
 }
 
@@ -407,24 +320,26 @@ nsResProtocolHandler::SetSubstitution(const nsACString& root, nsIURI *baseURI)
     }
 
     // If baseURI isn't a resource URI, we can set the substitution immediately.
-    nsCAutoString scheme;
+    nsAutoCString scheme;
     nsresult rv = baseURI->GetScheme(scheme);
     NS_ENSURE_SUCCESS(rv, rv);
     if (!scheme.Equals(NS_LITERAL_CSTRING("resource"))) {
-        return mSubstitutions.Put(root, baseURI) ? NS_OK : NS_ERROR_UNEXPECTED;
+        mSubstitutions.Put(root, baseURI);
+        return NS_OK;
     }
 
     // baseURI is a resource URI, let's resolve it first.
-    nsCAutoString newBase;
+    nsAutoCString newBase;
     rv = ResolveURI(baseURI, newBase);
     NS_ENSURE_SUCCESS(rv, rv);
 
     nsCOMPtr<nsIURI> newBaseURI;
-    rv = mIOService->NewURI(newBase, nsnull, nsnull,
+    rv = mIOService->NewURI(newBase, nullptr, nullptr,
                             getter_AddRefs(newBaseURI));
     NS_ENSURE_SUCCESS(rv, rv);
 
-    return mSubstitutions.Put(root, newBaseURI) ? NS_OK : NS_ERROR_UNEXPECTED;
+    mSubstitutions.Put(root, newBaseURI);
+    return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -437,7 +352,7 @@ nsResProtocolHandler::GetSubstitution(const nsACString& root, nsIURI **result)
 
     // try invoking the directory service for "resource:root"
 
-    nsCAutoString key;
+    nsAutoCString key;
     key.AssignLiteral("resource:");
     key.Append(root);
 
@@ -454,11 +369,11 @@ nsResProtocolHandler::GetSubstitution(const nsACString& root, nsIURI **result)
 }
 
 NS_IMETHODIMP
-nsResProtocolHandler::HasSubstitution(const nsACString& root, PRBool *result)
+nsResProtocolHandler::HasSubstitution(const nsACString& root, bool *result)
 {
     NS_ENSURE_ARG_POINTER(result);
 
-    *result = mSubstitutions.Get(root, nsnull);
+    *result = mSubstitutions.Get(root, nullptr);
     return NS_OK;
 }
 
@@ -467,12 +382,8 @@ nsResProtocolHandler::ResolveURI(nsIURI *uri, nsACString &result)
 {
     nsresult rv;
 
-    nsCOMPtr<nsIURL> url(do_QueryInterface(uri));
-    if (!url)
-        return NS_NOINTERFACE;
-
-    nsCAutoString host;
-    nsCAutoString path;
+    nsAutoCString host;
+    nsAutoCString path;
 
     rv = uri->GetAsciiHost(host);
     if (NS_FAILED(rv)) return rv;
@@ -480,15 +391,15 @@ nsResProtocolHandler::ResolveURI(nsIURI *uri, nsACString &result)
     rv = uri->GetPath(path);
     if (NS_FAILED(rv)) return rv;
 
-    nsCAutoString filepath;
-    url->GetFilePath(filepath);
+    // Unescape the path so we can perform some checks on it.
+    nsAutoCString unescapedPath(path);
+    NS_UnescapeURL(unescapedPath);
 
     // Don't misinterpret the filepath as an absolute URI.
-    if (filepath.FindChar(':') != -1)
+    if (unescapedPath.FindChar(':') != -1)
         return NS_ERROR_MALFORMED_URI;
 
-    NS_UnescapeURL(filepath);
-    if (filepath.FindChar('\\') != -1)
+    if (unescapedPath.FindChar('\\') != -1)
         return NS_ERROR_MALFORMED_URI;
 
     const char *p = path.get() + 1; // path always starts with a slash
@@ -505,7 +416,7 @@ nsResProtocolHandler::ResolveURI(nsIURI *uri, nsACString &result)
 
 #if defined(PR_LOGGING)
     if (PR_LOG_TEST(gResLog, PR_LOG_DEBUG)) {
-        nsCAutoString spec;
+        nsAutoCString spec;
         uri->GetAsciiSpec(spec);
         PR_LOG(gResLog, PR_LOG_DEBUG,
                ("%s\n -> %s\n", spec.get(), PromiseFlatCString(result).get()));

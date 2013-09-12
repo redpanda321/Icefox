@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SMIL module.
- *
- * The Initial Developer of the Original Code is Brian Birtles.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Brian Birtles <birtles@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef NS_SMILINSTANCETIME_H_
 #define NS_SMILINSTANCETIME_H_
@@ -84,24 +52,24 @@ public:
 
   nsSMILInstanceTime(const nsSMILTimeValue& aTime,
                      nsSMILInstanceTimeSource aSource = SOURCE_NONE,
-                     nsSMILTimeValueSpec* aCreator = nsnull,
-                     nsSMILInterval* aBaseInterval = nsnull);
+                     nsSMILTimeValueSpec* aCreator = nullptr,
+                     nsSMILInterval* aBaseInterval = nullptr);
   ~nsSMILInstanceTime();
   void Unlink();
   void HandleChangedInterval(const nsSMILTimeContainer* aSrcContainer,
-                             PRBool aBeginObjectChanged,
-                             PRBool aEndObjectChanged);
+                             bool aBeginObjectChanged,
+                             bool aEndObjectChanged);
   void HandleDeletedInterval();
   void HandleFilteredInterval();
 
   const nsSMILTimeValue& Time() const { return mTime; }
   const nsSMILTimeValueSpec* GetCreator() const { return mCreator; }
 
-  PRBool IsDynamic() const { return !!(mFlags & kDynamic); }
-  PRBool IsFixedTime() const { return !(mFlags & kMayUpdate); }
-  PRBool FromDOM() const { return !!(mFlags & kFromDOM); }
+  bool IsDynamic() const { return !!(mFlags & kDynamic); }
+  bool IsFixedTime() const { return !(mFlags & kMayUpdate); }
+  bool FromDOM() const { return !!(mFlags & kFromDOM); }
 
-  PRBool ShouldPreserve() const;
+  bool ShouldPreserve() const;
   void   UnmarkShouldPreserve();
 
   void AddRefFixedEndpoint();
@@ -114,25 +82,25 @@ public:
     mTime = aNewTime;
   }
 
-  PRBool IsDependent() const { return !!mBaseInterval; }
-  PRBool IsDependentOn(const nsSMILInstanceTime& aOther) const;
+  bool IsDependent() const { return !!mBaseInterval; }
+  bool IsDependentOn(const nsSMILInstanceTime& aOther) const;
   const nsSMILInterval* GetBaseInterval() const { return mBaseInterval; }
+  const nsSMILInstanceTime* GetBaseTime() const;
 
-  PRBool SameTimeAndBase(const nsSMILInstanceTime& aOther) const
+  bool SameTimeAndBase(const nsSMILInstanceTime& aOther) const
   {
     return mTime == aOther.mTime && GetBaseTime() == aOther.GetBaseTime();
   }
 
   // Get and set a serial number which may be used by a containing class to
   // control the sort order of otherwise similar instance times.
-  PRUint32 Serial() const { return mSerial; }
-  void SetSerial(PRUint32 aIndex) { mSerial = aIndex; }
+  uint32_t Serial() const { return mSerial; }
+  void SetSerial(uint32_t aIndex) { mSerial = aIndex; }
 
   NS_INLINE_DECL_REFCOUNTING(nsSMILInstanceTime)
 
 protected:
   void SetBaseInterval(nsSMILInterval* aBaseInterval);
-  const nsSMILInstanceTime* GetBaseTime() const;
 
   nsSMILTimeValue mTime;
 
@@ -163,8 +131,8 @@ protected:
     // should be preserved and not filtered.
     kWasDynamicEndpoint = 8
   };
-  PRUint8       mFlags;   // Combination of kDynamic, kMayUpdate, etc.
-  PRPackedBool  mVisited; // (mutable) Cycle tracking
+  uint8_t       mFlags;   // Combination of kDynamic, kMayUpdate, etc.
+  mutable bool  mVisited; // Cycle tracking
 
   // Additional reference count to determine if this instance time is currently
   // used as a fixed endpoint in any intervals. Instance times that are used in
@@ -174,13 +142,14 @@ protected:
   //
   // Instance times are only shared in a few cases, namely:
   // a) early ends,
-  // b) zero-duration intervals, and
+  // b) zero-duration intervals,
   // c) momentarily whilst establishing new intervals and updating the current
-  //    interval
-  // Hence the limited range of a PRUint16 should be more than adequate.
-  PRUint16      mFixedEndpointRefCnt;
+  //    interval, and
+  // d) trimmed intervals
+  // Hence the limited range of a uint16_t should be more than adequate.
+  uint16_t      mFixedEndpointRefCnt;
 
-  PRUint32      mSerial; // A serial number used by the containing class to
+  uint32_t      mSerial; // A serial number used by the containing class to
                          // specify the sort order for instance times with the
                          // same mTime.
 

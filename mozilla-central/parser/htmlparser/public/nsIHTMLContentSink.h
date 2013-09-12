@@ -1,43 +1,14 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef nsIHTMLContentSink_h___
 #define nsIHTMLContentSink_h___
 
 /**
+ * This interface is OBSOLETE and in the process of being REMOVED.
+ * Do NOT implement!
+ *
  * This file declares the concrete HTMLContentSink class.
  * This class is used during the parsing process as the
  * primary interface between the parser and the content
@@ -82,13 +53,14 @@
 #include "nsIContentSink.h"
 #include "nsHTMLTags.h"
 
-// d19e6730-5e2f-4131-89db-8a918515097d
 #define NS_IHTML_CONTENT_SINK_IID \
-{ 0xd19e6730, 0x5e2f, 0x4131, \
-  { 0x89, 0xdb, 0x8a, 0x91, 0x85, 0x15, 0x09, 0x7d } }
+{ 0xb6d6ae00, 0x0884, 0x4a30, \
+  { 0xa8, 0xb4, 0xce, 0xca, 0x57, 0x27, 0x1a, 0x3e } }
 
-#define MAX_REFLOW_DEPTH  200
-
+/**
+ * This interface is OBSOLETE and in the process of being REMOVED.
+ * Do NOT implement!
+ */
 class nsIHTMLContentSink : public nsIContentSink 
 {
 public:
@@ -109,7 +81,7 @@ public:
    * @update 04/04/99 harishd
    * @param aPosition - The position from where the new context begins.
    */
-  NS_IMETHOD BeginContext(PRInt32 aPosition) = 0;
+  NS_IMETHOD BeginContext(int32_t aPosition) = 0;
   
   /**
    * This method terminates any new context that got created by
@@ -118,13 +90,13 @@ public:
    * @update 04/04/99 harishd
    * @param aPosition - Validates the end of a context.
    */
-  NS_IMETHOD EndContext(PRInt32 aPosition) = 0;
+  NS_IMETHOD EndContext(int32_t aPosition) = 0;
   
   /**
    * @update 01/09/2003 harishd
    * @param aTag - Check if this tag is enabled or not.
    */
-  NS_IMETHOD IsEnabled(PRInt32 aTag, PRBool* aReturn) = 0;
+  NS_IMETHOD IsEnabled(int32_t aTag, bool* aReturn) = 0;
 
   /**
    * This method is called when parser has
@@ -185,52 +157,6 @@ public:
    * @param  nsIParserNode reference to parser node interface
    */     
   NS_IMETHOD AddLeaf(const nsIParserNode& aNode) = 0;
-
-  /**
-   * This gets called by the parser when you want to add
-   * a leaf node to the current container in the content
-   * model.
-   *
-   * @update 4/1/98 gess
-   * @param  nsIParserNode reference to parser node interface
-   */     
-  NS_IMETHOD AddComment(const nsIParserNode& aNode) = 0;
-
-  /**
-   * This gets called by the parser when you want to add
-   * a leaf node to the current container in the content
-   * model.
-   *
-   * @update 4/1/98 gess
-   * @param  nsIParserNode reference to parser node interface
-   */     
-  NS_IMETHOD AddProcessingInstruction(const nsIParserNode& aNode) = 0;
-
-  /**
-   * This method is called by the parser when it encounters
-   * a document type declaration.
-   *
-   * XXX Should the parser also parse the internal subset?
-   *
-   * @param  nsIParserNode reference to parser node interface
-   */
-  NS_IMETHOD AddDocTypeDecl(const nsIParserNode& aNode) = 0;
-
-  /**
-   * This gets called by the parser to notify observers of
-   * the tag
-   *
-   * @param aErrorResult the error code
-   */
-  NS_IMETHOD NotifyTagObservers(nsIParserNode* aNode) = 0;
-
-  /**
-   * Call this method to determnine if a FORM is on the sink's stack
-   *
-   * @return PR_TRUE if found else PR_FALSE
-   */
-  NS_IMETHOD_(PRBool) IsFormOnStack() = 0;
-
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsIHTMLContentSink, NS_IHTML_CONTENT_SINK_IID)

@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 
 .autocomplete-result-popupset {
   width: 0 !important;
@@ -15,6 +19,14 @@
 
 .autocomplete-tree {
   -moz-user-focus: ignore;
+}
+
+.autocomplete-history-dropmarker {
+  display: none;
+}
+
+.autocomplete-history-dropmarker[enablehistory="true"] {
+  display: -moz-box;
 }
 
 /* The following rule is here to fix bug 96899 (and now 117952).  

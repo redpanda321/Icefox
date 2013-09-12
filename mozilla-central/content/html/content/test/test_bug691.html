@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=691
 -->
 <head>
   <title>Test for Bug 691</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>        
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 <script type="text/javascript">
@@ -14,7 +13,7 @@ function show(what) {
   var stage = document.getElementById("stage");
   if (what == "modularity") {
     var spaghetti = document.createElement("IMG",null);
-    spaghetti.setAttribute("SRC","/static/nnc_lockup.gif");
+    spaghetti.setAttribute("SRC","nnc_lockup.gif");
     spaghetti.setAttribute("id","foo");
     stage.insertBefore(spaghetti,stage.firstChild);
   }

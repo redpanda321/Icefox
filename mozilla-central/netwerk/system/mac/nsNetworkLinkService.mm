@@ -1,46 +1,14 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dave Camp <dcamp@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsNetworkLinkService.h"
 #include "nsCOMPtr.h"
 #include "nsIObserverService.h"
 #include "nsServiceManagerUtils.h"
 #include "nsString.h"
+#include "nsCRT.h"
 
 #import <Cocoa/Cocoa.h>
 #import <netinet/in.h>
@@ -50,8 +18,8 @@ NS_IMPL_ISUPPORTS2(nsNetworkLinkService,
                    nsIObserver)
 
 nsNetworkLinkService::nsNetworkLinkService()
-    : mLinkUp(PR_TRUE)
-    , mStatusKnown(PR_FALSE)
+    : mLinkUp(true)
+    , mStatusKnown(false)
     , mReachability(NULL)
     , mCFRunLoop(NULL)
 {
@@ -62,17 +30,27 @@ nsNetworkLinkService::~nsNetworkLinkService()
 }
 
 NS_IMETHODIMP
-nsNetworkLinkService::GetIsLinkUp(PRBool *aIsUp)
+nsNetworkLinkService::GetIsLinkUp(bool *aIsUp)
 {
     *aIsUp = mLinkUp;
     return NS_OK;
 }
 
 NS_IMETHODIMP
-nsNetworkLinkService::GetLinkStatusKnown(PRBool *aIsUp)
+nsNetworkLinkService::GetLinkStatusKnown(bool *aIsUp)
 {
     *aIsUp = mStatusKnown;
     return NS_OK;
+}
+
+NS_IMETHODIMP
+nsNetworkLinkService::GetLinkType(uint32_t *aLinkType)
+{
+  NS_ENSURE_ARG_POINTER(aLinkType);
+
+  // XXX This function has not yet been implemented for this platform
+  *aLinkType = nsINetworkLinkService::LINK_TYPE_UNKNOWN;
+  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -96,7 +74,7 @@ nsNetworkLinkService::Init(void)
         do_GetService("@mozilla.org/observer-service;1", &rv);
     NS_ENSURE_SUCCESS(rv, rv);
 
-    rv = observerService->AddObserver(this, "xpcom-shutdown", PR_FALSE);
+    rv = observerService->AddObserver(this, "xpcom-shutdown", false);
     NS_ENSURE_SUCCESS(rv, rv);
 
     // If the network reachability API can reach 0.0.0.0 without
@@ -175,15 +153,15 @@ nsNetworkLinkService::UpdateReachability()
 
     SCNetworkConnectionFlags flags;
     if (!::SCNetworkReachabilityGetFlags(mReachability, &flags)) {
-        mStatusKnown = PR_FALSE;
+        mStatusKnown = false;
         return;
     }
 
-    PRBool reachable = (flags & kSCNetworkFlagsReachable) != 0;
-    PRBool needsConnection = (flags & kSCNetworkFlagsConnectionRequired) != 0;
+    bool reachable = (flags & kSCNetworkFlagsReachable) != 0;
+    bool needsConnection = (flags & kSCNetworkFlagsConnectionRequired) != 0;
 
     mLinkUp = (reachable && !needsConnection);
-    mStatusKnown = PR_TRUE;
+    mStatusKnown = true;
 }
 
 void

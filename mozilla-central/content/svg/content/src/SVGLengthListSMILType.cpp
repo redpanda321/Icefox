@@ -1,42 +1,12 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SVG project.
- *
- * The Initial Developer of the Original Code is the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "SVGLengthListSMILType.h"
 #include "nsSMILValue.h"
 #include "SVGLengthList.h"
+#include "nsMathUtils.h"
 #include <math.h>
 
 namespace mozilla {
@@ -54,7 +24,7 @@ SVGLengthListSMILType::Init(nsSMILValue &aValue) const
   SVGLengthListAndInfo* lengthList = new SVGLengthListAndInfo();
 
   // See the comment documenting Init() in our header file:
-  lengthList->SetCanZeroPadList(PR_TRUE);
+  lengthList->SetCanZeroPadList(true);
 
   aValue.mU.mPtr = lengthList;
   aValue.mType = this;
@@ -65,7 +35,7 @@ SVGLengthListSMILType::Destroy(nsSMILValue& aValue) const
 {
   NS_PRECONDITION(aValue.mType == this, "Unexpected SMIL value type");
   delete static_cast<SVGLengthListAndInfo*>(aValue.mU.mPtr);
-  aValue.mU.mPtr = nsnull;
+  aValue.mU.mPtr = nullptr;
   aValue.mType = &nsSMILNullType::sSingleton;
 }
 
@@ -84,7 +54,7 @@ SVGLengthListSMILType::Assign(nsSMILValue& aDest,
   return dest->CopyFrom(*src);
 }
 
-PRBool
+bool
 SVGLengthListSMILType::IsEqual(const nsSMILValue& aLeft,
                                const nsSMILValue& aRight) const
 {
@@ -98,7 +68,7 @@ SVGLengthListSMILType::IsEqual(const nsSMILValue& aLeft,
 nsresult
 SVGLengthListSMILType::Add(nsSMILValue& aDest,
                            const nsSMILValue& aValueToAdd,
-                           PRUint32 aCount) const
+                           uint32_t aCount) const
 {
   NS_PRECONDITION(aDest.mType == this, "Unexpected SMIL type");
   NS_PRECONDITION(aValueToAdd.mType == this, "Incompatible SMIL type");
@@ -122,18 +92,46 @@ SVGLengthListSMILType::Add(nsSMILValue& aDest,
   // should be, not zeros, and those values are not explicit or otherwise
   // available.
 
+  if (dest.IsEmpty() && valueToAdd.IsEmpty()) {
+    // Adding two identity values, no-op.  This occurs when performing a
+    // discrete by-animation on an attribute with no specified base value.
+    return NS_OK;
+  }
+
+  if (!valueToAdd.Element()) { // Adding identity value - no-op
+    NS_ABORT_IF_FALSE(valueToAdd.IsEmpty(),
+                      "Identity values should be empty");
+    return NS_OK;
+  }
+
+  if (!dest.Element()) { // Adding *to* an identity value
+    NS_ABORT_IF_FALSE(dest.IsEmpty(),
+                      "Identity values should be empty");
+    if (!dest.SetLength(valueToAdd.Length())) {
+      return NS_ERROR_OUT_OF_MEMORY;
+    }
+    for (uint32_t i = 0; i < dest.Length(); ++i) {
+      dest[i].SetValueAndUnit(valueToAdd[i].GetValueInCurrentUnits() * aCount,
+                              valueToAdd[i].GetUnit());
+    }
+    dest.SetInfo(valueToAdd.Element(), valueToAdd.Axis(),
+                 valueToAdd.CanZeroPadList()); // propagate target element info!
+    return NS_OK;
+  }
+  NS_ABORT_IF_FALSE(dest.Element() == valueToAdd.Element(),
+                    "adding values from different elements...?");
+
+  // Zero-pad our |dest| list, if necessary.
   if (dest.Length() < valueToAdd.Length()) {
     if (!dest.CanZeroPadList()) {
-      // nsSVGUtils::ReportToConsole
+      // SVGContentUtils::ReportToConsole
       return NS_ERROR_FAILURE;
     }
 
-    NS_ASSERTION(valueToAdd.CanZeroPadList() || dest.Length() == 0,
-                 "Only \"zero\" nsSMILValues from the SMIL engine should "
-                 "return PR_TRUE for CanZeroPadList() when the attribute "
-                 "being animated can't be zero padded");
+    NS_ABORT_IF_FALSE(valueToAdd.CanZeroPadList(),
+                      "values disagree about attribute's zero-paddibility");
 
-    PRUint32 i = dest.Length();
+    uint32_t i = dest.Length();
     if (!dest.SetLength(valueToAdd.Length())) {
       return NS_ERROR_OUT_OF_MEMORY;
     }
@@ -142,7 +140,7 @@ SVGLengthListSMILType::Add(nsSMILValue& aDest,
     }
   }
 
-  for (PRUint32 i = 0; i < valueToAdd.Length(); ++i) {
+  for (uint32_t i = 0; i < valueToAdd.Length(); ++i) {
     float valToAdd;
     if (dest[i].GetUnit() == valueToAdd[i].GetUnit()) {
       valToAdd = valueToAdd[i].GetValueInCurrentUnits();
@@ -153,13 +151,14 @@ SVGLengthListSMILType::Add(nsSMILValue& aDest,
                                                        dest.Element(),
                                                        dest.Axis());
     }
-    dest[i].SetValueAndUnit(dest[i].GetValueInCurrentUnits() + valToAdd,
-                            dest[i].GetUnit());
+    dest[i].SetValueAndUnit(
+      dest[i].GetValueInCurrentUnits() + valToAdd * aCount,
+      dest[i].GetUnit());
   }
 
-  // propagate flag:
-  dest.SetCanZeroPadList(dest.CanZeroPadList() &&
-                         valueToAdd.CanZeroPadList());
+  // propagate target element info!
+  dest.SetInfo(valueToAdd.Element(), valueToAdd.Axis(),
+               dest.CanZeroPadList() && valueToAdd.CanZeroPadList());
 
   return NS_OK;
 }
@@ -180,16 +179,16 @@ SVGLengthListSMILType::ComputeDistance(const nsSMILValue& aFrom,
   // To understand this code, see the comments documenting our Init() method,
   // and documenting SVGLengthListAndInfo::CanZeroPadList().
 
-  NS_ASSERTION(from.CanZeroPadList() == to.CanZeroPadList() ||
-               from.CanZeroPadList() && from.Length() == 0 ||
-               to.CanZeroPadList() && to.Length() == 0,
+  NS_ASSERTION((from.CanZeroPadList() == to.CanZeroPadList()) ||
+               (from.CanZeroPadList() && from.IsEmpty()) ||
+               (to.CanZeroPadList() && to.IsEmpty()),
                "Only \"zero\" nsSMILValues from the SMIL engine should "
-               "return PR_TRUE for CanZeroPadList() when the attribute "
+               "return true for CanZeroPadList() when the attribute "
                "being animated can't be zero padded");
 
   if ((from.Length() < to.Length() && !from.CanZeroPadList()) ||
       (to.Length() < from.Length() && !to.CanZeroPadList())) {
-    // nsSVGUtils::ReportToConsole
+    // SVGContentUtils::ReportToConsole
     return NS_ERROR_FAILURE;
   }
 
@@ -205,7 +204,7 @@ SVGLengthListSMILType::ComputeDistance(const nsSMILValue& aFrom,
 
   double total = 0.0;
 
-  PRUint32 i = 0;
+  uint32_t i = 0;
   for (; i < from.Length() && i < to.Length(); ++i) {
     double f = from[i].GetValueInUserUnits(from.Element(), from.Axis());
     double t = to[i].GetValueInUserUnits(to.Element(), to.Axis());
@@ -226,7 +225,7 @@ SVGLengthListSMILType::ComputeDistance(const nsSMILValue& aFrom,
   }
 
   float distance = sqrt(total);
-  if (!NS_FloatIsFinite(distance)) {
+  if (!NS_finite(distance)) {
     return NS_ERROR_FAILURE;
   }
   aDistance = distance;
@@ -255,16 +254,16 @@ SVGLengthListSMILType::Interpolate(const nsSMILValue& aStartVal,
   // To understand this code, see the comments documenting our Init() method,
   // and documenting SVGLengthListAndInfo::CanZeroPadList().
 
-  NS_ASSERTION(start.CanZeroPadList() == end.CanZeroPadList() ||
-               start.CanZeroPadList() && start.Length() == 0 ||
-               end.CanZeroPadList() && end.Length() == 0,
+  NS_ASSERTION((start.CanZeroPadList() == end.CanZeroPadList()) ||
+               (start.CanZeroPadList() && start.IsEmpty()) ||
+               (end.CanZeroPadList() && end.IsEmpty()),
                "Only \"zero\" nsSMILValues from the SMIL engine should "
-               "return PR_TRUE for CanZeroPadList() when the attribute "
+               "return true for CanZeroPadList() when the attribute "
                "being animated can't be zero padded");
 
   if ((start.Length() < end.Length() && !start.CanZeroPadList()) ||
       (end.Length() < start.Length() && !end.CanZeroPadList())) {
-    // nsSVGUtils::ReportToConsole
+    // SVGContentUtils::ReportToConsole
     return NS_ERROR_FAILURE;
   }
 
@@ -272,7 +271,7 @@ SVGLengthListSMILType::Interpolate(const nsSMILValue& aStartVal,
     return NS_ERROR_OUT_OF_MEMORY;
   }
 
-  PRUint32 i = 0;
+  uint32_t i = 0;
   for (; i < start.Length() && i < end.Length(); ++i) {
     float s;
     if (start[i].GetUnit() == end[i].GetUnit()) {
@@ -299,9 +298,9 @@ SVGLengthListSMILType::Interpolate(const nsSMILValue& aStartVal,
                               end[i].GetUnit());
   }
 
-  // propagate flag:
-  result.SetCanZeroPadList(start.CanZeroPadList() &&
-                           end.CanZeroPadList());
+  // propagate target element info!
+  result.SetInfo(end.Element(), end.Axis(),
+                 start.CanZeroPadList() && end.CanZeroPadList());
 
   return NS_OK;
 }

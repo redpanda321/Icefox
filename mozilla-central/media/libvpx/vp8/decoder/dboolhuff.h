@@ -1,173 +1,95 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license 
+ *  Use of this source code is governed by a BSD-style license
  *  that can be found in the LICENSE file in the root of the source
  *  tree. An additional intellectual property rights grant can be found
- *  in the file PATENTS.  All contributing project authors may 
+ *  in the file PATENTS.  All contributing project authors may
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
 
 #ifndef DBOOLHUFF_H
 #define DBOOLHUFF_H
-#include "vpx_ports/config.h"
+#include <stddef.h>
+#include <limits.h>
+#include "vpx_config.h"
 #include "vpx_ports/mem.h"
 #include "vpx/vpx_integer.h"
 
-/* Size of the bool decoder backing storage
- *
- * This size was chosen to be greater than the worst case encoding of a
- * single macroblock. This was calcluated as follows (python):
- *
- *     def max_cost(prob):
- *         return max(prob_costs[prob], prob_costs[255-prob]) / 256;
- *
- *     tree_nodes_cost = 7 * max_cost(255)
- *     extra_bits_cost = sum([max_cost(bit) for bit in extra_bits])
- *     sign_bit_cost = max_cost(128)
- *     total_cost = tree_nodes_cost + extra_bits_cost + sign_bit_cost
- *
- * where the prob_costs table was taken from the C vp8_prob_cost table in
- * boolhuff.c and the extra_bits table was taken from the 11 extrabits for
- * a category 6 token as defined in vp8d_token_extra_bits2/detokenize.c
- *
- * This equation produced a maximum of 79 bits per coefficient. Scaling up
- * to the macroblock level:
- *
- *     79 bits/coeff * 16 coeff/block * 25 blocks/macroblock = 31600 b/mb
- *
- *     4096 bytes = 32768 bits > 31600
- */
-#define VP8_BOOL_DECODER_SZ       4096
-#define VP8_BOOL_DECODER_MASK     (VP8_BOOL_DECODER_SZ-1)
-#define VP8_BOOL_DECODER_PTR_MASK (~(uintptr_t)(VP8_BOOL_DECODER_SZ))
+typedef size_t VP8_BD_VALUE;
 
-struct vp8_dboolhuff_rtcd_vtable;
+# define VP8_BD_VALUE_SIZE ((int)sizeof(VP8_BD_VALUE)*CHAR_BIT)
+/*This is meant to be a large, positive constant that can still be efficiently
+   loaded as an immediate (on platforms like ARM, for example).
+  Even relatively modest values like 100 would work fine.*/
+# define VP8_LOTS_OF_BITS (0x40000000)
 
 typedef struct
 {
-    unsigned int         lowvalue;
-    unsigned int         range;
-    unsigned int         value;
-    int                  count;
+    const unsigned char *user_buffer_end;
     const unsigned char *user_buffer;
-    unsigned int         user_buffer_sz;
-    unsigned char       *decode_buffer;
-    const unsigned char *read_ptr;
-    unsigned char       *write_ptr;
-#if CONFIG_RUNTIME_CPU_DETECT
-    struct vp8_dboolhuff_rtcd_vtable *rtcd;
-#endif
+    VP8_BD_VALUE         value;
+    int                  count;
+    unsigned int         range;
 } BOOL_DECODER;
 
-#define prototype_dbool_start(sym) int sym(BOOL_DECODER *br, \
-    const unsigned char *source, unsigned int source_sz)
-#define prototype_dbool_stop(sym) void sym(BOOL_DECODER *bc)
-#define prototype_dbool_fill(sym) void sym(BOOL_DECODER *br)
-#define prototype_dbool_debool(sym) int sym(BOOL_DECODER *br, int probability)
-#define prototype_dbool_devalue(sym) int sym(BOOL_DECODER *br, int bits);
+DECLARE_ALIGNED(16, extern const unsigned char, vp8_norm[256]);
 
-#if ARCH_ARM
-#include "arm/dboolhuff_arm.h"
-#endif
+int vp8dx_start_decode(BOOL_DECODER *br,
+                       const unsigned char *source,
+                       unsigned int source_sz);
 
-#ifndef vp8_dbool_start
-#define vp8_dbool_start vp8dx_start_decode_c
-#endif
+void vp8dx_bool_decoder_fill(BOOL_DECODER *br);
 
-#ifndef vp8_dbool_stop
-#define vp8_dbool_stop vp8dx_stop_decode_c
-#endif
+/*The refill loop is used in several places, so define it in a macro to make
+   sure they're all consistent.
+  An inline function would be cleaner, but has a significant penalty, because
+   multiple BOOL_DECODER fields must be modified, and the compiler is not smart
+   enough to eliminate the stores to those fields and the subsequent reloads
+   from them when inlining the function.*/
+#define VP8DX_BOOL_DECODER_FILL(_count,_value,_bufptr,_bufend) \
+    do \
+    { \
+        int shift = VP8_BD_VALUE_SIZE - 8 - ((_count) + 8); \
+        int loop_end, x; \
+        size_t bits_left = ((_bufend)-(_bufptr))*CHAR_BIT; \
+        \
+        x = shift + CHAR_BIT - bits_left; \
+        loop_end = 0; \
+        if(x >= 0) \
+        { \
+            (_count) += VP8_LOTS_OF_BITS; \
+            loop_end = x; \
+            if(!bits_left) break; \
+        } \
+        while(shift >= loop_end) \
+        { \
+            (_count) += CHAR_BIT; \
+            (_value) |= (VP8_BD_VALUE)*(_bufptr)++ << shift; \
+            shift -= CHAR_BIT; \
+        } \
+    } \
+    while(0) \
 
-#ifndef vp8_dbool_fill
-#define vp8_dbool_fill vp8dx_bool_decoder_fill_c
-#endif
 
-#ifndef vp8_dbool_debool
-#define vp8_dbool_debool vp8dx_decode_bool_c
-#endif
-
-#ifndef vp8_dbool_devalue
-#define vp8_dbool_devalue vp8dx_decode_value_c
-#endif
-
-extern prototype_dbool_start(vp8_dbool_start);
-extern prototype_dbool_stop(vp8_dbool_stop);
-extern prototype_dbool_fill(vp8_dbool_fill);
-extern prototype_dbool_debool(vp8_dbool_debool);
-extern prototype_dbool_devalue(vp8_dbool_devalue);
-
-typedef prototype_dbool_start((*vp8_dbool_start_fn_t));
-typedef prototype_dbool_stop((*vp8_dbool_stop_fn_t));
-typedef prototype_dbool_fill((*vp8_dbool_fill_fn_t));
-typedef prototype_dbool_debool((*vp8_dbool_debool_fn_t));
-typedef prototype_dbool_devalue((*vp8_dbool_devalue_fn_t));
-
-typedef struct vp8_dboolhuff_rtcd_vtable {
-    vp8_dbool_start_fn_t   start;
-    vp8_dbool_stop_fn_t    stop;
-    vp8_dbool_fill_fn_t    fill;
-    vp8_dbool_debool_fn_t  debool;
-    vp8_dbool_devalue_fn_t devalue;
-} vp8_dboolhuff_rtcd_vtable_t;
-
-// There are no processor-specific versions of these
-// functions right now. Disable RTCD to avoid using
-// function pointers which gives a speed boost
-//#ifdef ENABLE_RUNTIME_CPU_DETECT
-//#define DBOOLHUFF_INVOKE(ctx,fn) (ctx)->fn
-//#define IF_RTCD(x) (x)
-//#else
-#define DBOOLHUFF_INVOKE(ctx,fn) vp8_dbool_##fn
-#define IF_RTCD(x) NULL
-//#endif
-
-static unsigned char *br_ptr_advance(const unsigned char *_ptr,
-                                     unsigned int n)
-{
-    uintptr_t  ptr = (uintptr_t)_ptr;
-
-    ptr += n;
-    ptr &= VP8_BOOL_DECODER_PTR_MASK;
-
-    return (void *)ptr;
-}
-
-DECLARE_ALIGNED(16, extern const unsigned int, vp8dx_bitreader_norm[256]);
-
-/* wrapper functions to hide RTCD. static means inline means hopefully no
- * penalty
- */
-static int vp8dx_start_decode(BOOL_DECODER *br,
-        struct vp8_dboolhuff_rtcd_vtable *rtcd,
-        const unsigned char *source, unsigned int source_sz) {
-#if CONFIG_RUNTIME_CPU_DETECT
-    br->rtcd = rtcd;
-#endif
-    return DBOOLHUFF_INVOKE(rtcd, start)(br, source, source_sz);
-}
-static void vp8dx_stop_decode(BOOL_DECODER *br) {
-    DBOOLHUFF_INVOKE(br->rtcd, stop)(br);
-}
-static void vp8dx_bool_decoder_fill(BOOL_DECODER *br) {
-    DBOOLHUFF_INVOKE(br->rtcd, fill)(br);
-}
 static int vp8dx_decode_bool(BOOL_DECODER *br, int probability) {
-  /*
-   * Until optimized versions of this function are available, we
-   * keep the implementation in the header to allow inlining.
-   *
-   *return DBOOLHUFF_INVOKE(br->rtcd, debool)(br, probability);
-   */
     unsigned int bit = 0;
+    VP8_BD_VALUE value;
     unsigned int split;
-    unsigned int bigsplit;
-    register unsigned int range = br->range;
-    register unsigned int value = br->value;
+    VP8_BD_VALUE bigsplit;
+    int count;
+    unsigned int range;
 
-    split = 1 + (((range - 1) * probability) >> 8);
-    bigsplit = (split << 8);
+    split = 1 + (((br->range - 1) * probability) >> 8);
+
+    if(br->count < 0)
+        vp8dx_bool_decoder_fill(br);
+
+    value = br->value;
+    count = br->count;
+
+    bigsplit = (VP8_BD_VALUE)split << (VP8_BD_VALUE_SIZE - 8);
 
     range = split;
 
@@ -178,42 +100,21 @@ static int vp8dx_decode_bool(BOOL_DECODER *br, int probability) {
         bit = 1;
     }
 
-    /*if(range>=0x80)
     {
-        br->value = value;
-        br->range = range;
-        return bit
-    }*/
-
-    {
-        int count = br->count;
-        register unsigned int shift = vp8dx_bitreader_norm[range];
+        register unsigned int shift = vp8_norm[range];
         range <<= shift;
         value <<= shift;
         count -= shift;
-
-        if (count <= 0)
-        {
-            value |= (*br->read_ptr) << (-count);
-            br->read_ptr = br_ptr_advance(br->read_ptr, 1);
-            count += 8 ;
-        }
-
-        br->count = count;
     }
     br->value = value;
+    br->count = count;
     br->range = range;
+
     return bit;
 }
 
 static int vp8_decode_value(BOOL_DECODER *br, int bits)
 {
-  /*
-   * Until optimized versions of this function are available, we
-   * keep the implementation in the header to allow inlining.
-   *
-   *return DBOOLHUFF_INVOKE(br->rtcd, devalue)(br, bits);
-   */
     int z = 0;
     int bit;
 
@@ -223,5 +124,31 @@ static int vp8_decode_value(BOOL_DECODER *br, int bits)
     }
 
     return z;
+}
+
+static int vp8dx_bool_error(BOOL_DECODER *br)
+{
+    /* Check if we have reached the end of the buffer.
+     *
+     * Variable 'count' stores the number of bits in the 'value' buffer, minus
+     * 8. The top byte is part of the algorithm, and the remainder is buffered
+     * to be shifted into it. So if count == 8, the top 16 bits of 'value' are
+     * occupied, 8 for the algorithm and 8 in the buffer.
+     *
+     * When reading a byte from the user's buffer, count is filled with 8 and
+     * one byte is filled into the value buffer. When we reach the end of the
+     * data, count is additionally filled with VP8_LOTS_OF_BITS. So when
+     * count == VP8_LOTS_OF_BITS - 1, the user's data has been exhausted.
+     */
+    if ((br->count > VP8_BD_VALUE_SIZE) && (br->count < VP8_LOTS_OF_BITS))
+    {
+       /* We have tried to decode bits after the end of
+        * stream was encountered.
+        */
+        return 1;
+    }
+
+    /* No error. */
+    return 0;
 }
 #endif

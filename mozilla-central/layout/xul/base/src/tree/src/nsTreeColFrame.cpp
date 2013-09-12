@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dave Hyatt <hyatt@mozilla.org> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsCOMPtr.h"
 #include "nsTreeColFrame.h"
@@ -42,8 +9,6 @@
 #include "nsIContent.h"
 #include "nsStyleContext.h"
 #include "nsINameSpaceManager.h" 
-#include "nsIDOMNSDocument.h"
-#include "nsIDocument.h"
 #include "nsIBoxObject.h"
 #include "nsTreeBoxObject.h"
 #include "nsIDOMElement.h"
@@ -84,7 +49,7 @@ nsTreeColFrame::Init(nsIContent*      aContent,
 void
 nsTreeColFrame::DestroyFrom(nsIFrame* aDestructRoot)
 {
-  InvalidateColumns(PR_FALSE);
+  InvalidateColumns(false);
   nsBoxFrame::DestroyFrom(aDestructRoot);
 }
 
@@ -113,17 +78,17 @@ nsDisplayXULTreeColSplitterTarget::HitTest(nsDisplayListBuilder* aBuilder, const
   nsRect rect = aRect - ToReferenceFrame();
   // If we are in either in the first 4 pixels or the last 4 pixels, we're going to
   // do something really strange.  Check for an adjacent splitter.
-  PRBool left = PR_FALSE;
-  PRBool right = PR_FALSE;
+  bool left = false;
+  bool right = false;
   if (mFrame->GetSize().width - nsPresContext::CSSPixelsToAppUnits(4) <= rect.XMost()) {
-    right = PR_TRUE;
+    right = true;
   } else if (nsPresContext::CSSPixelsToAppUnits(4) > rect.x) {
-    left = PR_TRUE;
+    left = true;
   }
 
   // Swap left and right for RTL trees in order to find the correct splitter
   if (mFrame->GetStyleVisibility()->mDirection == NS_STYLE_DIRECTION_RTL) {
-    PRBool tmp = left;
+    bool tmp = left;
     left = right;
     right = tmp;
   }
@@ -164,9 +129,9 @@ nsTreeColFrame::BuildDisplayListForChildren(nsDisplayListBuilder*   aBuilder,
 }
 
 NS_IMETHODIMP
-nsTreeColFrame::AttributeChanged(PRInt32 aNameSpaceID,
+nsTreeColFrame::AttributeChanged(int32_t aNameSpaceID,
                                  nsIAtom* aAttribute,
-                                 PRInt32 aModType)
+                                 int32_t aModType)
 {
   nsresult rv = nsBoxFrame::AttributeChanged(aNameSpaceID, aAttribute,
                                              aModType);
@@ -181,7 +146,7 @@ nsTreeColFrame::AttributeChanged(PRInt32 aNameSpaceID,
 void
 nsTreeColFrame::SetBounds(nsBoxLayoutState& aBoxLayoutState,
                           const nsRect& aRect,
-                          PRBool aRemoveOverflowArea) {
+                          bool aRemoveOverflowArea) {
   nscoord oldWidth = mRect.width;
 
   nsBoxFrame::SetBounds(aBoxLayoutState, aRect, aRemoveOverflowArea);
@@ -196,7 +161,7 @@ nsTreeColFrame::SetBounds(nsBoxLayoutState& aBoxLayoutState,
 nsITreeBoxObject*
 nsTreeColFrame::GetTreeBoxObject()
 {
-  nsITreeBoxObject* result = nsnull;
+  nsITreeBoxObject* result = nullptr;
 
   nsIContent* parent = mContent->GetParent();
   if (parent) {
@@ -214,7 +179,7 @@ nsTreeColFrame::GetTreeBoxObject()
 }
 
 void
-nsTreeColFrame::InvalidateColumns(PRBool aCanWalkFrameTree)
+nsTreeColFrame::InvalidateColumns(bool aCanWalkFrameTree)
 {
   nsITreeBoxObject* treeBoxObject = GetTreeBoxObject();
   if (treeBoxObject) {

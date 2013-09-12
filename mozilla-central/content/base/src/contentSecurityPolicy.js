@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the ContentSecurityPolicy module.
- *
- * The Initial Developer of the Original Code is
- *   Mozilla Corporation
- *
- * Contributor(s):
- *   Sid Stamm <sid@mozilla.com>
- *   Brandon Sterne <bsterne@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 /**
@@ -53,6 +21,7 @@ const Cu = Components.utils;
 const CSP_VIOLATION_TOPIC = "csp-on-violate-policy";
 
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
+Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/CSPUtils.jsm");
 
 /* ::::: Policy Parsing & Data structures :::::: */
@@ -61,18 +30,20 @@ function ContentSecurityPolicy() {
   CSPdebug("CSP CREATED");
   this._isInitialized = false;
   this._reportOnlyMode = false;
-  this._policy = CSPRep.fromString("allow *");
+  this._policy = CSPRep.fromString("default-src *");
 
   // default options "wide open" since this policy will be intersected soon
   this._policy._allowInlineScripts = true;
   this._policy._allowEval = true;
 
-  this._requestHeaders = []; 
   this._request = "";
-  CSPdebug("CSP POLICY INITED TO 'allow *'");
+  this._requestOrigin = "";
+  this._requestPrincipal = "";
+  this._referrer = "";
+  this._docRequest = null;
+  CSPdebug("CSP POLICY INITED TO 'default-src *'");
 
-  this._observerService = Cc['@mozilla.org/observer-service;1']
-                            .getService(Ci.nsIObserverService);
+  this._cache = { };
 }
 
 /*
@@ -86,7 +57,7 @@ function ContentSecurityPolicy() {
   csp._MAPPINGS=[];
 
   /* default, catch-all case */
-  csp._MAPPINGS[cp.TYPE_OTHER]             =  cspr_sd.ALLOW;
+  csp._MAPPINGS[cp.TYPE_OTHER]             =  cspr_sd.DEFAULT_SRC;
 
   /* self */
   csp._MAPPINGS[cp.TYPE_DOCUMENT]          =  null;
@@ -104,12 +75,15 @@ function ContentSecurityPolicy() {
   csp._MAPPINGS[cp.TYPE_MEDIA]             = cspr_sd.MEDIA_SRC;
   csp._MAPPINGS[cp.TYPE_FONT]              = cspr_sd.FONT_SRC;
   csp._MAPPINGS[cp.TYPE_XMLHTTPREQUEST]    = cspr_sd.XHR_SRC;
+  csp._MAPPINGS[cp.TYPE_WEBSOCKET]         = cspr_sd.XHR_SRC;
 
+  /* CSP cannot block CSP reports */
+  csp._MAPPINGS[cp.TYPE_CSP_REPORT]        = null;
 
   /* These must go through the catch-all */
-  csp._MAPPINGS[cp.TYPE_XBL]               = cspr_sd.ALLOW;
-  csp._MAPPINGS[cp.TYPE_PING]              = cspr_sd.ALLOW;
-  csp._MAPPINGS[cp.TYPE_DTD]               = cspr_sd.ALLOW;
+  csp._MAPPINGS[cp.TYPE_XBL]               = cspr_sd.DEFAULT_SRC;
+  csp._MAPPINGS[cp.TYPE_PING]              = cspr_sd.DEFAULT_SRC;
+  csp._MAPPINGS[cp.TYPE_DTD]               = cspr_sd.DEFAULT_SRC;
 }
 
 ContentSecurityPolicy.prototype = {
@@ -129,39 +103,45 @@ ContentSecurityPolicy.prototype = {
   },
 
   get allowsInlineScript() {
-    // trigger automatic report to go out when inline scripts are disabled.
-    if (!this._policy.allowsInlineScripts) {
-      var violation = 'violated base restriction: Inline Scripts will not execute';
-      // gotta wrap the violation string, since it's sent out to observers as
-      // an nsISupports.
-      let wrapper = Cc["@mozilla.org/supports-cstring;1"]
-                      .createInstance(Ci.nsISupportsCString);
-      wrapper.data = violation;
-      this._observerService.notifyObservers(
-                              wrapper,
-                              CSP_VIOLATION_TOPIC,
-                              'inline script base restriction');
-      this.sendReports('self', violation);
-    }
     return this._reportOnlyMode || this._policy.allowsInlineScripts;
   },
 
   get allowsEval() {
-    // trigger automatic report to go out when eval and friends are disabled.
-    if (!this._policy.allowsEvalInScripts) {
-      var violation = 'violated base restriction: Code will not be created from strings';
-      // gotta wrap the violation string, since it's sent out to observers as
-      // an nsISupports.
-      let wrapper = Cc["@mozilla.org/supports-cstring;1"]
-                      .createInstance(Ci.nsISupportsCString);
-      wrapper.data = violation;
-      this._observerService.notifyObservers(
-                              wrapper,
-                              CSP_VIOLATION_TOPIC,
-                              'eval script base restriction');
-      this.sendReports('self', violation);
-    }
     return this._reportOnlyMode || this._policy.allowsEvalInScripts;
+  },
+
+  /**
+   * Log policy violation on the Error Console and send a report if a report-uri
+   * is present in the policy
+   *
+   * @param aViolationType
+   *     one of the VIOLATION_TYPE_* constants, e.g. inline-script or eval
+   * @param aSourceFile
+   *     name of the source file containing the violation (if available)
+   * @param aContentSample
+   *     sample of the violating content (to aid debugging)
+   * @param aLineNum
+   *     source line number of the violation (if available)
+   */
+  logViolationDetails:
+  function(aViolationType, aSourceFile, aScriptSample, aLineNum) {
+    // allowsInlineScript and allowsEval both return true when report-only mode
+    // is enabled, resulting in a call to this function. Therefore we need to
+    // check that the policy was in fact violated before logging any violations
+    switch (aViolationType) {
+    case Ci.nsIContentSecurityPolicy.VIOLATION_TYPE_INLINE_SCRIPT:
+      if (!this._policy.allowsInlineScripts)
+        this._asyncReportViolation('self',null,'inline script base restriction',
+                                   'violated base restriction: Inline Scripts will not execute',
+                                   aSourceFile, aScriptSample, aLineNum);
+      break;
+    case Ci.nsIContentSecurityPolicy.VIOLATION_TYPE_EVAL:
+      if (!this._policy.allowsEvalInScripts)
+        this._asyncReportViolation('self',null,'eval script base restriction',
+                                   'violated base restriction: Code will not be created from strings',
+                                   aSourceFile, aScriptSample, aLineNum);
+      break;
+    }
   },
 
   set reportOnlyMode(val) {
@@ -187,21 +167,25 @@ ContentSecurityPolicy.prototype = {
   function(aChannel) {
     if (!aChannel)
       return;
-    // grab the request line
-    var internalChannel = aChannel.QueryInterface(Ci.nsIHttpChannelInternal);
-    var reqMaj = {};
-    var reqMin = {};
-    var reqVersion = internalChannel.getRequestVersion(reqMaj, reqMin);
-    this._request = aChannel.requestMethod + " " 
-                  + aChannel.URI.asciiSpec
-                  + " HTTP/" + reqMaj.value + "." + reqMin.value;
 
-    // grab the request headers
-    var self = this;
-    aChannel.visitRequestHeaders({
-      visitHeader: function(aHeader, aValue) {
-        self._requestHeaders.push(aHeader + ": " + aValue);
-      }});
+    // Save the docRequest for fetching a policy-uri
+    this._docRequest = aChannel;
+
+    // save the document URI (minus <fragment>) and referrer for reporting
+    let uri = aChannel.URI.cloneIgnoringRef();
+    uri.userPass = '';
+    this._request = uri.asciiSpec;
+    this._requestOrigin = uri;
+
+    //store a reference to the principal, that can later be used in shouldLoad
+    this._requestPrincipal = Components.classes["@mozilla.org/scriptsecuritymanager;1"].
+    getService(Components.interfaces.nsIScriptSecurityManager).getChannelPrincipal(aChannel);
+
+    if (aChannel.referrer) {
+      let referrer = aChannel.referrer.cloneIgnoringRef();
+      referrer.userPass = '';
+      this._referrer = referrer.asciiSpec;
+    }
   },
 
 /* ........ Methods .............. */
@@ -216,91 +200,161 @@ ContentSecurityPolicy.prototype = {
   function csp_refinePolicy(aPolicy, selfURI) {
     CSPdebug("REFINE POLICY: " + aPolicy);
     CSPdebug("         SELF: " + selfURI.asciiSpec);
+    // For nested schemes such as view-source: make sure we are taking the
+    // innermost URI to use as 'self' since that's where we will extract the
+    // scheme, host and port from
+    if (selfURI instanceof Ci.nsINestedURI) {
+      CSPdebug("        INNER: " + selfURI.innermostURI.asciiSpec);
+      selfURI = selfURI.innermostURI;
+    }
 
     // stay uninitialized until policy merging is done
     this._isInitialized = false;
 
     // If there is a policy-uri, fetch the policy, then re-call this function.
     // (1) parse and create a CSPRep object
+    // Note that we pass the full URI since when it's parsed as 'self' to construct a
+    // CSPSource only the scheme, host, and port are kept.
     var newpolicy = CSPRep.fromString(aPolicy,
-                                      selfURI.scheme + "://" + selfURI.hostPort);
+				      selfURI,
+                                      this._docRequest,
+                                      this);
 
     // (2) Intersect the currently installed CSPRep object with the new one
     var intersect = this._policy.intersectWith(newpolicy);
- 
+
     // (3) Save the result
     this._policy = intersect;
     this._isInitialized = true;
+    this._cache = {};
   },
 
   /**
    * Generates and sends a violation report to the specified report URIs.
    */
   sendReports:
-  function(blockedUri, violatedDirective) {
+  function(blockedUri, originalUri, violatedDirective,
+           aSourceFile, aScriptSample, aLineNum) {
     var uriString = this._policy.getReportURIs();
     var uris = uriString.split(/\s+/);
     if (uris.length > 0) {
+      // see if we need to sanitize the blocked-uri
+      let blocked = '';
+      if (originalUri) {
+        // We've redirected, only report the blocked origin
+        let clone = blockedUri.clone();
+        clone.path = '';
+        blocked = clone.asciiSpec;
+      }
+      else if (blockedUri instanceof Ci.nsIURI) {
+        blocked = blockedUri.cloneIgnoringRef().asciiSpec;
+      }
+      else {
+        // blockedUri is a string for eval/inline-script violations
+        blocked = blockedUri;
+      }
+
       // Generate report to send composed of
       // {
       //   csp-report: {
-      //     request: "GET /index.html HTTP/1.1",
-      //     request-headers: "Host: example.com
-      //                       User-Agent: ...
-      //                       ...",
+      //     document-uri: "http://example.com/file.html?params",
+      //     referrer: "...",
       //     blocked-uri: "...",
       //     violated-directive: "..."
       //   }
       // }
-      var strHeaders = "";
-      for (let i in this._requestHeaders) {
-        strHeaders += this._requestHeaders[i] + "\n";
-      }
       var report = {
         'csp-report': {
-          'request': this._request,
-          'request-headers': strHeaders,
-          'blocked-uri': (blockedUri instanceof Ci.nsIURI ?
-                          blockedUri.asciiSpec : blockedUri),
+          'document-uri': this._request,
+          'referrer': this._referrer,
+          'blocked-uri': blocked,
           'violated-directive': violatedDirective
         }
       }
-      CSPdebug("Constructed violation report:\n" + JSON.stringify(report));
 
-      CSPWarning("Directive \"" + violatedDirective + "\" violated"
-               + (blockedUri['asciiSpec'] ? " by " + blockedUri.asciiSpec : ""));
+      // extra report fields for script errors (if available)
+      if (originalUri)
+        report["csp-report"]["original-uri"] = originalUri.cloneIgnoringRef().asciiSpec;
+      if (aSourceFile)
+        report["csp-report"]["source-file"] = aSourceFile;
+      if (aScriptSample)
+        report["csp-report"]["script-sample"] = aScriptSample;
+      if (aLineNum)
+        report["csp-report"]["line-number"] = aLineNum;
+
+      var reportString = JSON.stringify(report);
+      CSPdebug("Constructed violation report:\n" + reportString);
+
+      var violationMessage = null;
+      if (blockedUri["asciiSpec"]) {
+         violationMessage = CSPLocalizer.getFormatStr("directiveViolatedWithURI", [violatedDirective, blockedUri.asciiSpec]);
+      } else {
+         violationMessage = CSPLocalizer.getFormatStr("directiveViolated", [violatedDirective]);
+      }
+      this._policy.warn(violationMessage,
+                        (aSourceFile) ? aSourceFile : null,
+                        (aScriptSample) ? decodeURIComponent(aScriptSample) : null,
+                        (aLineNum) ? aLineNum : null);
 
       // For each URI in the report list, send out a report.
+      // We make the assumption that all of the URIs are absolute URIs; this
+      // should be taken care of in CSPRep.fromString (where it converts any
+      // relative URIs into absolute ones based on "self").
       for (let i in uris) {
         if (uris[i] === "")
           continue;
 
-        var failure = function(aEvt) {  
-          if (req.readyState == 4 && req.status != 200) {
-            CSPError("Failed to send report to " + reportURI);
-          }  
-        };  
-        var req = Cc["@mozilla.org/xmlextras/xmlhttprequest;1"]  
-                    .createInstance(Ci.nsIXMLHttpRequest);  
-
         try {
-          req.open("POST", uris[i], true);
-          req.setRequestHeader('Content-Type', 'application/json');
-          req.upload.addEventListener("error", failure, false);
-          req.upload.addEventListener("abort", failure, false);
+          var chan = Services.io.newChannel(uris[i], null, null);
+          if (!chan) {
+            CSPdebug("Error creating channel for " + uris[i]);
+            continue;
+          }
 
-          // make request anonymous
-          // This prevents sending cookies with the request,
-          // in case the policy URI is injected, it can't be
-          // abused for CSRF.
-          req.channel.loadFlags |= Ci.nsIChannel.LOAD_ANONYMOUS;
+          var content = Cc["@mozilla.org/io/string-input-stream;1"]
+                          .createInstance(Ci.nsIStringInputStream);
+          content.data = reportString + "\n\n";
 
-          req.send(JSON.stringify(report));
+          // make sure this is an anonymous request (no cookies) so in case the
+          // policy URI is injected, it can't be abused for CSRF.
+          chan.loadFlags |= Ci.nsIChannel.LOAD_ANONYMOUS;
+
+          // we need to set an nsIChannelEventSink on the channel object
+          // so we can tell it to not follow redirects when posting the reports
+          chan.notificationCallbacks = new CSPReportRedirectSink(this._policy);
+
+          chan.QueryInterface(Ci.nsIUploadChannel)
+              .setUploadStream(content, "application/json", content.available());
+
+          try {
+            // if this is an HTTP channel, set the request method to post
+            chan.QueryInterface(Ci.nsIHttpChannel);
+            chan.requestMethod = "POST";
+          } catch(e) {} // throws only if chan is not an nsIHttpChannel.
+
+          // check with the content policy service to see if we're allowed to
+          // send this request.
+          try {
+            var contentPolicy = Cc["@mozilla.org/layout/content-policy;1"]
+                                  .getService(Ci.nsIContentPolicy);
+            if (contentPolicy.shouldLoad(Ci.nsIContentPolicy.TYPE_CSP_REPORT,
+                                         chan.URI, this._requestOrigin,
+                                         null, null, null, this._requestPrincipal)
+                != Ci.nsIContentPolicy.ACCEPT) {
+              continue; // skip unauthorized URIs
+            }
+          } catch(e) {
+            continue; // refuse to load if we can't do a security check.
+          }
+
+          //send data (and set up error notifications)
+          chan.asyncOpen(new CSPViolationReportListener(uris[i]), null);
           CSPdebug("Sent violation report to " + uris[i]);
         } catch(e) {
           // it's possible that the URI was invalid, just log a
           // warning and skip over that.
-          CSPWarning("Tried to send report to invalid URI: \"" + uris[i] + "\"");
+          this._policy.warn(CSPLocalizer.getFormatStr("triedToSendReport", [uris[i]]));
+          this._policy.warn(CSPLocalizer.getFormatStr("errorWas", [e.toString()]));
         }
       }
     }
@@ -337,7 +391,7 @@ ContentSecurityPolicy.prototype = {
         CSPdebug(" found frame ancestor " + ancestor.asciiSpec);
         ancestors.push(ancestor);
       }
-    } 
+    }
 
     // scan the discovered ancestors
     let cspContext = CSPRep.SRC_DIRECTIVES.FRAME_ANCESTORS;
@@ -347,14 +401,11 @@ ContentSecurityPolicy.prototype = {
         // report the frame-ancestor violation
         let directive = this._policy._directives[cspContext];
         let violatedPolicy = (directive._isImplicit
-                                ? 'allow' : 'frame-ancestors ')
+                                ? 'default-src' : 'frame-ancestors ')
                                 + directive.toString();
-        // send an nsIURI object to the observers (more interesting than a string)
-        this._observerService.notifyObservers(
-                                ancestors[i],
-                                CSP_VIOLATION_TOPIC, 
-                                violatedPolicy);
-        this.sendReports(ancestors[i].asciiSpec, violatedPolicy);
+
+        this._asyncReportViolation(ancestors[i], null, violatedPolicy);
+
         // need to lie if we are testing in report-only mode
         return this._reportOnlyMode;
       }
@@ -368,21 +419,23 @@ ContentSecurityPolicy.prototype = {
    * decides whether or not the policy is satisfied.
    */
   shouldLoad:
-  function csp_shouldLoad(aContentType, 
-                          aContentLocation, 
-                          aRequestOrigin, 
-                          aContext, 
-                          aMimeTypeGuess, 
-                          aExtra) {
-
-    // don't filter chrome stuff
-    if (aContentLocation.scheme === 'chrome') {
-      return Ci.nsIContentPolicy.ACCEPT;
+  function csp_shouldLoad(aContentType,
+                          aContentLocation,
+                          aRequestOrigin,
+                          aContext,
+                          aMimeTypeGuess,
+                          aOriginalUri) {
+    let key = aContentLocation.spec + "!" + aContentType;
+    if (this._cache[key]) {
+      return this._cache[key];
     }
 
-    // interpret the context, and then pass off to the decision structure
+#ifndef MOZ_B2G
+    // Try to remove as much as possible from the hot path on b2g.
     CSPdebug("shouldLoad location = " + aContentLocation.asciiSpec);
     CSPdebug("shouldLoad content type = " + aContentType);
+#endif
+    // interpret the context, and then pass off to the decision structure
     var cspContext = ContentSecurityPolicy._MAPPINGS[aContentType];
 
     // if the mapping is null, there's no policy, let it through.
@@ -391,34 +444,32 @@ ContentSecurityPolicy.prototype = {
     }
 
     // otherwise, honor the translation
-    // var source = aContentLocation.scheme + "://" + aContentLocation.hostPort; 
+    // var source = aContentLocation.scheme + "://" + aContentLocation.hostPort;
     var res = this._policy.permits(aContentLocation, cspContext)
-              ? Ci.nsIContentPolicy.ACCEPT 
+              ? Ci.nsIContentPolicy.ACCEPT
               : Ci.nsIContentPolicy.REJECT_SERVER;
 
     // frame-ancestors is taken care of early on (as this document is loaded)
 
     // If the result is *NOT* ACCEPT, then send report
-    if (res != Ci.nsIContentPolicy.ACCEPT) { 
+    if (res != Ci.nsIContentPolicy.ACCEPT) {
       CSPdebug("blocking request for " + aContentLocation.asciiSpec);
       try {
         let directive = this._policy._directives[cspContext];
         let violatedPolicy = (directive._isImplicit
-                                ? 'allow' : cspContext)
+                                ? 'default-src' : cspContext)
                                 + ' ' + directive.toString();
-        this._observerService.notifyObservers(
-                                aContentLocation,
-                                CSP_VIOLATION_TOPIC, 
-                                violatedPolicy);
-        this.sendReports(aContentLocation, violatedPolicy);
+        this._asyncReportViolation(aContentLocation, aOriginalUri, violatedPolicy);
       } catch(e) {
         CSPdebug('---------------- ERROR: ' + e);
       }
     }
 
-    return (this._reportOnlyMode ? Ci.nsIContentPolicy.ACCEPT : res);
+    let ret = this._cache[key] =
+      (this._reportOnlyMode ? Ci.nsIContentPolicy.ACCEPT : res);
+    return ret;
   },
-  
+
   shouldProcess:
   function csp_shouldProcess(aContentType,
                              aContentLocation,
@@ -432,6 +483,107 @@ ContentSecurityPolicy.prototype = {
     return res;
   },
 
+  /**
+   * Asynchronously notifies any nsIObservers listening to the CSP violation
+   * topic that a violation occurred.  Also triggers report sending.  All
+   * asynchronous on the main thread.
+   *
+   * @param blockedContentSource
+   *        Either a CSP Source (like 'self', as string) or nsIURI: the source
+   *        of the violation.
+   * @param originalUri
+   *        The original URI if the blocked content is a redirect, else null
+   * @param violatedDirective
+   *        the directive that was violated (string).
+   * @param observerSubject
+   *        optional, subject sent to the nsIObservers listening to the CSP
+   *        violation topic.
+   * @param aSourceFile
+   *        name of the file containing the inline script violation
+   * @param aScriptSample
+   *        a sample of the violating inline script
+   * @param aLineNum
+   *        source line number of the violation (if available)
+   */
+  _asyncReportViolation:
+  function(blockedContentSource, originalUri, violatedDirective, observerSubject,
+           aSourceFile, aScriptSample, aLineNum) {
+    // if optional observerSubject isn't specified, default to the source of
+    // the violation.
+    if (!observerSubject)
+      observerSubject = blockedContentSource;
+
+    // gotta wrap things that aren't nsISupports, since it's sent out to
+    // observers as such.  Objects that are not nsISupports are converted to
+    // strings and then wrapped into a nsISupportsCString.
+    if (!(observerSubject instanceof Ci.nsISupports)) {
+      let d = observerSubject;
+      observerSubject = Cc["@mozilla.org/supports-cstring;1"]
+                          .createInstance(Ci.nsISupportsCString);
+      observerSubject.data = d;
+    }
+
+    var reportSender = this;
+    Services.tm.mainThread.dispatch(
+      function() {
+        Services.obs.notifyObservers(observerSubject,
+                                     CSP_VIOLATION_TOPIC,
+                                     violatedDirective);
+        reportSender.sendReports(blockedContentSource, originalUri,
+                                 violatedDirective,
+                                 aSourceFile, aScriptSample, aLineNum);
+      }, Ci.nsIThread.DISPATCH_NORMAL);
+  },
 };
 
-var NSGetFactory = XPCOMUtils.generateNSGetFactory([ContentSecurityPolicy]);
+// The POST of the violation report (if it happens) should not follow
+// redirects, per the spec. hence, we implement an nsIChannelEventSink
+// with an object so we can tell XHR to abort if a redirect happens.
+function CSPReportRedirectSink(policy) {
+  this._policy = policy;
+}
+
+CSPReportRedirectSink.prototype = {
+  QueryInterface: function requestor_qi(iid) {
+    if (iid.equals(Ci.nsISupports) ||
+        iid.equals(Ci.nsIInterfaceRequestor) ||
+        iid.equals(Ci.nsIChannelEventSink))
+      return this;
+    throw Cr.NS_ERROR_NO_INTERFACE;
+  },
+
+  // nsIInterfaceRequestor
+  getInterface: function requestor_gi(iid) {
+    if (iid.equals(Ci.nsIChannelEventSink))
+      return this;
+
+    throw Components.results.NS_ERROR_NO_INTERFACE;
+  },
+
+  // nsIChannelEventSink
+  asyncOnChannelRedirect: function channel_redirect(oldChannel, newChannel,
+                                                    flags, callback) {
+    this._policy.warn(CSPLocalizer.getFormatStr("reportPostRedirect", [oldChannel.URI.asciiSpec]));
+
+    // cancel the old channel so XHR failure callback happens
+    oldChannel.cancel(Cr.NS_ERROR_ABORT);
+
+    // notify an observer that we have blocked the report POST due to a redirect,
+    // used in testing, do this async since we're in an async call now to begin with
+    Services.tm.mainThread.dispatch(
+      function() {
+        observerSubject = Cc["@mozilla.org/supports-cstring;1"]
+                             .createInstance(Ci.nsISupportsCString);
+        observerSubject.data = oldChannel.URI.asciiSpec;
+
+        Services.obs.notifyObservers(observerSubject,
+                                     CSP_VIOLATION_TOPIC,
+                                     "denied redirect while sending violation report");
+      }, Ci.nsIThread.DISPATCH_NORMAL);
+
+    // throw to stop the redirect happening
+    throw Cr.NS_BINDING_REDIRECTED;
+  }
+};
+
+this.NSGetFactory = XPCOMUtils.generateNSGetFactory([ContentSecurityPolicy]);

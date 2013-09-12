@@ -95,6 +95,27 @@ CrashGenerationClient::CrashGenerationClient(
     MINIDUMP_TYPE dump_type,
     const CustomClientInfo* custom_info)
         : pipe_name_(pipe_name),
+          pipe_handle_(NULL),
+          dump_type_(dump_type),
+          thread_id_(0),
+          server_process_id_(0),
+          crash_event_(NULL),
+          crash_generated_(NULL),
+          server_alive_(NULL),
+          exception_pointers_(NULL),
+          custom_info_() {
+  memset(&assert_info_, 0, sizeof(assert_info_));
+  if (custom_info) {
+    custom_info_ = *custom_info;
+  }
+}
+
+CrashGenerationClient::CrashGenerationClient(
+    HANDLE pipe_handle,
+    MINIDUMP_TYPE dump_type,
+    const CustomClientInfo* custom_info)
+        : pipe_name_(),
+          pipe_handle_(pipe_handle),
           dump_type_(dump_type),
           thread_id_(0),
           server_process_id_(0),
@@ -167,6 +188,23 @@ bool CrashGenerationClient::Register() {
   return success;
 }
 
+bool CrashGenerationClient::RequestUpload(DWORD crash_id) {
+  HANDLE pipe = ConnectToServer();
+  if (!pipe) {
+    return false;
+  }
+
+  CustomClientInfo custom_info = {NULL, 0};
+  ProtocolMessage msg(MESSAGE_TAG_UPLOAD_REQUEST, crash_id,
+                      static_cast<MINIDUMP_TYPE>(NULL), NULL, NULL, NULL,
+                      custom_info, NULL, NULL, NULL);
+  DWORD bytes_count = 0;
+  bool success = WriteFile(pipe, &msg, sizeof(msg), &bytes_count, NULL) != 0;
+
+  CloseHandle(pipe);
+  return success;
+}
+
 HANDLE CrashGenerationClient::ConnectToServer() {
   HANDLE pipe = ConnectToPipe(pipe_name_.c_str(),
                               kPipeDesiredAccess,
@@ -223,7 +261,7 @@ bool CrashGenerationClient::RegisterClient(HANDLE pipe) {
   crash_event_ = reply.dump_request_handle;
   crash_generated_ = reply.dump_generated_handle;
   server_alive_ = reply.server_alive_handle;
-  server_process_id_ = reply.pid;
+  server_process_id_ = reply.id;
 
   return true;
 }
@@ -231,6 +269,12 @@ bool CrashGenerationClient::RegisterClient(HANDLE pipe) {
 HANDLE CrashGenerationClient::ConnectToPipe(const wchar_t* pipe_name,
                                             DWORD pipe_access,
                                             DWORD flags_attrs) {
+  if (pipe_handle_) {
+    HANDLE t = pipe_handle_;
+    pipe_handle_ = NULL;
+    return t;
+  }
+
   for (int i = 0; i < kPipeConnectMaxAttempts; ++i) {
     HANDLE pipe = CreateFile(pipe_name,
                              pipe_access,
@@ -261,7 +305,7 @@ HANDLE CrashGenerationClient::ConnectToPipe(const wchar_t* pipe_name,
 bool CrashGenerationClient::ValidateResponse(
     const ProtocolMessage& msg) const {
   return (msg.tag == MESSAGE_TAG_REGISTRATION_RESPONSE) &&
-         (msg.pid != 0) &&
+         (msg.id != 0) &&
          (msg.dump_request_handle != NULL) &&
          (msg.dump_generated_handle != NULL) &&
          (msg.server_alive_handle != NULL);
@@ -323,6 +367,35 @@ bool CrashGenerationClient::SignalCrashEventAndWait() {
   // Crash dump was successfully generated only if the server
   // signaled the crash generated event.
   return result == WAIT_OBJECT_0;
+}
+
+HANDLE CrashGenerationClient::DuplicatePipeToClientProcess(const wchar_t* pipe_name,
+                                                           HANDLE hProcess) {
+  for (int i = 0; i < kPipeConnectMaxAttempts; ++i) {
+    HANDLE local_pipe = CreateFile(pipe_name, kPipeDesiredAccess,
+                                   0, NULL, OPEN_EXISTING,
+                                   kPipeFlagsAndAttributes, NULL);
+    if (local_pipe != INVALID_HANDLE_VALUE) {
+      HANDLE remotePipe = INVALID_HANDLE_VALUE;
+      if (DuplicateHandle(GetCurrentProcess(), local_pipe,
+                          hProcess, &remotePipe, 0, FALSE,
+                          DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS)) {
+        return remotePipe;
+      } else {
+        return INVALID_HANDLE_VALUE;
+      }
+    }
+
+    // Cannot continue retrying if the error wasn't a busy pipe.
+    if (GetLastError() != ERROR_PIPE_BUSY) {
+      return INVALID_HANDLE_VALUE;
+    }
+
+    if (!WaitNamedPipe(pipe_name, kPipeBusyWaitTimeoutMs)) {
+      return INVALID_HANDLE_VALUE;
+    }
+  }
+  return INVALID_HANDLE_VALUE;
 }
 
 }  // namespace google_breakpad

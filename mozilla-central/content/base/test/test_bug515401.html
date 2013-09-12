@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=515401
 -->
 <head>
   <title>Test for Bug 515401</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
   <base id=basehref href="base/">
@@ -69,6 +68,14 @@ verifyBase("base/", "from markup");
 // Modify existing <base>
 basehref.href = "base2/";
 verifyBase("base2/", "modify existing");
+is(basehref.href, pre + "base2/", "HTMLBaseElement.href resolves correctly");
+
+// Modify existing <base> to absolute url
+basehref.href = "http://www.example.com/foo/bar.html";
+is(document.baseURI, "http://www.example.com/foo/bar.html", "document base when setting absolute url");
+is(a.href, "http://www.example.com/foo/dest.html", "link href when setting absolute url");
+is(basehref.href, "http://www.example.com/foo/bar.html",
+   "HTMLBaseElement.href resolves correctly when setting absolute url");
 
 // Remove href on existing element
 basehref.removeAttribute("href");
@@ -100,13 +107,13 @@ head.insertBefore(basehref0, head.firstChild);
 verifyBase("base6/", "insert base with href before existing");
 
 // Insert base as grandchild of head
-var baseerr = document.createElement("base");
-baseerr.href = "baseerr/";
+var basehref3 = document.createElement("base");
+basehref3.href = "base7/";
 var tmp = document.createElement("head");
-tmp.appendChild(baseerr);
+tmp.appendChild(basehref3);
 head.insertBefore(tmp, head.firstChild);
-verifyBase("base6/", "inserted base as grandchild of head");
-is(baseerr.parentNode.parentNode, head, "base got inserted correctly");
+verifyBase("base7/", "inserted base as grandchild of head at the beginning of head");
+is(basehref3.parentNode.parentNode, head, "base got inserted correctly");
 
 // Remove secondary bases
 var tmp, tmp2;
@@ -116,7 +123,7 @@ for (tmp = head.firstChild; tmp = tmp.nextSibling; tmp) {
     head.removeChild(tmp);
     tmp = tmp2;
   }
-  verifyBase("base6/", "remove unneeded base");
+  verifyBase("base7/", "remove unneeded base");
 }
 
 // Remove head
@@ -124,8 +131,8 @@ document.documentElement.removeChild(head);
 verifyBase("", "removed head");
 
 // Insert base in body
-document.body.insertBefore(baseerr, document.body.firstChild);
-verifyBase("", "inserted base in body");
+document.body.insertBefore(basehref3, document.body.firstChild);
+verifyBase("base7/", "inserted base in body");
 
 </script>
 </pre>

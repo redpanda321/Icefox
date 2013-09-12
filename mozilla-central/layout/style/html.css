@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Blake Ross <BlakeR1234@aol.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 @namespace url(http://www.w3.org/1999/xhtml); /* set default namespace to HTML */
 @namespace xul url(http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul);
@@ -48,9 +15,9 @@
   direction: ltr;
   unicode-bidi: embed;
 }
-bdo[dir] {
-  unicode-bidi: bidi-override;
-}
+
+bdi:-moz-dir(ltr), [dir="auto"]:-moz-dir(ltr) { direction: ltr; }
+bdi:-moz-dir(rtl), [dir="auto"]:-moz-dir(rtl) { direction: rtl; }
 
 /* To ensure http://www.w3.org/TR/REC-html40/struct/dirlang.html#style-bidi:
  *
@@ -58,60 +25,75 @@ bdo[dir] {
  * the style of an inline element by a style sheet, the resulting presentation
  * should be equivalent, in terms of bidirectional formatting, to the
  * formatting obtained by explicitly adding a dir attribute (assigned the
- * inherited value) to the transformed element." */
+ * inherited value) to the transformed element."
+ *
+ * and the rules in http://dev.w3.org/html5/spec/rendering.html#rendering
+ */
 
-address,
-article,
-aside,
-blockquote,
-body,
-caption,
-center,
-col,
-colgroup,
-dd,
-dir,
-div,
-dl,
-dt,
-fieldset,
-footer,
-form,
-h1,
-h2,
-h3,
-h4,
-h5,
-h6,
-header,
-hgroup,
-hr,
-html,
-isindex,
-li,
-listing,
-map,
-marquee,
-menu,
-nav,
-noframes,
-ol,
-p,
-plaintext,
-pre,
-section,
-table,
-tbody,
-td,
-tfoot,
-th,
-thead,
-tr,
-ul,
-xmp {
-  unicode-bidi: embed;
+address, address[dir],
+article, article[dir],
+aside, aside[dir],
+blockquote, blockquote[dir],
+body, body[dir],
+caption, caption[dir],
+center, center[dir],
+col, col[dir],
+colgroup, colgroup[dir],
+dd, dd[dir],
+dir, dir[dir],
+div, div[dir],
+dl, dl[dir],
+dt, dt[dir],
+fieldset, fieldset[dir],
+figcaption, figcaption[dir],
+figure, figure[dir],
+footer, footer[dir],
+form, form[dir],
+h1, h1[dir],
+h2, h2[dir],
+h3, h3[dir],
+h4, h4[dir],
+h5, h5[dir],
+h6, h6[dir],
+header, header[dir],
+hgroup, hgroup[dir],
+hr, hr[dir],
+html, html[dir],
+legend, legend[dir],
+li, li[dir],
+listing, listing[dir],
+marquee, marquee[dir],
+menu, menu[dir],
+nav, nav[dir],
+noframes, noframes[dir],
+ol, ol[dir],
+p, p[dir],
+plaintext, plaintext[dir],
+pre, pre[dir],
+section, section[dir],
+summary, summary[dir],
+table, table[dir],
+tbody, tbody[dir],
+td, td[dir],
+tfoot, tfoot[dir],
+th, th[dir],
+thead, thead[dir],
+tr, tr[dir],
+ul, ul[dir],
+xmp, xmp[dir] {
+  unicode-bidi: -moz-isolate;
 }
 
+bdi, bdi[dir], output, output[dir], [dir="auto"] { 
+  unicode-bidi: -moz-isolate;
+}
+bdo, bdo[dir] {
+  unicode-bidi: bidi-override;
+}
+bdo[dir="auto"] {
+  unicode-bidi: -moz-isolate-override;
+}
+textarea[dir="auto"], pre[dir="auto"] { unicode-bidi: -moz-plaintext; }
 
 /* blocks */
 
@@ -125,8 +107,6 @@ form,
 header,
 hgroup,
 html,
-isindex,
-map,
 nav,
 section {
   display: block;
@@ -287,47 +267,51 @@ table[align="right"] {
 
   /* Put this first so 'border' and 'frame' rules can override it. */
 table[rules] { 
-  border: thin hidden; 
+  border-width: thin;
+  border-style: hidden;
 }
 
   /* 'border' before 'frame' so 'frame' overrides
       A border with a given value should, of course, pass that value
       as the border-width in pixels -> attr mapping */
 
-  /* 'border="0"' suppresses the border */
-table[border]:not([border="0"]) { 
-  border: thin outset; 
+  /* :-moz-table-border-nonzero is like [border]:not([border="0"]) except it
+     also checks for other zero-like values according to HTML attribute
+     parsing rules */
+table:-moz-table-border-nonzero { 
+  border-width: thin;
+  border-style: outset;
 }
 
-  
 table[frame] {
   border: thin hidden;
 }
 
-/*increased specificity to compete with [border]:not([border="0"]) rule above*/
-table[frame][frame="void"]   { border-style: hidden; }
-table[frame][frame="above"]  { border-style: outset hidden hidden hidden; }
-table[frame][frame="below"]  { border-style: hidden hidden outset hidden; }
-table[frame][frame="lhs"]    { border-style: hidden hidden hidden outset; }
-table[frame][frame="rhs"]    { border-style: hidden outset hidden hidden; }
-table[frame][frame="hsides"] { border-style: outset hidden; }
-table[frame][frame="vsides"] { border-style: hidden outset; }
-table[frame][frame="box"],
-table[frame][frame="border"] { border-style: outset; }
+/* specificity must beat table:-moz-table-border-nonzero rule above */
+table[frame="void"]   { border-style: hidden; }
+table[frame="above"]  { border-style: outset hidden hidden hidden; }
+table[frame="below"]  { border-style: hidden hidden outset hidden; }
+table[frame="lhs"]    { border-style: hidden hidden hidden outset; }
+table[frame="rhs"]    { border-style: hidden outset hidden hidden; }
+table[frame="hsides"] { border-style: outset hidden; }
+table[frame="vsides"] { border-style: hidden outset; }
+table[frame="box"],
+table[frame="border"] { border-style: outset; }
 
  
 /* Internal Table Borders */
 
   /* 'border' cell borders first */
 
-table[border]:not([border="0"])> * > tr > td,
-table[border]:not([border="0"])> * > tr > th,
-table[border]:not([border="0"])> * > td,
-table[border]:not([border="0"])> * > th,
-table[border]:not([border="0"])> td,
-table[border]:not([border="0"])> th
+table:-moz-table-border-nonzero > * > tr > td,
+table:-moz-table-border-nonzero > * > tr > th,
+table:-moz-table-border-nonzero > * > td,
+table:-moz-table-border-nonzero > * > th,
+table:-moz-table-border-nonzero > td,
+table:-moz-table-border-nonzero > th
 {
-  border: thin inset;
+  border-width: thin;
+  border-style: inset;
 }
 
 /* collapse only if rules are really specified */
@@ -344,7 +328,8 @@ table[rules]:not([rules=""])> * > tr > th,
 table[rules]:not([rules=""])> td,
 table[rules]:not([rules=""])> th
 {
-  border: thin none;
+  border-width: thin;
+  border-style: none;
 }
 
 
@@ -355,7 +340,8 @@ table[rules][rules="none"] > * > tr > th,
 table[rules][rules="none"] > td,
 table[rules][rules="none"] > th
 {
-  border: thin hidden;
+  border-width: thin;
+  border-style: none;
 }
 
 table[rules][rules="all"] > tr > td,
@@ -365,13 +351,16 @@ table[rules][rules="all"] > * > tr > th,
 table[rules][rules="all"] > td,
 table[rules][rules="all"] > th 
 {
-  border: thin solid ;
+  border-width: thin;
+  border-style: solid;
 }
 
 table[rules][rules="rows"] > tr,
 table[rules][rules="rows"] > * > tr {
-  border-top: thin solid;
-  border-bottom: thin solid;
+  border-top-width: thin;
+  border-bottom-width: thin;
+  border-top-style: solid;
+  border-bottom-style: solid;
 }
 
 
@@ -379,19 +368,25 @@ table[rules][rules="cols"] > tr > td,
 table[rules][rules="cols"] > * > tr > td,
 table[rules][rules="cols"] > tr > th,
 table[rules][rules="cols"] > * > tr > th {
-  border-left: thin solid;
-  border-right: thin solid;
+  border-left-width: thin;
+  border-right-width: thin;
+  border-left-style: solid;
+  border-right-style: solid;
 }
 
 table[rules][rules="groups"] > colgroup {
-  border-left: thin solid;
-  border-right: thin solid;
+  border-left-width: thin;
+  border-right-width: thin;
+  border-left-style: solid;
+  border-right-style: solid;
 }
 table[rules][rules="groups"] > tfoot,
 table[rules][rules="groups"] > thead,
 table[rules][rules="groups"] > tbody {
-  border-top: thin solid;
-  border-bottom: thin solid;
+  border-top-width: thin;
+  border-bottom-width: thin;
+  border-top-style: solid;
+  border-bottom-style: solid;
 }
   
   
@@ -399,7 +394,6 @@ table[rules][rules="groups"] > tbody {
 caption {
   display: table-caption;
   text-align: center;
-  -moz-box-sizing: border-box;
 }
 
 table[align="center"] > caption {
@@ -467,6 +461,20 @@ thead > form:-moz-is-html, tfoot > form:-moz-is-html,
 table > form:-moz-is-html {
   /* Important: don't show these forms in HTML */
   display: none !important;
+}
+
+table[bordercolor] > tbody,
+table[bordercolor] > thead,
+table[bordercolor] > tfoot,
+table[bordercolor] > col,
+table[bordercolor] > colgroup,
+table[bordercolor] > tr,
+table[bordercolor] > * > tr,
+table[bordercolor]  > tr > td,
+table[bordercolor] > * > tr > td,
+table[bordercolor]  > tr > th,
+table[bordercolor] > * > tr > th {
+  border-color: inherit;
 }
 
 /* inlines */
@@ -546,6 +554,10 @@ ul, menu, dir {
   -moz-padding-start: 40px;
 }
 
+menu[type="context"] {
+  display: none !important;
+}
+
 ol {
   display: block;
   list-style-type: decimal;
@@ -607,7 +619,7 @@ img:-moz-loading::before, input:-moz-loading::before,
 applet:-moz-empty-except-children-with-localname(param):-moz-broken::before,
 applet:-moz-empty-except-children-with-localname(param):-moz-user-disabled::before {
   content: -moz-alt-content !important;
-  unicode-bidi: embed;
+  unicode-bidi: -moz-isolate;
 }
 
 :-moz-any(object,applet):-moz-any(:-moz-broken,:-moz-user-disabled) > *|* {
@@ -665,33 +677,16 @@ canvas {
   -moz-user-select: none;
 }
 
-/* focusable content: anything w/ tabindex >=0 is focusable */
-abbr:-moz-focusring, acronym:-moz-focusring, address:-moz-focusring,
-b:-moz-focusring, base:-moz-focusring, big:-moz-focusring,
-blockquote:-moz-focusring, br:-moz-focusring, canvas:-moz-focusring,
-caption:-moz-focusring, center:-moz-focusring, cite:-moz-focusring,
-code:-moz-focusring, col:-moz-focusring, colgroup:-moz-focusring,
-dd:-moz-focusring, del:-moz-focusring, dfn:-moz-focusring, dir:-moz-focusring,
-div:-moz-focusring, dl:-moz-focusring, dt:-moz-focusring, em:-moz-focusring,
-fieldset:-moz-focusring, font:-moz-focusring, form:-moz-focusring,
-h1:-moz-focusring, h2:-moz-focusring, h3:-moz-focusring, h4:-moz-focusring,
-h5:-moz-focusring, h6:-moz-focusring, hr:-moz-focusring, i:-moz-focusring,
-img:-moz-focusring, ins:-moz-focusring, kbd:-moz-focusring,
-label:-moz-focusring, legend:-moz-focusring, li:-moz-focusring,
-link:-moz-focusring, menu:-moz-focusring, ol:-moz-focusring, p:-moz-focusring,
-pre:-moz-focusring, q:-moz-focusring, s:-moz-focusring, samp:-moz-focusring,
-small:-moz-focusring, span:-moz-focusring, strike:-moz-focusring,
-strong:-moz-focusring, sub:-moz-focusring, sup:-moz-focusring,
-table:-moz-focusring, tbody:-moz-focusring, td:-moz-focusring,
-tfoot:-moz-focusring, th:-moz-focusring, thead:-moz-focusring, 
-tr:-moz-focusring, tt:-moz-focusring, u:-moz-focusring,
-ul:-moz-focusring, var:-moz-focusring {
+/* focusable content: anything w/ tabindex >=0 is focusable, but we
+   skip drawing a focus outline on a few things that handle it
+   themselves. */
+:-moz-focusring:not(input):not(button):not(select):not(textarea):not(iframe):not(frame):not(body):not(html) {
   /* Don't specify the outline-color, we should always use initial value. */
    outline: 1px dotted;
 }
 
 /* hidden elements */
-base, basefont, head, meta, script, style, title,
+base, basefont, datalist, head, meta, script, style, title,
 noembed, param {
    display: none;
 }
@@ -699,6 +694,11 @@ noembed, param {
 area {
   /* Don't give it frames other than its imageframe */
   display: none ! important;
+}
+
+iframe:-moz-full-screen {
+  /* iframes in full-screen mode don't show a border. */
+  border: none;
 }
 
 /* media elements */
@@ -715,6 +715,12 @@ audio:not([controls]) > xul|videocontrols {
 
 audio:not([controls]) {
   display: none;
+}
+
+*|*::-moz-html-canvas-content {
+  display: block !important;
+  /* we want to be an absolute and fixed container */
+  -moz-transform: translate(0) !important;
 }
 
 /* emulation of non-standard HTML <marquee> tag */

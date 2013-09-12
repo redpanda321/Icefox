@@ -43,17 +43,16 @@
 #include <d3d10.h>
 #include <dxgi.h>
 
-extern "C" {
 #include "cairoint.h"
 #include "cairo-surface-clipper-private.h"
-}
 
 #include "cairo-win32-refptr.h"
 #include "cairo-d2d-private-fx.h"
 #include "cairo-win32.h"
+#include "cairo-list-private.h"
 
 /* describes the type of the currently applied clip so that we can pop it */
-struct d2d_clip;
+struct d2d_clip_t;
 
 #define MAX_OPERATORS CAIRO_OPERATOR_HSL_LUMINOSITY + 1
 
@@ -68,16 +67,26 @@ struct _cairo_d2d_device
     RefPtr<ID3D10Buffer> mQuadBuffer;
     RefPtr<ID3D10RasterizerState> mRasterizerState;
     RefPtr<ID3D10BlendState> mBlendStates[MAX_OPERATORS];
+    /** Texture used for manual glyph rendering */
+    RefPtr<ID3D10Texture2D> mTextTexture;
+    RefPtr<ID3D10ShaderResourceView> mTextTextureView;
     int mVRAMUsage;
 };
+
+const unsigned int TEXT_TEXTURE_WIDTH = 2048;
+const unsigned int TEXT_TEXTURE_HEIGHT = 512;
 typedef struct _cairo_d2d_device cairo_d2d_device_t;
 
 struct _cairo_d2d_surface {
     _cairo_d2d_surface() : d2d_clip(NULL), clipping(false), isDrawing(false),
-	textRenderingInit(true)
+            textRenderingState(TEXT_RENDERING_UNINITIALIZED)
     {
 	_cairo_clip_init (&this->clip);
+        cairo_list_init(&this->dependent_surfaces);
     }
+    
+    ~_cairo_d2d_surface();
+
 
     cairo_surface_t base;
     /* Device used by this surface 
@@ -105,7 +114,7 @@ struct _cairo_d2d_surface {
     cairo_format_t format;
 
     cairo_clip_t clip;
-    d2d_clip *d2d_clip;
+    d2d_clip_t *d2d_clip;
 
 
     /** Mask layer used by surface_mask to push opacity masks */
@@ -124,21 +133,39 @@ struct _cairo_d2d_surface {
     /** Indicates if our render target is currently in drawing mode */
     bool isDrawing;
     /** Indicates if text rendering is initialized */
-    bool textRenderingInit;
+    enum TextRenderingState {
+        TEXT_RENDERING_UNINITIALIZED,
+        TEXT_RENDERING_NO_CLEARTYPE,
+        TEXT_RENDERING_NORMAL,
+        TEXT_RENDERING_GDI_CLASSIC
+    };
+    TextRenderingState textRenderingState;
 
     RefPtr<ID3D10RenderTargetView> buffer_rt_view;
     RefPtr<ID3D10ShaderResourceView> buffer_sr_view;
 
-
+    // Other d2d surfaces which depend on this one and need to be flushed if
+    // it is drawn to. This is required for situations where this surface is
+    // drawn to another surface, but may be modified before the other surface
+    // has flushed. When the flush of the other surface then happens and the
+    // drawing command is actually executed, the contents of this surface will
+    // no longer be what it was when the drawing command was issued.
+    cairo_list_t dependent_surfaces;
     //cairo_surface_clipper_t clipper;
 };
 typedef struct _cairo_d2d_surface cairo_d2d_surface_t;
 
+struct _cairo_d2d_surface_entry
+{
+    cairo_list_t link;
+    cairo_d2d_surface_t *surface;
+};
+
 typedef HRESULT (WINAPI*D2D1CreateFactoryFunc)(
-    __in D2D1_FACTORY_TYPE factoryType,
-    __in REFIID iid,
-    __in_opt CONST D2D1_FACTORY_OPTIONS *pFactoryOptions,
-    __out void **factory
+    D2D1_FACTORY_TYPE factoryType,
+    REFIID iid,
+    CONST D2D1_FACTORY_OPTIONS *pFactoryOptions,
+    void **factory
 );
 
 typedef HRESULT (WINAPI*D3D10CreateDevice1Func)(
@@ -159,22 +186,6 @@ typedef HRESULT (WINAPI*D3D10CreateEffectFromMemoryFunc)(
     ID3D10EffectPool *pEffectPool,
     ID3D10Effect **ppEffect
 );
-
-RefPtr<ID2D1Brush>
-_cairo_d2d_create_brush_for_pattern(cairo_d2d_surface_t *d2dsurf, 
-			            const cairo_pattern_t *pattern,
-				    bool unique = false);
-void
-_cairo_d2d_begin_draw_state(cairo_d2d_surface_t *d2dsurf);
-
-cairo_status_t
-_cairo_d2d_set_clip(cairo_d2d_surface_t *d2dsurf, cairo_clip_t *clip);
-
-cairo_int_status_t _cairo_d2d_blend_temp_surface(cairo_d2d_surface_t *surf, cairo_operator_t op, ID2D1RenderTarget *rt, cairo_clip_t *clip, const cairo_rectangle_int_t *bounds = NULL);
-
-RefPtr<ID2D1RenderTarget> _cairo_d2d_get_temp_rt(cairo_d2d_surface_t *surf, cairo_clip_t *clip);
-
-cairo_operator_t _cairo_d2d_simplify_operator(cairo_operator_t op, const cairo_pattern_t *source);
 
 #endif /* CAIRO_HAS_D2D_SURFACE */
 #endif /* CAIRO_D2D_PRIVATE_H */

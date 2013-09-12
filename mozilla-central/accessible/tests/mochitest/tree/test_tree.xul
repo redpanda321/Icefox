@@ -6,20 +6,18 @@
 <window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         title="Accessible XUL tree hierarchy tests">
 
-  <script type="application/javascript" 
-          src="chrome://mochikit/content/MochiKit/packed.js" />
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/treeview.js" />
+          src="../treeview.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js" />
+          src="../common.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/role.js" />
+          src="../role.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/events.js" />
+          src="../events.js" />
 
   <script type="application/javascript">
   <![CDATA[
@@ -117,7 +115,7 @@
 
     function doTest()
     {
-      var gQueue = new eventQueue("TreeViewChanged");
+      var gQueue = new eventQueue(EVENT_REORDER);
 
       gQueue.push(new treeChecker("list", new nsTableTreeView(3), ROLE_LIST));
       gQueue.push(new treeChecker("tree", new nsTreeTreeView(), ROLE_OUTLINE));

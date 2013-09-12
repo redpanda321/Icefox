@@ -1,43 +1,8 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is nsDiskCacheDevice.h, released
- * February 20, 2001.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Gordon Sheridan <gordon@netscape.com>
- *   Patrick C. Beard <beard@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef _nsDiskCacheDevice_h_
 #define _nsDiskCacheDevice_h_
@@ -47,7 +12,7 @@
 #include "nsDiskCacheBlockFile.h"
 #include "nsDiskCacheEntry.h"
 
-#include "nsILocalFile.h"
+#include "nsIFile.h"
 #include "nsIObserver.h"
 #include "nsCOMArray.h"
 
@@ -63,68 +28,88 @@ public:
     virtual nsresult        Shutdown();
 
     virtual const char *    GetDeviceID(void);
-    virtual nsCacheEntry *  FindEntry(nsCString * key, PRBool *collision);
+    virtual nsCacheEntry *  FindEntry(nsCString * key, bool *collision);
     virtual nsresult        DeactivateEntry(nsCacheEntry * entry);
     virtual nsresult        BindEntry(nsCacheEntry * entry);
     virtual void            DoomEntry( nsCacheEntry * entry );
 
     virtual nsresult OpenInputStreamForEntry(nsCacheEntry *    entry,
                                              nsCacheAccessMode mode,
-                                             PRUint32          offset,
+                                             uint32_t          offset,
                                              nsIInputStream ** result);
 
     virtual nsresult OpenOutputStreamForEntry(nsCacheEntry *     entry,
                                               nsCacheAccessMode  mode,
-                                              PRUint32           offset,
+                                              uint32_t           offset,
                                               nsIOutputStream ** result);
 
     virtual nsresult        GetFileForEntry(nsCacheEntry *    entry,
                                             nsIFile **        result);
 
-    virtual nsresult        OnDataSizeChange(nsCacheEntry * entry, PRInt32 deltaSize);
+    virtual nsresult        OnDataSizeChange(nsCacheEntry * entry, int32_t deltaSize);
     
     virtual nsresult        Visit(nsICacheVisitor * visitor);
 
     virtual nsresult        EvictEntries(const char * clientID);
 
+    bool                    EntryIsTooBig(int64_t entrySize);
+
+    size_t                 SizeOfIncludingThis(nsMallocSizeOfFun aMallocSizeOf);
+
     /**
      * Preference accessors
      */
-    void                    SetCacheParentDirectory(nsILocalFile * parentDir);
-    void                    SetCapacity(PRUint32  capacity);
+    void                    SetCacheParentDirectory(nsIFile * parentDir);
+    void                    SetCapacity(uint32_t  capacity);
+    void                    SetMaxEntrySize(int32_t  maxSizeInKilobytes);
 
 /* private: */
 
-    void                    getCacheDirectory(nsILocalFile ** result);
-    PRUint32                getCacheCapacity();
-    PRUint32                getCacheSize();
-    PRUint32                getEntryCount();
+    void                    getCacheDirectory(nsIFile ** result);
+    uint32_t                getCacheCapacity();
+    uint32_t                getCacheSize();
+    uint32_t                getEntryCount();
     
     nsDiskCacheMap *        CacheMap()    { return &mCacheMap; }
     
 private:    
+    friend class nsDiskCacheDeviceDeactivateEntryEvent;
+    friend class nsEvictDiskCacheEntriesEvent;
+    friend class nsDiskCacheMap;
     /**
      *  Private methods
      */
 
-    PRBool                  Initialized() { return mInitialized; }
+    inline bool IsValidBinding(nsDiskCacheBinding *binding)
+    {
+        NS_ASSERTION(binding, "  binding == nullptr");
+        NS_ASSERTION(binding->mDeactivateEvent == nullptr,
+                     "  entry in process of deactivation");
+        return (binding && !binding->mDeactivateEvent);
+    }
 
-    nsresult                Shutdown_Private(PRBool flush);
+    bool                    Initialized() { return mInitialized; }
+
+    nsresult                Shutdown_Private(bool flush);
+    nsresult                DeactivateEntry_Private(nsCacheEntry * entry,
+                                                    nsDiskCacheBinding * binding);
 
     nsresult                OpenDiskCache();
     nsresult                ClearDiskCache();
 
-    nsresult                EvictDiskCacheEntries(PRUint32  targetCapacity);
+    nsresult                EvictDiskCacheEntries(uint32_t  targetCapacity);
     
     /**
      *  Member variables
      */
-    nsCOMPtr<nsILocalFile>  mCacheDirectory;
+    nsCOMPtr<nsIFile>       mCacheDirectory;
     nsDiskCacheBindery      mBindery;
-    PRUint32                mCacheCapacity;     // Unit is KiB's
+    uint32_t                mCacheCapacity;     // Unit is KiB's
+    int32_t                 mMaxEntrySize;      // Unit is bytes internally
     // XXX need soft/hard limits, currentTotal
     nsDiskCacheMap          mCacheMap;
-    PRPackedBool            mInitialized;
+    bool                    mInitialized;
+    bool                    mClearingDiskCache;
 };
 
 #endif // _nsDiskCacheDevice_h_

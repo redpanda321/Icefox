@@ -1,42 +1,8 @@
 /* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set ts=2 et sw=2 tw=80: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Indexed Database.
- *
- * The Initial Developer of the Original Code is
- * The Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Shawn Wilsher <me@shawnwilsher.com>
- *   Ben Turner <bent.mozilla@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef mozilla_dom_indexeddb_idbrequest_h__
 #define mozilla_dom_indexeddb_idbrequest_h__
@@ -44,97 +10,137 @@
 #include "mozilla/dom/indexedDB/IndexedDatabase.h"
 
 #include "nsIIDBRequest.h"
-#include "nsIVariant.h"
-
+#include "nsIIDBOpenDBRequest.h"
 #include "nsDOMEventTargetHelper.h"
-#include "nsCycleCollectionParticipant.h"
+#include "mozilla/dom/indexedDB/IDBWrapperCache.h"
 
 class nsIScriptContext;
 class nsPIDOMWindow;
 
 BEGIN_INDEXEDDB_NAMESPACE
 
-class AsyncConnectionHelper;
+class HelperBase;
 class IDBFactory;
-class IDBDatabase;
+class IDBTransaction;
+class IndexedDBRequestParentBase;
 
-class IDBRequest : public nsDOMEventTargetHelper,
+class IDBRequest : public IDBWrapperCache,
                    public nsIIDBRequest
 {
-  friend class AsyncConnectionHelper;
-
 public:
-  class Generator : public nsISupports
-  {
-    protected:
-      friend class IDBRequest;
-
-      Generator() { }
-
-      virtual ~Generator() {
-        NS_ASSERTION(mLiveRequests.IsEmpty(), "Huh?!");
-      }
-
-      already_AddRefed<IDBRequest>
-      GenerateRequest(nsIScriptContext* aScriptContext,
-                      nsPIDOMWindow* aOwner) {
-        return GenerateRequestInternal(aScriptContext, aOwner, PR_FALSE);
-      }
-
-      already_AddRefed<IDBRequest>
-      GenerateWriteRequest(nsIScriptContext* aScriptContext,
-                           nsPIDOMWindow* aOwner) {
-        return GenerateRequestInternal(aScriptContext, aOwner, PR_TRUE);
-      }
-
-      void NoteDyingRequest(IDBRequest* aRequest) {
-        NS_ASSERTION(mLiveRequests.Contains(aRequest), "Unknown request!");
-        mLiveRequests.RemoveElement(aRequest);
-      }
-
-    private:
-      already_AddRefed<IDBRequest>
-      GenerateRequestInternal(nsIScriptContext* aScriptContext,
-                              nsPIDOMWindow* aOwner,
-                              PRBool aWriteRequest);
-
-      // XXXbent Assuming infallible nsTArray here, make sure it lands!
-      nsAutoTArray<IDBRequest*, 1> mLiveRequests;
-  };
-
-  friend class IDBRequestGenerator;
-
   NS_DECL_ISUPPORTS_INHERITED
   NS_DECL_NSIIDBREQUEST
-  NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED(IDBRequest,
-                                           nsDOMEventTargetHelper)
+  NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_CLASS_INHERITED(IDBRequest,
+                                                         IDBWrapperCache)
 
-  already_AddRefed<nsISupports> GetGenerator()
+  static
+  already_AddRefed<IDBRequest> Create(nsISupports* aSource,
+                                      IDBWrapperCache* aOwnerCache,
+                                      IDBTransaction* aTransaction,
+                                      JSContext* aCallingCx);
+
+  // nsIDOMEventTarget
+  virtual nsresult PreHandleEvent(nsEventChainPreVisitor& aVisitor);
+
+  nsISupports* Source()
   {
-    nsCOMPtr<nsISupports> generator(mGenerator);
-    return generator.forget();
+    return mSource;
   }
 
-private:
-  // Only called by IDBRequestGenerator::Generate().
-  IDBRequest()
-  : mReadyState(nsIIDBRequest::INITIAL),
-    mAborted(PR_FALSE),
-    mWriteRequest(PR_FALSE)
-  { }
+  void Reset();
 
-  nsRefPtr<Generator> mGenerator;
+  nsresult NotifyHelperCompleted(HelperBase* aHelper);
+  void NotifyHelperSentResultsToChildProcess(nsresult aRv);
+
+  void SetError(nsresult aRv);
+
+  nsresult
+  GetErrorCode() const
+#ifdef DEBUG
+  ;
+#else
+  {
+    return mErrorCode;
+  }
+#endif
+
+  JSContext* GetJSContext();
+
+  void
+  SetActor(IndexedDBRequestParentBase* aActorParent)
+  {
+    NS_ASSERTION(!aActorParent || !mActorParent,
+                 "Shouldn't have more than one!");
+    mActorParent = aActorParent;
+  }
+
+  IndexedDBRequestParentBase*
+  GetActorParent() const
+  {
+    return mActorParent;
+  }
+
+  void CaptureCaller(JSContext* aCx);
+
+  void FillScriptErrorEvent(nsScriptErrorEvent* aEvent) const;
+
+  bool IsPending() const
+  {
+    return !mHaveResultOrErrorCode;
+  }
 
 protected:
-  // Called by Release().
+  IDBRequest();
   ~IDBRequest();
 
-  nsRefPtr<nsDOMEventListenerWrapper> mOnSuccessListener;
-  nsRefPtr<nsDOMEventListenerWrapper> mOnErrorListener;
+  nsCOMPtr<nsISupports> mSource;
+  nsRefPtr<IDBTransaction> mTransaction;
 
-  PRUint16 mReadyState;
-  PRPackedBool mAborted;
-  PRPackedBool mWriteRequest;
+  jsval mResultVal;
+
+  nsCOMPtr<nsIDOMDOMError> mError;
+
+  IndexedDBRequestParentBase* mActorParent;
+
+  nsresult mErrorCode;
+  bool mHaveResultOrErrorCode;
+
+  nsString mFilename;
+  uint32_t mLineNo;
+};
+
+class IDBOpenDBRequest : public IDBRequest,
+                         public nsIIDBOpenDBRequest
+{
+public:
+  NS_DECL_ISUPPORTS_INHERITED
+  NS_FORWARD_NSIIDBREQUEST(IDBRequest::)
+  NS_DECL_NSIIDBOPENDBREQUEST
+  NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED(IDBOpenDBRequest, IDBRequest)
+
+  static
+  already_AddRefed<IDBOpenDBRequest>
+  Create(IDBFactory* aFactory,
+         nsPIDOMWindow* aOwner,
+         JSObject* aScriptOwner,
+         JSContext* aCallingCx);
+
+  void SetTransaction(IDBTransaction* aTransaction);
+
+  // nsIDOMEventTarget
+  virtual nsresult PostHandleEvent(nsEventChainPostVisitor& aVisitor);
+
+  IDBFactory*
+  Factory() const
+  {
+    return mFactory;
+  }
+
+protected:
+  ~IDBOpenDBRequest();
+
+  // Only touched on the main thread.
+  nsRefPtr<IDBFactory> mFactory;
 };
 
 END_INDEXEDDB_NAMESPACE

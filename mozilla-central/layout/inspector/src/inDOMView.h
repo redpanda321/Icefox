@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Joe Hewitt <hewitt@netscape.com> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef __inDOMView_h__
 #define __inDOMView_h__
@@ -85,34 +52,34 @@ protected:
   nsCOMPtr<nsITreeSelection> mSelection;
   nsCOMPtr<inIDOMUtils> mDOMUtils;
 
-  PRPackedBool mShowAnonymous;
-  PRPackedBool mShowSubDocuments;
-  PRPackedBool mShowWhitespaceNodes;
-  PRPackedBool mShowAccessibleNodes;
-  PRUint32 mWhatToShow;
+  bool mShowAnonymous;
+  bool mShowSubDocuments;
+  bool mShowWhitespaceNodes;
+  bool mShowAccessibleNodes;
+  uint32_t mWhatToShow;
 
   nsCOMPtr<nsIDOMNode> mRootNode;
   nsCOMPtr<nsIDOMDocument> mRootDocument;
 
   nsTArray<inDOMViewNode*> mNodes;
 
-  inDOMViewNode* GetNodeAt(PRInt32 aIndex);
-  PRInt32 GetRowCount();
-  PRInt32 NodeToRow(inDOMViewNode* aNode);
-  PRBool RowOutOfBounds(PRInt32 aRow, PRInt32 aCount);
+  inDOMViewNode* GetNodeAt(int32_t aIndex);
+  int32_t GetRowCount();
+  int32_t NodeToRow(inDOMViewNode* aNode);
+  bool RowOutOfBounds(int32_t aRow, int32_t aCount);
   inDOMViewNode* CreateNode(nsIDOMNode* aNode, inDOMViewNode* aParent);
   void AppendNode(inDOMViewNode* aNode);
-  void InsertNode(inDOMViewNode* aNode, PRInt32 aIndex);
-  void RemoveNode(PRInt32 aIndex);
-  void ReplaceNode(inDOMViewNode* aNode, PRInt32 aIndex);
-  void InsertNodes(nsTArray<inDOMViewNode*>& aNodes, PRInt32 aIndex);
-  void RemoveNodes(PRInt32 aIndex, PRInt32 aCount);
+  void InsertNode(inDOMViewNode* aNode, int32_t aIndex);
+  void RemoveNode(int32_t aIndex);
+  void ReplaceNode(inDOMViewNode* aNode, int32_t aIndex);
+  void InsertNodes(nsTArray<inDOMViewNode*>& aNodes, int32_t aIndex);
+  void RemoveNodes(int32_t aIndex, int32_t aCount);
   void RemoveAllNodes();
-  void ExpandNode(PRInt32 aRow);
-  void CollapseNode(PRInt32 aRow);
+  void ExpandNode(int32_t aRow);
+  void CollapseNode(int32_t aRow);
 
-  nsresult RowToNode(PRInt32 aRow, inDOMViewNode** aNode);
-  nsresult NodeToRow(nsIDOMNode* aNode, PRInt32* aRow);
+  nsresult RowToNode(int32_t aRow, inDOMViewNode** aNode);
+  nsresult NodeToRow(nsIDOMNode* aNode, int32_t* aRow);
 
   void InsertLinkAfter(inDOMViewNode* aNode, inDOMViewNode* aInsertAfter);
   void InsertLinkBefore(inDOMViewNode* aNode, inDOMViewNode* aInsertBefore);
@@ -122,8 +89,8 @@ protected:
   nsresult GetChildNodesFor(nsIDOMNode* aNode, nsCOMArray<nsIDOMNode>& aResult);
   nsresult AppendKidsToArray(nsIDOMNodeList* aKids, nsCOMArray<nsIDOMNode>& aArray);
   nsresult AppendAttrsToArray(nsIDOMNamedNodeMap* aKids, nsCOMArray<nsIDOMNode>& aArray);
-  nsresult GetFirstDescendantOf(inDOMViewNode* aNode, PRInt32 aRow, PRInt32* aResult);
-  nsresult GetLastDescendantOf(inDOMViewNode* aNode, PRInt32 aRow, PRInt32* aResult);
+  nsresult GetFirstDescendantOf(inDOMViewNode* aNode, int32_t aRow, int32_t* aResult);
+  nsresult GetLastDescendantOf(inDOMViewNode* aNode, int32_t aRow, int32_t* aResult);
   nsresult GetRealPreviousSibling(nsIDOMNode* aNode, nsIDOMNode* aRealParent, nsIDOMNode** aSibling);
 };
 

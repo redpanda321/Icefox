@@ -40,11 +40,19 @@ must be one of the following:
 
 1. Inclusion of another manifest
 
-   include <relative_path>
+   <failure-type>* include <relative_path>
+
+   <failure-type> is the same as listed below for a test item.  As for 
+   test items, multiple failure types listed on the same line are 
+   combined by using the last matching failure type listed.  However, 
+   the failure type on a manifest is combined with the failure type on 
+   the test (or on a nested manifest) with the rule that the last in the
+   following list wins:  fails, random, skip.  (In other words, skip 
+   always wins, and random beats fails.)
 
 2. A test item
 
-   <failure-type>* [<http>] <type> <url> <url_ref>
+   [ <failure-type> | <preference> ]* [<http>] <type> <url> <url_ref>
 
    where
 
@@ -58,11 +66,24 @@ must be one of the following:
                           conditions of <type>. If the condition is not met,
                           the test passes if the conditions of <type> are met.
 
+      needs-focus  The test fails or times out if the reftest window is not
+                   focused.
+
       random  The results of the test are random and therefore not to be
               considered in the output.
 
       random-if(condition) The results of the test are random if a given
                            condition is met.
+
+      silentfail This test may fail silently, and if that happens it should
+                 count as if the test passed. This is useful for cases where
+                 silent failure is the intended behavior (for example, in
+                 an out of memory situation in JavaScript, we stop running
+                 the script silently and immediately, in hopes of reclaiming
+                 enough memory to keep the browser functioning).
+
+      silentfail-if(condition) This test may fail silently if the condition
+                               is met.
 
       skip  This test should not be run. This is useful when a test fails in a
             catastrophic way, such as crashing or hanging the browser. Using
@@ -84,6 +105,24 @@ must be one of the following:
                          test which exercised out-of-memory behavior might be
                          fast on a 32-bit system but inordinately slow on a
                          64-bit system).
+
+      fuzzy(maxDiff, diffCount)
+          This allows a test to pass if the pixel value differences are <=
+          maxDiff and the total number of different pixels is <= diffCount.
+          It can also be used with '!=' to ensure that the difference is
+          greater than maxDiff.
+
+      fuzzy-if(condition, maxDiff, diffCount)
+          If the condition is met, the test is treated as if 'fuzzy' had been
+          specified. This is useful if there are differences on particular
+          platforms.
+
+      require-or(cond1&&cond2&&...,fallback)
+          Require some particular setup be performed or environmental
+          condition(s) made true (eg setting debug mode) before the test
+          is run. If any condition is unknown, unimplemented, or fails,
+          revert to the fallback failure-type.
+          Example: require-or(debugMode,skip)
 
       asserts(count)
           Loading the test and reference is known to assert exactly
@@ -116,9 +155,28 @@ must be one of the following:
 
       Examples of using conditions:
           fails-if(winWidget) == test reference
-          asserts-if(2,cocoaWidget) load crashtest
+          asserts-if(cocoaWidget,2) load crashtest
 
-   b. <http>, if present, is one of the strings (sans quotes) "HTTP" or
+   b. <preference> (optional) is a string of the form
+
+          pref(<name>,<value>)
+          test-pref(<name>,<value>)
+          ref-pref(<name>,<value>)
+
+      where <name> is the name of a preference setting, as seen in
+      about:config, and <value> is the value to which this preference should
+      be set. <value> may be a boolean (true/false), an integer, or a
+      quoted string *without spaces*, according to the type of the preference.
+
+      The preference will be set to the specified value prior to
+      rendering the test and/or reference canvases (pref() applies to
+      both, test-pref() only to the test, and ref-pref() only to the
+      reference), and will be restored afterwards so that following
+      tests are not affected. Note that this feature is only useful for
+      "live" preferences that take effect immediately, without requiring
+      a browser restart.
+
+   c. <http>, if present, is one of the strings (sans quotes) "HTTP" or
       "HTTP(..)" or "HTTP(../..)" or "HTTP(../../..)", etc. , indicating that
       the test should be run over an HTTP server because it requires certain
       HTTP headers or a particular HTTP status.  (Don't use this if your test
@@ -177,7 +235,7 @@ must be one of the following:
       on request/response in handleRequest, see the nsIHttpRe(quest|sponse)
       definitions in <netwerk/test/httpserver/nsIHttpServer.idl>.
 
-   c. <type> is one of the following:
+   d. <type> is one of the following:
 
       ==     The test passes if the images of the two renderings are the
              SAME.
@@ -205,10 +263,10 @@ must be one of the following:
              url_ref must be omitted. The test may be marked as fails or
              random. (Used to test the JavaScript Engine.)
 
-   d. <url> is either a relative file path or an absolute URL for the
+   e. <url> is either a relative file path or an absolute URL for the
       test page
 
-   e. <url_ref> is either a relative file path or an absolute URL for
+   f. <url_ref> is either a relative file path or an absolute URL for
       the reference page
 
    The only difference between <url> and <url_ref> is that results of
@@ -231,6 +289,28 @@ must be one of the following:
    While the typical use of url-prefix is expected to be as the first line of
    a manifest, it is legal to use it anywhere in a manifest. Subsequent uses
    of url-prefix overwrite any existing values.
+
+4. Specification of default preferences
+
+   default-preferences <preference>*
+
+   where <preference> is defined above.
+
+   The <preference> settings will be used for all following test items in the
+   manifest.
+
+   If a test item includes its own preference settings, then they will override
+   any settings for preferences of the same names that are set using
+   default-preferences, just as later items within a line override earlier ones.
+
+   A default-preferences line with no <preference> settings following it will
+   reset the set of default preferences to be empty.
+
+   As with url-prefix, default-preferences will often be used at the start of a
+   manifest file so that it applies to all test items, but it is legal for
+   default-preferences to appear anywhere in the manifest. A subsequent
+   default-preferences will reset any previous default preference values and
+   overwrite them with the specified <preference> values.
 
 This test manifest format could be used by other harnesses, such as ones
 that do not depend on XUL, or even ones testing other layout engines.
@@ -375,6 +455,7 @@ so 60/zoom is an integer.
 
 Printing Tests
 ==============
+
 Now that the patch for bug 374050 has landed
 (https://bugzilla.mozilla.org/show_bug.cgi?id=374050), it is possible to
 create reftests that run in a paginated context.
@@ -400,3 +481,22 @@ doesn't use exactly the same codepath as real print preview/print. In
 particular, scripting and frames are likely to cause problems; it is untested,
 though.  That said, it should be sufficient for testing layout issues related
 to pagination.
+
+Plugin and IPC Process Crash Tests
+==================================
+
+If you are running a test that causes an out-of-process plugin or IPC process
+under Electrolysis to crash as part of a reftest, this will cause process
+crash minidump files to be left in the profile directory.  The test
+infrastructure that runs the reftests will notice these minidump files and
+dump out information from them, and these additional error messages in the logs
+can end up erroneously being associated with other errors from the reftest run.
+They are also confusing, since the appearance of "PROCESS-CRASH" messages in
+the test run output can seem like a real problem, when in fact it is the
+expected behavior.
+
+To indicate to the reftest framework that a test is expecting a plugin or
+IPC process crash, have the test include "reftest-expect-process-crash" as
+one of the root element's classes by the time the test has finished.  This will
+cause any minidump files that are generated while running the test to be removed
+and they won't cause any error messages in the test run output.

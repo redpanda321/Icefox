@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Private Browsing Tests.
- *
- * The Initial Developer of the Original Code is
- * Ehsan Akhgari.
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Ehsan Akhgari <ehsan.akhgari@gmail.com> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
   Test download manager's interaction with the private browsing service.
@@ -56,14 +23,7 @@
     * Verify that Download-C resumes and finishes correctly now.
 **/
 
-this.__defineGetter__("pb", function () {
-  delete this.pb;
-  try {
-    return this.pb = Cc["@mozilla.org/privatebrowsing;1"].
-                     getService(Ci.nsIPrivateBrowsingService);
-  } catch (e) {}
-  return this.pb = null;
-});
+Components.utils.import("resource://gre/modules/Services.jsm");
 
 this.__defineGetter__("dm", function() {
   delete this.dm;
@@ -75,46 +35,55 @@ this.__defineGetter__("dm", function() {
  * Try to see if an active download is available using the |activeDownloads|
  * property.
  */
-function is_active_download_available(aID, aSrc, aDst, aName) {
-  let enumerator = dm.activeDownloads;
+function is_active_download_available(aGUID, aSrc, aDst, aName, aPrivate) {
+  let enumerator = aPrivate ? dm.activePrivateDownloads : dm.activeDownloads;
   while (enumerator.hasMoreElements()) {
     let download = enumerator.getNext();
-    if (download.id == aID &&
+    if (download.guid == aGUID &&
         download.source.spec == aSrc &&
         download.targetFile.path == aDst.path &&
-        download.displayName == aName)
+        download.displayName == aName &&
+        download.isPrivate == aPrivate)
       return true;
   }
   return false;
 }
 
+function expect_download_present(aGUID, aSrc, aDst, aName, aPrivate) {
+  is_download_available(aGUID, aSrc, aDst, aName, aPrivate, true);
+}
+
+function expect_download_absent(aGUID, aSrc, aDst, aName, aPrivate) {
+  is_download_available(aGUID, aSrc, aDst, aName, aPrivate, false);
+}
+
 /**
- * Try to see if a download is available using the |getDownload| method.  The
+ * Try to see if a download is available using the |getDownloadByGUID| method.  The
  * download can both be active or inactive.
  */
-function is_download_available(aID, aSrc, aDst, aName) {
-  let download;
-  try {
-    download = dm.getDownload(aID);
-  } catch (ex) {
-    return false;
-  }
-  return (download.id == aID &&
-          download.source.spec == aSrc &&
-          download.targetFile.path == aDst.path &&
-          download.displayName == aName);
+function is_download_available(aGUID, aSrc, aDst, aName, aPrivate, present) {
+  do_test_pending();
+  dm.getDownloadByGUID(aGUID, function(status, download) {
+    if (!present) {
+      do_check_eq(download, null);
+    } else {
+      do_check_neq(download, null);
+      do_check_eq(download.guid, aGUID);
+      do_check_eq(download.source.spec, aSrc);
+      do_check_eq(download.targetFile.path, aDst.path);
+      do_check_eq(download.displayName, aName);
+      do_check_eq(download.isPrivate, aPrivate);
+    }
+    do_test_finished();
+  });
 }
 
 function run_test() {
-  if (!pb) // Private Browsing might not be available
-    return;
-
   let prefBranch = Cc["@mozilla.org/preferences-service;1"].
                    getService(Ci.nsIPrefBranch);
-  prefBranch.setBoolPref("browser.privatebrowsing.keep_current_session", true);
 
   do_test_pending();
-  let httpserv = new nsHttpServer();
+  let httpserv = new HttpServer();
   httpserv.registerDirectory("/", do_get_cwd());
 
   let tmpDir = Cc["@mozilla.org/file/directory_service;1"].
@@ -124,6 +93,7 @@ function run_test() {
 
   // make sure we're starting with an empty DB
   do_check_eq(dm.activeDownloadCount, 0);
+  do_check_eq(dm.activePrivateDownloadCount, 0);
 
   let listener = {
     phase: 1,
@@ -146,35 +116,21 @@ function run_test() {
         // We need to wait until Download-C has started, because otherwise it
         // won't be resumable, so the private browsing mode won't correctly pause it.
         case dm.DOWNLOAD_DOWNLOADING:
-          if (aDownload.id == downloadC && !this.handledC && this.phase == 2) {
+          if (aDownload.guid == downloadC && !this.handledC && this.phase == 2) {
             // Sanity check: Download-C must be resumable
             do_check_true(dlC.resumable);
 
-            // Enter private browsing mode immediately
-            pb.privateBrowsingEnabled = true;
-            do_check_true(pb.privateBrowsingEnabled);
-
-            // Check that Download-C is paused and not accessible
-            do_check_eq(dlC.state, dm.DOWNLOAD_PAUSED);
-            do_check_eq(dm.activeDownloadCount, 0);
-            do_check_false(is_download_available(downloadC, downloadCSource,
-              fileC, downloadCName));
-
-            // Exit private browsing mode
-            pb.privateBrowsingEnabled = false;
-            do_check_false(pb.privateBrowsingEnabled);
-
             // Check that Download-A is accessible
-            do_check_true(is_download_available(downloadA, downloadASource,
-              fileA, downloadAName));
+            expect_download_present(downloadA, downloadASource,
+              fileA, downloadAName, false);
 
             // Check that Download-B is not accessible
-            do_check_false(is_download_available(downloadB, downloadBSource,
-              fileB, downloadBName));
+            expect_download_absent(downloadB, downloadBSource,
+              fileB, downloadBName, true);
 
             // Check that Download-C is accessible
-            do_check_true(is_download_available(downloadC, downloadCSource,
-              fileC, downloadCName));
+            expect_download_present(downloadC, downloadCSource,
+              fileC, downloadCName, false);
 
             // only perform these checks the first time that Download-C is started
             this.handledC = true;
@@ -196,29 +152,23 @@ function run_test() {
         case 1: {
           do_check_eq(dm.activeDownloadCount, 0);
 
-          // Enter private browsing mode
-          pb.privateBrowsingEnabled = true;
-          do_check_true(pb.privateBrowsingEnabled);
-
-          // Check that Download-A is not accessible
-          do_check_false(is_download_available(downloadA, downloadASource,
-            fileA, downloadAName));
-
           // Create Download-B
           let dlB = addDownload({
+            isPrivate: true,
             targetFile: fileB,
             sourceURI: downloadBSource,
             downloadName: downloadBName,
             runBeforeStart: function (aDownload) {
               // Check that Download-B is retrievable
-              do_check_eq(dm.activeDownloadCount, 1);
-              do_check_true(is_active_download_available(aDownload.id,
-                downloadBSource, fileB, downloadBName));
-              do_check_true(is_download_available(aDownload.id,
-                downloadBSource, fileB, downloadBName));
+              do_check_eq(dm.activePrivateDownloadCount, 1);
+              do_check_eq(dm.activeDownloadCount, 0);
+              do_check_true(is_active_download_available(aDownload.guid,
+                downloadBSource, fileB, downloadBName, true));
+              expect_download_present(aDownload.guid,
+                downloadBSource, fileB, downloadBName, true);
             }
           });
-          downloadB = dlB.id;
+          downloadB = dlB.guid;
 
           // wait for Download-B to finish
           ++this.phase;
@@ -228,57 +178,56 @@ function run_test() {
         case 2: {
           do_check_eq(dm.activeDownloadCount, 0);
 
-          // Exit private browsing mode
-          pb.privateBrowsingEnabled = false;
-          do_check_false(pb.privateBrowsingEnabled);
-
-          // Check that Download-A is accessible
-          do_check_true(is_download_available(downloadA, downloadASource,
-            fileA, downloadAName));
-
-          // Check that Download-B is not accessible
-          do_check_false(is_download_available(downloadB, downloadBSource,
-            fileB, downloadBName));
+          // Simulate last private browsing context triggering cleanup
+          Services.obs.notifyObservers(null, "last-pb-context-exited", null);
 
           // Create Download-C
           httpserv.start(4444);
           dlC = addDownload({
+            isPrivate: false,
             targetFile: fileC,
             sourceURI: downloadCSource,
             downloadName: downloadCName,
             runBeforeStart: function (aDownload) {
               // Check that Download-C is retrievable
-              do_check_eq(dm.activeDownloadCount, 1);
-              do_check_true(is_active_download_available(aDownload.id,
-                downloadCSource, fileC, downloadCName));
-              do_check_true(is_download_available(aDownload.id,
-                downloadCSource, fileC, downloadCName));
+              do_check_eq(dm.activePrivateDownloadCount, 0);
+              do_check_true(is_active_download_available(aDownload.guid,
+                downloadCSource, fileC, downloadCName, false));
+              expect_download_present(aDownload.guid,
+                downloadCSource, fileC, downloadCName, false);
             }
           });
-          downloadC = dlC.id;
+          downloadC = dlC.guid;
 
           // wait for Download-C to finish
           ++this.phase;
+
+          // Check that Download-A is accessible
+          expect_download_present(downloadA, downloadASource,
+            fileA, downloadAName, false);
+
+          // Check that Download-B is not accessible
+          expect_download_absent(downloadB, downloadBSource,
+            fileB, downloadBName, true);
         }
         break;
 
         case 3: {
-          do_check_eq(dm.activeDownloadCount, 0);
+          do_check_eq(dm.activePrivateDownloadCount, 0);
 
           // Check that Download-A is accessible
-          do_check_true(is_download_available(downloadA, downloadASource,
-            fileA, downloadAName));
+          expect_download_present(downloadA, downloadASource,
+            fileA, downloadAName, false);
 
           // Check that Download-B is not accessible
-          do_check_false(is_download_available(downloadB, downloadBSource,
-            fileB, downloadBName));
+          expect_download_absent(downloadB, downloadBSource,
+            fileB, downloadBName, true);
 
           // Check that Download-C is accessible
-          do_check_true(is_download_available(downloadC, downloadCSource,
-            fileC, downloadCName));
+          expect_download_present(downloadC, downloadCSource,
+            fileC, downloadCName, false);
 
           // cleanup
-          prefBranch.clearUserPref("browser.privatebrowsing.keep_current_session");
           dm.removeListener(this);
           httpserv.stop(do_test_finished);
         }
@@ -291,8 +240,8 @@ function run_test() {
     }
   };
 
-  dm.addListener(listener);
-  dm.addListener(getDownloadListener());
+  dm.addPrivacyAwareListener(listener);
+  dm.addPrivacyAwareListener(getDownloadListener());
 
   // properties of Download-A
   let downloadA = -1;
@@ -328,17 +277,18 @@ function run_test() {
 
   // Create Download-A
   let dlA = addDownload({
+    isPrivate: false,
     targetFile: fileA,
     sourceURI: downloadASource,
     downloadName: downloadAName,
     runBeforeStart: function (aDownload) {
       // Check that Download-A is retrievable
-      do_check_eq(dm.activeDownloadCount, 1);
-      do_check_true(is_active_download_available(aDownload.id, downloadASource, fileA, downloadAName));
-      do_check_true(is_download_available(aDownload.id, downloadASource, fileA, downloadAName));
+      do_check_eq(dm.activePrivateDownloadCount, 0);
+      do_check_true(is_active_download_available(aDownload.guid, downloadASource, fileA, downloadAName, false));
+      expect_download_present(aDownload.guid, downloadASource, fileA, downloadAName, false);
     }
   });
-  downloadA = dlA.id;
+  downloadA = dlA.guid;
 
   // wait for Download-A to finish
 }

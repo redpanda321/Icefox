@@ -1,46 +1,11 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Ian McGreer <mcgreer@netscape.com>
- *   Kai Engert <kengert@redhat.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef _NS_CERTTREE_H_
 #define _NS_CERTTREE_H_
 
 #include "nsCOMPtr.h"
-#include "nsAutoPtr.h"
 #include "nsIServiceManager.h"
 #include "nsICertTree.h"
 #include "nsITreeView.h"
@@ -52,6 +17,7 @@
 #include "pldhash.h"
 #include "nsIX509CertDB.h"
 #include "nsCertOverrideService.h"
+#include "mozilla/Attributes.h"
 
 
 typedef struct treeArrayElStr treeArrayEl;
@@ -61,7 +27,7 @@ struct CompareCacheHashEntry {
   CompareCacheHashEntry();
 
   void *key; // no ownership
-  PRPackedBool mCritInit[max_criterions];
+  bool mCritInit[max_criterions];
   nsXPIDLString mCrit[max_criterions];
 };
 
@@ -71,17 +37,17 @@ struct CompareCacheHashEntryPtr : PLDHashEntryHdr {
   CompareCacheHashEntry *entry;
 };
 
-class nsCertAddonInfo : public nsISupports
+class nsCertAddonInfo MOZ_FINAL : public nsISupports
 {
 public:
   NS_DECL_ISUPPORTS
 
   nsCertAddonInfo() : mUsageCount(0) {}
 
-  nsRefPtr<nsIX509Cert> mCert;
+  mozilla::RefPtr<nsIX509Cert> mCert;
   // how many display entries reference this?
   // (and therefore depend on the underlying cert)
-  PRInt32 mUsageCount;
+  int32_t mUsageCount;
 };
 
 class nsCertTreeDispInfo : public nsICertTreeItem
@@ -94,14 +60,14 @@ public:
   nsCertTreeDispInfo(nsCertTreeDispInfo &other);
   virtual ~nsCertTreeDispInfo();
 
-  nsRefPtr<nsCertAddonInfo> mAddonInfo;
+  mozilla::RefPtr<nsCertAddonInfo> mAddonInfo;
   enum {
     direct_db, host_port_override
   } mTypeOfEntry;
   nsCString mAsciiHost;
-  PRInt32 mPort;
+  int32_t mPort;
   nsCertOverride::OverrideBits mOverrideBits;
-  PRBool mIsTemporary;
+  bool mIsTemporary;
   nsCOMPtr<nsIX509Cert> mCert;
 };
 
@@ -127,45 +93,46 @@ protected:
 
   static CompareCacheHashEntry *getCacheEntry(void *cache, void *aCert);
   static void CmpInitCriterion(nsIX509Cert *cert, CompareCacheHashEntry *entry,
-                               sortCriterion crit, PRInt32 level);
-  static PRInt32 CmpByCrit(nsIX509Cert *a, CompareCacheHashEntry *ace, 
+                               sortCriterion crit, int32_t level);
+  static int32_t CmpByCrit(nsIX509Cert *a, CompareCacheHashEntry *ace, 
                            nsIX509Cert *b, CompareCacheHashEntry *bce, 
-                           sortCriterion crit, PRInt32 level);
-  static PRInt32 CmpBy(void *cache, nsIX509Cert *a, nsIX509Cert *b, 
+                           sortCriterion crit, int32_t level);
+  static int32_t CmpBy(void *cache, nsIX509Cert *a, nsIX509Cert *b, 
                        sortCriterion c0, sortCriterion c1, sortCriterion c2);
-  static PRInt32 CmpCACert(void *cache, nsIX509Cert *a, nsIX509Cert *b);
-  static PRInt32 CmpWebSiteCert(void *cache, nsIX509Cert *a, nsIX509Cert *b);
-  static PRInt32 CmpUserCert(void *cache, nsIX509Cert *a, nsIX509Cert *b);
-  static PRInt32 CmpEmailCert(void *cache, nsIX509Cert *a, nsIX509Cert *b);
-  nsCertCompareFunc GetCompareFuncFromCertType(PRUint32 aType);
-  PRInt32 CountOrganizations();
+  static int32_t CmpCACert(void *cache, nsIX509Cert *a, nsIX509Cert *b);
+  static int32_t CmpWebSiteCert(void *cache, nsIX509Cert *a, nsIX509Cert *b);
+  static int32_t CmpUserCert(void *cache, nsIX509Cert *a, nsIX509Cert *b);
+  static int32_t CmpEmailCert(void *cache, nsIX509Cert *a, nsIX509Cert *b);
+  nsCertCompareFunc GetCompareFuncFromCertType(uint32_t aType);
+  int32_t CountOrganizations();
 
-  nsresult GetCertsByType(PRUint32 aType, nsCertCompareFunc aCertCmpFn,
+  nsresult GetCertsByType(uint32_t aType, nsCertCompareFunc aCertCmpFn,
                           void *aCertCmpFnArg);
 
-  nsresult GetCertsByTypeFromCache(nsINSSCertCache *aCache, PRUint32 aType,
+  nsresult GetCertsByTypeFromCache(nsINSSCertCache *aCache, uint32_t aType,
                                    nsCertCompareFunc aCertCmpFn, void *aCertCmpFnArg);
 private:
-  nsTArray< nsRefPtr<nsCertTreeDispInfo> > mDispInfo;
+  nsTArray< mozilla::RefPtr<nsCertTreeDispInfo> > mDispInfo;
   nsCOMPtr<nsITreeBoxObject>  mTree;
   nsCOMPtr<nsITreeSelection>  mSelection;
   treeArrayEl                *mTreeArray;
-  PRInt32                         mNumOrgs;
-  PRInt32                         mNumRows;
+  int32_t                         mNumOrgs;
+  int32_t                         mNumRows;
   PLDHashTable mCompareCache;
   nsCOMPtr<nsINSSComponent> mNSSComponent;
   nsCOMPtr<nsICertOverrideService> mOverrideService;
+  mozilla::RefPtr<nsCertOverrideService> mOriginalOverrideService;
 
-  treeArrayEl *GetThreadDescAtIndex(PRInt32 _index);
+  treeArrayEl *GetThreadDescAtIndex(int32_t _index);
   already_AddRefed<nsIX509Cert> 
-    GetCertAtIndex(PRInt32 _index, PRInt32 *outAbsoluteCertOffset = nsnull);
-  already_AddRefed<nsCertTreeDispInfo> 
-    GetDispInfoAtIndex(PRInt32 index, PRInt32 *outAbsoluteCertOffset = nsnull);
+    GetCertAtIndex(int32_t _index, int32_t *outAbsoluteCertOffset = nullptr);
+  mozilla::TemporaryRef<nsCertTreeDispInfo>
+    GetDispInfoAtIndex(int32_t index, int32_t *outAbsoluteCertOffset = nullptr);
   void FreeCertArray();
   nsresult UpdateUIContents();
 
   nsresult GetCertsByTypeFromCertList(CERTCertList *aCertList,
-                                      PRUint32 aType,
+                                      uint32_t aType,
                                       nsCertCompareFunc  aCertCmpFn,
                                       void              *aCertCmpFnArg);
 

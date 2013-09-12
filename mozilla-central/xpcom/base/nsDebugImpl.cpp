@@ -1,45 +1,17 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   IBM Corp.
- *   Henry Sobotka
- *   Benjamin Smedberg <benjamin@smedbergs.us>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+// Chromium headers must come before Mozilla headers.
+#include "base/process_util.h"
 
 #include "nsDebugImpl.h"
 #include "nsDebug.h"
+#ifdef MOZ_CRASHREPORTER
+# include "nsExceptionHandler.h"
+#endif
+#include "nsStringGlue.h"
 #include "prprf.h"
 #include "prlog.h"
 #include "prinit.h"
@@ -54,12 +26,7 @@
 #include <android/log.h>
 #endif
 
-#if defined(XP_BEOS)
-/* For DEBUGGER macros */
-#include <Debug.h>
-#endif
-
-#if defined(XP_UNIX) || defined(_WIN32) || defined(XP_OS2) || defined(XP_BEOS)
+#if defined(XP_UNIX) || defined(_WIN32) || defined(XP_OS2)
 /* for abort() and getenv() */
 #include <stdlib.h>
 #endif
@@ -74,6 +41,13 @@
 #if defined(XP_WIN)
 #include <tchar.h>
 #include "nsString.h"
+#endif
+
+#if defined(XP_MACOSX)
+#include <stdbool.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/sysctl.h>
 #endif
 
 #include "mozilla/mozalloc_abort.h"
@@ -101,7 +75,12 @@ Break(const char *aMsg);
 #include <stdlib.h>
 #endif
 
-static PRInt32 gAssertionCount = 0;
+using namespace mozilla;
+
+static bool sIsMultiprocess = false;
+static const char *sMultiprocessDescription = NULL;
+
+static int32_t gAssertionCount = 0;
 
 NS_IMPL_QUERY_INTERFACE2(nsDebugImpl, nsIDebug, nsIDebug2)
 
@@ -119,49 +98,90 @@ nsDebugImpl::Release()
 
 NS_IMETHODIMP
 nsDebugImpl::Assertion(const char *aStr, const char *aExpr,
-                       const char *aFile, PRInt32 aLine)
+                       const char *aFile, int32_t aLine)
 {
   NS_DebugBreak(NS_DEBUG_ASSERTION, aStr, aExpr, aFile, aLine);
   return NS_OK;
 }
 
 NS_IMETHODIMP
-nsDebugImpl::Warning(const char *aStr, const char *aFile, PRInt32 aLine)
+nsDebugImpl::Warning(const char *aStr, const char *aFile, int32_t aLine)
 {
-  NS_DebugBreak(NS_DEBUG_WARNING, aStr, nsnull, aFile, aLine);
+  NS_DebugBreak(NS_DEBUG_WARNING, aStr, nullptr, aFile, aLine);
   return NS_OK;
 }
 
 NS_IMETHODIMP
-nsDebugImpl::Break(const char *aFile, PRInt32 aLine)
+nsDebugImpl::Break(const char *aFile, int32_t aLine)
 {
-  NS_DebugBreak(NS_DEBUG_BREAK, nsnull, nsnull, aFile, aLine);
+  NS_DebugBreak(NS_DEBUG_BREAK, nullptr, nullptr, aFile, aLine);
   return NS_OK;
 }
 
 NS_IMETHODIMP
-nsDebugImpl::Abort(const char *aFile, PRInt32 aLine)
+nsDebugImpl::Abort(const char *aFile, int32_t aLine)
 {
-  NS_DebugBreak(NS_DEBUG_ABORT, nsnull, nsnull, aFile, aLine);
+  NS_DebugBreak(NS_DEBUG_ABORT, nullptr, nullptr, aFile, aLine);
   return NS_OK;
 }
 
 NS_IMETHODIMP
-nsDebugImpl::GetIsDebugBuild(PRBool* aResult)
+nsDebugImpl::GetIsDebugBuild(bool* aResult)
 {
 #ifdef DEBUG
-  *aResult = PR_TRUE;
+  *aResult = true;
 #else
-  *aResult = PR_FALSE;
+  *aResult = false;
 #endif
   return NS_OK;
 }
 
 NS_IMETHODIMP
-nsDebugImpl::GetAssertionCount(PRInt32* aResult)
+nsDebugImpl::GetAssertionCount(int32_t* aResult)
 {
   *aResult = gAssertionCount;
   return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDebugImpl::GetIsDebuggerAttached(bool* aResult)
+{
+  *aResult = false;
+
+#if defined(XP_WIN)
+  *aResult = ::IsDebuggerPresent();
+#elif defined(XP_MACOSX)
+  // Specify the info we're looking for
+  int mib[4];
+  mib[0] = CTL_KERN;
+  mib[1] = KERN_PROC;
+  mib[2] = KERN_PROC_PID;
+  mib[3] = getpid();
+  size_t mibSize = sizeof(mib) / sizeof(int);
+
+  struct kinfo_proc info;
+  size_t infoSize = sizeof(info);
+  memset(&info, 0, infoSize);
+
+  if (sysctl(mib, mibSize, &info, &infoSize, NULL, 0)) {
+    // if the call fails, default to false
+    *aResult = false;
+    return NS_OK;
+  }
+
+  if (info.kp_proc.p_flag & P_TRACED) {
+    *aResult = true;
+  }
+#endif
+
+  return NS_OK;
+}
+
+/* static */ void
+nsDebugImpl::SetMultiprocessMode(const char *aDesc)
+{
+  sIsMultiprocess = true;
+  sMultiprocessDescription = aDesc;
 }
 
 /**
@@ -232,11 +252,11 @@ struct FixedBuffer
   FixedBuffer() : curlen(0) { buffer[0] = '\0'; }
 
   char buffer[1000];
-  PRUint32 curlen;
+  uint32_t curlen;
 };
 
-static PRIntn
-StuffFixedBuffer(void *closure, const char *buf, PRUint32 len)
+static int
+StuffFixedBuffer(void *closure, const char *buf, uint32_t len)
 {
   if (!len)
     return 0;
@@ -260,8 +280,8 @@ StuffFixedBuffer(void *closure, const char *buf, PRUint32 len)
 }
 
 EXPORT_XPCOM_API(void)
-NS_DebugBreak(PRUint32 aSeverity, const char *aStr, const char *aExpr,
-              const char *aFile, PRInt32 aLine)
+NS_DebugBreak(uint32_t aSeverity, const char *aStr, const char *aExpr,
+              const char *aFile, int32_t aLine)
 {
    InitLog();
 
@@ -289,19 +309,33 @@ NS_DebugBreak(PRUint32 aSeverity, const char *aStr, const char *aExpr,
      aSeverity = NS_DEBUG_WARNING;
    };
 
-   PR_sxprintf(StuffFixedBuffer, &buf, "%s: ", sevString);
+#  define PrintToBuffer(...) PR_sxprintf(StuffFixedBuffer, &buf, __VA_ARGS__)
+
+   // If we're multiprocess, print "[PID]" or "[Desc PID]" at the beginning of
+   // the message.
+   if (sIsMultiprocess) {
+     PrintToBuffer("[");
+     if (sMultiprocessDescription) {
+       PrintToBuffer("%s ", sMultiprocessDescription);
+     }
+     PrintToBuffer("%d] ", base::GetCurrentProcId());
+   }
+
+   PrintToBuffer("%s: ", sevString);
 
    if (aStr)
-     PR_sxprintf(StuffFixedBuffer, &buf, "%s: ", aStr);
+     PrintToBuffer("%s: ", aStr);
 
    if (aExpr)
-     PR_sxprintf(StuffFixedBuffer, &buf, "'%s', ", aExpr);
+     PrintToBuffer("'%s', ", aExpr);
 
    if (aFile)
-     PR_sxprintf(StuffFixedBuffer, &buf, "file %s, ", aFile);
+     PrintToBuffer("file %s, ", aFile);
 
    if (aLine != -1)
-     PR_sxprintf(StuffFixedBuffer, &buf, "line %d", aLine);
+     PrintToBuffer("line %d", aLine);
+
+#  undef PrintToBuffer
 
    // Write out the message to the debug log
    PR_LOG(gDebugLog, ll, ("%s", buf.buffer));
@@ -329,17 +363,27 @@ NS_DebugBreak(PRUint32 aSeverity, const char *aStr, const char *aExpr,
      Break(buf.buffer);
      return;
 
-   case NS_DEBUG_ABORT:
+   case NS_DEBUG_ABORT: {
+#if defined(MOZ_CRASHREPORTER)
+     nsCString note("xpcom_runtime_abort(");
+     note += buf.buffer;
+     note += ")";
+     CrashReporter::AppendAppNotesToCrashReport(note);
+#endif  // MOZ_CRASHREPORTER
+
 #if defined(DEBUG) && defined(_WIN32)
      RealBreak();
 #endif
+#ifdef DEBUG
      nsTraceRefcntImpl::WalkTheStack(stderr);
+#endif
      Abort(buf.buffer);
      return;
    }
+   }
 
    // Now we deal with assertions
-   PR_AtomicIncrement(&gAssertionCount);
+   PR_ATOMIC_INCREMENT(&gAssertionCount);
 
    switch (GetAssertBehavior()) {
    case NS_ASSERT_WARN:
@@ -383,18 +427,24 @@ static void
 RealBreak()
 {
 #if defined(_WIN32)
-#ifndef WINCE
   ::DebugBreak();
-#endif
 #elif defined(XP_OS2)
    asm("int $3");
-#elif defined(XP_BEOS)
-#elif defined(XP_MACOSX)
+#elif defined(XP_MACOSX) || defined(XP_IOS)
    raise(SIGTRAP);
 #elif defined(__GNUC__) && (defined(__i386__) || defined(__i386) || defined(__x86_64__))
    asm("int $3");
 #elif defined(__arm__)
-   asm("BKPT #0");
+   asm(
+#ifdef __ARM_ARCH_4T__
+/* ARMv4T doesn't support the BKPT instruction, so if the compiler target
+ * is ARMv4T, we want to ensure the assembler will understand that ARMv5T
+ * instruction, while keeping the resulting object tagged as ARMv4T.
+ */
+       ".arch armv5t\n"
+       ".object_arch armv4t\n"
+#endif
+       "BKPT #0");
 #elif defined(SOLARIS)
 #if defined(__i386__) || defined(__i386) || defined(__x86_64__)
    asm("int $3");
@@ -402,7 +452,7 @@ RealBreak()
    raise(SIGTRAP);
 #endif
 #else
-#warning don't know how to break on this platform  
+#warning do not know how to break on this platform
 #endif
 }
 
@@ -411,7 +461,6 @@ static void
 Break(const char *aMsg)
 {
 #if defined(_WIN32)
-#ifndef WINCE // we really just want to crash for now
   static int ignoreDebugger;
   if (!ignoreDebugger) {
     const char *shouldIgnoreDebugger = getenv("XPCOM_DEBUG_DLG");
@@ -445,7 +494,7 @@ Break(const char *aMsg)
        NULL != 
        wcscpy((WCHAR*)
        pName+1, L"windbgdlg.exe") &&
-       CreateProcessW((LPCWSTR)executable, (LPWSTR)msgCopy, NULL, NULL, PR_FALSE,
+       CreateProcessW((LPCWSTR)executable, (LPWSTR)msgCopy, NULL, NULL, false,
                      DETACHED_PROCESS | NORMAL_PRIORITY_CLASS,
                      NULL, NULL, &si, &pi)) {
       WaitForSingleObject(pi.hProcess, INFINITE);
@@ -467,7 +516,6 @@ Break(const char *aMsg)
   }
 
   RealBreak();
-#endif // WINCE
 #elif defined(XP_OS2)
    char msg[1200];
    PR_snprintf(msg, sizeof(msg),
@@ -490,9 +538,6 @@ Break(const char *aMsg)
      return;
 
    RealBreak();
-#elif defined(XP_BEOS)
-   DEBUGGER(aMsg);
-   RealBreak();
 #elif defined(XP_MACOSX)
    /* Note that we put this Mac OS X test above the GNUC/x86 test because the
     * GNUC/x86 test is also true on Intel Mac OS X and we want the PPC/x86
@@ -506,7 +551,7 @@ Break(const char *aMsg)
 #elif defined(SOLARIS)
    RealBreak();
 #else
-#warning don't know how to break on this platform
+#warning do not know how to break on this platform
 #endif
 }
 
@@ -523,7 +568,7 @@ nsDebugImpl::Create(nsISupports* outer, const nsIID& aIID, void* *aInstancePtr)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NS_COM nsresult
+nsresult
 NS_ErrorAccordingToNSPR()
 {
     PRErrorCode err = PR_GetError();
@@ -549,11 +594,11 @@ NS_ErrorAccordingToNSPR()
 ////////////////////////////////////////////////////////////////////////////////
 
 #ifdef XP_WIN
-NS_COM PRBool sXPCOMHasLoadedNewDLLs = PR_FALSE;
+bool sXPCOMHasLoadedNewDLLs = false;
 
 NS_EXPORT void
 NS_SetHasLoadedNewDLLs()
 {
-  sXPCOMHasLoadedNewDLLs = PR_TRUE;
+  sXPCOMHasLoadedNewDLLs = true;
 }
 #endif

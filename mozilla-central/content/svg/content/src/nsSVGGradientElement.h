@@ -1,57 +1,27 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SVG project.
- *
- * The Initial Developer of the Original Code is
- * Scooter Morris.
- * Portions created by the Initial Developer are Copyright (C) 2004
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Scooter Morris <scootermorris@comcast.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef __NS_SVGGRADIENTELEMENT_H__
 #define __NS_SVGGRADIENTELEMENT_H__
 
 #include "nsIDOMSVGURIReference.h"
 #include "nsIDOMSVGGradientElement.h"
+#include "DOMSVGTests.h"
 #include "nsIDOMSVGUnitTypes.h"
 #include "nsSVGStylableElement.h"
 #include "nsSVGLength2.h"
 #include "nsSVGEnum.h"
 #include "nsSVGString.h"
+#include "SVGAnimatedTransformList.h"
 
 //--------------------- Gradients------------------------
 
 typedef nsSVGStylableElement nsSVGGradientElementBase;
 
 class nsSVGGradientElement : public nsSVGGradientElementBase,
+                             public DOMSVGTests,
                              public nsIDOMSVGURIReference,
                              public nsIDOMSVGUnitTypes
 {
@@ -71,13 +41,17 @@ public:
   NS_DECL_NSIDOMSVGURIREFERENCE
 
   // nsIContent
-  NS_IMETHOD_(PRBool) IsAttributeMapped(const nsIAtom* aAttribute) const;
+  NS_IMETHOD_(bool) IsAttributeMapped(const nsIAtom* aAttribute) const;
+
+  virtual mozilla::SVGAnimatedTransformList*
+    GetAnimatedTransformList(uint32_t aFlags = 0);
+  virtual nsIAtom* GetTransformListAttrName() const {
+    return nsGkAtoms::gradientTransform;
+  }
 
 protected:
   virtual EnumAttributesInfo GetEnumInfo();
   virtual StringAttributesInfo GetStringInfo();
-
-  virtual void DidAnimateTransform();
 
   enum { GRADIENTUNITS, SPREADMETHOD };
   nsSVGEnum mEnumAttributes[2];
@@ -88,14 +62,8 @@ protected:
   nsSVGString mStringAttributes[1];
   static StringInfo sStringInfo[1];
 
-  virtual nsresult BeforeSetAttr(PRInt32 aNamespaceID, nsIAtom* aName,
-                                 const nsAString* aValue, PRBool aNotify);
-
   // nsIDOMSVGGradientElement values
-  nsCOMPtr<nsIDOMSVGAnimatedTransformList> mGradientTransform;
-
-  // helper
-  nsresult CreateTransformList();
+  nsAutoPtr<mozilla::SVGAnimatedTransformList> mGradientTransform;
 };
 
 //---------------------Linear Gradients------------------------
@@ -125,12 +93,14 @@ public:
   // The Gradient Element base class implements these
   NS_FORWARD_NSIDOMSVGELEMENT(nsSVGLinearGradientElementBase::)
 
-  NS_FORWARD_NSIDOMNODE(nsSVGLinearGradientElementBase::)
-  NS_FORWARD_NSIDOMELEMENT(nsSVGLinearGradientElementBase::)
+  NS_FORWARD_NSIDOMNODE_TO_NSINODE
+  NS_FORWARD_NSIDOMELEMENT_TO_GENERIC
 
   virtual nsresult Clone(nsINodeInfo *aNodeInfo, nsINode **aResult) const;
 
   virtual nsXPCClassInfo* GetClassInfo();
+
+  virtual nsIDOMNode* AsDOMNode() { return this; }
 protected:
 
   virtual LengthAttributesInfo GetLengthInfo();
@@ -167,13 +137,15 @@ public:
   NS_DECL_NSIDOMSVGRADIALGRADIENTELEMENT
 
   // xxx I wish we could use virtual inheritance
-  NS_FORWARD_NSIDOMNODE(nsSVGRadialGradientElementBase::)
-  NS_FORWARD_NSIDOMELEMENT(nsSVGRadialGradientElementBase::)
+  NS_FORWARD_NSIDOMNODE_TO_NSINODE
+  NS_FORWARD_NSIDOMELEMENT_TO_GENERIC
   NS_FORWARD_NSIDOMSVGELEMENT(nsSVGRadialGradientElementBase::)
 
   virtual nsresult Clone(nsINodeInfo *aNodeInfo, nsINode **aResult) const;
 
   virtual nsXPCClassInfo* GetClassInfo();
+
+  virtual nsIDOMNode* AsDOMNode() { return this; }
 protected:
 
   virtual LengthAttributesInfo GetLengthInfo();

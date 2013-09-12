@@ -6,7 +6,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=369370
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   <title>Test for Bug 369370</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>        
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -33,12 +32,15 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=369370
         is(elements.length, 1, "looking for imagedoc img");
         var img = elements[0];
 
-        is(kidDoc.documentElement.clientWidth,  400, "Checking doc width");
-        is(kidDoc.documentElement.clientHeight, 300, "Checking doc height");
+        // Need to use innerWidth/innerHeight of the window
+        // since the containing image is absolutely positioned,
+        // causing clientHeight to be zero.
+        is(kidWin.innerWidth, 400, "Checking doc width");
+        is(kidWin.innerHeight, 300, "Checking doc height");
 
         // Image just loaded and is scaled to window size.
-        is(img.width,  378, "image width");
-        is(img.height, 284, "image height");
+        is(img.width,  400, "image width");
+        is(img.height, 300, "image height");
         is(kidDoc.body.scrollLeft,  0, "Checking scrollLeft");
         is(kidDoc.body.scrollTop,   0, "Checking scrollTop");
 
@@ -59,8 +61,8 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=369370
         img.dispatchEvent(event);
         ok(true, "----- click 2 -----");
 
-        is(img.width,  378, "image width");
-        is(img.height, 284, "image height");
+        is(img.width,  400, "image width");
+        is(img.height, 300, "image height");
         is(kidDoc.body.scrollLeft,  0, "Checking scrollLeft");
         is(kidDoc.body.scrollTop,   0, "Checking scrollTop");
 
@@ -72,8 +74,8 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=369370
 
         is(img.width,  800, "image width");
         is(img.height, 600, "image height");
-        is(kidDoc.body.scrollLeft,  408, "Checking scrollLeft");
-        is(kidDoc.body.scrollTop,   316, "Checking scrollTop");
+        is(kidDoc.body.scrollLeft,  400, "Checking scrollLeft");
+        is(kidDoc.body.scrollTop,   300, "Checking scrollTop");
 
         // ========== test 4 ==========
         // Click there again to zoom out
@@ -81,18 +83,14 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=369370
         img.dispatchEvent(event);
         ok(true, "----- click 4 -----");
 
-        is(img.width,  378, "image width");
-        is(img.height, 284, "image height");
+        is(img.width,  400, "image width");
+        is(img.height, 300, "image height");
         is(kidDoc.body.scrollLeft,  0, "Checking scrollLeft");
         is(kidDoc.body.scrollTop,   0, "Checking scrollTop");
 
         kidWin.close();
         netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
-        try {
-          prefs.clearUserPref("browser.enable_automatic_image_resizing");
-        } catch (ex) {
-          // throws if it wasn't already set because app default was true
-        }
+        prefs.clearUserPref("browser.enable_automatic_image_resizing");
         SimpleTest.finish();
     }
 

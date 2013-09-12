@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Zip Writer Component.
- *
- * The Initial Developer of the Original Code is
- * Dave Townsend <dtownsend@oxymoronical.com>.
- *
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK *****
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
 #ifndef _nsZipHeader_h_
@@ -44,6 +11,7 @@
 #include "nsIInputStream.h"
 #include "nsIZipReader.h"
 #include "nsAutoPtr.h"
+#include "mozilla/Attributes.h"
 
 // High word is S_IFREG, low word is DOS file attribute
 #define ZIP_ATTRS_FILE 0x80000000
@@ -55,7 +23,7 @@
 // Combine file type attributes with unix style permissions
 #define ZIP_ATTRS(p, a) ((p & 0xfff) << 16) | a
 
-class nsZipHeader : public nsIZipEntry
+class nsZipHeader MOZ_FINAL : public nsIZipEntry
 {
 public:
     NS_DECL_ISUPPORTS
@@ -77,7 +45,8 @@ public:
         mDate(0),
         mDisk(0),
         mIAttr(0),
-        mInited(PR_FALSE),
+        mInited(false),
+        mWriteOnClose(false),
         mExtraField(NULL),
         mLocalExtraField(NULL)
     {
@@ -89,35 +58,36 @@ public:
         mLocalExtraField = NULL;
     }
 
-    PRUint32 mCRC;
-    PRUint32 mCSize;
-    PRUint32 mUSize;
-    PRUint32 mEAttr;
-    PRUint32 mOffset;
-    PRUint32 mFieldLength;
-    PRUint32 mLocalFieldLength;
-    PRUint16 mVersionMade;
-    PRUint16 mVersionNeeded;
-    PRUint16 mFlags;
-    PRUint16 mMethod;
-    PRUint16 mTime;
-    PRUint16 mDate;
-    PRUint16 mDisk;
-    PRUint16 mIAttr;
-    PRPackedBool mInited;
+    uint32_t mCRC;
+    uint32_t mCSize;
+    uint32_t mUSize;
+    uint32_t mEAttr;
+    uint32_t mOffset;
+    uint32_t mFieldLength;
+    uint32_t mLocalFieldLength;
+    uint16_t mVersionMade;
+    uint16_t mVersionNeeded;
+    uint16_t mFlags;
+    uint16_t mMethod;
+    uint16_t mTime;
+    uint16_t mDate;
+    uint16_t mDisk;
+    uint16_t mIAttr;
+    bool mInited;
+    bool mWriteOnClose;
     nsCString mName;
     nsCString mComment;
-    nsAutoArrayPtr<PRUint8> mExtraField;
-    nsAutoArrayPtr<PRUint8> mLocalExtraField;
+    nsAutoArrayPtr<uint8_t> mExtraField;
+    nsAutoArrayPtr<uint8_t> mLocalExtraField;
 
-    void Init(const nsACString & aPath, PRTime aDate, PRUint32 aAttr,
-              PRUint32 aOffset);
-    PRUint32 GetFileHeaderLength();
+    void Init(const nsACString & aPath, PRTime aDate, uint32_t aAttr,
+              uint32_t aOffset);
+    uint32_t GetFileHeaderLength();
     nsresult WriteFileHeader(nsIOutputStream *aStream);
-    PRUint32 GetCDSHeaderLength();
+    uint32_t GetCDSHeaderLength();
     nsresult WriteCDSHeader(nsIOutputStream *aStream);
     nsresult ReadCDSHeader(nsIInputStream *aStream);
-    const PRUint8 * GetExtraField(PRUint16 aTag, PRBool aLocal, PRUint16 *aBlockSize);
+    const uint8_t * GetExtraField(uint16_t aTag, bool aLocal, uint16_t *aBlockSize);
 };
 
 #endif

@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 //
 // Eric Vaughan
@@ -53,10 +21,11 @@
 #include "nsBoxLayoutState.h"
 #include "nsGridLayout2.h"
 #include "nsGridRow.h"
+#include "nsHTMLReflowState.h"
 
-already_AddRefed<nsIBoxLayout> NS_NewGridRowGroupLayout()
+already_AddRefed<nsBoxLayout> NS_NewGridRowGroupLayout()
 {
-  nsIBoxLayout* layout = new nsGridRowGroupLayout();
+  nsBoxLayout* layout = new nsGridRowGroupLayout();
   NS_IF_ADDREF(layout);
   return layout;
 } 
@@ -70,18 +39,18 @@ nsGridRowGroupLayout::~nsGridRowGroupLayout()
 }
 
 void
-nsGridRowGroupLayout::ChildAddedOrRemoved(nsIBox* aBox, nsBoxLayoutState& aState)
+nsGridRowGroupLayout::ChildAddedOrRemoved(nsIFrame* aBox, nsBoxLayoutState& aState)
 {
-  PRInt32 index = 0;
+  int32_t index = 0;
   nsGrid* grid = GetGrid(aBox, &index);
-  PRBool isHorizontal = IsHorizontal(aBox);
+  bool isHorizontal = IsHorizontal(aBox);
 
   if (grid)
     grid->RowAddedOrRemoved(aState, index, isHorizontal);
 }
 
 void
-nsGridRowGroupLayout::AddWidth(nsSize& aSize, nscoord aSize2, PRBool aIsHorizontal)
+nsGridRowGroupLayout::AddWidth(nsSize& aSize, nscoord aSize2, bool aIsHorizontal)
 {
   nscoord& size = GET_WIDTH(aSize, aIsHorizontal);
 
@@ -92,7 +61,7 @@ nsGridRowGroupLayout::AddWidth(nsSize& aSize, nscoord aSize2, PRBool aIsHorizont
 }
 
 nsSize
-nsGridRowGroupLayout::GetPrefSize(nsIBox* aBox, nsBoxLayoutState& aState)
+nsGridRowGroupLayout::GetPrefSize(nsIFrame* aBox, nsBoxLayoutState& aState)
 { 
   nsSize vpref = nsGridRowLayout::GetPrefSize(aBox, aState); 
 
@@ -104,16 +73,16 @@ nsGridRowGroupLayout::GetPrefSize(nsIBox* aBox, nsBoxLayoutState& aState)
   * as well.
   */
 
-  PRInt32 index = 0;
+  int32_t index = 0;
   nsGrid* grid = GetGrid(aBox, &index);
 
   if (grid) 
   {
     // make sure we add in extra columns sizes as well
-    PRBool isHorizontal = IsHorizontal(aBox);
-    PRInt32 extraColumns = grid->GetExtraColumnCount(isHorizontal);
-    PRInt32 start = grid->GetColumnCount(isHorizontal) - grid->GetExtraColumnCount(isHorizontal);
-    for (PRInt32 i=0; i < extraColumns; i++)
+    bool isHorizontal = IsHorizontal(aBox);
+    int32_t extraColumns = grid->GetExtraColumnCount(isHorizontal);
+    int32_t start = grid->GetColumnCount(isHorizontal) - grid->GetExtraColumnCount(isHorizontal);
+    for (int32_t i=0; i < extraColumns; i++)
     {
       nscoord pref =
         grid->GetPrefRowHeight(aState, i+start, !isHorizontal); // GetPrefColumnWidth
@@ -126,20 +95,20 @@ nsGridRowGroupLayout::GetPrefSize(nsIBox* aBox, nsBoxLayoutState& aState)
 }
 
 nsSize
-nsGridRowGroupLayout::GetMaxSize(nsIBox* aBox, nsBoxLayoutState& aState)
+nsGridRowGroupLayout::GetMaxSize(nsIFrame* aBox, nsBoxLayoutState& aState)
 {
  nsSize maxSize = nsGridRowLayout::GetMaxSize(aBox, aState); 
 
-  PRInt32 index = 0;
+  int32_t index = 0;
   nsGrid* grid = GetGrid(aBox, &index);
 
   if (grid) 
   {
     // make sure we add in extra columns sizes as well
-    PRBool isHorizontal = IsHorizontal(aBox);
-    PRInt32 extraColumns = grid->GetExtraColumnCount(isHorizontal);
-    PRInt32 start = grid->GetColumnCount(isHorizontal) - grid->GetExtraColumnCount(isHorizontal);
-    for (PRInt32 i=0; i < extraColumns; i++)
+    bool isHorizontal = IsHorizontal(aBox);
+    int32_t extraColumns = grid->GetExtraColumnCount(isHorizontal);
+    int32_t start = grid->GetColumnCount(isHorizontal) - grid->GetExtraColumnCount(isHorizontal);
+    for (int32_t i=0; i < extraColumns; i++)
     {
       nscoord max =
         grid->GetMaxRowHeight(aState, i+start, !isHorizontal); // GetMaxColumnWidth
@@ -152,20 +121,20 @@ nsGridRowGroupLayout::GetMaxSize(nsIBox* aBox, nsBoxLayoutState& aState)
 }
 
 nsSize
-nsGridRowGroupLayout::GetMinSize(nsIBox* aBox, nsBoxLayoutState& aState)
+nsGridRowGroupLayout::GetMinSize(nsIFrame* aBox, nsBoxLayoutState& aState)
 {
   nsSize minSize = nsGridRowLayout::GetMinSize(aBox, aState); 
 
-  PRInt32 index = 0;
+  int32_t index = 0;
   nsGrid* grid = GetGrid(aBox, &index);
 
   if (grid) 
   {
     // make sure we add in extra columns sizes as well
-    PRBool isHorizontal = IsHorizontal(aBox);
-    PRInt32 extraColumns = grid->GetExtraColumnCount(isHorizontal);
-    PRInt32 start = grid->GetColumnCount(isHorizontal) - grid->GetExtraColumnCount(isHorizontal);
-    for (PRInt32 i=0; i < extraColumns; i++)
+    bool isHorizontal = IsHorizontal(aBox);
+    int32_t extraColumns = grid->GetExtraColumnCount(isHorizontal);
+    int32_t start = grid->GetColumnCount(isHorizontal) - grid->GetExtraColumnCount(isHorizontal);
+    for (int32_t i=0; i < extraColumns; i++)
     {
       nscoord min = 
         grid->GetMinRowHeight(aState, i+start, !isHorizontal); // GetMinColumnWidth
@@ -180,7 +149,7 @@ nsGridRowGroupLayout::GetMinSize(nsIBox* aBox, nsBoxLayoutState& aState)
  * Run down through our children dirtying them recursively.
  */
 void
-nsGridRowGroupLayout::DirtyRows(nsIBox* aBox, nsBoxLayoutState& aState)
+nsGridRowGroupLayout::DirtyRows(nsIFrame* aBox, nsBoxLayoutState& aState)
 {
   if (aBox) {
     // mark us dirty
@@ -188,21 +157,17 @@ nsGridRowGroupLayout::DirtyRows(nsIBox* aBox, nsBoxLayoutState& aState)
     // calling MarkIntrinsicWidthsDirty for every row group.
     aState.PresShell()->FrameNeedsReflow(aBox, nsIPresShell::eTreeChange,
                                          NS_FRAME_IS_DIRTY);
-    nsIBox* child = aBox->GetChildBox();
+    nsIFrame* child = aBox->GetChildBox();
 
     while(child) {
 
       // walk into scrollframes
-      nsIBox* deepChild = nsGrid::GetScrolledBox(child);
+      nsIFrame* deepChild = nsGrid::GetScrolledBox(child);
 
       // walk into other monuments
-      nsCOMPtr<nsIBoxLayout> layout;
-      deepChild->GetLayoutManager(getter_AddRefs(layout));
-      if (layout) {
-        nsCOMPtr<nsIGridPart> monument( do_QueryInterface(layout) );
-        if (monument) 
-          monument->DirtyRows(deepChild, aState);
-      }
+      nsIGridPart* monument = nsGrid::GetPartFromBox(deepChild);
+      if (monument) 
+        monument->DirtyRows(deepChild, aState);
 
       child = child->GetNextBox();
     }
@@ -211,28 +176,24 @@ nsGridRowGroupLayout::DirtyRows(nsIBox* aBox, nsBoxLayoutState& aState)
 
 
 void
-nsGridRowGroupLayout::CountRowsColumns(nsIBox* aBox, PRInt32& aRowCount, PRInt32& aComputedColumnCount)
+nsGridRowGroupLayout::CountRowsColumns(nsIFrame* aBox, int32_t& aRowCount, int32_t& aComputedColumnCount)
 {
   if (aBox) {
-    PRInt32 startCount = aRowCount;
+    int32_t startCount = aRowCount;
 
-    nsIBox* child = aBox->GetChildBox();
+    nsIFrame* child = aBox->GetChildBox();
 
     while(child) {
       
       // first see if it is a scrollframe. If so walk down into it and get the scrolled child
-      nsIBox* deepChild = nsGrid::GetScrolledBox(child);
+      nsIFrame* deepChild = nsGrid::GetScrolledBox(child);
 
-      nsCOMPtr<nsIBoxLayout> layout;
-      deepChild->GetLayoutManager(getter_AddRefs(layout));
-      if (layout) {
-        nsCOMPtr<nsIGridPart> monument( do_QueryInterface(layout) );
-        if (monument) {
-          monument->CountRowsColumns(deepChild, aRowCount, aComputedColumnCount);
-          child = child->GetNextBox();
-          deepChild = child;
-          continue;
-        }
+      nsIGridPart* monument = nsGrid::GetPartFromBox(deepChild);
+      if (monument) {
+        monument->CountRowsColumns(deepChild, aRowCount, aComputedColumnCount);
+        child = child->GetNextBox();
+        deepChild = child;
+        continue;
       }
 
       child = child->GetNextBox();
@@ -249,32 +210,28 @@ nsGridRowGroupLayout::CountRowsColumns(nsIBox* aBox, PRInt32& aRowCount, PRInt32
 /**
  * Fill out the given row structure recursively
  */
-PRInt32 
-nsGridRowGroupLayout::BuildRows(nsIBox* aBox, nsGridRow* aRows)
+int32_t 
+nsGridRowGroupLayout::BuildRows(nsIFrame* aBox, nsGridRow* aRows)
 { 
-  PRInt32 rowCount = 0;
+  int32_t rowCount = 0;
 
   if (aBox) {
-    nsIBox* child = aBox->GetChildBox();
+    nsIFrame* child = aBox->GetChildBox();
 
     while(child) {
       
       // first see if it is a scrollframe. If so walk down into it and get the scrolled child
-      nsIBox* deepChild = nsGrid::GetScrolledBox(child);
+      nsIFrame* deepChild = nsGrid::GetScrolledBox(child);
 
-      nsCOMPtr<nsIBoxLayout> layout;
-      deepChild->GetLayoutManager(getter_AddRefs(layout));
-      if (layout) {
-        nsCOMPtr<nsIGridPart> monument( do_QueryInterface(layout) );
-        if (monument) {
-          rowCount += monument->BuildRows(deepChild, &aRows[rowCount]);
-          child = child->GetNextBox();
-          deepChild = child;
-          continue;
-        }
+      nsIGridPart* monument = nsGrid::GetPartFromBox(deepChild);
+      if (monument) {
+        rowCount += monument->BuildRows(deepChild, &aRows[rowCount]);
+        child = child->GetNextBox();
+        deepChild = child;
+        continue;
       }
 
-      aRows[rowCount].Init(child, PR_TRUE);
+      aRows[rowCount].Init(child, true);
 
       child = child->GetNextBox();
 
@@ -287,7 +244,7 @@ nsGridRowGroupLayout::BuildRows(nsIBox* aBox, nsGridRow* aRows)
 }
 
 nsMargin
-nsGridRowGroupLayout::GetTotalMargin(nsIBox* aBox, PRBool aIsHorizontal)
+nsGridRowGroupLayout::GetTotalMargin(nsIFrame* aBox, bool aIsHorizontal)
 {
   // group have border and padding added to the total margin
 

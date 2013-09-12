@@ -1,42 +1,9 @@
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is Mozilla Communicator client code, released
-# March 31, 1998.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1998
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either of the GNU General Public License Version 2 or later (the "GPL"),
-# or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH		= ..
+DEPTH		= @DEPTH@
 topsrcdir	= @top_srcdir@
 srcdir		= @srcdir@
 VPATH		= @srcdir@
@@ -45,7 +12,7 @@ include $(DEPTH)/config/autoconf.mk
 
 MODULE = build
 
-ifeq (,$(filter WINCE WINNT OS2,$(OS_ARCH)))
+ifeq (,$(filter WINNT OS2,$(OS_ARCH)))
 DIRS		= unix
 endif
 
@@ -53,27 +20,92 @@ ifeq (WINNT,$(OS_ARCH))
 DIRS = win32
 endif
 
-ifdef WINCE
-# We need jemalloc built before the shunt
-ifdef MOZ_MEMORY
-DIRS += wince/tools \
-	$(DEPTH)/memory/jemalloc \
-	wince/shunt \
-	$(DEPTH)/memory/mozalloc \
-	$(NULL)
-else
-DIRS += wince/tools \
-	wince/shunt \
-	$(DEPTH)/memory/mozalloc \
-	$(NULL)
-endif
+ifdef STLPORT_SOURCES
+DIRS += stlport
 endif
 
 DIRS += pgo
 
-ifeq (Android,$(OS_TARGET))
-  DIRS += mobile/sutagent/android
+ifeq (android,$(MOZ_WIDGET_TOOLKIT))
+TEST_DIRS += mobile/sutagent/android \
+          mobile/sutagent/android/watcher \
+          mobile/sutagent/android/ffxcp \
+          mobile/sutagent/android/fencp \
+          mobile/robocop \
+          $(NULL)
 endif
+
+ifdef MOZ_APP_BASENAME
+DIST_FILES = $(srcdir)/application.ini
+
+ifneq (android,$(MOZ_WIDGET_TOOLKIT))
+ifdef MOZ_UPDATER
+DIST_FILES += update-settings.ini
+endif
+endif
+
+ifdef LIBXUL_SDK
+APP_INI_DEPS = $(LIBXUL_DIST)/bin/platform.ini
+else
+APP_INI_DEPS = $(topsrcdir)/config/milestone.txt
+endif
+
+APP_BUILDID := $(shell cat $(DEPTH)/config/buildid)
+APP_INI_DEPS += $(DEPTH)/config/buildid
+
+DEFINES += -DGRE_MILESTONE=$(GRE_MILESTONE) -DAPP_BUILDID=$(APP_BUILDID)
+
+DEFINES += -DMOZ_APP_VERSION="$(MOZ_APP_VERSION)"
+APP_INI_DEPS += $(DEPTH)/config/autoconf.mk
+
+MOZ_SOURCE_STAMP := $(firstword $(shell cd $(topsrcdir)/$(MOZ_BUILD_APP)/.. && hg parent --template="{node|short}\n" 2>/dev/null))
+ifdef MOZ_SOURCE_STAMP
+DEFINES += -DMOZ_SOURCE_STAMP="$(MOZ_SOURCE_STAMP)"
+endif
+
+_dollar=$$
+SOURCE_REPO := $(shell cd $(topsrcdir)/$(MOZ_BUILD_APP)/.. && hg showconfig paths.default 2>/dev/null | head -n1 | sed -e "s/^ssh:/http:/" -e "s/\/$(_dollar)//" )
+ifdef SOURCE_REPO
+DEFINES += -DMOZ_SOURCE_REPO="$(SOURCE_REPO)"
+endif
+
+DEFINES += \
+  -DMOZ_APP_BASENAME="$(MOZ_APP_BASENAME)" \
+  -DMOZ_APP_VENDOR="$(MOZ_APP_VENDOR)" \
+  -DMOZ_APP_ID="$(MOZ_APP_ID)" \
+  -DMAR_CHANNEL_ID="$(MAR_CHANNEL_ID)" \
+  -DACCEPTED_MAR_CHANNEL_IDS="$(ACCEPTED_MAR_CHANNEL_IDS)" \
+  $(NULL)
+
+ifdef MOZ_APP_PROFILE
+DEFINES += -DMOZ_APP_PROFILE="$(MOZ_APP_PROFILE)"
+endif
+
+ifdef MOZILLA_OFFICIAL
+DEFINES += -DMOZILLA_OFFICIAL
+endif
+
+ifdef MOZ_PROFILE_MIGRATOR
+DEFINES += -DMOZ_PROFILE_MIGRATOR
+endif
+
+ifdef MOZ_EXTENSION_MANAGER
+DEFINES += -DMOZ_EXTENSION_MANAGER
+endif
+
+endif
+
+# Put a useful .gdbinit in the bin directory, to be picked up automatically
+# by GDB when we debug executables there.
+# NOTE: Keep .gdbinit in the topsrcdir for people who run gdb from the topsrcdir.
+GDBINIT_FILES := $(topsrcdir)/.gdbinit
+GDBINIT_DEST = $(FINAL_TARGET)
+INSTALL_TARGETS += GDBINIT
+
+PYTHON_UNIT_TESTS := \
+  tests/unit-ConfigStatus.py \
+  tests/test.py \
+  $(NULL)
 
 include $(topsrcdir)/config/rules.mk
 
@@ -90,6 +122,18 @@ _LEAKTEST_FILES =    \
 		leaktest.py \
 		bloatcycle.html \
 		$(topsrcdir)/build/pgo/server-locations.txt \
+		$(topsrcdir)/build/pgo/favicon.ico \
+		$(topsrcdir)/build/pgo/blueprint/sample.html \
+		$(topsrcdir)/build/pgo/blueprint/elements.html \
+		$(topsrcdir)/build/pgo/blueprint/forms.html \
+		$(topsrcdir)/build/pgo/blueprint/grid.html \
+		$(topsrcdir)/build/pgo/blueprint/test.jpg \
+		$(topsrcdir)/build/pgo/blueprint/test-small.jpg \
+		$(topsrcdir)/build/pgo/blueprint/valid.png \
+		$(topsrcdir)/build/pgo/blueprint/screen.css \
+		$(topsrcdir)/build/pgo/blueprint/print.css \
+		$(topsrcdir)/build/pgo/blueprint/grid.png \
+		$(topsrcdir)/build/pgo/blueprint/fancytype-screen.css \
 		$(NULL)
 
 leaktest.py: leaktest.py.in
@@ -97,36 +141,51 @@ leaktest.py: leaktest.py.in
 	chmod +x $@
 GARBAGE += leaktest.py
 
+ifdef MOZ_APP_BASENAME
+$(FINAL_TARGET)/application.ini: $(APP_INI_DEPS)
+
+ifdef MOZ_APP_STATIC_INI
+DEFINES += -DMOZ_APP_STATIC_INI
+
+application.ini.h: appini_header.py $(FINAL_TARGET)/application.ini
+	$(PYTHON) $^ > $@
+export:: application.ini.h
+GARBAGE += application.ini.h
+endif
+endif
+
 libs:: $(_LEAKTEST_FILES)
 	$(INSTALL) $^ $(_LEAKTEST_DIR)
 
+ifdef MOZ_VALGRIND
+_VALGRIND_DIR = $(DEPTH)/_valgrind
+GARBAGE_DIRS += $(_VALGRIND_DIR)
+
+_VALGRIND_FILES = \
+		$(topsrcdir)/build/valgrind/cross-architecture.sup \
+		$(topsrcdir)/build/valgrind/i386-redhat-linux-gnu.sup \
+		$(topsrcdir)/build/valgrind/x86_64-redhat-linux-gnu.sup \
+		$(NULL)
+
+libs:: $(_VALGRIND_FILES)
+	$(INSTALL) $^ $(_VALGRIND_DIR)
+endif
+
 ifdef ENABLE_TESTS
-# Install bloaturls.txt file for tinderbox bloat test.
-libs:: bloaturls.txt
-	$(INSTALL) $< $(DIST)/bin
-
-# Install bloatcycle.html into dist/bin/res, for auto-cycling
-# of bloaturls.txt.  This is for browsers that can't do -f
-# autocycling of URLs.
-libs:: bloatcycle.html
-	$(INSTALL) $< $(DIST)/bin/res
-
 libs:: $(topsrcdir)/tools/rb/fix_stack_using_bpsyms.py
 	$(INSTALL) $< $(DIST)/bin
 
 ifeq ($(OS_ARCH),Darwin)
-libs:: $(topsrcdir)/tools/rb/fix-macosx-stack.pl
-	$(INSTALL) $< $(DIST)/bin
 libs:: $(topsrcdir)/tools/rb/fix_macosx_stack.py
 	$(INSTALL) $< $(DIST)/bin
 
 # Basic unit tests for some stuff in the unify script
 check::
-# build ppc/i386 binaries, and unify them
-	rm -f unify-test-ppc unify-test-i386 unify-test-universal
-	$(HOST_CC) -arch ppc $(srcdir)/unify-test.c -o unify-test-ppc
+# build x64/i386 binaries, and unify them
+	rm -f unify-test-x64 unify-test-i386 unify-test-universal
+	$(HOST_CC) -arch x86_64 $(srcdir)/unify-test.c -o unify-test-x64
 	$(HOST_CC) -arch i386 $(srcdir)/unify-test.c -o unify-test-i386
-	@if ! $(srcdir)/macosx/universal/unify ./unify-test-ppc ./unify-test-i386 \
+	@if ! $(srcdir)/macosx/universal/unify ./unify-test-x64 ./unify-test-i386 \
           ./unify-test-universal; then \
           echo "TEST-UNEXPECTED-FAIL | build/ | unify failed to produce a universal binary!"; \
           false; \
@@ -207,4 +266,5 @@ libs:: $(topsrcdir)/tools/rb/fix-linux-stack.pl
 endif
 
 GARBAGE += $(srcdir)/automationutils.pyc
+
 endif # ENABLE_TESTS

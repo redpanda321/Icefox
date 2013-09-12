@@ -1,43 +1,10 @@
 /*
  * crypto.h - public data structures and prototypes for the crypto library
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Vipul Gupta <vipul.gupta@sun.com>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-/* $Id: blapi.h,v 1.33 2009/03/29 03:45:32 wtc%google.com Exp $ */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+/* $Id: blapi.h,v 1.49 2012/10/11 00:10:26 rrelyea%redhat.com Exp $ */
 
 #ifndef _BLAPI_H_
 #define _BLAPI_H_
@@ -98,10 +65,57 @@ extern SECStatus RSA_PrivateKeyOpDoubleChecked(RSAPrivateKey *  key,
 */
 extern SECStatus RSA_PrivateKeyCheck(RSAPrivateKey *key);
 
+/*
+** Given only minimal private key parameters, fill in the rest of the
+** parameters.
+**
+**
+** All the entries, including those supplied by the caller, will be 
+** overwritten with data alocated out of the arena.
+**
+** If no arena is supplied, one will be created.
+**
+** The following fields must be supplied in order for this function
+** to succeed:
+**   one of either publicExponent or privateExponent
+**   two more of the following 5 parameters (not counting the above).
+**      modulus (n)
+**      prime1  (p)
+**      prime2  (q)
+**      publicExponent (e)
+**      privateExponent (d)
+**
+** NOTE: if only the publicExponent, privateExponent, and one prime is given,
+** then there may be more than one RSA key that matches that combination. If
+** we find 2 possible valid keys that meet this criteria, we return an error.
+** If we return the wrong key, and the original modulus is compared to the
+** new modulus, both can be factored by calculateing gcd(n_old,n_new) to get
+** the common prime.
+**
+** NOTE: in some cases the publicExponent must be less than 2^23 for this
+** function to work correctly. (The case where we have only one of: modulus
+** prime1 and prime2).
+**
+** All parameters will be replaced in the key structure with new parameters
+** allocated out of the arena. There is no attempt to free the old structures.
+** prime1 will always be greater than prime2 (even if the caller supplies the
+** smaller prime as prime1 or the larger prime as prime2). The parameters are
+** not overwritten on failure.
+**
+** While the remaining Chinese remainder theorem parameters (dp,dp, and qinv)
+** can also be used in reconstructing the private key, they are currently
+** ignored in this implementation.
+*/
+extern SECStatus RSA_PopulatePrivateKey(RSAPrivateKey *key);
 
 /********************************************************************
 ** DSA signing algorithm
 */
+
+/* Generate a new random value within the interval [2, q-1].
+*/
+extern SECStatus DSA_NewRandom(PLArenaPool * arena, const SECItem * q,
+                               SECItem * random);
 
 /*
 ** Generate and return a new DSA public and private key pair,
@@ -165,8 +179,13 @@ extern SECStatus DH_NewKey(DHParams *           params,
 ** the prime.   If successful, derivedSecret->data is set 
 ** to the address of the newly allocated buffer containing the derived 
 ** secret, and derivedSecret->len is the size of the secret produced.
-** The size of the secret produced will never be larger than the length
-** of the prime, and it may be smaller than maxOutBytes.
+** The size of the secret produced will depend on the value of outBytes.
+** If outBytes is 0, the key length will be all the significant bytes of
+** the derived secret (leading zeros are dropped). This length could be less
+** than the length of the prime. If outBytes is nonzero, the length of the
+** produced key will be outBytes long. If the key is truncated, the most
+** significant bytes are truncated. If it is expanded, zero bytes are added
+** at the beginning.
 ** It is the caller's responsibility to free the allocated buffer 
 ** containing the derived secret.
 */
@@ -174,7 +193,7 @@ extern SECStatus DH_Derive(SECItem *    publicValue,
 		           SECItem *    prime, 
 			   SECItem *    privateValue, 
 			   SECItem *    derivedSecret,
-			   unsigned int maxOutBytes);
+			   unsigned int outBytes);
 
 /* 
 ** KEA_CalcKey returns octet string with the private key for a dual
@@ -192,6 +211,72 @@ extern SECStatus KEA_Derive(SECItem *prime,
  * subprime domain.
  */
 extern PRBool KEA_Verify(SECItem *Y, SECItem *prime, SECItem *subPrime);
+
+/****************************************
+ * J-PAKE key transport
+ */
+
+/* Given gx == g^x, create a Schnorr zero-knowledge proof for the value x
+ * using the specified hash algorithm and signer ID. The signature is
+ * returned in the values gv and r. testRandom must be NULL for a PRNG
+ * generated random committment to be used in the sigature. When testRandom
+ * is non-NULL, that value must contain a value in the subgroup q; that
+ * value will be used instead of a PRNG-generated committment in order to
+ * facilitate known-answer tests.
+ *
+ * If gxIn is non-NULL then it must contain a pre-computed value of g^x that
+ * will be used by the function; in this case, the gxOut parameter must be NULL.
+ * If the gxIn parameter is NULL then gxOut must be non-NULL; in this case
+ * gxOut will contain the value g^x on output.
+ *
+ * gx (if not supplied by the caller), gv, and r will be allocated in the arena.
+ * The arena is *not* optional so do not pass NULL for the arena parameter.
+ * The arena should be zeroed when it is freed.
+ */
+SECStatus
+JPAKE_Sign(PLArenaPool * arena, const PQGParams * pqg, HASH_HashType hashType,
+           const SECItem * signerID, const SECItem * x,
+           const SECItem * testRandom, const SECItem * gxIn, SECItem * gxOut,
+           SECItem * gv, SECItem * r);
+
+/* Given gx == g^x, verify the Schnorr zero-knowledge proof (gv, r) for the
+ * value x using the specified hash algorithm and signer ID.
+ *
+ * The arena is *not* optional so do not pass NULL for the arena parameter. 
+ */
+SECStatus
+JPAKE_Verify(PLArenaPool * arena, const PQGParams * pqg,
+             HASH_HashType hashType, const SECItem * signerID,
+             const SECItem * peerID, const SECItem * gx,
+             const SECItem * gv, const SECItem * r);
+
+/* Call before round 2 with x2, s, and x2s all non-NULL. This will calculate
+ * base = g^(x1+x3+x4) (mod p) and x2s = x2*s (mod q). The values to send in 
+ * round 2 (A and the proof of knowledge of x2s) can then be calculated with
+ * JPAKE_Sign using pqg->base = base and x = x2s.
+ *
+ * Call after round 2 with x2, s, and x2s all NULL, and passing (gx1, gx2, gx3)
+ * instead of (gx1, gx3, gx4). This will calculate base = g^(x1+x2+x3). Then call
+ * JPAKE_Verify with pqg->base = base and then JPAKE_Final.
+ *
+ * base and x2s will be allocated in the arena. The arena is *not* optional so
+ * do not pass NULL for the arena parameter. The arena should be zeroed when it
+ * is freed.
+*/
+SECStatus
+JPAKE_Round2(PLArenaPool * arena, const SECItem * p, const SECItem  *q,
+             const SECItem * gx1, const SECItem * gx3, const SECItem * gx4,
+             SECItem * base, const SECItem * x2, const SECItem * s, SECItem * x2s);
+
+/* K = (B/g^(x2*x4*s))^x2 (mod p)
+ *
+ * K will be allocated in the arena. The arena is *not* optional so do not pass
+ * NULL for the arena parameter. The arena should be zeroed when it is freed.
+ */
+SECStatus
+JPAKE_Final(PLArenaPool * arena, const SECItem * p, const SECItem  *q,
+            const SECItem * x2, const SECItem * gx4, const SECItem * x2s,
+            const SECItem * B, SECItem * K);
 
 /******************************************************
 ** Elliptic Curve algorithms
@@ -976,6 +1061,24 @@ extern void SHA1_Clone(SHA1Context *dest, SHA1Context *src);
 
 /******************************************/
 
+extern SHA224Context *SHA224_NewContext(void);
+extern void SHA224_DestroyContext(SHA224Context *cx, PRBool freeit);
+extern void SHA224_Begin(SHA224Context *cx);
+extern void SHA224_Update(SHA224Context *cx, const unsigned char *input,
+			unsigned int inputLen);
+extern void SHA224_End(SHA224Context *cx, unsigned char *digest,
+		     unsigned int *digestLen, unsigned int maxDigestLen);
+extern SECStatus SHA224_HashBuf(unsigned char *dest, const unsigned char *src,
+			      uint32 src_length);
+extern SECStatus SHA224_Hash(unsigned char *dest, const char *src);
+extern void SHA224_TraceState(SHA224Context *cx);
+extern unsigned int SHA224_FlattenSize(SHA224Context *cx);
+extern SECStatus SHA224_Flatten(SHA224Context *cx,unsigned char *space);
+extern SHA224Context * SHA224_Resurrect(unsigned char *space, void *arg);
+extern void SHA224_Clone(SHA224Context *dest, SHA224Context *src);
+
+/******************************************/
+
 extern SHA256Context *SHA256_NewContext(void);
 extern void SHA256_DestroyContext(SHA256Context *cx, PRBool freeit);
 extern void SHA256_Begin(SHA256Context *cx);
@@ -1029,12 +1132,16 @@ extern SHA384Context * SHA384_Resurrect(unsigned char *space, void *arg);
 extern void SHA384_Clone(SHA384Context *dest, SHA384Context *src);
 
 /****************************************
- * implement TLS Pseudo Random Function (PRF)
+ * implement TLS 1.0 Pseudo Random Function (PRF) and TLS P_hash function
  */
 
 extern SECStatus
 TLS_PRF(const SECItem *secret, const char *label, SECItem *seed, 
          SECItem *result, PRBool isFIPS);
+
+extern SECStatus
+TLS_P_hash(HASH_HashType hashAlg, const SECItem *secret, const char *label,
+           SECItem *seed, SECItem *result, PRBool isFIPS);
 
 /******************************************/
 /*
@@ -1122,10 +1229,14 @@ PRNGTEST_Generate(PRUint8 *bytes, unsigned int bytes_len,
 extern SECStatus
 PRNGTEST_Uninstantiate(void);
 
+extern SECStatus
+PRNGTEST_RunHealthTests(void);
 
 /* Generate PQGParams and PQGVerify structs.
  * Length of seed and length of h both equal length of P. 
  * All lengths are specified by "j", according to the table above.
+ *
+ * The verify parameters will conform to FIPS186-1.
  */
 extern SECStatus
 PQG_ParamGen(unsigned int j, 	   /* input : determines length of P. */
@@ -1136,10 +1247,42 @@ PQG_ParamGen(unsigned int j, 	   /* input : determines length of P. */
  * Length of P specified by j.  Length of h will match length of P.
  * Length of SEED in bytes specified in seedBytes.
  * seedBbytes must be in the range [20..255] or an error will result.
+ *
+ * The verify parameters will conform to FIPS186-1.
  */
 extern SECStatus
 PQG_ParamGenSeedLen(
              unsigned int j, 	     /* input : determines length of P. */
+	     unsigned int seedBytes, /* input : length of seed in bytes.*/
+             PQGParams **pParams,    /* output: P Q and G returned here */
+	     PQGVerify **pVfy);      /* output: counter and seed. */
+
+/* Generate PQGParams and PQGVerify structs.
+ * Length of P specified by L in bits.  
+ * Length of Q specified by N in bits.  
+ * Length of SEED in bytes specified in seedBytes.
+ * seedBbytes must be in the range [N..L*2] or an error will result.
+ *
+ * Not that J uses the above table, L is the length exact. L and N must
+ * match the table below or an error will result:
+ *
+ *  L            N
+ * 1024         160
+ * 2048         224
+ * 2048         256
+ * 3072         256
+ *
+ * If N or seedBytes are set to zero, then PQG_ParamGenSeedLen will
+ * pick a default value (typically the smallest secure value for these
+ * variables).
+ *
+ * The verify parameters will conform to FIPS186-3 using the smallest 
+ * permissible hash for the key strength.
+ */
+extern SECStatus
+PQG_ParamGenV2(
+             unsigned int L, 	     /* input : determines length of P. */
+             unsigned int N, 	     /* input : determines length of Q. */
 	     unsigned int seedBytes, /* input : length of seed in bytes.*/
              PQGParams **pParams,    /* output: P Q and G returned here */
 	     PQGVerify **pVfy);      /* output: counter and seed. */
@@ -1155,20 +1298,9 @@ PQG_ParamGenSeedLen(
  *       SECSuccess: PQGParams are valid.
  *       SECFailure: PQGParams are invalid.
  *
- * Verify the following 12 facts about PQG counter SEED g and h
- * 1.  Q is 160 bits long.
- * 2.  P is one of the 9 valid lengths.
- * 3.  G < P
- * 4.  P % Q == 1
- * 5.  Q is prime
- * 6.  P is prime
- * Steps 7-12 are done only if the optional PQGVerify is supplied.
- * 7.  counter < 4096
- * 8.  g >= 160 and g < 2048   (g is length of seed in bits)
- * 9.  Q generated from SEED matches Q in PQGParams.
- * 10. P generated from (L, counter, g, SEED, Q) matches P in PQGParams.
- * 11. 1 < h < P-1
- * 12. G generated from h matches G in PQGParams.
+ * Verify the PQG againts the counter, SEED and h.
+ * These tests are specified in FIPS 186-3 Appendix A.1.1.1, A.1.1.3, and A.2.2
+ * PQG_VerifyParams will automatically choose the appropriate test.
  */
 
 extern SECStatus   PQG_VerifyParams(const PQGParams *params, 
@@ -1193,6 +1325,11 @@ extern void BL_Unload(void);
  *  Verify a given Shared library signature                               *
  **************************************************************************/
 PRBool BLAPI_SHVerify(const char *name, PRFuncPtr addr);
+
+/**************************************************************************
+ *  Verify a given filename's signature                               *
+ **************************************************************************/
+PRBool BLAPI_SHVerifyFile(const char *shName);
 
 /**************************************************************************
  *  Verify Are Own Shared library signature                               *

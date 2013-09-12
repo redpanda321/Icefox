@@ -1,39 +1,7 @@
 /* -*- Mode: C; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is WOFF font packaging code.
- *
- * The Initial Developer of the Original Code is Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Jonathan Kew <jfkthame@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "woff-private.h"
 
@@ -43,10 +11,10 @@
 #include "zlib.h"
 
 #ifdef WOFF_MOZILLA_CLIENT /* define this when building as part of Gecko */
-# include "prmem.h"
-# define malloc  PR_Malloc
-# define realloc PR_Realloc
-# define free    PR_Free
+# include "mozilla/mozalloc.h"
+# define malloc  moz_malloc
+# define realloc moz_realloc
+# define free    moz_free
 #endif
 
 /*
@@ -997,6 +965,122 @@ failure:
   }
   return NULL;
 }
+
+/* functions to get size and data of a single table */
+
+uint32_t woffGetTableSize(const uint8_t * woffData, uint32_t woffLen,
+                          uint32_t tag, uint32_t * pStatus)
+{
+  uint32_t status = eWOFF_ok;
+  const woffHeader * header;
+  uint16_t numTables;
+  uint16_t tableIndex;
+  const woffDirEntry * woffDir;
+
+  if (pStatus && WOFF_FAILURE(*pStatus)) {
+    return 0;
+  }
+
+  status = sanityCheck(woffData, woffLen);
+  if (WOFF_FAILURE(status)) {
+    FAIL(status);
+  }
+
+  header = (const woffHeader *) (woffData);
+
+  numTables = READ16BE(header->numTables);
+  woffDir = (const woffDirEntry *) (woffData + sizeof(woffHeader));
+
+  for (tableIndex = 0; tableIndex < numTables; ++tableIndex) {
+    uint32_t thisTag;
+    thisTag = READ32BE(woffDir[tableIndex].tag);
+    if (thisTag < tag) {
+      continue;
+    }
+    if (thisTag > tag) {
+      break;
+    }
+    return READ32BE(woffDir[tableIndex].origLen);
+  }
+
+  status = eWOFF_warn_no_such_table;
+
+failure:
+  if (pStatus) {
+    *pStatus = status;
+  }
+  return 0;
+}
+
+void woffGetTableToBuffer(const uint8_t * woffData, uint32_t woffLen,
+                          uint32_t tag, uint8_t * buffer, uint32_t bufferLen,
+                          uint32_t * pTableLen, uint32_t * pStatus)
+{
+  uint32_t status = eWOFF_ok;
+  const woffHeader * header;
+  uint16_t numTables;
+  uint16_t tableIndex;
+  const woffDirEntry * woffDir;
+
+  if (pStatus && WOFF_FAILURE(*pStatus)) {
+    return;
+  }
+
+  status = sanityCheck(woffData, woffLen);
+  if (WOFF_FAILURE(status)) {
+    FAIL(status);
+  }
+
+  header = (const woffHeader *) (woffData);
+
+  numTables = READ16BE(header->numTables);
+  woffDir = (const woffDirEntry *) (woffData + sizeof(woffHeader));
+
+  for (tableIndex = 0; tableIndex < numTables; ++tableIndex) {
+    uint32_t thisTag, origLen, compLen, sourceOffset;
+    thisTag = READ32BE(woffDir[tableIndex].tag);
+    if (thisTag < tag) {
+      continue;
+    }
+    if (thisTag > tag) {
+      break;
+    }
+
+    /* found the required table: decompress it (checking for overflow) */
+    origLen = READ32BE(woffDir[tableIndex].origLen);
+    if (origLen > bufferLen) {
+      FAIL(eWOFF_buffer_too_small);
+    }
+
+    compLen = READ32BE(woffDir[tableIndex].compLen);
+    sourceOffset = READ32BE(woffDir[tableIndex].offset);
+
+    if (compLen < origLen) {
+      uLongf destLen = origLen;
+      if (uncompress((Bytef *)(buffer), &destLen,
+                     (const Bytef *)(woffData + sourceOffset),
+                     compLen) != Z_OK || destLen != origLen) {
+        FAIL(eWOFF_compression_failure);
+      }
+    } else {
+      memcpy(buffer, woffData + sourceOffset, origLen);
+    }
+
+    if (pTableLen) {
+      *pTableLen = origLen;
+    }
+
+    return;
+  }
+
+  status = eWOFF_warn_no_such_table;
+
+failure:
+  if (pStatus) {
+    *pStatus = status;
+  }
+}
+
 
 #ifndef WOFF_MOZILLA_CLIENT
 

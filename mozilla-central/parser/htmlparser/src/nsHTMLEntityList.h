@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /******
 
@@ -43,7 +11,7 @@
   It is designed to be used as inline input to nsHTMLEntities.cpp *only*
   through the magic of C preprocessing.
 
-  All entires must be enclosed in the macro HTML_ENTITY which will have cruel
+  All entries must be enclosed in the macro HTML_ENTITY which will have cruel
   and unusual things done to it
 
   It is recommended (but not strictly necessary) to keep all entries
@@ -272,8 +240,10 @@ HTML_ENTITY(lceil, 8968)
 HTML_ENTITY(rceil, 8969)
 HTML_ENTITY(lfloor, 8970)
 HTML_ENTITY(rfloor, 8971)
-HTML_ENTITY(lang, 9001)
-HTML_ENTITY(rang, 9002)
+// Bug 603716: expansions of &lang; and &rang; have been modified in HTML5.
+// See http://www.w3.org/2003/entities/2007/htmlmathml-f.ent
+HTML_ENTITY(lang, 0x27E8)
+HTML_ENTITY(rang, 0x27E9)
 HTML_ENTITY(loz, 9674)
 HTML_ENTITY(spades, 9824)
 HTML_ENTITY(clubs, 9827)

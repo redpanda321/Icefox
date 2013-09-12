@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=238987
 -->
 <head>
   <title>Test for Bug 238987</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>        
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -41,9 +40,7 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=238987
     var prefs = Components.classes[prefSvcContractID].getService(prefSvcIID)
                                                      .getBranch("accessibility.");
     if (!newValue) {
-      try {
-        prefs.clearUserPref("tabfocus");
-      } catch(ex) {}
+      prefs.clearUserPref("tabfocus");
     } else {
       prefs.setIntPref("tabfocus", newValue);
     }
@@ -56,7 +53,7 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=238987
         shouldStop = true;
       }
     } else if (e.target.id == "end") {
-      modifier = Components.interfaces.nsIDOMNSEvent.SHIFT_MASK;
+      modifier = Components.interfaces.nsIDOMEvent.SHIFT_MASK;
     } else if (modifier) {
       var expected = backwardFocusArray.pop();
       ok(expected == e.target.id,
@@ -64,6 +61,7 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=238987
          expected + "], got [" + e.target.id + "]");
     } else {
       var expected = forwardFocusArray.shift();
+      is(e.target, document.activeElement, "Wrong activeElement!");
       ok(expected == e.target.id,
          "(focus) Forward tabbing, expected [" +
          expected + "], got [" + e.target.id + "]");
@@ -135,10 +133,24 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=238987
          backwardBlurArray.toString());
       is(expectedWindowBlurCount, 0,
          "|window| didn't get the right amount of blur events");
+
+      // Cleanup
       setOrRestoreTabFocus(0);
+      window.removeEventListener("focus", handleWindowFocus, true);
+      window.removeEventListener("focus", handleWindowFocus, false);
+      window.removeEventListener("blur", handleWindowBlur, true);
+      window.removeEventListener("blur", handleWindowBlur, false);
+      var elements = document.getElementsByTagName("*");
+      for (var i = 0; i < elements.length; ++i) {
+        if (elements[i].hasAttribute("id")) {
+          elements[i].removeEventListener("focus", handleFocus, false);
+          elements[i].removeEventListener("blur", handleBlur, false);
+        }
+      }
+
       SimpleTest.finish();
     } else {
-      setTimeout(tab, 50);
+      setTimeout(tab, 0);
     }
   }
 
@@ -163,7 +175,7 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=238987
 
   function doTest() {
     setOrRestoreTabFocus(7);
-    setTimeout(start, 100);
+    setTimeout(start, 0);
   }
 
   SimpleTest.waitForExplicitFinish();

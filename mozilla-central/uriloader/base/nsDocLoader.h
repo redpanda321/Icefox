@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* 
 */
@@ -57,11 +25,12 @@
 #include "nsIChannelEventSink.h"
 #include "nsISecurityEventSink.h"
 #include "nsISupportsPriority.h"
-#include "nsInt64.h"
 #include "nsCOMPtr.h"
 #include "pldhash.h"
+#include "nsAutoPtr.h"
 
-struct nsRequestInfo;
+#include "mozilla/LinkedList.h"
+
 struct nsListenerInfo;
 
 /****************************************************************************
@@ -133,31 +102,49 @@ protected:
 
     virtual nsresult SetDocLoaderParent(nsDocLoader * aLoader);
 
-    PRBool IsBusy();
+    bool IsBusy();
 
     void Destroy();
     virtual void DestroyChildren();
 
-    nsIDocumentLoader* ChildAt(PRInt32 i) {
+    nsIDocumentLoader* ChildAt(int32_t i) {
         return static_cast<nsDocLoader*>(mChildList[i]);
     }
 
-    nsIDocumentLoader* SafeChildAt(PRInt32 i) {
+    nsIDocumentLoader* SafeChildAt(int32_t i) {
         return static_cast<nsDocLoader*>(mChildList.SafeElementAt(i));
     }
 
     void FireOnProgressChange(nsDocLoader* aLoadInitiator,
                               nsIRequest *request,
-                              PRInt64 aProgress,
-                              PRInt64 aProgressMax,
-                              PRInt64 aProgressDelta,
-                              PRInt64 aTotalProgress,
-                              PRInt64 aMaxTotalProgress);
+                              int64_t aProgress,
+                              int64_t aProgressMax,
+                              int64_t aProgressDelta,
+                              int64_t aTotalProgress,
+                              int64_t aMaxTotalProgress);
+
+    // This should be at least 2 long since we'll generally always
+    // have the current page and the global docloader on the ancestor
+    // list.  But to deal with frames it's better to make it a bit
+    // longer, and it's always a stack temporary so there's no real
+    // reason not to.
+    typedef nsAutoTArray<nsRefPtr<nsDocLoader>, 8> WebProgressList;
+    void GatherAncestorWebProgresses(WebProgressList& aList);
 
     void FireOnStateChange(nsIWebProgress *aProgress,
                            nsIRequest* request,
-                           PRInt32 aStateFlags,
+                           int32_t aStateFlags,
                            nsresult aStatus);
+
+    // The guts of FireOnStateChange, but does not call itself on our ancestors.
+    // The arguments that are const are const so that we can detect cases when
+    // DoFireOnStateChange wants to propagate changes to the next web progress
+    // at compile time.  The ones that are not, are references so that such
+    // changes can be propagated.
+    void DoFireOnStateChange(nsIWebProgress * const aProgress,
+                             nsIRequest* const request,
+                             int32_t &aStateFlags,
+                             const nsresult aStatus);
 
     void FireOnStatusChange(nsIWebProgress *aWebProgress,
                             nsIRequest *aRequest,
@@ -166,12 +153,13 @@ protected:
 
     void FireOnLocationChange(nsIWebProgress* aWebProgress,
                               nsIRequest* aRequest,
-                              nsIURI *aUri);
+                              nsIURI *aUri,
+                              uint32_t aFlags);
 
-    PRBool RefreshAttempted(nsIWebProgress* aWebProgress,
+    bool RefreshAttempted(nsIWebProgress* aWebProgress,
                             nsIURI *aURI,
-                            PRInt32 aDelay,
-                            PRBool aSameURI);
+                            int32_t aDelay,
+                            bool aSameURI);
 
     // this function is overridden by the docshell, it is provided so that we
     // can pass more information about redirect state (the normal OnStateChange
@@ -181,8 +169,8 @@ protected:
     // @param aStateFlags    The channel flags normally sent to OnStateChange.
     virtual void OnRedirectStateChange(nsIChannel* aOldChannel,
                                        nsIChannel* aNewChannel,
-                                       PRUint32 aRedirectFlags,
-                                       PRUint32 aStateFlags) {}
+                                       uint32_t aRedirectFlags,
+                                       uint32_t aStateFlags) {}
 
     void doStartDocumentLoad();
     void doStartURLLoad(nsIRequest *request);
@@ -191,7 +179,7 @@ protected:
 
     // Inform a parent docloader that aChild is about to call its onload
     // handler.
-    PRBool ChildEnteringOnload(nsIDocumentLoader* aChild) {
+    bool ChildEnteringOnload(nsIDocumentLoader* aChild) {
         // It's ok if we're already in the list -- we'll just be in there twice
         // and then the RemoveObject calls from ChildDoneWithOnload will remove
         // us.
@@ -202,10 +190,58 @@ protected:
     // handler.
     void ChildDoneWithOnload(nsIDocumentLoader* aChild) {
         mChildrenInOnload.RemoveObject(aChild);
-        DocLoaderIsEmpty(PR_TRUE);
+        DocLoaderIsEmpty(true);
     }        
 
 protected:
+    struct nsStatusInfo : public mozilla::LinkedListElement<nsStatusInfo>
+    {
+        nsString mStatusMessage;
+        nsresult mStatusCode;
+        // Weak mRequest is ok; we'll be told if it decides to go away.
+        nsIRequest * const mRequest;
+
+        nsStatusInfo(nsIRequest* aRequest) :
+            mRequest(aRequest)
+        {
+            MOZ_COUNT_CTOR(nsStatusInfo);
+        }
+        ~nsStatusInfo()
+        {
+            MOZ_COUNT_DTOR(nsStatusInfo);
+        }
+    };
+
+    struct nsRequestInfo : public PLDHashEntryHdr
+    {
+        nsRequestInfo(const void* key)
+            : mKey(key), mCurrentProgress(0), mMaxProgress(0), mUploading(false)
+            , mLastStatus(nullptr)
+        {
+            MOZ_COUNT_CTOR(nsRequestInfo);
+        }
+
+        ~nsRequestInfo()
+        {
+            MOZ_COUNT_DTOR(nsRequestInfo);
+        }
+
+        nsIRequest* Request() {
+            return static_cast<nsIRequest*>(const_cast<void*>(mKey));
+        }
+
+        const void* mKey; // Must be first for the pldhash stubs to work
+        int64_t mCurrentProgress;
+        int64_t mMaxProgress;
+        bool mUploading;
+
+        nsAutoPtr<nsStatusInfo> mLastStatus;
+    };
+
+    static bool RequestInfoHashInitEntry(PLDHashTable* table, PLDHashEntryHdr* entry,
+                                         const void* key);
+    static void RequestInfoHashClearEntry(PLDHashTable* table, PLDHashEntryHdr* entry);
+
     // IMPORTANT: The ownership implicit in the following member
     // variables has been explicitly checked and set using nsCOMPtr
     // for owning pointers and raw COM interface pointers for weak
@@ -224,36 +260,38 @@ protected:
 
     // The following member variables are related to the new nsIWebProgress 
     // feedback interfaces that travis cooked up.
-    PRInt32 mProgressStateFlags;
+    int32_t mProgressStateFlags;
 
-    nsInt64 mCurrentSelfProgress;
-    nsInt64 mMaxSelfProgress;
+    int64_t mCurrentSelfProgress;
+    int64_t mMaxSelfProgress;
 
-    nsInt64 mCurrentTotalProgress;
-    nsInt64 mMaxTotalProgress;
+    int64_t mCurrentTotalProgress;
+    int64_t mMaxTotalProgress;
 
     PLDHashTable mRequestInfoHash;
-    nsInt64 mCompletedTotalProgress;
+    int64_t mCompletedTotalProgress;
+
+    mozilla::LinkedList<nsStatusInfo> mStatusInfoList;
 
     /*
      * This flag indicates that the loader is loading a document.  It is set
      * from the call to LoadDocument(...) until the OnConnectionsComplete(...)
      * notification is fired...
      */
-    PRPackedBool mIsLoadingDocument;
+    bool mIsLoadingDocument;
 
     /* Flag to indicate that we're in the process of restoring a document. */
-    PRPackedBool mIsRestoringDocument;
+    bool mIsRestoringDocument;
 
     /* Flag to indicate that we're in the process of flushing layout
        under DocLoaderIsEmpty() and should not do another flush. */
-    PRPackedBool mDontFlushLayout;
+    bool mDontFlushLayout;
 
     /* Flag to indicate whether we should consider ourselves as currently
        flushing layout for the purposes of IsBusy. For example, if Stop has
        been called then IsBusy should return false even if we are still
        flushing. */
-    PRPackedBool mIsFlushingLayout;
+    bool mIsFlushingLayout;
 
 private:
     // A list of kids that are in the middle of their onload calls and will let
@@ -267,17 +305,20 @@ private:
     // fact empty.  This method _does_ make sure that layout is flushed if our
     // loadgroup has no active requests before checking for "real" emptiness if
     // aFlushLayout is true.
-    void DocLoaderIsEmpty(PRBool aFlushLayout);
+    void DocLoaderIsEmpty(bool aFlushLayout);
 
     nsListenerInfo *GetListenerInfo(nsIWebProgressListener* aListener);
 
-    PRInt64 GetMaxTotalProgress();
+    int64_t GetMaxTotalProgress();
 
     nsresult AddRequestInfo(nsIRequest* aRequest);
     void RemoveRequestInfo(nsIRequest* aRequest);
     nsRequestInfo *GetRequestInfo(nsIRequest* aRequest);
     void ClearRequestInfoHash();
-    PRInt64 CalculateMaxProgress();
+    int64_t CalculateMaxProgress();
+    static PLDHashOperator CalcMaxProgressCallback(PLDHashTable* table,
+                                                   PLDHashEntryHdr* hdr,
+                                                   uint32_t number, void* arg);
 ///    void DumpChannelInfo(void);
 
     // used to clear our internal progress state between loads...

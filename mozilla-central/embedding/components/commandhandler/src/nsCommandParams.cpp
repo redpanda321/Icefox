@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "xpcom-config.h"
 #include NEW_H    // for placement new
@@ -41,7 +9,9 @@
 #include "nsCRT.h"
 
 #include "nsCommandParams.h"
+#include "mozilla/HashFunctions.h"
 
+using namespace mozilla;
 
 PLDHashTableOps nsCommandParams::sHashOps =
 {
@@ -83,7 +53,7 @@ nsCommandParams::Init()
 #endif
 
 /* short getValueType (in string name); */
-NS_IMETHODIMP nsCommandParams::GetValueType(const char * name, PRInt16 *_retval)
+NS_IMETHODIMP nsCommandParams::GetValueType(const char * name, int16_t *_retval)
 {
   NS_ENSURE_ARG_POINTER(_retval);
   *_retval = eNoType;
@@ -98,10 +68,10 @@ NS_IMETHODIMP nsCommandParams::GetValueType(const char * name, PRInt16 *_retval)
 }
 
 /* boolean getBooleanValue (in AString name); */
-NS_IMETHODIMP nsCommandParams::GetBooleanValue(const char * name, PRBool *_retval)
+NS_IMETHODIMP nsCommandParams::GetBooleanValue(const char * name, bool *_retval)
 {
   NS_ENSURE_ARG_POINTER(_retval);
-  *_retval = PR_FALSE;
+  *_retval = false;
 
   HashEntry*  foundEntry = GetNamedEntry(name);
   if (foundEntry && foundEntry->mEntryType == eBooleanType)
@@ -114,10 +84,10 @@ NS_IMETHODIMP nsCommandParams::GetBooleanValue(const char * name, PRBool *_retva
 }
 
 /* long getLongValue (in AString name); */
-NS_IMETHODIMP nsCommandParams::GetLongValue(const char * name, PRInt32 *_retval)
+NS_IMETHODIMP nsCommandParams::GetLongValue(const char * name, int32_t *_retval)
 {
   NS_ENSURE_ARG_POINTER(_retval);
-  *_retval = PR_FALSE;
+  *_retval = false;
 
   HashEntry*  foundEntry = GetNamedEntry(name);
   if (foundEntry && foundEntry->mEntryType == eLongType)
@@ -178,7 +148,7 @@ NS_IMETHODIMP nsCommandParams::GetCStringValue(const char * name, char **_retval
 NS_IMETHODIMP nsCommandParams::GetISupportsValue(const char * name, nsISupports **_retval)
 {
   NS_ENSURE_ARG_POINTER(_retval);
-  *_retval = nsnull;
+  *_retval = nullptr;
 
   HashEntry*  foundEntry = GetNamedEntry(name);
   if (foundEntry && foundEntry->mEntryType == eISupportsType)
@@ -195,7 +165,7 @@ NS_IMETHODIMP nsCommandParams::GetISupportsValue(const char * name, nsISupports 
 #endif
 
 /* void setBooleanValue (in AString name, in boolean value); */
-NS_IMETHODIMP nsCommandParams::SetBooleanValue(const char * name, PRBool value)
+NS_IMETHODIMP nsCommandParams::SetBooleanValue(const char * name, bool value)
 {
   HashEntry*  foundEntry;
   GetOrMakeEntry(name, eBooleanType, foundEntry);
@@ -207,7 +177,7 @@ NS_IMETHODIMP nsCommandParams::SetBooleanValue(const char * name, PRBool value)
 }
 
 /* void setLongValue (in AString name, in long value); */
-NS_IMETHODIMP nsCommandParams::SetLongValue(const char * name, PRInt32 value)
+NS_IMETHODIMP nsCommandParams::SetLongValue(const char * name, int32_t value)
 {
   HashEntry*  foundEntry;
   GetOrMakeEntry(name, eLongType, foundEntry);
@@ -286,38 +256,38 @@ nsCommandParams::GetNamedEntry(const char * name)
   if (PL_DHASH_ENTRY_IS_BUSY(foundEntry))
     return foundEntry;
    
-  return nsnull;
+  return nullptr;
 }
 
 
 nsCommandParams::HashEntry*
-nsCommandParams::GetIndexedEntry(PRInt32 index)
+nsCommandParams::GetIndexedEntry(int32_t index)
 {
   HashEntry*  entry = reinterpret_cast<HashEntry*>(mValuesHash.entryStore);
   HashEntry*  limit = entry + PL_DHASH_TABLE_SIZE(&mValuesHash);
-  PRUint32    entryCount = 0;
+  uint32_t    entryCount = 0;
   
   do
   {  
     if (!PL_DHASH_ENTRY_IS_LIVE(entry))
       continue;
 
-    if ((PRInt32)entryCount == index)
+    if ((int32_t)entryCount == index)
       return entry;
     
     entryCount ++;
   } while (++entry < limit);
 
-  return nsnull;
+  return nullptr;
 }
 
 
-PRUint32
+uint32_t
 nsCommandParams::GetNumEntries()
 {
   HashEntry*  entry = reinterpret_cast<HashEntry*>(mValuesHash.entryStore);
   HashEntry*  limit = entry + PL_DHASH_TABLE_SIZE(&mValuesHash);
-  PRUint32    entryCount = 0;
+  uint32_t    entryCount = 0;
   
   do
   {  
@@ -329,7 +299,7 @@ nsCommandParams::GetNumEntries()
 }
 
 nsresult
-nsCommandParams::GetOrMakeEntry(const char * name, PRUint8 entryType, HashEntry*& outEntry)
+nsCommandParams::GetOrMakeEntry(const char * name, uint8_t entryType, HashEntry*& outEntry)
 {
 
   HashEntry *foundEntry = (HashEntry *)PL_DHashTableOperate(&mValuesHash, (void *)name, PL_DHASH_LOOKUP);
@@ -356,10 +326,10 @@ nsCommandParams::GetOrMakeEntry(const char * name, PRUint8 entryType, HashEntry*
 PLDHashNumber
 nsCommandParams::HashKey(PLDHashTable *table, const void *key)
 {
-  return nsCRT::HashCode((const char *)key);
+  return HashString((const char *)key);
 }
 
-PRBool
+bool
 nsCommandParams::HashMatchEntry(PLDHashTable *table,
                                 const PLDHashEntryHdr *entry, const void *key)
 {
@@ -394,7 +364,7 @@ nsCommandParams::HashClearEntry(PLDHashTable *table, PLDHashEntryHdr *entry)
 
 /* boolean hasMoreElements (); */
 NS_IMETHODIMP
-nsCommandParams::HasMoreElements(PRBool *_retval)
+nsCommandParams::HasMoreElements(bool *_retval)
 {
   NS_ENSURE_ARG_POINTER(_retval);
 

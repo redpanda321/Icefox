@@ -13,7 +13,7 @@
  *
  * You should have received a copy of the LGPL along with this library
  * in the file COPYING-LGPL-2.1; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA 02110-1335, USA
  * You should have received a copy of the MPL along with this library
  * in the file COPYING-MPL-1.1
  *
@@ -45,6 +45,7 @@
 #include "cairoint.h"
 
 #include "cairo-win32-private.h"
+#include "cairo-error-private.h"
 
 #ifndef SPI_GETFONTSMOOTHINGTYPE
 #define SPI_GETFONTSMOOTHINGTYPE 0x200a
@@ -60,6 +61,23 @@
 #endif
 
 #define CMAP_TAG 0x70616d63
+
+/**
+ * SECTION:cairo-win32-fonts
+ * @Title: Win32 Fonts
+ * @Short_Description: Font support for Microsoft Windows
+ * @See_Also: #cairo_font_face_t
+ *
+ * The Microsoft Windows font backend is primarily used to render text on
+ * Microsoft Windows systems.
+ */
+
+/**
+ * CAIRO_HAS_WIN32_FONT:
+ *
+ * Defined if the Microsoft Windows font backend is available.
+ * This macro can be used to conditionally compile backend-specific code.
+ */
 
 const cairo_scaled_font_backend_t _cairo_win32_scaled_font_backend;
 
@@ -240,7 +258,7 @@ _have_cleartype_quality (void)
 }
 
 BYTE
-_cairo_win32_get_system_text_quality (void)
+cairo_win32_get_system_text_quality (void)
 {
     BOOL font_smoothing;
     UINT smoothing_type;
@@ -307,7 +325,7 @@ _win32_scaled_font_create (LOGFONTW                   *logfont,
      *      here is the hint_metrics options.
      */
     if (options->antialias == CAIRO_ANTIALIAS_DEFAULT)
-	f->quality = _cairo_win32_get_system_text_quality ();
+	f->quality = cairo_win32_get_system_text_quality ();
     else {
 	switch (options->antialias) {
 	case CAIRO_ANTIALIAS_NONE:
@@ -966,7 +984,7 @@ _cairo_win32_scaled_font_init_glyph_metrics (cairo_win32_scaled_font_t *scaled_f
 	extents.height = scaled_font->base.ctm.yy * (font_extents.ascent + font_extents.descent) / scaled_font->y_scale;
 	extents.x_advance = extents.width;
 	extents.y_advance = 0;
-    } else if (scaled_font->preserve_axes && scaled_font->base.options.hint_style != CAIRO_HINT_METRICS_OFF) {
+    } else if (scaled_font->preserve_axes && scaled_font->base.options.hint_metrics != CAIRO_HINT_METRICS_OFF) {
 	/* If we aren't rotating / skewing the axes, then we get the metrics
 	 * from the GDI in device space and convert to font space.
 	 */
@@ -1385,6 +1403,7 @@ _cairo_win32_scaled_font_show_glyphs (void			*abstract_font,
 
     if (_cairo_surface_is_win32 (generic_surface) &&
 	surface->format == CAIRO_FORMAT_RGB24 &&
+	(generic_surface->permit_subpixel_antialiasing || scaled_font->quality != CLEARTYPE_QUALITY) &&
 	op == CAIRO_OPERATOR_OVER &&
 	_cairo_pattern_is_opaque_solid (pattern)) {
 
@@ -1416,6 +1435,8 @@ _cairo_win32_scaled_font_show_glyphs (void			*abstract_font,
 	cairo_win32_surface_t *tmp_surface;
 	cairo_surface_t *mask_surface;
 	cairo_surface_pattern_t mask;
+	cairo_bool_t use_subpixel_antialiasing =
+	    scaled_font->quality == CLEARTYPE_QUALITY && generic_surface->permit_subpixel_antialiasing;
 	RECT r;
 
 	tmp_surface = (cairo_win32_surface_t *)cairo_win32_surface_create_with_dib (CAIRO_FORMAT_ARGB32, width, height);
@@ -1437,7 +1458,7 @@ _cairo_win32_scaled_font_show_glyphs (void			*abstract_font,
 	    return status;
 	}
 
-	if (scaled_font->quality == CLEARTYPE_QUALITY) {
+	if (use_subpixel_antialiasing) {
 	    /* For ClearType, we need a 4-channel mask. If we are compositing on
 	     * a surface with alpha, we need to compute the alpha channel of
 	     * the mask (we just copy the green channel). But for a destination
@@ -1465,7 +1486,7 @@ _cairo_win32_scaled_font_show_glyphs (void			*abstract_font,
 	_cairo_pattern_init_for_surface (&mask, mask_surface);
 	cairo_surface_destroy (mask_surface);
 
-	if (scaled_font->quality == CLEARTYPE_QUALITY)
+	if (use_subpixel_antialiasing)
 	    mask.base.has_component_alpha = TRUE;
 
 	status = _cairo_surface_composite (op, pattern,

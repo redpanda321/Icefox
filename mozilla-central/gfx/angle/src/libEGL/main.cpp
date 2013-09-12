@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2002-2010 The ANGLE Project Authors. All rights reserved.
+// Copyright (c) 2002-2012 The ANGLE Project Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -18,16 +18,20 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved)
     {
       case DLL_PROCESS_ATTACH:
         {
-            #ifndef NDEBUG
-                FILE *debug = fopen("debug.txt", "rt");
+#if !defined(ANGLE_DISABLE_TRACE)
+            FILE *debug = fopen(TRACE_OUTPUT_FILE, "rt");
 
+            if (debug)
+            {
+                fclose(debug);
+                debug = fopen(TRACE_OUTPUT_FILE, "wt");   // Erase
+                
                 if (debug)
                 {
                     fclose(debug);
-                    debug = fopen("debug.txt", "wt");   // Erase
-                    fclose(debug);
                 }
-            #endif
+            }
+#endif
 
             currentTLS = TlsAlloc();
 

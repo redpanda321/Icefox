@@ -6,19 +6,18 @@
 
 #include "compiler/TranslatorHLSL.h"
 
+#include "compiler/InitializeParseContext.h"
 #include "compiler/OutputHLSL.h"
 
-TranslatorHLSL::TranslatorHLSL(EShLanguage lang, EShSpec spec)
-    : TCompiler(lang, spec)
+TranslatorHLSL::TranslatorHLSL(ShShaderType type, ShShaderSpec spec)
+    : TCompiler(type, spec)
 {
 }
 
-bool TranslatorHLSL::compile(TIntermNode *root)
+void TranslatorHLSL::translate(TIntermNode *root)
 {
     TParseContext& parseContext = *GetGlobalParseContext();
     sh::OutputHLSL outputHLSL(parseContext);
 
     outputHLSL.output();
-    
-    return true;
 }

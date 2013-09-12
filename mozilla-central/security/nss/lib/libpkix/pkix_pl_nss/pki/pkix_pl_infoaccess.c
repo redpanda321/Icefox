@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the PKIX-C library.
- *
- * The Initial Developer of the Original Code is
- * Sun Microsystems, Inc.
- * Portions created by the Initial Developer are
- * Copyright 2004-2007 Sun Microsystems, Inc.  All Rights Reserved.
- *
- * Contributor(s):
- *   Sun Microsystems, Inc.
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * pkix_pl_infoaccess.c
  *
@@ -573,11 +540,8 @@ pkix_pl_InfoAccess_ParseTokens(
         char terminator,
         void *plContext)
 {
-        PKIX_UInt32 len = 0;
         PKIX_UInt32 numFilters = 0;
-        PKIX_Int32 cmpResult = -1;
         char *endPos = NULL;
-        char *p = NULL;
         char **filterP = NULL;
 
         PKIX_ENTER(INFOACCESS, "pkix_pl_InfoAccess_ParseTokens");
@@ -598,8 +562,8 @@ pkix_pl_InfoAccess_ParseTokens(
                 PKIX_ERROR(PKIX_LOCATIONSTRINGNOTPROPERLYTERMINATED);
         }
 
-        /* Last one doesn't have a "," as separator, although we allow it */
-        if (*(endPos-1) != ',') {
+        /* Last component doesn't need a separator, although we allow it */
+        if (endPos > *startPos && *(endPos-1) != separator) {
                 numFilters++;
         }
 
@@ -620,38 +584,23 @@ pkix_pl_InfoAccess_ParseTokens(
 
         while (numFilters) {
             if (*endPos == separator || *endPos == terminator) {
-                    len = endPos - *startPos;
-                    p = PORT_ArenaZAlloc(arena, len+1);
+                    PKIX_UInt32 len = endPos - *startPos;
+                    char *p = PORT_ArenaZAlloc(arena, len+1);
                     if (p == NULL) {
                         PKIX_ERROR(PKIX_PORTARENAALLOCFAILED);
                     }
 
+                    PORT_Memcpy(p, *startPos, len);
+                    p[len] = '\0';
+
                     *filterP = p;
-
-                    while (len) {
-                            if (**startPos == '%') {
-                            /* replace %20 by blank */
-                                cmpResult = strncmp(*startPos, "%20", 3);
-                                if (cmpResult == 0) {
-                                    *p = ' ';
-                                    *startPos += 3;
-                                    len -= 3;
-                                }
-                            } else {
-                                *p = **startPos;
-                                (*startPos)++;
-                                len--;
-                            }
-                            p++;
-                    }
-
-                    *p = '\0';
                     filterP++;
                     numFilters--;
 
                     separator = terminator;
 
-                    if (endPos == '\0') {
+                    if (*endPos == '\0') {
+                        *startPos = endPos;
                         break;
                     } else {
                         endPos++;
@@ -667,6 +616,44 @@ pkix_pl_InfoAccess_ParseTokens(
 cleanup:
 
         PKIX_RETURN(INFOACCESS);
+}
+
+static int
+pkix_pl_HexDigitToInt(
+        int ch)
+{
+        if (isdigit(ch)) {
+                ch = ch - '0';
+        } else if (isupper(ch)) {
+                ch = ch - 'A' + 10;
+        } else {
+                ch = ch - 'a' + 10;
+        }
+        return ch;
+}
+
+/*
+ * Convert the "%" hex hex escape sequences in the URL 'location' in place.
+ */
+static void
+pkix_pl_UnescapeURL(
+        char *location)
+{
+        const char *src;
+        char *dst;
+
+        for (src = dst = location; *src != '\0'; src++, dst++) {
+                if (*src == '%' && isxdigit((unsigned char)*(src+1)) &&
+                    isxdigit((unsigned char)*(src+2))) {
+                        *dst = pkix_pl_HexDigitToInt((unsigned char)*(src+1));
+                        *dst *= 16;
+                        *dst += pkix_pl_HexDigitToInt((unsigned char)*(src+2));
+                        src += 2;
+                } else {
+                        *dst = *src;
+                }
+        }
+        *dst = *src;  /* the terminating null */
 }
 
 /*
@@ -745,11 +732,7 @@ pkix_pl_InfoAccess_ParseLocation(
                 plContext),
                 PKIX_STRINGGETENCODEDFAILED);
 
-#if 0
-        /* For testing inside the firewall... */
-        locationAscii = "ldap://nss.red.iplanet.com:1389/cn=Good%20CA,o="
-                "Test%20Certificates,c=US?caCertificate;binary";
-#endif
+        pkix_pl_UnescapeURL(locationAscii);
 
         /* Skip "ldap:" */
         endPos = locationAscii;

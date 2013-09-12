@@ -1,7 +1,6 @@
 <html>
 <head>
   <title>Testing Mixed Up Microformat APIs</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"></link>
@@ -81,6 +80,7 @@
   <script class="testbody" type="text/javascript">
 
   function hTest(node, validate) {
+    netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
     if (node)
       Microformats.parser.newMicroformat(this, node, "hTest", validate);
   }

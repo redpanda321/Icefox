@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 // vim:cindent:ts=2:et:sw=2:
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * used by nsCSSFrameConstructor to determine and iterate the child list
@@ -59,14 +27,14 @@ protected:
   // index into mNodes for our current position.  Otherwise, mChild is
   // our current child (which might be null if we're done iterating).
   union {
-    PRUint32 mIndex;
+    uint32_t mIndex;
     nsIContent* mChild;
   };
   nsINodeList* mNodes;
 
 public:
   ChildIterator()
-    : mContent(nsnull), mChild(0), mNodes(nsnull) {}
+    : mContent(nullptr), mChild(0), mNodes(nullptr) {}
 
   ChildIterator(const ChildIterator& aOther)
     : mContent(aOther.mContent),
@@ -126,7 +94,7 @@ public:
 
   nsIContent* get() const {
     if (XBLInvolved()) {
-      return mNodes->GetNodeAt(mIndex);
+      return mNodes->Item(mIndex);
     }
 
     return mChild;
@@ -134,7 +102,7 @@ public:
 
   nsIContent* operator*() const { return get(); }
 
-  PRBool operator==(const ChildIterator& aOther) const {
+  bool operator==(const ChildIterator& aOther) const {
     if (XBLInvolved()) {
       return mContent == aOther.mContent && mIndex == aOther.mIndex;
     }
@@ -142,13 +110,13 @@ public:
     return mContent == aOther.mContent && mChild == aOther.mChild;
   }
 
-  PRBool operator!=(const ChildIterator& aOther) const {
+  bool operator!=(const ChildIterator& aOther) const {
     return !aOther.operator==(*this);
   }
 
   void seek(nsIContent* aContent) {
     if (XBLInvolved()) {
-      PRInt32 index = mNodes->IndexOf(aContent);
+      int32_t index = mNodes->IndexOf(aContent);
       // XXXbz I wish we could assert that index != -1, but it seems to not be
       // the case in some XBL cases with filtered insertion points and no
       // default insertion point.  I will now claim that XBL's management of
@@ -168,11 +136,11 @@ public:
       // XXXbz I wish we could assert this doesn't happen, but I think that's
       // not necessarily the case when called from ContentInserted if
       // first-letter frames are about.
-      mChild = nsnull;
+      mChild = nullptr;
     }
   }
 
-  PRBool XBLInvolved() const { return mNodes != nsnull; }
+  bool XBLInvolved() const { return mNodes != nullptr; }
 
   /**
    * Create a pair of ChildIterators for a content node. aFirst will
@@ -184,9 +152,9 @@ public:
                        ChildIterator* aLast);
 
 private:
-  PRUint32 length() {
+  uint32_t length() {
     NS_PRECONDITION(XBLInvolved(), "Don't call me");
-    PRUint32 l;
+    uint32_t l;
     mNodes->GetLength(&l);
     return l;
   }

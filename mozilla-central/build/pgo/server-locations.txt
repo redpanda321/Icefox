@@ -1,39 +1,7 @@
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# The Initial Developer of the Original Code is
-# Jeff Walden <jwalden+code@mit.edu>.
-# Portions created by the Initial Developer are Copyright (C) 2008
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #
 # This file defines the locations at which this HTTP server may be accessed.
@@ -52,7 +20,7 @@
 # number is the default for the protocol.
 #
 # Unrecognized options are ignored.  Recognized options are "primary" and
-# "privileged", "nocert", "cert=some_cert_nickname". 
+# "privileged", "nocert", "cert=some_cert_nickname", "redir=hostname".
 #
 # "primary" denotes a location which is the canonical location of
 # the server; this location is the one assumed for requests which don't
@@ -67,9 +35,16 @@
 # "cert=nickname" tells the pgo server to use a particular certificate
 # for this host. The certificate is referenced by its nickname that must
 # not contain any spaces. The certificate  key files (PKCS12 modules)
-# for custom certification are loaded from build/pgo/ssltunnel/certs
+# for custom certification are loaded from build/pgo/certs
 # directory. When new certificate is added to this dir pgo/ssltunnel
-# must be builded then.
+# must be built then. This is only necessary for cases where we really do
+# want specific certs.
+#
+# "redir=hostname" tells the pgo server is only used for https://
+# hosts while processing the CONNECT tunnel request. It responds
+# to the CONNECT with a 302 and redirection to the hostname instead
+# of connecting to the real back end and replying with a 200. This
+# mode exists primarily to ensure we don't allow a proxy to do that.
 #
 
 #
@@ -100,12 +75,14 @@ http://sub1.test2.example.org:8000   privileged
 http://sub2.test1.example.org:8000   privileged
 http://sub2.test2.example.org:8000   privileged
 http://example.com:80                privileged
+http://www.example.com:80            privileged
 http://test1.example.com:80          privileged
 http://test2.example.com:80          privileged
 http://sub1.test1.example.com:80     privileged
 http://sub1.test2.example.com:80     privileged
 http://sub2.test1.example.com:80     privileged
 http://sub2.test2.example.com:80     privileged
+http://noxul.example.com:80          privileged,noxul
 
 https://example.com:443                privileged
 https://test1.example.com:443          privileged
@@ -120,6 +97,18 @@ https://untrusted.example.com:443      privileged,cert=untrusted
 https://expired.example.com:443        privileged,cert=expired
 https://requestclientcert.example.com:443         privileged,clientauth=request
 https://requireclientcert.example.com:443         privileged,clientauth=require
+https://mismatch.expired.example.com:443	privileged,cert=expired
+https://mismatch.untrusted.example.com:443	privileged,cert=untrusted
+https://untrusted-expired.example.com:443	privileged,cert=untrustedandexpired
+https://mismatch.untrusted-expired.example.com:443	privileged,cert=untrustedandexpired
+
+# This is here so that we don't load the default live bookmark over
+# the network in every test suite.
+http://fxfeeds.mozilla.com:80
+
+# Prevent safebrowsing tests from hitting the network for its-a-trap.html and
+# its-an-attack.html.
+http://www.mozilla.org:80
 
 #
 # These are subdomains of <ält.example.org>.
@@ -165,3 +154,52 @@ http://malware.example.com:80
 # Bug 483437, 484111
 https://www.bank1.com:443           privileged,cert=escapeattack1
 https://www.bank2.com:443           privileged,cert=escapeattack2
+
+#
+# CONNECT for redirproxy results in a 302 redirect to
+# test1.example.com
+#
+https://redirproxy.example.com:443          privileged,redir=test1.example.com
+
+# Host used for IndexedDB Quota testing
+http://bug704464-1.example.com:80        privileged
+http://bug704464-2.example.com:80        privileged
+http://bug704464-3.example.com:80        privileged
+http://bug702292.example.com:80          privileged
+
+# W3C hosts.
+# See http://www.w3.org/wiki/Testing/Requirements#The_Web_test_server_must_be_available_through_different_domain_names
+http://w3c-test.org:80
+http://w3c-test.org:81
+http://w3c-test.org:82
+http://w3c-test.org:83
+http://www.w3c-test.org:80
+http://www.w3c-test.org:81
+http://www.w3c-test.org:82
+http://www.w3c-test.org:83
+http://www1.w3c-test.org:80
+http://www1.w3c-test.org:81
+http://www1.w3c-test.org:82
+http://www1.w3c-test.org:83
+http://www2.w3c-test.org:80
+http://www2.w3c-test.org:81
+http://www2.w3c-test.org:82
+http://www2.w3c-test.org:83
+# http://天気の良い日.w3c-test.org
+http://xn--n8j6ds53lwwkrqhv28a.w3c-test.org:80
+http://xn--n8j6ds53lwwkrqhv28a.w3c-test.org:81
+http://xn--n8j6ds53lwwkrqhv28a.w3c-test.org:82
+http://xn--n8j6ds53lwwkrqhv28a.w3c-test.org:83
+# http://élève.w3c-test.org
+http://xn--lve-6lad.w3c-test.org:80
+http://xn--lve-6lad.w3c-test.org:81
+http://xn--lve-6lad.w3c-test.org:82
+http://xn--lve-6lad.w3c-test.org:83
+# HTTPS versions of the above
+https://w3c-test.org:443
+https://www.w3c-test.org:443
+https://www1.w3c-test.org:443
+https://www2.w3c-test.org:443
+https://xn--n8j6ds53lwwkrqhv28a.w3c-test.org:443
+https://xn--lve-6lad.w3c-test.org:443
+http://test.w3.org:80

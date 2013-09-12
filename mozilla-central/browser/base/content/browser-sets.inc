@@ -1,47 +1,10 @@
 # -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is Mozilla.org Code.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 2001
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Ben Goodger <ben@bengoodger.com> (v2.0)
-#   Blake Ross <blakeross@telocity.com>
-#   Shawn Wilsher <me@shawnwilsher.com>
-#   Ehsan Akhgari <ehsan.akhgari@gmail.com>
-#   Rob Campbell <rcampbell@mozilla.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifdef XP_UNIX
-#ifndef MOZ_WIDGET_COCOA
+#ifndef XP_MACOSX
 #define XP_GNOME 1
 #endif
 #endif
@@ -69,7 +32,6 @@
     <command id="cmd_printPreview" oncommand="PrintUtils.printPreview(PrintPreviewListener);"/>
     <command id="cmd_close" oncommand="BrowserCloseTabOrWindow()"/>
     <command id="cmd_closeWindow" oncommand="BrowserTryToCloseWindow()"/>
-    <command id="cmd_toggleTaskbar" oncommand="goToggleToolbar('status-bar','toggle_taskbar');"/>
     <command id="cmd_ToggleTabsOnTop" oncommand="TabsOnTop.toggle()"/>
     <command id="cmd_CustomizeToolbars" oncommand="BrowserCustomizeToolbar()"/>
     <command id="cmd_quitApplication" oncommand="goQuitApplication()"/>
@@ -92,11 +54,10 @@
     <!-- work-around bug 392512 -->
     <command id="Browser:AddBookmarkAs"
              oncommand="PlacesCommandHook.bookmarkCurrentPage(true, PlacesUtils.bookmarksMenuFolderId);"/>
-    <!-- The command is disabled for the hidden window. Otherwise its enabled
-         state is handled by gBookmarkAllTabsHandler. -->
+    <!-- The command disabled state must be manually updated through
+         PlacesCommandHook.updateBookmarkAllTabsCommand() -->
     <command id="Browser:BookmarkAllTabs"
-             oncommand="gBookmarkAllTabsHandler.doCommand();"
-             disabled="true"/>
+             oncommand="PlacesCommandHook.bookmarkCurrentPages();"/>
     <command id="Browser:Home"    oncommand="BrowserHome();"/>
     <command id="Browser:Back"    oncommand="BrowserBack();" disabled="true"/>
     <command id="Browser:BackOrBackDuplicate" oncommand="BrowserBack(event);" disabled="true">
@@ -118,21 +79,43 @@
     <command id="Browser:PrevTab" oncommand="gBrowser.tabContainer.advanceSelectedTab(-1, true);"/>
     <command id="Browser:ShowAllTabs" oncommand="allTabs.open();"/>
     <command id="Browser:ToggleTabView" oncommand="TabView.toggle();"/>
+    <command id="Browser:FocusNextFrame" oncommand="focusNextFrame(event);"/>
     <command id="cmd_fullZoomReduce"  oncommand="FullZoom.reduce()"/>
     <command id="cmd_fullZoomEnlarge" oncommand="FullZoom.enlarge()"/>
     <command id="cmd_fullZoomReset"   oncommand="FullZoom.reset()"/>
     <command id="cmd_fullZoomToggle"  oncommand="ZoomManager.toggleZoom();"/>
     <command id="Browser:OpenLocation" oncommand="openLocation();"/>
+    <command id="Browser:RestoreLastSession" oncommand="restoreLastSession();" disabled="true"/>
 
     <command id="Tools:Search" oncommand="BrowserSearch.webSearch();"/>
     <command id="Tools:Downloads" oncommand="BrowserDownloadsUI();"/>
-    <command id="Tools:Inspect" oncommand="InspectorUI.toggleInspectorUI();"/>
+    <command id="Tools:DevToolbox" oncommand="gDevToolsBrowser.toggleToolboxCommand(gBrowser);"/>
+    <command id="Tools:DevToolbar" oncommand="DeveloperToolbar.toggle();" disabled="true" hidden="true"/>
+    <command id="Tools:DevToolbarFocus" oncommand="DeveloperToolbar.focusToggle();" disabled="true"/>
+    <command id="Tools:ChromeDebugger" oncommand="DebuggerUI.toggleChromeDebugger();" disabled="true" hidden="true"/>
+    <command id="Tools:Scratchpad" oncommand="Scratchpad.openScratchpad();" disabled="true" hidden="true"/>
+    <command id="Tools:ResponsiveUI" oncommand="ResponsiveUI.toggle();" disabled="true" hidden="true"/>
     <command id="Tools:Addons" oncommand="BrowserOpenAddonsMgr();"/>
+    <command id="Tools:ErrorConsole" oncommand="toJavaScriptConsole()" disabled="true" hidden="true"/>
+    <command id="Tools:DevToolsConnect" oncommand="gDevToolsBrowser.openConnectScreen(gBrowser)" disabled="true" hidden="true"/>
     <command id="Tools:Sanitize"
      oncommand="Cc['@mozilla.org/browser/browserglue;1'].getService(Ci.nsIBrowserGlue).sanitize(window);"/>
-    <command id="Tools:PrivateBrowsing" oncommand="gPrivateBrowsingUI.toggleMode();"/>
+    <command id="Tools:PrivateBrowsing"
+#ifdef MOZ_PER_WINDOW_PRIVATE_BROWSING
+      oncommand="OpenBrowserWindow({private: true});"/>
+#else
+      oncommand="gPrivateBrowsingUI.toggleMode();"/>
+#endif
     <command id="History:UndoCloseTab" oncommand="undoCloseTab();"/>
     <command id="History:UndoCloseWindow" oncommand="undoCloseWindow();"/>
+    <command id="Browser:ToggleAddonBar" oncommand="toggleAddonBar();"/>
+    <command id="Social:SharePage" oncommand="SocialShareButton.sharePage();" disabled="true"/>
+    <command id="Social:UnsharePage" oncommand="SocialShareButton.unsharePage();"/>
+    <command id="Social:ToggleSidebar" oncommand="Social.toggleSidebar();"/>
+    <command id="Social:ToggleNotifications" oncommand="Social.toggleNotifications();"/>
+    <command id="Social:FocusChat" oncommand="SocialChatBar.focus();" hidden="true" disabled="true"/>
+    <command id="Social:Toggle" oncommand="Social.toggle();" hidden="true"/>
+    <command id="Social:Remove" oncommand="SocialUI.disableWithConfirmation();"/>
   </commandset>
 
   <commandset id="placesCommands">
@@ -140,17 +123,6 @@
              oncommand="PlacesCommandHook.showPlacesOrganizer('AllBookmarks');"/>
     <command id="Browser:ShowAllHistory"
              oncommand="PlacesCommandHook.showPlacesOrganizer('History');"/>
-  </commandset>
-
-  <commandset id="inspectorCommands">
-    <command id="Inspector:Inspect"
-             oncommand="InspectorUI.toggleInspection();"/>
-    <command id="Inspector:Previous"
-             oncommand="InspectorUI.inspectPrevious();"
-             disabled="true"/>
-    <command id="Inspector:Next"
-             oncommand="InspectorUI.inspectNext();"
-             disabled="true"/>
   </commandset>
 
   <broadcasterset id="mainBroadcasterSet">
@@ -165,7 +137,7 @@
                  type="checkbox" group="sidebar"
                  sidebarurl="chrome://browser/content/history/history-panel.xul"
                  oncommand="toggleSidebar('viewHistorySidebar');"/>
-                 
+
     <broadcaster id="viewWebPanelsSidebar" autoCheck="false"
                  type="checkbox" group="sidebar" sidebarurl="chrome://browser/content/web-panels.xul"
                  oncommand="toggleSidebar('viewWebPanelsSidebar');"/>
@@ -191,6 +163,55 @@
     <broadcaster id="isFrameImage"/>
     <broadcaster id="singleFeedMenuitemState" disabled="true"/>
     <broadcaster id="multipleFeedsMenuState" hidden="true"/>
+    <broadcaster id="tabviewGroupsNumber" groups="1"/>
+#ifdef MOZ_SERVICES_SYNC
+    <broadcaster id="sync-setup-state"/>
+    <broadcaster id="sync-syncnow-state"/>
+#endif
+    <broadcaster id="workOfflineMenuitemState"/>
+    <broadcaster id="socialSidebarBroadcaster" hidden="true"/>
+    <broadcaster id="socialActiveBroadcaster" hidden="true"/>
+
+    <!-- DevTools broadcasters -->
+    <broadcaster id="devtoolsMenuBroadcaster_DevToolbox"
+                 label="&devToolbarToolsButton.label;"
+                 type="checkbox" autocheck="false"
+                 command="Tools:DevToolbox"/>
+    <broadcaster id="devtoolsMenuBroadcaster_DevToolbar"
+                 label="&devToolbarMenu.label;"
+                 type="checkbox" autocheck="false"
+                 command="Tools:DevToolbar"
+                 key="key_devToolbar"/>
+    <broadcaster id="devtoolsMenuBroadcaster_ChromeDebugger"
+                 label="&chromeDebuggerMenu.label;"
+                 command="Tools:ChromeDebugger"/>
+    <broadcaster id="devtoolsMenuBroadcaster_Scratchpad"
+                 label="&scratchpad.label;"
+                 command="Tools:Scratchpad"
+                 key="key_scratchpad"/>
+    <broadcaster id="devtoolsMenuBroadcaster_ResponsiveUI"
+                 label="&responsiveDesignTool.label;"
+                 type="checkbox" autocheck="false"
+                 command="Tools:ResponsiveUI"
+                 key="key_responsiveUI"/>
+    <broadcaster id="devtoolsMenuBroadcaster_PageSource"
+                 label="&pageSourceCmd.label;"
+                 key="key_viewSource"
+                 command="View:PageSource"/>
+    <broadcaster id="devtoolsMenuBroadcaster_ErrorConsole"
+                 label="&errorConsoleCmd.label;"
+                 key="key_errorConsole"
+                 command="Tools:ErrorConsole"/>
+    <broadcaster id="devtoolsMenuBroadcaster_GetMoreTools"
+                 label="&getMoreDevtoolsCmd.label;"
+                 oncommand="openUILinkIn('https://addons.mozilla.org/firefox/collections/mozilla/webdeveloper/', 'tab');"/>
+    <broadcaster id="devtoolsMenuBroadcaster_connect"
+                 label="&devtoolsConnect.label;"
+                 command="Tools:DevToolsConnect"/>
+
+    <!-- SocialAPI broadcasters -->
+    <broadcaster id="socialBroadcaster_userDetails"
+                 notLoggedInLabel="&social.notLoggedIn.label;"/>
   </broadcasterset>
 
   <keyset id="mainKeyset">
@@ -201,17 +222,18 @@
     <key id="key_newNavigatorTab" key="&tabCmd.commandkey;" modifiers="accel" command="cmd_newNavigatorTab"/>
     <key id="focusURLBar" key="&openCmd.commandkey;" command="Browser:OpenLocation"
          modifiers="accel"/>
-#ifndef MOZ_WIDGET_COCOA
+#ifndef XP_MACOSX
     <key id="focusURLBar2" key="&urlbar.accesskey;" command="Browser:OpenLocation"
          modifiers="alt"/>
 #endif
 
 #
 # Search Command Key Logic works like this:
-# 
+#
 # Unix: Ctrl+K (cross platform binding)
 #       Ctrl+J (in case of emacs Ctrl-K conflict)
-# Mac:  Ctrl+K (cross platform binding)
+# Mac:  Cmd+K (cross platform binding)
+#       Cmd+Opt+F (platform convention)
 # Win:  Ctrl+K (cross platform binding)
 #       Ctrl+E (IE compat)
 #
@@ -223,7 +245,7 @@
 # for people to switch to Linux.
 #
     <key id="key_search" key="&searchFocus.commandkey;" command="Tools:Search" modifiers="accel"/>
-#ifdef MOZ_WIDGET_COCOA
+#ifdef XP_MACOSX
     <key id="key_search2" key="&findOnCmd.commandkey;" command="Tools:Search" modifiers="accel,alt"/>
 #endif
 #ifdef XP_WIN
@@ -235,9 +257,19 @@
 #else
     <key id="key_openDownloads" key="&downloads.commandkey;" command="Tools:Downloads" modifiers="accel"/>
 #endif
-    <key id="key_errorConsole" key="&errorConsoleCmd.commandkey;" oncommand="toJavaScriptConsole();" modifiers="accel,shift"/>
-    <key id="key_webConsole" key="&webConsoleCmd.commandkey;" oncommand="HUDConsoleUI.toggleHUD();" modifiers="accel,shift"/>
-    <key id="key_inspect" key="&inspectMenu.commandkey;" command="Tools:Inspect" modifiers="accel,shift"/>
+    <key id="key_openAddons" key="&addons.commandkey;" command="Tools:Addons" modifiers="accel,shift"/>
+    <key id="key_errorConsole" key="&errorConsoleCmd.commandkey;" command="Tools:ErrorConsole" modifiers="accel,shift"/>
+    <key id="key_devToolbar" keycode="&devToolbar.keycode;" modifiers="shift"
+         keytext="&devToolbar.keytext;" command="Tools:DevToolbarFocus"/>
+    <key id="key_responsiveUI" key="&responsiveDesignTool.commandkey;" command="Tools:ResponsiveUI"
+#ifdef XP_MACOSX
+        modifiers="accel,alt"
+#else
+        modifiers="accel,shift"
+#endif
+    />
+    <key id="key_scratchpad" keycode="&scratchpad.keycode;" modifiers="shift"
+         keytext="&scratchpad.keytext;" command="Tools:Scratchpad"/>
     <key id="openFileKb" key="&openFileCmd.commandkey;" command="Browser:OpenFile"  modifiers="accel"/>
     <key id="key_savePage" key="&savePageCmd.commandkey;" command="Browser:SavePage" modifiers="accel"/>
     <key id="printKb" key="&printCmd.commandkey;" command="cmd_print"  modifiers="accel"/>
@@ -265,7 +297,7 @@
 
     <key keycode="VK_BACK" command="cmd_handleBackspace"/>
     <key keycode="VK_BACK" command="cmd_handleShiftBackspace" modifiers="shift"/>
-#ifndef MOZ_WIDGET_COCOA
+#ifndef XP_MACOSX
     <key id="goBackKb"  keycode="VK_LEFT" command="Browser:Back" modifiers="alt"/>
     <key id="goForwardKb"  keycode="VK_RIGHT" command="Browser:Forward" modifiers="alt"/>
 #else
@@ -278,12 +310,15 @@
 #endif
     <key id="goHome" keycode="VK_HOME" command="Browser:Home" modifiers="alt"/>
     <key keycode="VK_F5" command="Browser:Reload"/>
-#ifndef MOZ_WIDGET_COCOA
+#ifndef XP_MACOSX
     <key id="showAllHistoryKb" key="&showAllHistoryCmd.commandkey;" command="Browser:ShowAllHistory" modifiers="accel,shift"/>
     <key keycode="VK_F5" command="Browser:ReloadSkipCache" modifiers="accel"/>
+    <key keycode="VK_F6" command="Browser:FocusNextFrame"/>
+    <key keycode="VK_F6" command="Browser:FocusNextFrame" modifiers="shift"/>
     <key id="key_fullScreen" keycode="VK_F11" command="View:FullScreen"/>
 #else
-    <key id="key_fullScreen" key="&fullScreenCmd.macCommandKey;" command="View:FullScreen" modifiers="accel,shift"/>
+    <key id="key_fullScreen" key="&fullScreenCmd.macCommandKey;" command="View:FullScreen" modifiers="accel,control"/>
+    <key id="key_fullScreen_old" key="&fullScreenCmd.macCommandKey;" command="View:FullScreen" modifiers="accel,shift"/>
     <key keycode="VK_F11" command="View:FullScreen"/>
 #endif
     <key key="&reloadCmd.commandkey;" command="Browser:Reload" modifiers="accel" id="key_reload"/>
@@ -301,7 +336,7 @@
     <key id="addBookmarkAsKb" key="&bookmarkThisPageCmd.commandkey;" command="Browser:AddBookmarkAs" modifiers="accel"/>
 # Accel+Shift+A-F are reserved on GTK2
 #ifndef MOZ_WIDGET_GTK2
-    <key id="bookmarkAllTabsKb" key="&bookmarkThisPageCmd.commandkey;" command="Browser:BookmarkAllTabs" modifiers="accel,shift"/>
+    <key id="bookmarkAllTabsKb" key="&bookmarkThisPageCmd.commandkey;" oncommand="PlacesCommandHook.bookmarkCurrentPages();" modifiers="accel,shift"/>
     <key id="manBookmarkKb" key="&bookmarksCmd.commandkey;" command="Browser:ShowAllBookmarks" modifiers="accel,shift"/>
 #else
     <key id="manBookmarkKb" key="&bookmarksGtkCmd.commandkey;" command="Browser:ShowAllBookmarks" modifiers="accel,shift"/>
@@ -312,18 +347,19 @@
 # overridden for other purposes there.
     <key id="viewBookmarksSidebarWinKb" key="&bookmarksWinCmd.commandkey;" command="viewBookmarksSidebar" modifiers="accel"/>
 #endif
+    
+    <key id="sharePage" key="&sharePageCmd.commandkey;" command="Social:SharePage" modifiers="accel,shift"/>
+    <key id="focusChatBar" key="&social.chatBar.commandkey;" command="Social:FocusChat" modifiers="accel,shift"/>
 
-# don't use |command="Browser:Stop"|, ESC is being used to freeze animated gifs,
-# even if the stop button and menuitem are disabled (see Bug 284140)
-    <key id="key_stop" keycode="VK_ESCAPE" oncommand="BrowserStop();"/>
+    <key id="key_stop" keycode="VK_ESCAPE" command="Browser:Stop"/>
 
-#ifdef MOZ_WIDGET_COCOA
-    <key id="key_stop_mac" modifiers="accel" key="&stopCmd.macCommandKey;" oncommand="BrowserStop();"/>
+#ifdef XP_MACOSX
+    <key id="key_stop_mac" modifiers="accel" key="&stopCmd.macCommandKey;" command="Browser:Stop"/>
 #endif
 
     <key id="key_gotoHistory"
          key="&historySidebarCmd.commandKey;"
-#ifdef MOZ_WIDGET_COCOA
+#ifdef XP_MACOSX
          modifiers="accel,shift"
 #else
          modifiers="accel"
@@ -342,16 +378,20 @@
 
     <key id="key_switchTextDirection" key="&bidiSwitchTextDirectionItem.commandkey;" command="cmd_switchTextDirection" modifiers="accel,shift" />
 
+    <key id="key_tabview" key="&tabView.commandkey;" command="Browser:ToggleTabView" modifiers="accel,shift"/>
+
     <key id="key_privatebrowsing" command="Tools:PrivateBrowsing" key="&privateBrowsingCmd.commandkey;" modifiers="accel,shift"/>
     <key id="key_sanitize" command="Tools:Sanitize" keycode="VK_DELETE" modifiers="accel,shift"/>
-#ifdef MOZ_WIDGET_COCOA
+#ifdef XP_MACOSX
     <key id="key_sanitize_mac" command="Tools:Sanitize" keycode="VK_BACK" modifiers="accel,shift"/>
 #endif
 #ifdef XP_UNIX
     <key id="key_quitApplication" key="&quitApplicationCmdMac.key;" command="cmd_quitApplication" modifiers="accel"/>
 #endif
 
+#ifdef FULL_BROWSER_WINDOW
     <key id="key_undoCloseTab" command="History:UndoCloseTab" key="&tabCmd.commandkey;" modifiers="accel,shift"/>
+#endif
     <key id="key_undoCloseWindow" command="History:UndoCloseWindow" key="&newNavigatorCmd.key;" modifiers="accel,shift"/>
 
 #ifdef XP_GNOME
@@ -370,10 +410,12 @@
 #expand    <key id="key_selectTab8" oncommand="gBrowser.selectTabAtIndex(7, event);" key="8" modifiers="__NUM_SELECT_TAB_MODIFIER__"/>
 #expand    <key id="key_selectLastTab" oncommand="gBrowser.selectTabAtIndex(-1, event);" key="9" modifiers="__NUM_SELECT_TAB_MODIFIER__"/>
 
+    <key id="key_toggleAddonBar" command="Browser:ToggleAddonBar" key="&toggleAddonBarCmd.key;" modifiers="accel"/>
+
   </keyset>
 
 # Used by baseMenuOverlay
-#ifdef MOZ_WIDGET_COCOA
+#ifdef XP_MACOSX
   <commandset id="baseMenuCommandSet" />
 #endif
   <keyset id="baseMenuKeyset" />

@@ -1,0 +1,41 @@
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-iPhoneSimulator-opt-6.0
+mk_add_options MOZ_MAKE_FLAGS="-j6"
+ac_add_options --enable-application=mobile/xul
+ac_add_options --disable-debug
+ac_add_options --enable-logging
+ac_add_options --enable-dump-painting
+ac_add_options --disable-tests
+ac_add_options --disable-optimize
+
+export CROSS_COMPILE=1
+export MOZ_CUSTOM_STDINT_H=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator6.0.sdk/usr/include/stdint.h
+export CC="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch i686 -mios-simulator-version-min=6.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator6.0.sdk"
+export CXX="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch i686 -mios-simulator-version-min=6.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator6.0.sdk"
+export LD="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/bin/ld -arch i686"
+export AR=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/bin/ar
+export STRIP=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/bin/strip
+
+export PKG_CONFIG_PATH=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator6.0.sdk/usr/lib/pkgconfig/
+
+ac_add_options --with-macos-sdk=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator6.0.sdk
+ac_add_options --target=i686-apple-darwin11
+
+ac_add_options --disable-libjpeg-turbo
+
+#XXX: should make these defaults
+ac_add_options --disable-printing
+ac_add_options --disable-plugins
+ac_add_options --disable-necko-wifi
+ac_add_options --disable-negotiateauth
+#ac_add_options --disable-ogg
+ac_add_options --disable-wave
+ac_add_options --disable-webm
+ac_add_options --disable-dash
+ac_add_options --disable-raw
+ac_add_options --disable-webrtc
+ac_add_options --disable-gstreamer
+
+ac_add_options --disable-updater
+ac_add_options --disable-crashreporter
+#XXX: FIXME
+ac_add_options --disable-ctypes

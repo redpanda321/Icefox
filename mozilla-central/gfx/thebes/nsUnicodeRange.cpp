@@ -1,76 +1,44 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsUnicodeRange.h"
 #include "nsIAtom.h"
-#include "gfxAtoms.h"
+#include "nsGkAtoms.h"
 
 // This table depends on unicode range definitions. 
 // Each item's index must correspond unicode range value
 // eg. x-cyrillic = LangGroupTable[kRangeCyrillic]
 static nsIAtom **gUnicodeRangeToLangGroupAtomTable[] =
 {
-  &gfxAtoms::x_cyrillic,
-  &gfxAtoms::el,
-  &gfxAtoms::tr,
-  &gfxAtoms::he,
-  &gfxAtoms::ar,
-  &gfxAtoms::x_baltic,
-  &gfxAtoms::th,
-  &gfxAtoms::ko,
-  &gfxAtoms::ja,
-  &gfxAtoms::zh_cn,
-  &gfxAtoms::zh_tw,
-  &gfxAtoms::x_devanagari,
-  &gfxAtoms::x_tamil,
-  &gfxAtoms::x_armn,
-  &gfxAtoms::x_beng,
-  &gfxAtoms::x_cans,
-  &gfxAtoms::x_ethi,
-  &gfxAtoms::x_geor,
-  &gfxAtoms::x_gujr,
-  &gfxAtoms::x_guru,
-  &gfxAtoms::x_khmr,
-  &gfxAtoms::x_mlym,
-  &gfxAtoms::x_orya,
-  &gfxAtoms::x_telu,
-  &gfxAtoms::x_knda,
-  &gfxAtoms::x_sinh,
-  &gfxAtoms::x_tibt
+  &nsGkAtoms::x_cyrillic,
+  &nsGkAtoms::el_,
+  &nsGkAtoms::tr,
+  &nsGkAtoms::he,
+  &nsGkAtoms::ar,
+  &nsGkAtoms::x_baltic,
+  &nsGkAtoms::th,
+  &nsGkAtoms::ko,
+  &nsGkAtoms::Japanese,
+  &nsGkAtoms::zh_cn,
+  &nsGkAtoms::zh_tw,
+  &nsGkAtoms::x_devanagari,
+  &nsGkAtoms::x_tamil,
+  &nsGkAtoms::x_armn,
+  &nsGkAtoms::x_beng,
+  &nsGkAtoms::x_cans,
+  &nsGkAtoms::x_ethi,
+  &nsGkAtoms::x_geor,
+  &nsGkAtoms::x_gujr,
+  &nsGkAtoms::x_guru,
+  &nsGkAtoms::x_khmr,
+  &nsGkAtoms::x_mlym,
+  &nsGkAtoms::x_orya,
+  &nsGkAtoms::x_telu,
+  &nsGkAtoms::x_knda,
+  &nsGkAtoms::x_sinh,
+  &nsGkAtoms::x_tibt
 };
 
 /**********************************************************************
@@ -213,10 +181,10 @@ static nsIAtom **gUnicodeRangeToLangGroupAtomTable[] =
 
 
 
-#define NUM_OF_SUBTABLES      9
+#define NUM_OF_SUBTABLES      10
 #define SUBTABLE_SIZE         16
 
-static const PRUint8 gUnicodeSubrangeTable[NUM_OF_SUBTABLES][SUBTABLE_SIZE] = 
+static const uint8_t gUnicodeSubrangeTable[NUM_OF_SUBTABLES][SUBTABLE_SIZE] = 
 { 
   { // table for X---
     kRangeTableBase+1,  //u0xxx
@@ -252,7 +220,7 @@ static const PRUint8 gUnicodeSubrangeTable[NUM_OF_SUBTABLES][SUBTABLE_SIZE] =
     kRangeTertiaryTable,     //u0cxx
     kRangeTertiaryTable,     //u0dxx
     kRangeTertiaryTable,     //u0exx
-    kRangeTibetan,           //u0fxx
+    kRangeTibetan            //u0fxx
   },
   { //table for 1x--
     kRangeTertiaryTable,     //u10xx
@@ -270,7 +238,7 @@ static const PRUint8 gUnicodeSubrangeTable[NUM_OF_SUBTABLES][SUBTABLE_SIZE] =
     kRangeUnassigned,        //u1cxx
     kRangeUnassigned,        //u1dxx
     kRangeSetLatin,          //u1exx
-    kRangeGreek,             //u1fxx
+    kRangeGreek              //u1fxx
   },
   { //table for 2x--
     kRangeSetLatin,          //u20xx
@@ -288,7 +256,7 @@ static const PRUint8 gUnicodeSubrangeTable[NUM_OF_SUBTABLES][SUBTABLE_SIZE] =
     kRangeUnassigned,        //u2cxx
     kRangeUnassigned,        //u2dxx
     kRangeSetCJK,            //u2exx
-    kRangeSetCJK,            //u2fxx
+    kRangeSetCJK             //u2fxx
   },
   {  //table for ax--
     kRangeYi,                //ua0xx
@@ -306,7 +274,7 @@ static const PRUint8 gUnicodeSubrangeTable[NUM_OF_SUBTABLES][SUBTABLE_SIZE] =
     kRangeKorean,            //uacxx
     kRangeKorean,            //uadxx
     kRangeKorean,            //uaexx
-    kRangeKorean,            //uafxx
+    kRangeKorean             //uafxx
   },
   {  //table for dx--
     kRangeKorean,            //ud0xx
@@ -324,7 +292,7 @@ static const PRUint8 gUnicodeSubrangeTable[NUM_OF_SUBTABLES][SUBTABLE_SIZE] =
     kRangeSurrogate,         //udcxx
     kRangeSurrogate,         //uddxx
     kRangeSurrogate,         //udexx
-    kRangeSurrogate,         //udfxx
+    kRangeSurrogate          //udfxx
   },
   { // table for fx--
     kRangePrivate,           //uf0xx 
@@ -341,11 +309,8 @@ static const PRUint8 gUnicodeSubrangeTable[NUM_OF_SUBTABLES][SUBTABLE_SIZE] =
     kRangeArabic,            //ufbxx, includes alphabic presentation form
     kRangeArabic,            //ufcxx
     kRangeArabic,            //ufdxx
-    kRangeArabic,            //ufexx, includes Combining half marks, 
-                             //                CJK compatibility forms, 
-                             //                CJK compatibility forms, 
-                             //                small form variants
-    kRangeTableBase+8,       //uffxx, halfwidth and fullwidth forms, includes Specials
+    kRangeTableBase+8,       //ufexx
+    kRangeTableBase+9        //uffxx, halfwidth and fullwidth forms, includes Specials
   },
   { //table for 0x0500 - 0x05ff
     kRangeCyrillic,          //u050x
@@ -363,7 +328,25 @@ static const PRUint8 gUnicodeSubrangeTable[NUM_OF_SUBTABLES][SUBTABLE_SIZE] =
     kRangeHebrew,            //u05cx
     kRangeHebrew,            //u05dx
     kRangeHebrew,            //u05ex
-    kRangeHebrew,            //u05fx
+    kRangeHebrew             //u05fx
+  },
+  { //table for 0xfe00 - 0xfeff
+    kRangeSetCJK,            //ufe0x
+    kRangeSetCJK,            //ufe1x
+    kRangeSetCJK,            //ufe2x
+    kRangeSetCJK,            //ufe3x
+    kRangeSetCJK,            //ufe4x
+    kRangeSetCJK,            //ufe5x
+    kRangeSetCJK,            //ufe6x
+    kRangeArabic,            //ufe7x
+    kRangeArabic,            //ufe8x
+    kRangeArabic,            //ufe9x
+    kRangeArabic,            //ufeax
+    kRangeArabic,            //ufebx
+    kRangeArabic,            //ufecx
+    kRangeArabic,            //ufedx
+    kRangeArabic,            //ufeex
+    kRangeArabic             //ufefx
   },
   { //table for 0xff00 - 0xffff
     kRangeSetCJK,            //uff0x, fullwidth latin
@@ -392,7 +375,7 @@ static const PRUint8 gUnicodeSubrangeTable[NUM_OF_SUBTABLES][SUBTABLE_SIZE] =
 // syllabaries take multiple chunks and Ogham and Runic share  a single chunk.
 #define TERTIARY_TABLE_SIZE ((0x1700 - 0x0700) / 0x80)
 
-static const PRUint8 gUnicodeTertiaryRangeTable[TERTIARY_TABLE_SIZE] =
+static const uint8_t gUnicodeTertiaryRangeTable[TERTIARY_TABLE_SIZE] =
 { //table for 0x0700 - 0x1600 
     kRangeSyriac,            //u070x
     kRangeThaana,            //u078x
@@ -425,7 +408,7 @@ static const PRUint8 gUnicodeTertiaryRangeTable[TERTIARY_TABLE_SIZE] =
     kRangeCanadian,          //u150x  place holder(resolved in the 2ndary tab.)
     kRangeCanadian,          //u158x  place holder(resolved in the 2ndary tab.)
     kRangeCanadian,          //u160x  
-    kRangeOghamRunic,        //u168x  this contains two scripts, Ogham & Runic
+    kRangeOghamRunic         //u168x  this contains two scripts, Ogham & Runic
 };
 
 // A two level index is almost enough for locating a range, with the 
@@ -436,18 +419,31 @@ static const PRUint8 gUnicodeTertiaryRangeTable[TERTIARY_TABLE_SIZE] =
 // there is such a need.
 // For Indic, Southeast Asian scripts and some other scripts between
 // U+0700 and U+16FF, it's extended to the third level.
-PRUint32 FindCharUnicodeRange(PRUnichar ch)
+uint32_t FindCharUnicodeRange(uint32_t ch)
 {
-  PRUint32 range;
+  uint32_t range;
+  
+  // aggregate ranges for non-BMP codepoints
+  if (ch > 0xFFFF) {
+    uint32_t p = (ch >> 16);
+    if (p == 1) {
+        return kRangeSMP;
+    } else if (p == 2) {
+        return kRangeSetCJK;
+    }
+    return kRangeHigherPlanes;
+  }
 
-  //search the first table
+  // lookup explicit range for BMP codepoints
+  // first general range
   range = gUnicodeSubrangeTable[0][ch >> 12];
   
+  // if general range is good enough, return that
   if (range < kRangeTableBase)
     // we try to get a specific range 
     return range;
 
-  // otherwise, we have one more table to look at
+  // otherwise, use subrange tables
   range = gUnicodeSubrangeTable[range - kRangeTableBase][(ch & 0x0f00) >> 8];
   if (range < kRangeTableBase)
     return range;
@@ -458,11 +454,11 @@ PRUint32 FindCharUnicodeRange(PRUnichar ch)
   return gUnicodeTertiaryRangeTable[(ch - 0x0700) >> 7];
 }
 
-nsIAtom *LangGroupFromUnicodeRange(PRUint8 unicodeRange)
+nsIAtom *LangGroupFromUnicodeRange(uint8_t unicodeRange)
 {
   if (kRangeSpecificItemNum > unicodeRange) {
     nsIAtom **atom = gUnicodeRangeToLangGroupAtomTable[unicodeRange];
     return *atom;
   }
-  return nsnull;
+  return nullptr;
 }

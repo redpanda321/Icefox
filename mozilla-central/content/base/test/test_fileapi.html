@@ -5,7 +5,6 @@
 https://bugzilla.mozilla.org/show_bug.cgi?id=414796
 -->
   <title>Test for Bug 414796</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -20,6 +19,15 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=414796
 
 <pre id="test">
 <script class="testbody" type="text/javascript">
+
+// File constructors should not work from non-chrome code
+try {
+  var file = File("/etc/passwd");
+  ok(false, "Did not throw on unprivileged attempt to construct a File");
+} catch (e) {
+  ok(true, "Threw on an unprivileged attempt to construct a File");
+}
+
 const minFileSize = 20000;
 var fileNum = 1;
 var testRanCounter = 0;
@@ -62,6 +70,7 @@ var nonExistingFile = fileList.files[0];
 
 // Test that plain reading works and fires events as expected, both
 // for text and binary reading
+
 var onloadHasRunText = false;
 var onloadStartHasRunText = false;
 r = new FileReader();
@@ -88,6 +97,18 @@ is(onloadHasRunBinary, false, "binary loading must be async");
 is(onloadStartHasRunBinary, true, "binary loadstart should fire sync");
 expectedTestCount++;
 
+var onloadHasRunArrayBuffer = false;
+var onloadStartHasRunArrayBuffer = false;
+r = new FileReader();
+is(r.readyState, FileReader.EMPTY, "correct initial arrayBuffer readyState");
+r.addEventListener("load", function() { onloadHasRunArrayBuffer = true }, false);
+r.addEventListener("loadstart", function() { onloadStartHasRunArrayBuffer = true }, false);
+r.readAsArrayBuffer(binaryFile);
+r.onload = getLoadHandlerForArrayBuffer(testBinaryData, testBinaryData.length, "array buffer reading");
+is(r.readyState, FileReader.LOADING, "correct loading arrayBuffer readyState");
+is(onloadHasRunArrayBuffer, false, "arrayBuffer loading must be async");
+is(onloadStartHasRunArrayBuffer, true, "arrayBuffer loadstart should fire sync");
+expectedTestCount++;
 
 // Test a variety of encodings, and make sure they work properly
 r = new FileReader();
@@ -114,13 +135,47 @@ r.onload = getLoadHandler(testTextData,
                           "utf16 reading");
 expectedTestCount++;
 
+// Test get result without reading
 r = new FileReader();
-r.onload = getLoadHandler(testTextData,
-                          convertToUTF32(testTextData).length,
-                          "utf32 reading");
-r.readAsText(createFileWithData(convertToUTF32(testTextData)), "UTF-32");
+is(r.readyState, FileReader.EMPTY,
+  "readyState in test reader get result without reading");
+is(r.error, null,
+  "no error in test reader get result without reading");
+is(r.result, null,
+  "result in test reader get result without reading");
+
+// Test loading an empty file works (and doesn't crash!)
+var emptyFile = createFileWithData("");
+dump("hello nurse");
+r = new FileReader();
+r.onload = getLoadHandler("", 0, "empty no encoding reading");
+r.readAsText(emptyFile, "");
 expectedTestCount++;
 
+r = new FileReader();
+r.onload = getLoadHandler("", 0, "empty utf8 reading");
+r.readAsText(emptyFile, "utf8");
+expectedTestCount++;
+
+r = new FileReader();
+r.onload = getLoadHandler("", 0, "empty utf16 reading");
+r.readAsText(emptyFile, "utf-16");
+expectedTestCount++;
+
+r = new FileReader();
+r.onload = getLoadHandler("", 0, "empty binary string reading");
+r.readAsBinaryString(emptyFile);
+expectedTestCount++;
+
+r = new FileReader();
+r.onload = getLoadHandlerForArrayBuffer("", 0, "empty array buffer reading");
+r.readAsArrayBuffer(emptyFile);
+expectedTestCount++;
+
+r = new FileReader();
+r.onload = getLoadHandler(convertToDataURL(""), 0, "empt binary string reading");
+r.readAsDataURL(emptyFile);
+expectedTestCount++;
 
 // Test reusing a FileReader to read multiple times
 r = new FileReader();
@@ -171,6 +226,39 @@ r.addEventListener("load", makeAnotherReadListener3, false);
 r.readAsDataURL(binaryFile);
 expectedTestCount += 2;
 
+r = new FileReader();
+r.onload = getLoadHandlerForArrayBuffer(testBinaryData,
+                          testBinaryData.length,
+                          "to-be-reused reading arrayBuffer")
+var makeAnotherReadListener4 = function(event) {
+  r = event.target;
+  r.removeEventListener("load", makeAnotherReadListener4, false);
+  r.onload = getLoadHandlerForArrayBuffer(testBinaryData,
+                            testBinaryData.length,
+                            "reused reading arrayBuffer");
+  r.readAsArrayBuffer(binaryFile);
+};
+r.addEventListener("load", makeAnotherReadListener4, false);
+r.readAsArrayBuffer(binaryFile);
+expectedTestCount += 2;
+
+// Test first reading as ArrayBuffer then read as something else
+// (BinaryString) and doesn't crash
+r = new FileReader();
+r.onload = getLoadHandlerForArrayBuffer(testBinaryData,
+                          testBinaryData.length,
+                          "to-be-reused reading arrayBuffer")
+var makeAnotherReadListener5 = function(event) {
+  r = event.target;
+  r.removeEventListener("load", makeAnotherReadListener5, false);
+  r.onload = getLoadHandler(testBinaryData,
+                            testBinaryData.length,
+                            "reused reading binary string");
+  r.readAsBinaryString(binaryFile);
+};
+r.addEventListener("load", makeAnotherReadListener5, false);
+r.readAsArrayBuffer(binaryFile);
+expectedTestCount += 2;
 
 //Test data-URI encoding on differing file sizes
 dataurldata = testBinaryData.substr(0, testBinaryData.length -
@@ -213,7 +301,7 @@ r.onabort = function (event) {
   is(loadEndHasRun, false, "loadend shouldn't have fired yet");
   abortHasRun = true;
   is(event.target.readyState, FileReader.DONE, "should be DONE while firing onabort");
-  is(event.target.error.code, FileError.ABORT_ERR, "error code set to ABORT for aborted reads");
+  is(event.target.error.name, "AbortError", "error set to AbortError for aborted reads");
   is(event.target.result, null, "file data should be null on aborted reads");
 }
 r.onloadend = function (event) {
@@ -221,13 +309,19 @@ r.onloadend = function (event) {
   is(loadEndHasRun, false, "loadend should only fire once");
   loadEndHasRun = true;
   is(event.target.readyState, FileReader.DONE, "should be DONE while firing onabort");
-  is(event.target.error.code, FileError.ABORT_ERR, "error code set to ABORT for aborted reads");
+  is(event.target.error.name, "AbortError", "error set to AbortError for aborted reads");
   is(event.target.result, null, "file data should be null on aborted reads");
 }
 r.onload = function() { ok(false, "load should not fire for aborted reads") };
 r.onerror = function() { ok(false, "error should not fire for aborted reads") };
 r.onprogress = function() { ok(false, "progress should not fire for aborted reads") };
-r.abort();
+var abortThrew = false;
+try {
+  r.abort();
+} catch(e) {
+  abortThrew = true;
+}
+is(abortThrew, true, "abort() must throw if not loading");
 is(abortHasRun, false, "abort() is a no-op unless loading");
 r.readAsText(asciiFile);
 r.abort();
@@ -241,11 +335,17 @@ r.onabort = function (event) {
   is(reuseAbortHasRun, false, "abort should only fire once");
   reuseAbortHasRun = true;
   is(event.target.readyState, FileReader.DONE, "should be DONE while firing onabort");
-  is(event.target.error.code, FileError.ABORT_ERR, "error code set to ABORT for aborted reads");
+  is(event.target.error.name, "AbortError", "error set to AbortError for aborted reads");
   is(event.target.result, null, "file data should be null on aborted reads");
 }
 r.onload = function() { ok(false, "load should not fire for aborted reads") };
-r.abort();
+var abortThrew = false;
+try {
+  r.abort();
+} catch(e) {
+  abortThrew = true;
+}
+is(abortThrew, true, "abort() must throw if not loading");
 is(reuseAbortHasRun, false, "abort() is a no-op unless loading");
 r.readAsText(asciiFile);
 r.readAsText(asciiFile);
@@ -278,9 +378,37 @@ function getLoadHandler(expectedResult, expectedLength, testName) {
     is(event.lengthComputable, true,
        "lengthComputable in test " + testName);
     is(event.loaded, expectedLength,
-       "lengthComputable in test " + testName);
+       "loaded in test " + testName);
     is(event.total, expectedLength,
+       "total in test " + testName);
+    testHasRun();
+  }
+}
+
+function getLoadHandlerForArrayBuffer(expectedResult, expectedLength, testName) {
+  return function (event) {
+    is(event.target.readyState, FileReader.DONE,
+       "readyState in test " + testName);
+    is(event.target.error, null,
+       "no error in test " +  testName);
+    is(event.lengthComputable, true,
        "lengthComputable in test " + testName);
+    is(event.loaded, expectedLength,
+       "loaded in test " + testName);
+    is(event.total, expectedLength,
+       "total in test " + testName);
+    is(event.target.result.byteLength, expectedLength,
+       "array buffer size in test " + testName);
+    var u8v = new Uint8Array(event.target.result);
+    is(String.fromCharCode.apply(String, u8v), expectedResult,
+       "array buffer contents in test " + testName);
+    u8v = null;
+    SpecialPowers.gc();
+    is(event.target.result.byteLength, expectedLength,
+       "array buffer size after gc in test " + testName);
+    u8v = new Uint8Array(event.target.result);
+    is(String.fromCharCode.apply(String, u8v), expectedResult,
+       "array buffer contents after gc in test " + testName);
     testHasRun();
   }
 }
@@ -316,16 +444,7 @@ function convertToUTF16(s) {
   res = "";
   for (var i = 0; i < s.length; ++i) {
     c = s.charCodeAt(i);
-    res += String.fromCharCode(c >>> 8, c & 255);
-  }
-  return res;
-}
-
-function convertToUTF32(s) {
-  res = "";
-  for (var i = 0; i < s.length; ++i) {
-    c = s.charCodeAt(i);
-    res += "\0\0" + String.fromCharCode(c >>> 8, c & 255);
+    res += String.fromCharCode(c & 255, c >>> 8);
   }
   return res;
 }

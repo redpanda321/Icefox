@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Alexander Surkov <surkov.alexander@gmail.com> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsCoreUtils.h"
 
@@ -42,58 +9,58 @@
 
 #include "nsAccessNode.h"
 
+#include "nsIBaseWindow.h"
+#include "nsIDocShellTreeOwner.h"
 #include "nsIDocument.h"
-#include "nsIDOMAbstractView.h"
-#include "nsIDOM3Node.h"
 #include "nsIDOMDocument.h"
-#include "nsIDOMDocumentView.h"
-#include "nsIDOMDocumentXBL.h"
 #include "nsIDOMHTMLDocument.h"
 #include "nsIDOMHTMLElement.h"
-#include "nsIDOMNodeList.h"
-#include "nsIDOMRange.h"
-#include "nsIDOMViewCSS.h"
-#include "nsIDOMWindowInternal.h"
+#include "nsRange.h"
+#include "nsIDOMWindow.h"
 #include "nsIDOMXULElement.h"
 #include "nsIDocShell.h"
 #include "nsIContentViewer.h"
-#include "nsIEventListenerManager.h"
+#include "nsEventListenerManager.h"
 #include "nsIPresShell.h"
 #include "nsPresContext.h"
 #include "nsIScrollableFrame.h"
-#include "nsIEventStateManager.h"
-#include "nsISelection2.h"
+#include "nsEventStateManager.h"
+#include "nsISelectionPrivate.h"
 #include "nsISelectionController.h"
 #include "nsPIDOMWindow.h"
 #include "nsGUIEvent.h"
 #include "nsIView.h"
+#include "nsLayoutUtils.h"
+#include "nsGkAtoms.h"
 
-#include "nsContentCID.h"
 #include "nsComponentManagerUtils.h"
 #include "nsIInterfaceRequestorUtils.h"
+#include "mozilla/dom/Element.h"
 
-static NS_DEFINE_IID(kRangeCID, NS_RANGE_CID);
+#include "nsITreeBoxObject.h"
+#include "nsIDocShellTreeItem.h"
+#include "nsITreeColumns.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 // nsCoreUtils
 ////////////////////////////////////////////////////////////////////////////////
 
-PRBool
+bool
 nsCoreUtils::HasClickListener(nsIContent *aContent)
 {
-  NS_ENSURE_TRUE(aContent, PR_FALSE);
-  nsIEventListenerManager* listenerManager =
-    aContent->GetListenerManager(PR_FALSE);
+  NS_ENSURE_TRUE(aContent, false);
+  nsEventListenerManager* listenerManager =
+    aContent->GetListenerManager(false);
 
   return listenerManager &&
-    (listenerManager->HasListenersFor(NS_LITERAL_STRING("click")) ||
-     listenerManager->HasListenersFor(NS_LITERAL_STRING("mousedown")) ||
-     listenerManager->HasListenersFor(NS_LITERAL_STRING("mouseup")));
+    (listenerManager->HasListenersFor(nsGkAtoms::onclick) ||
+     listenerManager->HasListenersFor(nsGkAtoms::onmousedown) ||
+     listenerManager->HasListenersFor(nsGkAtoms::onmouseup));
 }
 
 void
 nsCoreUtils::DispatchClickEvent(nsITreeBoxObject *aTreeBoxObj,
-                                PRInt32 aRowIndex, nsITreeColumn *aColumn,
+                                int32_t aRowIndex, nsITreeColumn *aColumn,
                                 const nsCString& aPseudoElt)
 {
   nsCOMPtr<nsIDOMElement> tcElm;
@@ -106,7 +73,7 @@ nsCoreUtils::DispatchClickEvent(nsITreeBoxObject *aTreeBoxObj,
   if (!document)
     return;
 
-  nsIPresShell *presShell = nsnull;
+  nsIPresShell *presShell = nullptr;
   presShell = document->GetShell();
   if (!presShell)
     return;
@@ -115,7 +82,7 @@ nsCoreUtils::DispatchClickEvent(nsITreeBoxObject *aTreeBoxObj,
   aTreeBoxObj->EnsureRowIsVisible(aRowIndex);
 
   // Calculate x and y coordinates.
-  PRInt32 x = 0, y = 0, width = 0, height = 0;
+  int32_t x = 0, y = 0, width = 0, height = 0;
   nsresult rv = aTreeBoxObj->GetCoordsForCellItem(aRowIndex, aColumn,
                                                   aPseudoElt,
                                                   &x, &y, &width, &height);
@@ -126,10 +93,10 @@ nsCoreUtils::DispatchClickEvent(nsITreeBoxObject *aTreeBoxObj,
   nsCOMPtr<nsIBoxObject> tcBoxObj;
   tcXULElm->GetBoxObject(getter_AddRefs(tcBoxObj));
 
-  PRInt32 tcX = 0;
+  int32_t tcX = 0;
   tcBoxObj->GetX(&tcX);
 
-  PRInt32 tcY = 0;
+  int32_t tcY = 0;
   tcBoxObj->GetY(&tcY);
 
   // Dispatch mouse events.
@@ -142,9 +109,9 @@ nsCoreUtils::DispatchClickEvent(nsITreeBoxObject *aTreeBoxObj,
 
   nsPresContext* presContext = presShell->GetPresContext();
 
-  PRInt32 cnvdX = presContext->CSSPixelsToDevPixels(tcX + x + 1) +
+  int32_t cnvdX = presContext->CSSPixelsToDevPixels(tcX + x + 1) +
     presContext->AppUnitsToDevPixels(offset.x);
-  PRInt32 cnvdY = presContext->CSSPixelsToDevPixels(tcY + y + 1) +
+  int32_t cnvdY = presContext->CSSPixelsToDevPixels(tcY + y + 1) +
     presContext->AppUnitsToDevPixels(offset.y);
 
   DispatchMouseEvent(NS_MOUSE_BUTTON_DOWN, cnvdX, cnvdY,
@@ -154,39 +121,39 @@ nsCoreUtils::DispatchClickEvent(nsITreeBoxObject *aTreeBoxObj,
                      tcContent, tcFrame, presShell, rootWidget);
 }
 
-PRBool
-nsCoreUtils::DispatchMouseEvent(PRUint32 aEventType,
+bool
+nsCoreUtils::DispatchMouseEvent(uint32_t aEventType,
                                 nsIPresShell *aPresShell,
                                 nsIContent *aContent)
 {
   nsIFrame *frame = aContent->GetPrimaryFrame();
   if (!frame)
-    return PR_FALSE;
+    return false;
 
   // Compute x and y coordinates.
   nsPoint point;
   nsCOMPtr<nsIWidget> widget = frame->GetNearestWidget(point);
   if (!widget)
-    return PR_FALSE;
+    return false;
 
   nsSize size = frame->GetSize();
 
   nsPresContext* presContext = aPresShell->GetPresContext();
 
-  PRInt32 x = presContext->AppUnitsToDevPixels(point.x + size.width / 2);
-  PRInt32 y = presContext->AppUnitsToDevPixels(point.y + size.height / 2);
+  int32_t x = presContext->AppUnitsToDevPixels(point.x + size.width / 2);
+  int32_t y = presContext->AppUnitsToDevPixels(point.y + size.height / 2);
 
   // Fire mouse event.
   DispatchMouseEvent(aEventType, x, y, aContent, frame, aPresShell, widget);
-  return PR_TRUE;
+  return true;
 }
 
 void
-nsCoreUtils::DispatchMouseEvent(PRUint32 aEventType, PRInt32 aX, PRInt32 aY,
+nsCoreUtils::DispatchMouseEvent(uint32_t aEventType, int32_t aX, int32_t aY,
                                 nsIContent *aContent, nsIFrame *aFrame,
                                 nsIPresShell *aPresShell, nsIWidget *aRootWidget)
 {
-  nsMouseEvent event(PR_TRUE, aEventType, aRootWidget,
+  nsMouseEvent event(true, aEventType, aRootWidget,
                      nsMouseEvent::eReal, nsMouseEvent::eNormal);
 
   event.refPoint = nsIntPoint(aX, aY);
@@ -199,23 +166,16 @@ nsCoreUtils::DispatchMouseEvent(PRUint32 aEventType, PRInt32 aX, PRInt32 aY,
   aPresShell->HandleEventWithTarget(&event, aFrame, aContent, &status);
 }
 
-PRUint32
-nsCoreUtils::GetAccessKeyFor(nsIContent *aContent)
+uint32_t
+nsCoreUtils::GetAccessKeyFor(nsIContent* aContent)
 {
-  if (!aContent)
-    return 0;
-
   // Accesskeys are registered by @accesskey attribute only. At first check
   // whether it is presented on the given element to avoid the slow
-  // nsIEventStateManager::GetRegisteredAccessKey() method.
-  if (!aContent->HasAttr(kNameSpaceID_None, nsAccessibilityAtoms::accesskey))
+  // nsEventStateManager::GetRegisteredAccessKey() method.
+  if (!aContent->HasAttr(kNameSpaceID_None, nsGkAtoms::accesskey))
     return 0;
 
-  nsCOMPtr<nsIDocument> doc = aContent->GetOwnerDoc();
-  if (!doc)
-    return 0;
-
-  nsCOMPtr<nsIPresShell> presShell = doc->GetShell();
+  nsIPresShell* presShell = aContent->OwnerDoc()->GetShell();
   if (!presShell)
     return 0;
 
@@ -223,13 +183,11 @@ nsCoreUtils::GetAccessKeyFor(nsIContent *aContent)
   if (!presContext)
     return 0;
 
-  nsIEventStateManager *esm = presContext->EventStateManager();
+  nsEventStateManager *esm = presContext->EventStateManager();
   if (!esm)
     return 0;
 
-  PRUint32 key = 0;
-  esm->GetRegisteredAccessKey(aContent, &key);
-  return key;
+  return esm->GetRegisteredAccessKey(aContent);
 }
 
 nsIContent *
@@ -241,16 +199,15 @@ nsCoreUtils::GetDOMElementFor(nsIContent *aContent)
   if (aContent->IsNodeOfType(nsINode::eTEXT))
     return aContent->GetParent();
 
-  return nsnull;
+  return nullptr;
 }
 
 nsINode *
-nsCoreUtils::GetDOMNodeFromDOMPoint(nsINode *aNode, PRUint32 aOffset)
+nsCoreUtils::GetDOMNodeFromDOMPoint(nsINode *aNode, uint32_t aOffset)
 {
   if (aNode && aNode->IsElement()) {
-    PRUint32 childCount = aNode->GetChildCount();
-    NS_ASSERTION(aOffset >= 0 && aOffset <= childCount,
-                 "Wrong offset of the DOM point!");
+    uint32_t childCount = aNode->GetChildCount();
+    NS_ASSERTION(aOffset <= childCount, "Wrong offset of the DOM point!");
 
     // The offset can be after last child of container node that means DOM point
     // is placed immediately after the last child. In this case use the DOM node
@@ -286,71 +243,60 @@ nsCoreUtils::GetRoleContent(nsINode *aNode)
   return content;
 }
 
-PRBool
+bool
 nsCoreUtils::IsAncestorOf(nsINode *aPossibleAncestorNode,
                           nsINode *aPossibleDescendantNode,
                           nsINode *aRootNode)
 {
-  NS_ENSURE_TRUE(aPossibleAncestorNode && aPossibleDescendantNode, PR_FALSE);
+  NS_ENSURE_TRUE(aPossibleAncestorNode && aPossibleDescendantNode, false);
 
   nsINode *parentNode = aPossibleDescendantNode;
-  while ((parentNode = parentNode->GetNodeParent()) &&
+  while ((parentNode = parentNode->GetParentNode()) &&
          parentNode != aRootNode) {
     if (parentNode == aPossibleAncestorNode)
-      return PR_TRUE;
+      return true;
   }
 
-  return PR_FALSE;
+  return false;
 }
 
 nsresult
-nsCoreUtils::ScrollSubstringTo(nsIFrame *aFrame,
-                               nsIDOMNode *aStartNode, PRInt32 aStartIndex,
-                               nsIDOMNode *aEndNode, PRInt32 aEndIndex,
-                               PRUint32 aScrollType)
+nsCoreUtils::ScrollSubstringTo(nsIFrame* aFrame, nsRange* aRange,
+                               uint32_t aScrollType)
 {
-  PRInt16 vPercent, hPercent;
-  ConvertScrollTypeToPercents(aScrollType, &vPercent, &hPercent);
+  nsIPresShell::ScrollAxis vertical, horizontal;
+  ConvertScrollTypeToPercents(aScrollType, &vertical, &horizontal);
 
-  return ScrollSubstringTo(aFrame, aStartNode, aStartIndex, aEndNode, aEndIndex,
-                           vPercent, hPercent);
+  return ScrollSubstringTo(aFrame, aRange, vertical, horizontal);
 }
 
 nsresult
-nsCoreUtils::ScrollSubstringTo(nsIFrame *aFrame,
-                               nsIDOMNode *aStartNode, PRInt32 aStartIndex,
-                               nsIDOMNode *aEndNode, PRInt32 aEndIndex,
-                               PRInt16 aVPercent, PRInt16 aHPercent)
+nsCoreUtils::ScrollSubstringTo(nsIFrame* aFrame, nsRange* aRange,
+                               nsIPresShell::ScrollAxis aVertical,
+                               nsIPresShell::ScrollAxis aHorizontal)
 {
-  if (!aFrame || !aStartNode || !aEndNode)
+  if (!aFrame)
     return NS_ERROR_FAILURE;
 
   nsPresContext *presContext = aFrame->PresContext();
-
-  nsCOMPtr<nsIDOMRange> scrollToRange = do_CreateInstance(kRangeCID);
-  NS_ENSURE_TRUE(scrollToRange, NS_ERROR_FAILURE);
 
   nsCOMPtr<nsISelectionController> selCon;
   aFrame->GetSelectionController(presContext, getter_AddRefs(selCon));
   NS_ENSURE_TRUE(selCon, NS_ERROR_FAILURE);
 
-  scrollToRange->SetStart(aStartNode, aStartIndex);
-  scrollToRange->SetEnd(aEndNode, aEndIndex);
-
-  nsCOMPtr<nsISelection> selection1;
+  nsCOMPtr<nsISelection> selection;
   selCon->GetSelection(nsISelectionController::SELECTION_ACCESSIBILITY,
-                       getter_AddRefs(selection1));
+                       getter_AddRefs(selection));
 
-  nsCOMPtr<nsISelection2> selection(do_QueryInterface(selection1));
-  if (selection) {
-    selection->RemoveAllRanges();
-    selection->AddRange(scrollToRange);
+  nsCOMPtr<nsISelectionPrivate> privSel(do_QueryInterface(selection));
+  selection->RemoveAllRanges();
+  selection->AddRange(aRange);
 
-    selection->ScrollIntoView(nsISelectionController::SELECTION_ANCHOR_REGION,
-                              PR_TRUE, aVPercent, aHPercent);
+  privSel->ScrollIntoViewInternal(
+    nsISelectionController::SELECTION_ANCHOR_REGION,
+    true, aVertical, aHorizontal);
 
-    selection->CollapseToStart();
-  }
+  selection->CollapseToStart();
 
   return NS_OK;
 }
@@ -360,19 +306,14 @@ nsCoreUtils::ScrollFrameToPoint(nsIFrame *aScrollableFrame,
                                 nsIFrame *aFrame,
                                 const nsIntPoint& aPoint)
 {
-  nsIScrollableFrame *scrollableFrame = do_QueryFrame(aScrollableFrame);
+  nsIScrollableFrame* scrollableFrame = do_QueryFrame(aScrollableFrame);
   if (!scrollableFrame)
     return;
 
-  nsPresContext *presContext = aFrame->PresContext();
-
-  nsIntRect frameRect = aFrame->GetScreenRectExternal();
-  PRInt32 devDeltaX = aPoint.x - frameRect.x;
-  PRInt32 devDeltaY = aPoint.y - frameRect.y;
-
-  nsPoint deltaPoint;
-  deltaPoint.x = presContext->DevPixelsToAppUnits(devDeltaX);
-  deltaPoint.y = presContext->DevPixelsToAppUnits(devDeltaY);
+  nsPoint point =
+    aPoint.ToAppUnits(aFrame->PresContext()->AppUnitsPerDevPixel());
+  nsRect frameRect = aFrame->GetScreenRectInAppUnits();
+  nsPoint deltaPoint(point.x - frameRect.x, point.y - frameRect.y);
 
   nsPoint scrollPoint = scrollableFrame->GetScrollPosition();
   scrollPoint -= deltaPoint;
@@ -381,40 +322,58 @@ nsCoreUtils::ScrollFrameToPoint(nsIFrame *aScrollableFrame,
 }
 
 void
-nsCoreUtils::ConvertScrollTypeToPercents(PRUint32 aScrollType,
-                                         PRInt16 *aVPercent,
-                                         PRInt16 *aHPercent)
+nsCoreUtils::ConvertScrollTypeToPercents(uint32_t aScrollType,
+                                         nsIPresShell::ScrollAxis *aVertical,
+                                         nsIPresShell::ScrollAxis *aHorizontal)
 {
+  int16_t whereY, whereX;
+  nsIPresShell::WhenToScroll whenY, whenX;
   switch (aScrollType)
   {
     case nsIAccessibleScrollType::SCROLL_TYPE_TOP_LEFT:
-      *aVPercent = NS_PRESSHELL_SCROLL_TOP;
-      *aHPercent = NS_PRESSHELL_SCROLL_LEFT;
+      whereY = nsIPresShell::SCROLL_TOP;
+      whenY  = nsIPresShell::SCROLL_ALWAYS;
+      whereX = nsIPresShell::SCROLL_LEFT;
+      whenX  = nsIPresShell::SCROLL_ALWAYS;
       break;
     case nsIAccessibleScrollType::SCROLL_TYPE_BOTTOM_RIGHT:
-      *aVPercent = NS_PRESSHELL_SCROLL_BOTTOM;
-      *aHPercent = NS_PRESSHELL_SCROLL_RIGHT;
+      whereY = nsIPresShell::SCROLL_BOTTOM;
+      whenY  = nsIPresShell::SCROLL_ALWAYS;
+      whereX = nsIPresShell::SCROLL_RIGHT;
+      whenX  = nsIPresShell::SCROLL_ALWAYS;
       break;
     case nsIAccessibleScrollType::SCROLL_TYPE_TOP_EDGE:
-      *aVPercent = NS_PRESSHELL_SCROLL_TOP;
-      *aHPercent = NS_PRESSHELL_SCROLL_ANYWHERE;
+      whereY = nsIPresShell::SCROLL_TOP;
+      whenY  = nsIPresShell::SCROLL_ALWAYS;
+      whereX = nsIPresShell::SCROLL_MINIMUM;
+      whenX  = nsIPresShell::SCROLL_IF_NOT_FULLY_VISIBLE;
       break;
     case nsIAccessibleScrollType::SCROLL_TYPE_BOTTOM_EDGE:
-      *aVPercent = NS_PRESSHELL_SCROLL_BOTTOM;
-      *aHPercent = NS_PRESSHELL_SCROLL_ANYWHERE;
+      whereY = nsIPresShell::SCROLL_BOTTOM;
+      whenY  = nsIPresShell::SCROLL_ALWAYS;
+      whereX = nsIPresShell::SCROLL_MINIMUM;
+      whenX  = nsIPresShell::SCROLL_IF_NOT_FULLY_VISIBLE;
       break;
     case nsIAccessibleScrollType::SCROLL_TYPE_LEFT_EDGE:
-      *aVPercent = NS_PRESSHELL_SCROLL_ANYWHERE;
-      *aHPercent = NS_PRESSHELL_SCROLL_LEFT;
+      whereY = nsIPresShell::SCROLL_MINIMUM;
+      whenY  = nsIPresShell::SCROLL_IF_NOT_FULLY_VISIBLE;
+      whereX = nsIPresShell::SCROLL_LEFT;
+      whenX  = nsIPresShell::SCROLL_ALWAYS;
       break;
     case nsIAccessibleScrollType::SCROLL_TYPE_RIGHT_EDGE:
-      *aVPercent = NS_PRESSHELL_SCROLL_ANYWHERE;
-      *aHPercent = NS_PRESSHELL_SCROLL_RIGHT;
+      whereY = nsIPresShell::SCROLL_MINIMUM;
+      whenY  = nsIPresShell::SCROLL_IF_NOT_FULLY_VISIBLE;
+      whereX = nsIPresShell::SCROLL_RIGHT;
+      whenX  = nsIPresShell::SCROLL_ALWAYS;
       break;
     default:
-      *aVPercent = NS_PRESSHELL_SCROLL_ANYWHERE;
-      *aHPercent = NS_PRESSHELL_SCROLL_ANYWHERE;
+      whereY = nsIPresShell::SCROLL_MINIMUM;
+      whenY  = nsIPresShell::SCROLL_IF_NOT_FULLY_VISIBLE;
+      whereX = nsIPresShell::SCROLL_MINIMUM;
+      whenX  = nsIPresShell::SCROLL_IF_NOT_FULLY_VISIBLE;
   }
+  *aVertical = nsIPresShell::ScrollAxis(whereY, whenY);
+  *aHorizontal = nsIPresShell::ScrollAxis(whereX, whenX);
 }
 
 nsIntPoint
@@ -425,21 +384,15 @@ nsCoreUtils::GetScreenCoordsForWindow(nsINode *aNode)
   if (!treeItem)
     return coords;
 
-  nsCOMPtr<nsIDocShellTreeItem> rootTreeItem;
-  treeItem->GetRootTreeItem(getter_AddRefs(rootTreeItem));
-  nsCOMPtr<nsIDOMDocument> domDoc = do_GetInterface(rootTreeItem);
-  nsCOMPtr<nsIDOMDocumentView> docView(do_QueryInterface(domDoc));
-  if (!docView)
+  nsCOMPtr<nsIDocShellTreeOwner> treeOwner;
+  treeItem->GetTreeOwner(getter_AddRefs(treeOwner));
+  if (!treeOwner)
     return coords;
 
-  nsCOMPtr<nsIDOMAbstractView> abstractView;
-  docView->GetDefaultView(getter_AddRefs(abstractView));
-  nsCOMPtr<nsIDOMWindowInternal> windowInter(do_QueryInterface(abstractView));
-  if (!windowInter)
-    return coords;
+  nsCOMPtr<nsIBaseWindow> baseWindow = do_QueryInterface(treeOwner);
+  if (baseWindow)
+    baseWindow->GetPosition(&coords.x, &coords.y); // in device pixels
 
-  windowInter->GetScreenX(&coords.x);
-  windowInter->GetScreenY(&coords.y);
   return coords;
 }
 
@@ -447,34 +400,17 @@ already_AddRefed<nsIDocShellTreeItem>
 nsCoreUtils::GetDocShellTreeItemFor(nsINode *aNode)
 {
   if (!aNode)
-    return nsnull;
+    return nullptr;
 
-  nsIDocument *doc = aNode->GetOwnerDoc();
-  NS_ASSERTION(doc, "No document for node passed in");
-  NS_ENSURE_TRUE(doc, nsnull);
-
-  nsCOMPtr<nsISupports> container = doc->GetContainer();
-  nsIDocShellTreeItem *docShellTreeItem = nsnull;
+  nsCOMPtr<nsISupports> container = aNode->OwnerDoc()->GetContainer();
+  nsIDocShellTreeItem *docShellTreeItem = nullptr;
   if (container)
     CallQueryInterface(container, &docShellTreeItem);
 
   return docShellTreeItem;
 }
 
-PRBool
-nsCoreUtils::IsDocumentBusy(nsIDocument *aDocument)
-{
-  nsCOMPtr<nsISupports> container = aDocument->GetContainer();
-  nsCOMPtr<nsIDocShell> docShell = do_QueryInterface(container);
-  if (!docShell)
-    return PR_TRUE;
-
-  PRUint32 busyFlags = 0;
-  docShell->GetBusyFlags(&busyFlags);
-  return (busyFlags != nsIDocShell::BUSY_FLAGS_NONE);
-}
-
-PRBool
+bool
 nsCoreUtils::IsRootDocument(nsIDocument *aDocument)
 {
   nsCOMPtr<nsISupports> container = aDocument->GetContainer();
@@ -488,7 +424,7 @@ nsCoreUtils::IsRootDocument(nsIDocument *aDocument)
   return !parentTreeItem;
 }
 
-PRBool
+bool
 nsCoreUtils::IsContentDocument(nsIDocument *aDocument)
 {
   nsCOMPtr<nsISupports> container = aDocument->GetContainer();
@@ -496,300 +432,71 @@ nsCoreUtils::IsContentDocument(nsIDocument *aDocument)
     do_QueryInterface(container);
   NS_ASSERTION(docShellTreeItem, "No document shell tree item for document!");
 
-  PRInt32 contentType;
+  int32_t contentType;
   docShellTreeItem->GetItemType(&contentType);
   return (contentType == nsIDocShellTreeItem::typeContent);
 }
 
-PRBool
+bool
+nsCoreUtils::IsTabDocument(nsIDocument* aDocumentNode)
+{
+  nsCOMPtr<nsISupports> container = aDocumentNode->GetContainer();
+  nsCOMPtr<nsIDocShellTreeItem> treeItem(do_QueryInterface(container));
+
+  nsCOMPtr<nsIDocShellTreeItem> parentTreeItem;
+  treeItem->GetParent(getter_AddRefs(parentTreeItem));
+
+  // Tab document running in own process doesn't have parent.
+  if (XRE_GetProcessType() == GeckoProcessType_Content)
+    return !parentTreeItem;
+
+  // Parent of docshell for tab document running in chrome process is root.
+  nsCOMPtr<nsIDocShellTreeItem> rootTreeItem;
+  treeItem->GetRootTreeItem(getter_AddRefs(rootTreeItem));
+
+  return parentTreeItem == rootTreeItem;
+}
+
+bool
 nsCoreUtils::IsErrorPage(nsIDocument *aDocument)
 {
   nsIURI *uri = aDocument->GetDocumentURI();
-  PRBool isAboutScheme = PR_FALSE;
+  bool isAboutScheme = false;
   uri->SchemeIs("about", &isAboutScheme);
   if (!isAboutScheme)
-    return PR_FALSE;
+    return false;
 
-  nsCAutoString path;
+  nsAutoCString path;
   uri->GetPath(path);
 
-  nsCAutoString::const_iterator start, end;
-  path.BeginReading(start);
-  path.EndReading(end);
-
   NS_NAMED_LITERAL_CSTRING(neterror, "neterror");
-  return FindInReadable(neterror, start, end);
+  NS_NAMED_LITERAL_CSTRING(certerror, "certerror");
+
+  return StringBeginsWith(path, neterror) || StringBeginsWith(path, certerror);
 }
 
-PRBool
-nsCoreUtils::IsCorrectFrameType(nsIFrame *aFrame, nsIAtom *aAtom)
-{
-  NS_ASSERTION(aFrame != nsnull,
-               "aFrame is null in call to IsCorrectFrameType!");
-  NS_ASSERTION(aAtom != nsnull,
-               "aAtom is null in call to IsCorrectFrameType!");
-  
-  return aFrame->GetType() == aAtom;
-}
-
-already_AddRefed<nsIDOMNode>
-nsCoreUtils::GetDOMNodeForContainer(nsIDocShellTreeItem *aContainer)
-{
-  nsCOMPtr<nsIDocShell> shell = do_QueryInterface(aContainer);
-
-  nsCOMPtr<nsIContentViewer> cv;
-  shell->GetContentViewer(getter_AddRefs(cv));
-
-  if (!cv)
-    return nsnull;
-
-  nsIDocument* doc = cv->GetDocument();
-  if (!doc)
-    return nsnull;
-
-  nsIDOMNode* node = nsnull;
-  CallQueryInterface(doc, &node);
-  return node;
-}
-
-PRBool
+bool
 nsCoreUtils::GetID(nsIContent *aContent, nsAString& aID)
 {
   nsIAtom *idAttribute = aContent->GetIDAttributeName();
-  return idAttribute ? aContent->GetAttr(kNameSpaceID_None, idAttribute, aID) : PR_FALSE;
+  return idAttribute ? aContent->GetAttr(kNameSpaceID_None, idAttribute, aID) : false;
 }
 
-PRBool
-nsCoreUtils::GetUIntAttr(nsIContent *aContent, nsIAtom *aAttr, PRInt32 *aUInt)
+bool
+nsCoreUtils::GetUIntAttr(nsIContent *aContent, nsIAtom *aAttr, int32_t *aUInt)
 {
   nsAutoString value;
   aContent->GetAttr(kNameSpaceID_None, aAttr, value);
   if (!value.IsEmpty()) {
-    PRInt32 error = NS_OK;
-    PRInt32 integer = value.ToInteger(&error);
+    nsresult error = NS_OK;
+    int32_t integer = value.ToInteger(&error);
     if (NS_SUCCEEDED(error) && integer > 0) {
       *aUInt = integer;
-      return PR_TRUE;
+      return true;
     }
   }
 
-  return PR_FALSE;
-}
-
-PRBool
-nsCoreUtils::IsXLink(nsIContent *aContent)
-{
-  if (!aContent)
-    return PR_FALSE;
-
-  return aContent->AttrValueIs(kNameSpaceID_XLink, nsAccessibilityAtoms::type,
-                               nsAccessibilityAtoms::simple, eCaseMatters) &&
-         aContent->HasAttr(kNameSpaceID_XLink, nsAccessibilityAtoms::href);
-}
-
-nsIContent*
-nsCoreUtils::FindNeighbourPointingToNode(nsIContent *aForNode, 
-                                         nsIAtom *aRelationAttr,
-                                         nsIAtom *aTagName,
-                                         PRUint32 aAncestorLevelsToSearch)
-{
-  return FindNeighbourPointingToNode(aForNode, &aRelationAttr, 1, aTagName, aAncestorLevelsToSearch);
-}
-
-nsIContent*
-nsCoreUtils::FindNeighbourPointingToNode(nsIContent *aForNode, 
-                                         nsIAtom **aRelationAttrs,
-                                         PRUint32 aAttrNum,
-                                         nsIAtom *aTagName,
-                                         PRUint32 aAncestorLevelsToSearch)
-{
-  nsAutoString controlID;
-  if (!nsCoreUtils::GetID(aForNode, controlID)) {
-    if (!aForNode->IsInAnonymousSubtree())
-      return nsnull;
-
-    aForNode->GetAttr(kNameSpaceID_None, nsAccessibilityAtoms::anonid, controlID);
-    if (controlID.IsEmpty())
-      return nsnull;
-  }
-
-  // Look for label in subtrees of nearby ancestors
-  nsCOMPtr<nsIContent> binding(aForNode->GetBindingParent());
-  PRUint32 count = 0;
-  nsIContent *labelContent = nsnull;
-  nsIContent *prevSearched = nsnull;
-
-  while (!labelContent && ++count <= aAncestorLevelsToSearch &&
-         (aForNode = aForNode->GetParent()) != nsnull) {
-
-    if (aForNode == binding) {
-      // When we reach the binding parent, make sure to check
-      // all of its anonymous child subtrees
-      nsCOMPtr<nsIDocument> doc = aForNode->GetCurrentDoc();
-      nsCOMPtr<nsIDOMDocumentXBL> xblDoc(do_QueryInterface(doc));
-      if (!xblDoc)
-        return nsnull;
-
-      nsCOMPtr<nsIDOMNodeList> nodes;
-      nsCOMPtr<nsIDOMElement> forElm(do_QueryInterface(aForNode));
-      xblDoc->GetAnonymousNodes(forElm, getter_AddRefs(nodes));
-      if (!nodes)
-        return nsnull;
-
-      PRUint32 length;
-      nsresult rv = nodes->GetLength(&length);
-      if (NS_FAILED(rv))
-        return nsnull;
-
-      for (PRUint32 index = 0; index < length && !labelContent; index++) {
-        nsCOMPtr<nsIDOMNode> node;
-        rv = nodes->Item(index, getter_AddRefs(node));
-        if (NS_FAILED(rv))
-          return nsnull;
-
-        nsCOMPtr<nsIContent> content = do_QueryInterface(node);
-        if (!content)
-          return nsnull;
-
-        if (content != prevSearched) {
-          labelContent = FindDescendantPointingToID(&controlID, content,
-                                                    aRelationAttrs, aAttrNum,
-                                                    nsnull, aTagName);
-        }
-      }
-      break;
-    }
-
-    labelContent = FindDescendantPointingToID(&controlID, aForNode,
-                                              aRelationAttrs, aAttrNum,
-                                              prevSearched, aTagName);
-    prevSearched = aForNode;
-  }
-
-  return labelContent;
-}
-
-// Pass in aAriaProperty = null and aRelationAttr == nsnull if any <label> will do
-nsIContent*
-nsCoreUtils::FindDescendantPointingToID(const nsString *aId,
-                                        nsIContent *aLookContent,
-                                        nsIAtom **aRelationAttrs,
-                                        PRUint32 aAttrNum,
-                                        nsIContent *aExcludeContent,
-                                        nsIAtom *aTagType)
-{
-  // Surround id with spaces for search
-  nsCAutoString idWithSpaces(' ');
-  LossyAppendUTF16toASCII(*aId, idWithSpaces);
-  idWithSpaces += ' ';
-  return FindDescendantPointingToIDImpl(idWithSpaces, aLookContent,
-                                        aRelationAttrs, aAttrNum,
-                                        aExcludeContent, aTagType);
-}
-
-nsIContent*
-nsCoreUtils::FindDescendantPointingToID(const nsString *aId,
-                                        nsIContent *aLookContent,
-                                        nsIAtom *aRelationAttr,
-                                        nsIContent *aExcludeContent,
-                                        nsIAtom *aTagType)
-{
-  return FindDescendantPointingToID(aId, aLookContent, &aRelationAttr, 1, aExcludeContent, aTagType);
-}
-
-nsIContent*
-nsCoreUtils::FindDescendantPointingToIDImpl(nsCString& aIdWithSpaces,
-                                            nsIContent *aLookContent,
-                                            nsIAtom **aRelationAttrs,
-                                            PRUint32 aAttrNum,
-                                            nsIContent *aExcludeContent,
-                                            nsIAtom *aTagType)
-{
-  NS_ENSURE_TRUE(aLookContent, nsnull);
-  NS_ENSURE_TRUE(aRelationAttrs && *aRelationAttrs, nsnull);
-
-  if (!aTagType || aLookContent->Tag() == aTagType) {
-    // Tag matches
-    // Check for ID in the attributes aRelationAttrs, which can be a list
-    for (PRUint32 i = 0; i < aAttrNum; i++) {
-      nsAutoString idList;
-      if (aLookContent->GetAttr(kNameSpaceID_None, aRelationAttrs[i], idList)) {
-        idList.Insert(' ', 0);  // Surround idlist with spaces for search
-        idList.Append(' ');
-        // idList is now a set of id's with spaces around each,
-        // and id also has spaces around it.
-        // If id is a substring of idList then we have a match
-        if (idList.Find(aIdWithSpaces) != -1) {
-          return aLookContent;
-        }
-      }
-    }
-    if (aTagType) {
-      // Don't bother to search descendants of an element with matching tag.
-      // That would be like looking for a nested <label> or <description>
-      return nsnull;
-    }
-  }
-
-  // Recursively search descendants for match
-  PRUint32 count  = 0;
-  nsIContent *child;
-  nsIContent *labelContent = nsnull;
-
-  while ((child = aLookContent->GetChildAt(count++)) != nsnull) {
-    if (child != aExcludeContent) {
-      labelContent = FindDescendantPointingToIDImpl(aIdWithSpaces, child,
-                                                    aRelationAttrs, aAttrNum,
-                                                    aExcludeContent, aTagType);
-      if (labelContent) {
-        return labelContent;
-      }
-    }
-  }
-  return nsnull;
-}
-
-nsIContent*
-nsCoreUtils::GetLabelContent(nsIContent *aForNode)
-{
-  if (aForNode->IsXUL())
-    return FindNeighbourPointingToNode(aForNode, nsAccessibilityAtoms::control,
-                                       nsAccessibilityAtoms::label);
-
-  return GetHTMLLabelContent(aForNode);
-}
-
-nsIContent*
-nsCoreUtils::GetHTMLLabelContent(nsIContent *aForNode)
-{
-  // Get either <label for="[id]"> element which explictly points to aForNode,
-  // or <label> ancestor which implicitly point to it.
-  nsIContent *walkUpContent = aForNode;
-  
-  // Go up tree get name of ancestor label if there is one. Don't go up farther
-  // than form element.
-  while ((walkUpContent = walkUpContent->GetParent()) != nsnull) {
-    nsIAtom *tag = walkUpContent->Tag();
-    if (tag == nsAccessibilityAtoms::label)
-      return walkUpContent;  // An ancestor <label> implicitly points to us
-
-    if (tag == nsAccessibilityAtoms::form ||
-        tag == nsAccessibilityAtoms::body) {
-      // Reached top ancestor in form
-      // There can be a label targeted at this control using the 
-      // for="control_id" attribute. To save computing time, only 
-      // look for those inside of a form element
-      nsAutoString forId;
-      if (!GetID(aForNode, forId))
-        break;
-
-      // Actually we'll be walking down the content this time, with a depth first search
-      return FindDescendantPointingToID(&forId, walkUpContent,
-                                        nsAccessibilityAtoms::_for);
-    }
-  }
-
-  return nsnull;
+  return false;
 }
 
 void
@@ -800,143 +507,8 @@ nsCoreUtils::GetLanguageFor(nsIContent *aContent, nsIContent *aRootContent,
 
   nsIContent *walkUp = aContent;
   while (walkUp && walkUp != aRootContent &&
-         !walkUp->GetAttr(kNameSpaceID_None,
-                          nsAccessibilityAtoms::lang, aLanguage))
+         !walkUp->GetAttr(kNameSpaceID_None, nsGkAtoms::lang, aLanguage))
     walkUp = walkUp->GetParent();
-}
-
-void
-nsCoreUtils::GetElementsByIDRefsAttr(nsIContent *aContent, nsIAtom *aAttr,
-                                     nsIArray **aRefElements)
-{
-  *aRefElements = nsnull;
-
-  nsAutoString ids;
-  if (!aContent->GetAttr(kNameSpaceID_None, aAttr, ids))
-    return;
-
-  ids.CompressWhitespace(PR_TRUE, PR_TRUE);
-
-  nsCOMPtr<nsIDOMDocument> document = do_QueryInterface(aContent->GetOwnerDoc());
-  NS_ASSERTION(document, "The given node is not in document!");
-  if (!document)
-    return;
-
-  nsCOMPtr<nsIDOMDocumentXBL> xblDocument;
-  if (aContent->IsInAnonymousSubtree())
-    xblDocument = do_QueryInterface(document);
-
-  nsCOMPtr<nsIMutableArray> refElms = do_CreateInstance(NS_ARRAY_CONTRACTID);
-
-  while (!ids.IsEmpty()) {
-    nsAutoString id;
-    PRInt32 idLength = ids.FindChar(' ');
-    NS_ASSERTION(idLength != 0,
-                 "Should not be 0 because of CompressWhitespace() call above");
-
-    if (idLength == kNotFound) {
-      id = ids;
-      ids.Truncate();
-    } else {
-      id = Substring(ids, 0, idLength);
-      ids.Cut(0, idLength + 1);
-    }
-
-    // If content is anonymous subtree then use "anonid" attribute to get
-    // elements, otherwise search elements in DOM by ID attribute.
-    nsCOMPtr<nsIDOMElement> refElement;
-    if (xblDocument) {
-      nsCOMPtr<nsIDOMElement> elm =
-        do_QueryInterface(aContent->GetBindingParent());
-      xblDocument->GetAnonymousElementByAttribute(elm,
-                                                  NS_LITERAL_STRING("anonid"),
-                                                  id,
-                                                  getter_AddRefs(refElement));
-    } else {
-      document->GetElementById(id, getter_AddRefs(refElement));
-    }
-
-    if (!refElement)
-      continue;
-
-    refElms->AppendElement(refElement, PR_FALSE);
-  }
-
-  NS_ADDREF(*aRefElements = refElms);
-  return;
-}
-
-void
-nsCoreUtils::GetElementsHavingIDRefsAttr(nsIContent *aRootContent,
-                                         nsIContent *aContent,
-                                         nsIAtom *aIDRefsAttr,
-                                         nsIArray **aElements)
-{
-  *aElements = nsnull;
-
-  nsAutoString id;
-  if (!GetID(aContent, id))
-    return;
-
-  nsCAutoString idWithSpaces(' ');
-  LossyAppendUTF16toASCII(id, idWithSpaces);
-  idWithSpaces += ' ';
-
-  nsCOMPtr<nsIMutableArray> elms = do_CreateInstance(NS_ARRAY_CONTRACTID);
-  if (!elms)
-    return;
-
-  GetElementsHavingIDRefsAttrImpl(aRootContent, idWithSpaces, aIDRefsAttr,
-                                  elms);
-  NS_ADDREF(*aElements = elms);
-}
-
-void
-nsCoreUtils::GetElementsHavingIDRefsAttrImpl(nsIContent *aRootContent,
-                                             nsCString& aIdWithSpaces,
-                                             nsIAtom *aIDRefsAttr,
-                                             nsIMutableArray *aElements)
-{
-  PRUint32 childCount = aRootContent->GetChildCount();
-  for (PRUint32 index = 0; index < childCount; index++) {
-    nsIContent* child = aRootContent->GetChildAt(index);
-    nsAutoString idList;
-    if (child->GetAttr(kNameSpaceID_None, aIDRefsAttr, idList)) {
-      idList.Insert(' ', 0);  // Surround idlist with spaces for search
-      idList.Append(' ');
-      // idList is now a set of id's with spaces around each, and id also has
-      // spaces around it. If id is a substring of idList then we have a match.
-      if (idList.Find(aIdWithSpaces) != -1) {
-        aElements->AppendElement(child, PR_FALSE);
-        continue; // Do not search inside children.
-      }
-    }
-    GetElementsHavingIDRefsAttrImpl(child, aIdWithSpaces,
-                                    aIDRefsAttr, aElements);
-  }
-}
-
-already_AddRefed<nsIDOMCSSStyleDeclaration>
-nsCoreUtils::GetComputedStyleDeclaration(const nsAString& aPseudoElt,
-                                         nsIContent *aContent)
-{
-  nsIContent* content = GetDOMElementFor(aContent);
-  if (!content)
-    return nsnull;
-
-  // Returns number of items in style declaration
-  nsIDocument* document = content->GetOwnerDoc();
-  if (!document)
-    return nsnull;
-
-  nsCOMPtr<nsIDOMViewCSS> viewCSS(do_QueryInterface(document->GetWindow()));
-  if (!viewCSS)
-    return nsnull;
-
-  nsIDOMCSSStyleDeclaration* cssDecl = nsnull;
-  nsCOMPtr<nsIDOMElement> domElement(do_QueryInterface(content));
-  viewCSS->GetComputedStyle(domElement, aPseudoElt, &cssDecl);
-  return cssDecl;
 }
 
 already_AddRefed<nsIBoxObject>
@@ -946,9 +518,9 @@ nsCoreUtils::GetTreeBodyBoxObject(nsITreeBoxObject *aTreeBoxObj)
   aTreeBoxObj->GetTreeBody(getter_AddRefs(tcElm));
   nsCOMPtr<nsIDOMXULElement> tcXULElm(do_QueryInterface(tcElm));
   if (!tcXULElm)
-    return nsnull;
+    return nullptr;
 
-  nsIBoxObject *boxObj = nsnull;
+  nsIBoxObject *boxObj = nullptr;
   tcXULElm->GetBoxObject(&boxObj);
   return boxObj;
 }
@@ -959,7 +531,7 @@ nsCoreUtils::GetTreeBoxObject(nsIContent *aContent)
   // Find DOMNode's parents recursively until reach the <tree> tag
   nsIContent* currentContent = aContent;
   while (currentContent) {
-    if (currentContent->NodeInfo()->Equals(nsAccessibilityAtoms::tree,
+    if (currentContent->NodeInfo()->Equals(nsGkAtoms::tree,
                                            kNameSpaceID_XUL)) {
       // We will get the nsITreeBoxObject from the tree node
       nsCOMPtr<nsIDOMXULElement> xulElement(do_QueryInterface(currentContent));
@@ -974,7 +546,7 @@ nsCoreUtils::GetTreeBoxObject(nsIContent *aContent)
     currentContent = currentContent->GetParent();
   }
 
-  return nsnull;
+  return nullptr;
 }
 
 already_AddRefed<nsITreeColumn>
@@ -983,7 +555,7 @@ nsCoreUtils::GetFirstSensibleColumn(nsITreeBoxObject *aTree)
   nsCOMPtr<nsITreeColumns> cols;
   aTree->GetColumns(getter_AddRefs(cols));
   if (!cols)
-    return nsnull;
+    return nullptr;
 
   nsCOMPtr<nsITreeColumn> column;
   cols->GetFirstColumn(getter_AddRefs(column));
@@ -993,26 +565,10 @@ nsCoreUtils::GetFirstSensibleColumn(nsITreeBoxObject *aTree)
   return column.forget();
 }
 
-already_AddRefed<nsITreeColumn>
-nsCoreUtils::GetLastSensibleColumn(nsITreeBoxObject *aTree)
-{
-  nsCOMPtr<nsITreeColumns> cols;
-  aTree->GetColumns(getter_AddRefs(cols));
-  if (!cols)
-    return nsnull;
-
-  nsCOMPtr<nsITreeColumn> column;
-  cols->GetLastColumn(getter_AddRefs(column));
-  if (column && IsColumnHidden(column))
-    return GetPreviousSensibleColumn(column);
-
-  return column.forget();
-}
-
-PRUint32
+uint32_t
 nsCoreUtils::GetSensibleColumnCount(nsITreeBoxObject *aTree)
 {
-  PRUint32 count = 0;
+  uint32_t count = 0;
 
   nsCOMPtr<nsITreeColumns> cols;
   aTree->GetColumns(getter_AddRefs(cols));
@@ -1035,9 +591,9 @@ nsCoreUtils::GetSensibleColumnCount(nsITreeBoxObject *aTree)
 }
 
 already_AddRefed<nsITreeColumn>
-nsCoreUtils::GetSensibleColumnAt(nsITreeBoxObject *aTree, PRUint32 aIndex)
+nsCoreUtils::GetSensibleColumnAt(nsITreeBoxObject *aTree, uint32_t aIndex)
 {
-  PRUint32 idx = aIndex;
+  uint32_t idx = aIndex;
 
   nsCOMPtr<nsITreeColumn> column = GetFirstSensibleColumn(aTree);
   while (column) {
@@ -1048,7 +604,7 @@ nsCoreUtils::GetSensibleColumnAt(nsITreeBoxObject *aTree, PRUint32 aIndex)
     column = GetNextSensibleColumn(column);
   }
 
-  return nsnull;
+  return nullptr;
 }
 
 already_AddRefed<nsITreeColumn>
@@ -1081,55 +637,24 @@ nsCoreUtils::GetPreviousSensibleColumn(nsITreeColumn *aColumn)
   return prevColumn.forget();
 }
 
-PRBool
+bool
 nsCoreUtils::IsColumnHidden(nsITreeColumn *aColumn)
 {
   nsCOMPtr<nsIDOMElement> element;
   aColumn->GetElement(getter_AddRefs(element));
   nsCOMPtr<nsIContent> content = do_QueryInterface(element);
-  return content->AttrValueIs(kNameSpaceID_None, nsAccessibilityAtoms::hidden,
-                              nsAccessibilityAtoms::_true, eCaseMatters);
+  return content->AttrValueIs(kNameSpaceID_None, nsGkAtoms::hidden,
+                              nsGkAtoms::_true, eCaseMatters);
 }
 
 void
-nsCoreUtils::GeneratePopupTree(nsIContent *aContent, PRBool aIsAnon)
+nsCoreUtils::ScrollTo(nsIPresShell* aPresShell, nsIContent* aContent,
+                      uint32_t aScrollType)
 {
-  // Set menugenerated="true" on the menupopup node to generate the sub-menu
-  // items if they have not been generated.
-
-  nsCOMPtr<nsIDOMNodeList> list;
-  if (aIsAnon) {    
-    nsIDocument* document = aContent->GetCurrentDoc();
-    if (document)
-      document->GetXBLChildNodesFor(aContent, getter_AddRefs(list));
-
-  } else {
-    list = aContent->GetChildNodesList();
-  }
-
-  PRUint32 length = 0;
-  if (!list || NS_FAILED(list->GetLength(&length)))
-    return;
-
-  for (PRUint32 idx = 0; idx < length; idx++) {
-    nsCOMPtr<nsIDOMNode> childNode;
-    list->Item(idx, getter_AddRefs(childNode));
-    nsCOMPtr<nsIContent> child(do_QueryInterface(childNode));
-
-    PRBool isPopup = child->NodeInfo()->Equals(nsAccessibilityAtoms::menupopup,
-                                               kNameSpaceID_XUL) ||
-                     child->NodeInfo()->Equals(nsAccessibilityAtoms::panel,
-                                               kNameSpaceID_XUL);
-    if (isPopup && !child->AttrValueIs(kNameSpaceID_None,
-                                       nsAccessibilityAtoms::menugenerated,
-                                       nsAccessibilityAtoms::_true,
-                                       eCaseMatters)) {
-
-      child->SetAttr(kNameSpaceID_None, nsAccessibilityAtoms::menugenerated,
-                     NS_LITERAL_STRING("true"), PR_TRUE);
-      return;
-    }
-  }
+  nsIPresShell::ScrollAxis vertical, horizontal;
+  ConvertScrollTypeToPercents(aScrollType, &vertical, &horizontal);
+  aPresShell->ScrollContentIntoView(aContent, vertical, horizontal,
+                                    nsIPresShell::SCROLL_OVERFLOW_HIDDEN);
 }
 
 
@@ -1140,7 +665,7 @@ nsCoreUtils::GeneratePopupTree(nsIContent *aContent, PRBool aIsAnon)
 NS_IMPL_ISUPPORTS1(nsAccessibleDOMStringList, nsIDOMDOMStringList)
 
 NS_IMETHODIMP
-nsAccessibleDOMStringList::Item(PRUint32 aIndex, nsAString& aResult)
+nsAccessibleDOMStringList::Item(uint32_t aIndex, nsAString& aResult)
 {
   if (aIndex >= mNames.Length())
     SetDOMStringToNull(aResult);
@@ -1151,7 +676,7 @@ nsAccessibleDOMStringList::Item(PRUint32 aIndex, nsAString& aResult)
 }
 
 NS_IMETHODIMP
-nsAccessibleDOMStringList::GetLength(PRUint32 *aLength)
+nsAccessibleDOMStringList::GetLength(uint32_t* aLength)
 {
   *aLength = mNames.Length();
 
@@ -1159,9 +684,10 @@ nsAccessibleDOMStringList::GetLength(PRUint32 *aLength)
 }
 
 NS_IMETHODIMP
-nsAccessibleDOMStringList::Contains(const nsAString& aString, PRBool *aResult)
+nsAccessibleDOMStringList::Contains(const nsAString& aString, bool* aResult)
 {
   *aResult = mNames.Contains(aString);
 
   return NS_OK;
 }
+

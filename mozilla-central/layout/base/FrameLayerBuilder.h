@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Corporation code.
- *
- * The Initial Developer of the Original Code is Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Robert O'Callahan <robert@ocallahan.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef FRAMELAYERBUILDER_H_
 #define FRAMELAYERBUILDER_H_
@@ -43,36 +11,55 @@
 #include "nsTArray.h"
 #include "nsRegion.h"
 #include "nsIFrame.h"
+#include "nsDisplayListInvalidation.h"
+#include "LayerTreeInvalidation.h"
+#include "ImageLayers.h"
 
 class nsDisplayListBuilder;
 class nsDisplayList;
 class nsDisplayItem;
 class gfxContext;
+class nsRootPresContext;
 
 namespace mozilla {
-
 namespace layers {
-class Layer;
-class ThebesLayer;
+class ContainerLayer;
 class LayerManager;
+class ThebesLayer;
 }
+
+class FrameLayerBuilder;
+class LayerManagerData;
 
 enum LayerState {
   LAYER_NONE,
   LAYER_INACTIVE,
-  LAYER_ACTIVE
+  LAYER_ACTIVE,
+  // Force an active layer even if it causes incorrect rendering, e.g.
+  // when the layer has rounded rect clips.
+  LAYER_ACTIVE_FORCE,
+  // Special layer that is metadata only.
+  LAYER_ACTIVE_EMPTY,
+  // Inactive style layer for rendering SVG effects.
+  LAYER_SVG_EFFECTS
+};
+
+class RefCountedRegion : public RefCounted<RefCountedRegion> {
+public:
+  RefCountedRegion() : mIsInfinite(false) {}
+  nsRegion mRegion;
+  bool mIsInfinite;
 };
 
 /**
- * The FrameLayerBuilder belongs to an nsDisplayListBuilder and is
- * responsible for converting display lists into layer trees.
+ * The FrameLayerBuilder is responsible for converting display lists 
+ * into layer trees. Every LayerManager needs a unique FrameLayerBuilder
+ * to build layers.
  * 
  * The most important API in this class is BuildContainerLayerFor. This
  * method takes a display list as input and constructs a ContainerLayer
  * with child layers that render the contents of the display list. It
- * also updates userdata for the retained layer manager, and
- * DisplayItemDataProperty data for frames, to record the relationship
- * between frames and layers.
+ * records the relationship between frames and layers.
  * 
  * That data enables us to retain layer trees. When constructing a
  * ContainerLayer, we first check to see if there's an existing
@@ -91,43 +78,102 @@ enum LayerState {
  * FrameLayerBuilder sets up ThebesLayers so that 0,0 in the Thebes layer
  * corresponds to the (pixel-snapped) top-left of the aActiveScrolledRoot.
  * It sets up ContainerLayers so that 0,0 in the container layer
- * corresponds to the snapped top-left of the display list reference frame.
+ * corresponds to the snapped top-left of the display item reference frame.
+ *
+ * When we construct a container layer, we know the transform that will be
+ * applied to the layer. If the transform scales the content, we can get
+ * better results when intermediate buffers are used by pushing some scale
+ * from the container's transform down to the children. For ThebesLayer
+ * children, the scaling can be achieved by changing the size of the layer
+ * and drawing into it with increased or decreased resolution. By convention,
+ * integer types (nsIntPoint/nsIntSize/nsIntRect/nsIntRegion) are all in layer
+ * coordinates, post-scaling, whereas appunit types are all pre-scaling.
  */
-class FrameLayerBuilder {
+class FrameLayerBuilder : public layers::LayerUserData {
 public:
-  typedef layers::Layer Layer; 
+  typedef layers::ContainerLayer ContainerLayer;
+  typedef layers::Layer Layer;
   typedef layers::ThebesLayer ThebesLayer;
+  typedef layers::ImageLayer ImageLayer;
   typedef layers::LayerManager LayerManager;
 
   FrameLayerBuilder() :
-    mRetainingManager(nsnull),
-    mInvalidateAllThebesContent(PR_FALSE),
-    mInvalidateAllLayers(PR_FALSE)
+    mRetainingManager(nullptr),
+    mDetectedDOMModification(false),
+    mInvalidateAllLayers(false),
+    mContainerLayerGeneration(0),
+    mMaxContainerLayerGeneration(0)
   {
-    mNewDisplayItemData.Init();
+    MOZ_COUNT_CTOR(FrameLayerBuilder);
     mThebesLayerItems.Init();
   }
+  ~FrameLayerBuilder()
+  {
+    MOZ_COUNT_DTOR(FrameLayerBuilder);
+  }
+
+  static void Shutdown();
+
+  void Init(nsDisplayListBuilder* aBuilder, LayerManager* aManager);
 
   /**
-   * Call this to notify that we are about to start a transaction on the
+   * Call this to notify that we have just started a transaction on the
    * retained layer manager aManager.
    */
-  void WillBeginRetainedLayerTransaction(LayerManager* aManager);
+  void DidBeginRetainedLayerTransaction(LayerManager* aManager);
 
   /**
-   * Call this just before we end a transaction on aManager. If aManager
-   * is not the retained layer manager then it must be a temporary layer
-   * manager that will not be used again.
+   * Call this just before we end a transaction.
    */
-  void WillEndTransaction(LayerManager* aManager);
+  void WillEndTransaction();
 
   /**
-   * Call this after we end a transaction on aManager. If aManager
-   * is not the retained layer manager then it must be a temporary layer
-   * manager that will not be used again.
+   * Call this after we end a transaction.
    */
-  void DidEndTransaction(LayerManager* aManager);
+  void DidEndTransaction();
 
+  struct ContainerParameters {
+    ContainerParameters() :
+      mXScale(1), mYScale(1),
+      mInTransformedSubtree(false), mInActiveTransformedSubtree(false),
+      mDisableSubpixelAntialiasingInDescendants(false)
+    {}
+    ContainerParameters(float aXScale, float aYScale) :
+      mXScale(aXScale), mYScale(aYScale),
+      mInTransformedSubtree(false), mInActiveTransformedSubtree(false),
+      mDisableSubpixelAntialiasingInDescendants(false)
+    {}
+    ContainerParameters(float aXScale, float aYScale,
+                        const nsIntPoint& aOffset,
+                        const ContainerParameters& aParent) :
+      mXScale(aXScale), mYScale(aYScale),
+      mOffset(aOffset),
+      mInTransformedSubtree(aParent.mInTransformedSubtree),
+      mInActiveTransformedSubtree(aParent.mInActiveTransformedSubtree),
+      mDisableSubpixelAntialiasingInDescendants(aParent.mDisableSubpixelAntialiasingInDescendants)
+    {}
+    float mXScale, mYScale;
+
+    /**
+     * An offset to append to the transform set on all child layers created.
+     */
+    nsIntPoint mOffset;
+
+    bool mInTransformedSubtree;
+    bool mInActiveTransformedSubtree;
+    bool mDisableSubpixelAntialiasingInDescendants;
+    /**
+     * When this is false, ThebesLayer coordinates are drawn to with an integer
+     * translation and the scale in mXScale/mYScale.
+     */
+    bool AllowResidualTranslation()
+    {
+      // If we're in a transformed subtree, but no ancestor transform is actively
+      // changing, we'll use the residual translation when drawing into the
+      // ThebesLayer to ensure that snapping exactly matches the ideal transform.
+      return mInTransformedSubtree && !mInActiveTransformedSubtree;
+    }
+  };
   /**
    * Build a container layer for a display item that contains a child
    * list, either reusing an existing one or creating a new one. It
@@ -140,14 +186,19 @@ public:
    * children of the new container, and assigning all other items to
    * ThebesLayer children created and managed by the FrameLayerBuilder.
    * Returns a layer with clip rect cleared; it is the
-   * caller's responsibility to add any clip rect and set the visible
-   * region.
+   * caller's responsibility to add any clip rect. The visible region
+   * is set based on what's in the layer.
+   * The container layer is transformed by aTransform (if non-null), and
+   * the result is transformed by the scale factors in aContainerParameters.
    */
-  already_AddRefed<Layer> BuildContainerLayerFor(nsDisplayListBuilder* aBuilder,
-                                                 LayerManager* aManager,
-                                                 nsIFrame* aContainerFrame,
-                                                 nsDisplayItem* aContainerItem,
-                                                 const nsDisplayList& aChildren);
+  already_AddRefed<ContainerLayer>
+  BuildContainerLayerFor(nsDisplayListBuilder* aBuilder,
+                         LayerManager* aManager,
+                         nsIFrame* aContainerFrame,
+                         nsDisplayItem* aContainerItem,
+                         const nsDisplayList& aChildren,
+                         const ContainerParameters& aContainerParameters,
+                         const gfx3DMatrix* aTransform);
 
   /**
    * Get a retained layer for a display item that needs to create its own
@@ -160,39 +211,27 @@ public:
    * region.
    */
   Layer* GetLeafLayerFor(nsDisplayListBuilder* aBuilder,
-                         LayerManager* aManager,
                          nsDisplayItem* aItem);
-
-  /**
-   * Call this during invalidation if aFrame has
-   * the NS_FRAME_HAS_CONTAINER_LAYER state bit. Only the nearest
-   * ancestor frame of the damaged frame that has
-   * NS_FRAME_HAS_CONTAINER_LAYER needs to be invalidated this way.
-   */
-  static void InvalidateThebesLayerContents(nsIFrame* aFrame,
-                                            const nsRect& aRect);
-
-  /**
-   * Call this to force *all* retained layer contents to be discarded at
-   * the next paint.
-   */
-  static void InvalidateAllThebesLayerContents(LayerManager* aManager);
 
   /**
    * Call this to force all retained layers to be discarded and recreated at
    * the next paint.
    */
   static void InvalidateAllLayers(LayerManager* aManager);
+  static void InvalidateAllLayersForFrame(nsIFrame *aFrame);
 
   /**
    * Call this to determine if a frame has a dedicated (non-Thebes) layer
-   * for the given display item key.
+   * for the given display item key. If there isn't one, we return null,
+   * otherwise we return the layer.
    */
-  static PRBool HasDedicatedLayer(nsIFrame* aFrame, PRUint32 aDisplayItemKey);
+  static Layer* GetDedicatedLayer(nsIFrame* aFrame, uint32_t aDisplayItemKey);
 
   /**
    * This callback must be provided to EndTransaction. The callback data
    * must be the nsDisplayListBuilder containing this FrameLayerBuilder.
+   * This function can be called multiple times in a row to draw
+   * different regions.
    */
   static void DrawThebesLayer(ThebesLayer* aLayer,
                               gfxContext* aContext,
@@ -200,36 +239,300 @@ public:
                               const nsIntRegion& aRegionToInvalidate,
                               void* aCallbackData);
 
-#ifdef DEBUG
+#ifdef MOZ_DUMP_PAINTING
   /**
    * Dumps this FrameLayerBuilder's retained layer manager's retained
-   * layer tree to stderr.
+   * layer tree. Defaults to dumping to stdout in non-HTML format.
    */
-  void DumpRetainedLayerTree();
+  static void DumpRetainedLayerTree(LayerManager* aManager, FILE* aFile = stdout, bool aDumpHtml = false);
 #endif
 
   /******* PRIVATE METHODS to FrameLayerBuilder.cpp ********/
   /* These are only in the public section because they need
    * to be called by file-scope helper functions in FrameLayerBuilder.cpp.
    */
-  
+
   /**
    * Record aItem as a display item that is rendered by aLayer.
+   *
+   * @param aLayer Layer that the display item will be rendered into
+   * @param aItem Display item to be drawn.
+   * @param aLayerState What LayerState the item is using.
+   * @param aTopLeft offset from active scrolled root to reference frame
+   * @param aManager If the layer is in the LAYER_INACTIVE state,
+   * then this is the temporary layer manager to draw with.
    */
-  void AddLayerDisplayItem(Layer* aLayer, nsDisplayItem* aItem);
+  struct Clip;
+  void AddLayerDisplayItem(Layer* aLayer,
+                           nsDisplayItem* aItem,
+                           const Clip& aClip,
+                           LayerState aLayerState,
+                           const nsPoint& aTopLeft,
+                           LayerManager* aManager,
+                           nsAutoPtr<nsDisplayItemGeometry> aGeometry);
 
   /**
    * Record aItem as a display item that is rendered by the ThebesLayer
    * aLayer, with aClipRect, where aContainerLayerFrame is the frame
    * for the container layer this ThebesItem belongs to.
    * aItem must have an underlying frame.
+   * @param aTopLeft offset from active scrolled root to reference frame
    */
   void AddThebesDisplayItem(ThebesLayer* aLayer,
                             nsDisplayItem* aItem,
-                            const nsRect* aClipRect,
+                            const Clip& aClip,
                             nsIFrame* aContainerLayerFrame,
                             LayerState aLayerState,
-                            LayerManager* aTempManager);
+                            const nsPoint& aTopLeft,
+                            nsAutoPtr<nsDisplayItemGeometry> aGeometry);
+
+  /**
+   * Gets the frame property descriptor for the given manager, or for the current
+   * widget layer manager if nullptr is passed.
+   */
+  static const FramePropertyDescriptor* GetDescriptorForManager(LayerManager* aManager);
+
+  /**
+   * Calls GetOldLayerForFrame on the underlying frame of the display item,
+   * and each subsequent merged frame if no layer is found for the underlying
+   * frame.
+   */
+  Layer* GetOldLayerFor(nsDisplayItem* aItem, 
+                        nsDisplayItemGeometry** aOldGeometry = nullptr, 
+                        Clip** aOldClip = nullptr,
+                        nsTArray<nsIFrame*>* aChangedFrames = nullptr,
+                        bool *aIsInvalid = nullptr);
+
+  static Layer* GetDebugOldLayerFor(nsIFrame* aFrame, uint32_t aDisplayItemKey);
+
+  /**
+   * Destroy any stored LayerManagerDataProperty and the associated data for
+   * aFrame.
+   */
+  static void DestroyDisplayItemDataFor(nsIFrame* aFrame);
+
+  LayerManager* GetRetainingLayerManager() { return mRetainingManager; }
+
+  /**
+   * Returns true if the given display item was rendered during the previous
+   * paint. Returns false otherwise.
+   */
+  static bool HasRetainedDataFor(nsIFrame* aFrame, uint32_t aDisplayItemKey);
+
+  class DisplayItemData;
+  typedef void (*DisplayItemDataCallback)(nsIFrame *aFrame, DisplayItemData* aItem);
+
+  static void IterateRetainedDataFor(nsIFrame* aFrame, DisplayItemDataCallback aCallback);
+
+  /**
+   * Save transform that was in aLayer when we last painted, and the position
+   * of the active scrolled root frame. It must be an integer
+   * translation.
+   */
+  void SaveLastPaintOffset(ThebesLayer* aLayer);
+  /**
+   * Get the translation transform that was in aLayer when we last painted. It's either
+   * the transform saved by SaveLastPaintTransform, or else the transform
+   * that's currently in the layer (which must be an integer translation).
+   */
+  nsIntPoint GetLastPaintOffset(ThebesLayer* aLayer);
+
+  /**
+   * Return the resolution at which we expect to render aFrame's contents,
+   * assuming they are being painted to retained layers. This takes into account
+   * the resolution the contents of the ContainerLayer containing aFrame are
+   * being rendered at, as well as any currently-inactive transforms between
+   * aFrame and that container layer.
+   */
+  static gfxSize GetThebesLayerScaleForFrame(nsIFrame* aFrame);
+
+  /**
+   * Stores a Layer as the dedicated layer in the DisplayItemData for a given frame/key pair.
+   *
+   * Used when we optimize a ThebesLayer into an ImageLayer and want to retroactively update the 
+   * DisplayItemData so we can retrieve the layer from within layout.
+   */
+  void StoreOptimizedLayerForFrame(nsDisplayItem* aItem, Layer* aLayer);
+
+  /**
+   * Clip represents the intersection of an optional rectangle with a
+   * list of rounded rectangles.
+   */
+  struct Clip {
+    struct RoundedRect {
+      nsRect mRect;
+      // Indices into mRadii are the NS_CORNER_* constants in nsStyleConsts.h
+      nscoord mRadii[8];
+
+      RoundedRect operator+(const nsPoint& aOffset) const {
+        RoundedRect r = *this;
+        r.mRect += aOffset;
+        return r;
+      }
+      bool operator==(const RoundedRect& aOther) const {
+        if (!mRect.IsEqualInterior(aOther.mRect)) {
+          return false;
+        }
+
+        NS_FOR_CSS_HALF_CORNERS(corner) {
+          if (mRadii[corner] != aOther.mRadii[corner]) {
+            return false;
+          }
+        }
+        return true;
+      }
+      bool operator!=(const RoundedRect& aOther) const {
+        return !(*this == aOther);
+      }
+    };
+    nsRect mClipRect;
+    nsTArray<RoundedRect> mRoundedClipRects;
+    bool mHaveClipRect;
+
+    Clip() : mHaveClipRect(false) {}
+
+    // Construct as the intersection of aOther and aClipItem.
+    Clip(const Clip& aOther, nsDisplayItem* aClipItem);
+
+    // Apply this |Clip| to the given gfxContext.  Any saving of state
+    // or clearing of other clips must be done by the caller.
+    // See aBegin/aEnd note on ApplyRoundedRectsTo.
+    void ApplyTo(gfxContext* aContext, nsPresContext* aPresContext,
+                 uint32_t aBegin = 0, uint32_t aEnd = UINT32_MAX);
+
+    void ApplyRectTo(gfxContext* aContext, int32_t A2D) const;
+    // Applies the rounded rects in this Clip to aContext
+    // Will only apply rounded rects from aBegin (inclusive) to aEnd
+    // (exclusive) or the number of rounded rects, whichever is smaller.
+    void ApplyRoundedRectsTo(gfxContext* aContext, int32_t A2DPRInt32,
+                             uint32_t aBegin, uint32_t aEnd) const;
+
+    // Draw (fill) the rounded rects in this clip to aContext
+    void DrawRoundedRectsTo(gfxContext* aContext, int32_t A2D,
+                            uint32_t aBegin, uint32_t aEnd) const;
+    // 'Draw' (create as a path, does not stroke or fill) aRoundRect to aContext
+    void AddRoundedRectPathTo(gfxContext* aContext, int32_t A2D,
+                              const RoundedRect &aRoundRect) const;
+
+    // Return a rectangle contained in the intersection of aRect with this
+    // clip region. Tries to return the largest possible rectangle, but may
+    // not succeed.
+    nsRect ApproximateIntersect(const nsRect& aRect) const;
+
+    // Returns false if aRect is definitely not clipped by a rounded corner in
+    // this clip. Returns true if aRect is clipped by a rounded corner in this
+    // clip or it can not be quickly determined that it is not clipped by a
+    // rounded corner in this clip.
+    bool IsRectClippedByRoundedCorner(const nsRect& aRect) const;
+
+    // Intersection of all rects in this clip ignoring any rounded corners.
+    nsRect NonRoundedIntersection() const;
+
+    // Intersect the given rects with all rects in this clip, ignoring any
+    // rounded corners.
+    nsRect ApplyNonRoundedIntersection(const nsRect& aRect) const;
+
+    // Gets rid of any rounded corners in this clip.
+    void RemoveRoundedCorners();
+
+    // Adds the difference between Intersect(*this + aPoint, aBounds) and
+    // Intersect(aOther, aOtherBounds) to aDifference.
+    void AddOffsetAndComputeDifference(const nsPoint& aPoint, const nsRect& aBounds,
+                                       const Clip& aOther, const nsRect& aOtherBounds,
+                                       nsRegion* aDifference);
+
+    bool operator==(const Clip& aOther) const {
+      return mHaveClipRect == aOther.mHaveClipRect &&
+             (!mHaveClipRect || mClipRect.IsEqualInterior(aOther.mClipRect)) &&
+             mRoundedClipRects == aOther.mRoundedClipRects;
+    }
+    bool operator!=(const Clip& aOther) const {
+      return !(*this == aOther);
+    }
+  };
+  
+  NS_DECLARE_FRAME_PROPERTY_WITH_FRAME_IN_DTOR(LayerManagerDataProperty,
+                                               RemoveFrameFromLayerManager)
+
+  /**
+   * Retained data storage:
+   *
+   * Each layer manager (widget, and inactive) stores a LayerManagerData object
+   * that keeps a hash-set of DisplayItemData items that were drawn into it.
+   * Each frame also keeps a list of DisplayItemData pointers that were
+   * created for that frame. DisplayItemData objects manage these lists automatically.
+   *
+   * During layer construction we update the data in the LayerManagerData object, marking
+   * items that are modified. At the end we sweep the LayerManagerData hash-set and remove
+   * all items that haven't been modified.
+   */
+
+  /**
+   * Retained data for a display item.
+   */
+  class DisplayItemData {
+  public:
+    friend class FrameLayerBuilder;
+
+    uint32_t GetDisplayItemKey() { return mDisplayItemKey; }
+    Layer* GetLayer() { return mLayer; }
+    void Invalidate() { mIsInvalid = true; }
+  protected:
+
+    DisplayItemData(LayerManagerData* aParent, uint32_t aKey, Layer* aLayer, LayerState aLayerState, uint32_t aGeneration);
+    DisplayItemData(DisplayItemData &toCopy);
+
+    /**
+     * Removes any references to this object from frames
+     * in mFrameList.
+     */
+    ~DisplayItemData();
+
+    NS_INLINE_DECL_REFCOUNTING(DisplayItemData)
+
+
+    /**
+     * Associates this DisplayItemData with a frame, and adds it
+     * to the LayerManagerDataProperty list on the frame.
+     */
+    void AddFrame(nsIFrame* aFrame);
+    void RemoveFrame(nsIFrame* aFrame);
+    void GetFrameListChanges(nsDisplayItem* aOther, nsTArray<nsIFrame*>& aOut);
+
+    /**
+     * Updates the contents of this item to a new set of data, instead of allocating a new
+     * object.
+     * Set the passed in parameters, and clears the opt layer, inactive manager, geometry
+     * and clip.
+     * Parent, frame list and display item key are assumed to be the same.
+     */
+    void UpdateContents(Layer* aLayer, LayerState aState,
+                        uint32_t aContainerLayerGeneration, nsDisplayItem* aItem = nullptr);
+
+    LayerManagerData* mParent;
+    nsRefPtr<Layer> mLayer;
+    nsRefPtr<Layer> mOptLayer;
+    nsRefPtr<LayerManager> mInactiveManager;
+    nsAutoTArray<nsIFrame*, 1> mFrameList;
+    nsAutoPtr<nsDisplayItemGeometry> mGeometry;
+    Clip            mClip;
+    uint32_t        mDisplayItemKey;
+    uint32_t        mContainerLayerGeneration;
+    LayerState      mLayerState;
+
+    /**
+     * Used to track if data currently stored in mFramesWithLayers (from an existing
+     * paint) has been updated in the current paint.
+     */
+    bool            mUsed;
+    bool            mIsInvalid;
+  };
+
+protected:
+
+  friend class LayerManagerData;
+
+  static void RemoveFrameFromLayerManager(nsIFrame* aFrame, void* aPropertyValue);
 
   /**
    * Given a frame and a display item key that uniquely identifies a
@@ -238,57 +541,46 @@ public:
    * This could be a dedicated layer for the display item, or a ThebesLayer
    * that renders many display items.
    */
-  Layer* GetOldLayerFor(nsIFrame* aFrame, PRUint32 aDisplayItemKey);
-
-protected:
-  /**
-   * We store an array of these for each frame that is associated with
-   * one or more retained layers. Each DisplayItemData records the layer
-   * used to render one of the frame's display items.
-   */
-  class DisplayItemData {
-  public:
-    DisplayItemData(Layer* aLayer, PRUint32 aKey)
-      : mLayer(aLayer), mDisplayItemKey(aKey) {}
-
-    nsRefPtr<Layer> mLayer;
-    PRUint32        mDisplayItemKey;
-  };
-
-  static void InternalDestroyDisplayItemData(nsIFrame* aFrame,
-                                             void* aPropertyValue,
-                                             PRBool aRemoveFromFramesWithLayers);
-  static void DestroyDisplayItemData(nsIFrame* aFrame, void* aPropertyValue);
+  DisplayItemData* GetOldLayerForFrame(nsIFrame* aFrame, uint32_t aDisplayItemKey);
 
   /**
-   * For DisplayItemDataProperty, the property value *is* an
-   * nsTArray<DisplayItemData>, not a pointer to an array. This works
-   * because sizeof(nsTArray<T>) == sizeof(void*).
+   * Stores DisplayItemData associated with aFrame, stores the data in
+   * mNewDisplayItemData.
    */
-  NS_DECLARE_FRAME_PROPERTY_WITH_FRAME_IN_DTOR(DisplayItemDataProperty,
-                                               DestroyDisplayItemData)
+  DisplayItemData* StoreDataForFrame(nsDisplayItem* aItem, Layer* aLayer, LayerState aState);
+  void StoreDataForFrame(nsIFrame* aFrame,
+                         uint32_t aDisplayItemKey,
+                         Layer* aLayer,
+                         LayerState aState);
 
-  /**
-   * We accumulate DisplayItemData elements in a hashtable during
-   * the paint process, and store them in the frame property only when
-   * paint is complete. This is the hashentry for that hashtable.
+  // Flash the area within the context clip if paint flashing is enabled.
+  static void FlashPaint(gfxContext *aContext);
+
+  /*
+   * Get the DisplayItemData array associated with this frame, or null if one
+   * doesn't exist.
+   *
+   * Note that the pointer returned here is only valid so long as you don't
+   * poke the LayerManagerData's mFramesWithLayers hashtable.
    */
-  class DisplayItemDataEntry : public nsPtrHashKey<nsIFrame> {
-  public:
-    DisplayItemDataEntry(const nsIFrame *key) : nsPtrHashKey<nsIFrame>(key) {}
-    DisplayItemDataEntry(const DisplayItemDataEntry &toCopy) :
-      nsPtrHashKey<nsIFrame>(toCopy.mKey), mData(toCopy.mData)
-    {
-      NS_ERROR("Should never be called, since we ALLOW_MEMMOVE");
-    }
+  DisplayItemData* GetDisplayItemData(nsIFrame *aFrame, uint32_t aKey);
 
-    PRBool HasContainerLayer();
+  /*
+   * Get the DisplayItemData associated with this frame / display item pair,
+   * using the LayerManager instead of FrameLayerBuilder.
+   */
+  static DisplayItemData* GetDisplayItemDataForManager(nsIFrame* aFrame, 
+                                                       uint32_t aDisplayItemKey, 
+                                                       LayerManager* aManager);
+  static DisplayItemData* GetDisplayItemDataForManager(nsIFrame* aFrame, 
+                                                       uint32_t aDisplayItemKey);
+  static DisplayItemData* GetDisplayItemDataForManager(nsDisplayItem* aItem, LayerManager* aManager);
+  static DisplayItemData* GetDisplayItemDataForManager(nsIFrame* aFrame, 
+                                                       uint32_t aDisplayItemKey, 
+                                                       LayerManagerData* aData);
 
-    nsTArray<DisplayItemData> mData;
-
-    enum { ALLOW_MEMMOVE = PR_TRUE };
-  };
-
+  static PLDHashOperator DumpDisplayItemDataForFrame(nsRefPtrHashKey<DisplayItemData>* aEntry,
+                                                     void* aClosure);
   /**
    * We store one of these for each display item associated with a
    * ThebesLayer, in a hashtable that maps each ThebesLayer to an array
@@ -300,27 +592,37 @@ protected:
    * mItem always has an underlying frame.
    */
   struct ClippedDisplayItem {
-    ClippedDisplayItem(nsDisplayItem* aItem, const nsRect* aClipRect)
-      : mItem(aItem), mHasClipRect(aClipRect != nsnull)
+    ClippedDisplayItem(nsDisplayItem* aItem, const Clip& aClip, uint32_t aGeneration)
+      : mItem(aItem), mClip(aClip), mContainerLayerGeneration(aGeneration)
     {
-      if (mHasClipRect) {
-        mClipRect = *aClipRect;
-      }
     }
 
+    ~ClippedDisplayItem();
+
     nsDisplayItem* mItem;
-    nsRefPtr<LayerManager> mTempLayerManager;
-    nsRect         mClipRect;
-    PRPackedBool   mHasClipRect;
+
+    /**
+     * If the display item is being rendered as an inactive
+     * layer, then this stores the layer manager being
+     * used for the inactive transaction.
+     */
+    nsRefPtr<LayerManager> mInactiveLayerManager;
+
+    Clip mClip;
+    uint32_t mContainerLayerGeneration;
   };
 
   /**
    * We accumulate ClippedDisplayItem elements in a hashtable during
    * the paint process. This is the hashentry for that hashtable.
    */
+public:
   class ThebesLayerItemsEntry : public nsPtrHashKey<ThebesLayer> {
   public:
-    ThebesLayerItemsEntry(const ThebesLayer *key) : nsPtrHashKey<ThebesLayer>(key) {}
+    ThebesLayerItemsEntry(const ThebesLayer *key) :
+        nsPtrHashKey<ThebesLayer>(key), mContainerLayerFrame(nullptr),
+        mContainerLayerGeneration(0),
+        mHasExplicitLastPaintOffset(false), mCommonClipCount(0) {}
     ThebesLayerItemsEntry(const ThebesLayerItemsEntry &toCopy) :
       nsPtrHashKey<ThebesLayer>(toCopy.mKey), mItems(toCopy.mItems)
     {
@@ -329,16 +631,48 @@ protected:
 
     nsTArray<ClippedDisplayItem> mItems;
     nsIFrame* mContainerLayerFrame;
+    // The translation set on this ThebesLayer before we started updating the
+    // layer tree.
+    nsIntPoint mLastPaintOffset;
+    uint32_t mContainerLayerGeneration;
+    bool mHasExplicitLastPaintOffset;
+    /**
+      * The first mCommonClipCount rounded rectangle clips are identical for
+      * all items in the layer. Computed in ThebesLayerData.
+      */
+    uint32_t mCommonClipCount;
 
-    enum { ALLOW_MEMMOVE = PR_TRUE };
+    enum { ALLOW_MEMMOVE = true };
   };
 
-  void RemoveThebesItemsForLayerSubtree(Layer* aLayer);
+  /**
+   * Get the ThebesLayerItemsEntry object associated with aLayer in this
+   * FrameLayerBuilder
+   */
+  ThebesLayerItemsEntry* GetThebesLayerItemsEntry(ThebesLayer* aLayer)
+  {
+    return mThebesLayerItems.GetEntry(aLayer);
+  }
 
-  static PLDHashOperator UpdateDisplayItemDataForFrame(nsPtrHashKey<nsIFrame>* aEntry,
-                                                       void* aUserArg);
-  static PLDHashOperator StoreNewDisplayItemData(DisplayItemDataEntry* aEntry,
-                                                 void* aUserArg);
+protected:
+  void RemoveThebesItemsAndOwnerDataForLayerSubtree(Layer* aLayer,
+                                                    bool aRemoveThebesItems,
+                                                    bool aRemoveOwnerData);
+
+  static PLDHashOperator ProcessRemovedDisplayItems(nsRefPtrHashKey<DisplayItemData>* aEntry,
+                                                    void* aUserArg);
+  static PLDHashOperator RestoreDisplayItemData(nsRefPtrHashKey<DisplayItemData>* aEntry,
+                                                void *aUserArg);
+
+  static PLDHashOperator RestoreThebesLayerItemEntries(ThebesLayerItemsEntry* aEntry,
+                                                       void *aUserArg);
+
+  /**
+   * Returns true if the DOM has been modified since we started painting,
+   * in which case we should bail out and not paint anymore. This should
+   * never happen, but plugins can trigger it in some cases.
+   */
+  bool CheckDOMModified();
 
   /**
    * The layer manager belonging to the widget that is being retained
@@ -346,25 +680,36 @@ protected:
    */
   LayerManager*                       mRetainingManager;
   /**
-   * A map from frames to a list of (display item key, layer) pairs that
-   * describes what layers various parts of the frame are assigned to.
+   * The root prescontext for the display list builder reference frame
    */
-  nsTHashtable<DisplayItemDataEntry>  mNewDisplayItemData;
+  nsRefPtr<nsRootPresContext>         mRootPresContext;
+
+  /**
+   * The display list builder being used.
+   */
+  nsDisplayListBuilder*               mDisplayListBuilder;
   /**
    * A map from ThebesLayers to the list of display items (plus
    * clipping data) to be rendered in the layer.
    */
   nsTHashtable<ThebesLayerItemsEntry> mThebesLayerItems;
   /**
-   * Indicates that the contents of all ThebesLayers should be rerendered
-   * during this paint.
+   * Saved generation counter so we can detect DOM changes.
    */
-  PRPackedBool                        mInvalidateAllThebesContent;
+  uint32_t                            mInitialDOMGeneration;
+  /**
+   * Set to true if we have detected and reported DOM modification during
+   * the current paint.
+   */
+  bool                                mDetectedDOMModification;
   /**
    * Indicates that the entire layer tree should be rerendered
    * during this paint.
    */
-  PRPackedBool                        mInvalidateAllLayers;
+  bool                                mInvalidateAllLayers;
+
+  uint32_t                            mContainerLayerGeneration;
+  uint32_t                            mMaxContainerLayerGeneration;
 };
 
 }

@@ -1,4 +1,8 @@
 <?xml version="1.0"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 
 <bindings id="editorBindings"
    xmlns="http://www.mozilla.org/xbl"
@@ -102,12 +106,18 @@
       <property name="docShell"
                 onget="return this.boxObject.QueryInterface(Components.interfaces.nsIContainerBoxObject).docShell;"
                 readonly="true"/>
+      <property name="currentURI"
+                readonly="true"
+                onget="return this.webNavigation.currentURI;"/>
       <property name="contentWindow"
                 readonly="true"
                 onget="return this.docShell.QueryInterface(Components.interfaces.nsIInterfaceRequestor).getInterface(Components.interfaces.nsIDOMWindow);"/>
       <property name="webBrowserFind"
                 readonly="true"
                 onget="return this.docShell.QueryInterface(Components.interfaces.nsIInterfaceRequestor).getInterface(Components.interfaces.nsIWebBrowserFind);"/>
+      <property name="markupDocumentViewer"
+                readonly="true"
+                onget="return this.docShell.contentViewer.QueryInterface(Components.interfaces.nsIMarkupDocumentViewer);"/>
       <property name="editingSession"
                 readonly="true"
                 onget="return this.webNavigation.QueryInterface(Components.interfaces.nsIInterfaceRequestor).getInterface(Components.interfaces.nsIEditingSession);"/>

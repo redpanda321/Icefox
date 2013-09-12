@@ -1,5 +1,4 @@
 <!DOCTYPE HTML><html><head>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/EventUtils.js"></script>
 </head>
 <body>
@@ -16,8 +15,8 @@
   range.setEnd(p.firstChild, 0);
   sel.addRange(range);
 
-  sendKey('UP', div);  // move UP
-  sendChar('A', div);  // insert "A"
+  sendKey('UP');  // move UP
+  sendChar('A');  // insert "A"
 </script>
 </body>
 </html>

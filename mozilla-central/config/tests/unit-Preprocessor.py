@@ -1,17 +1,18 @@
+from __future__ import with_statement
 import unittest
 
 from StringIO import StringIO
 import os
 import sys
 import os.path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from mozunit import main, MockedOpen
 
 from Preprocessor import Preprocessor
 
-class NamedIO(StringIO):
-  def __init__(self, name, content):
-    self.name = name
-    StringIO.__init__(self, content)
+def NamedIO(name, content):
+  with open(name, 'w') as f:
+    f.write(content)
+  return name
 
 class TestPreprocessor(unittest.TestCase):
   """
@@ -31,6 +32,16 @@ PASS
 """)
     self.pp.do_include(f)
     self.assertEqual(self.pp.out.getvalue(), "PASS\n")
+
+  def test_no_marker(self):
+    no_marker = """#if 0
+PASS
+#endif
+"""
+    f = NamedIO("no_marker.in", no_marker)
+    self.pp.setMarker(None)
+    self.pp.do_include(f)
+    self.assertEqual(self.pp.out.getvalue(), no_marker)
 
   def test_string_value(self):
     f = NamedIO("string_value.in", """#define FOO STRING
@@ -171,11 +182,11 @@ BAR
   
   def test_filter_attemptSubstitution(self):
     f = NamedIO('filter_attemptSubstitution.in', '''#filter attemptSubstitution
-P@VAR@ASS
+@PASS@
 #unfilter attemptSubstitution
 ''')
     self.pp.do_include(f)
-    self.assertEqual(self.pp.out.getvalue(), "PASS\n")
+    self.assertEqual(self.pp.out.getvalue(), "@PASS@\n")
   
   def test_filter_emptyLines(self):
     f = NamedIO('filter_emptyLines.in', '''lines with a
@@ -404,6 +415,15 @@ FAIL
     self.pp.do_include(f)
     self.assertEqual(self.pp.out.getvalue(), "first\rsecond\r")
 
+  def test_filterDefine(self):
+    f = NamedIO('filterDefine.in', '''#filter substitution
+#define VAR AS
+#define VAR2 P@VAR@
+@VAR2@S
+''')
+    self.pp.do_include(f)
+    self.assertEqual(self.pp.out.getvalue(), "PASS\n")
+
   def test_number_value_equals(self):
     f = NamedIO("number_value_equals.in", """#define FOO 1000
 #if FOO == 1000
@@ -490,5 +510,69 @@ octal value is not equal
     self.pp.do_include(f)
     self.assertEqual(self.pp.out.getvalue(), "octal value is not equal\n")
 
+  def test_undefined_variable(self):
+    f = NamedIO("undefined_variable.in", """#filter substitution
+@foo@
+""")
+    try:
+      self.pp.do_include(f)
+    except Preprocessor.Error, exception:
+      self.assertEqual(exception.key, 'UNDEFINED_VAR')
+    else:
+      self.fail("Expected a Preprocessor.Error")
+
+  def test_include(self):
+    with MockedOpen({"foo/test": """#define foo foobarbaz
+#include @inc@
+@bar@
+""",
+                     "bar": """#define bar barfoobaz
+@foo@
+"""}):
+      f = NamedIO("include.in", """#filter substitution
+#define inc ../bar
+#include foo/test""")
+      self.pp.do_include(f)
+      self.assertEqual(self.pp.out.getvalue(), """foobarbaz
+barfoobaz
+""")
+
+  def test_include_missing_file(self):
+    f = NamedIO("include_missing_file.in", "#include foo")
+    try:
+      self.pp.do_include(f)
+    except Preprocessor.Error, exception:
+      self.assertEqual(exception.key, 'FILE_NOT_FOUND')
+    else:
+      self.fail("Expected a Preprocessor.Error")
+
+  def test_include_undefined_variable(self):
+    f = NamedIO("include_undefined_variable.in", """#filter substitution
+#include @foo@
+""")
+    try:
+      self.pp.do_include(f)
+    except Preprocessor.Error, exception:
+      self.assertEqual(exception.key, 'UNDEFINED_VAR')
+    else:
+      self.fail("Expected a Preprocessor.Error")
+
+  def test_include_literal_at(self):
+    with MockedOpen({"@foo@": "#define foo foobarbaz"}):
+      f = NamedIO("include_literal_at.in", """#include @foo@
+#filter substitution
+@foo@
+""")
+      self.pp.do_include(f)
+      self.assertEqual(self.pp.out.getvalue(), """foobarbaz
+""")
+
+  def test_command_line_literal_at(self):
+    with MockedOpen({"@foo@.in": """@foo@
+"""}):
+      self.pp.handleCommandLine(['-Fsubstitution', '-Dfoo=foobarbaz', '@foo@.in'])
+      self.assertEqual(self.pp.out.getvalue(), """foobarbaz
+""")
+
 if __name__ == '__main__':
-  unittest.main()
+  main()

@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Novell code.
- *
- * The Initial Developer of the Original Code is Novell.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *         Robert O'Callahan <robert@ocallahan.org> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef NSLINEBREAKER_H_
 #define NSLINEBREAKER_H_
@@ -43,6 +11,7 @@
 #include "nsILineBreaker.h"
 
 class nsIAtom;
+class nsHyphenator;
 
 /**
  * A receiver of line break data.
@@ -55,14 +24,18 @@ public:
    * will cover the entire text chunk. Substrings may overlap (i.e., we may
    * set the break-before state of a character more than once).
    * @param aBreakBefore the break-before states for the characters in the substring.
+   * These are enum values from gfxTextRun::CompressedGlyph:
+   *    FLAG_BREAK_TYPE_NONE     - no linebreak is allowed here
+   *    FLAG_BREAK_TYPE_NORMAL   - a normal (whitespace) linebreak
+   *    FLAG_BREAK_TYPE_HYPHEN   - a hyphenation point
    */
-  virtual void SetBreaks(PRUint32 aStart, PRUint32 aLength, PRPackedBool* aBreakBefore) = 0;
+  virtual void SetBreaks(uint32_t aStart, uint32_t aLength, uint8_t* aBreakBefore) = 0;
   
   /**
    * Indicates which characters should be capitalized. Only called if
    * BREAK_NEED_CAPITALIZATION was requested.
    */
-  virtual void SetCapitalization(PRUint32 aStart, PRUint32 aLength, PRPackedBool* aCapitalize) = 0;
+  virtual void SetCapitalization(uint32_t aStart, uint32_t aLength, bool* aCapitalize) = 0;
 };
 
 /**
@@ -92,9 +65,9 @@ public:
   nsLineBreaker();
   ~nsLineBreaker();
   
-  static inline PRBool IsSpace(PRUnichar u) { return NS_IsSpace(u); }
+  static inline bool IsSpace(PRUnichar u) { return NS_IsSpace(u); }
 
-  static inline PRBool IsComplexASCIIChar(PRUnichar u)
+  static inline bool IsComplexASCIIChar(PRUnichar u)
   {
     return !((0x0030 <= u && u <= 0x0039) ||
              (0x0041 <= u && u <= 0x005A) ||
@@ -102,7 +75,7 @@ public:
              (0x000a == u));
   }
 
-  static inline PRBool IsComplexChar(PRUnichar u)
+  static inline bool IsComplexChar(PRUnichar u)
   {
     return IsComplexASCIIChar(u) ||
            NS_NeedsPlatformNativeHandling(u) ||
@@ -153,7 +126,12 @@ public:
      * We need to be notified of characters that should be capitalized
      * (as in text-transform:capitalize) in this chunk of text.
      */
-    BREAK_NEED_CAPITALIZATION = 0x08
+    BREAK_NEED_CAPITALIZATION = 0x08,
+    /**
+     * Auto-hyphenation is enabled, so we need to get a hyphenator
+     * (if available) and use it to find breakpoints.
+     */
+    BREAK_USE_AUTO_HYPHENATION = 0x10
   };
 
   /**
@@ -161,7 +139,7 @@ public:
    * no actual text associated with it. Only the BREAK_SUPPRESS_INSIDE flag
    * is relevant here.
    */
-  nsresult AppendInvisibleWhitespace(PRUint32 aFlags);
+  nsresult AppendInvisibleWhitespace(uint32_t aFlags);
 
   /**
    * Feed Unicode text into the linebreaker for analysis. aLength must be
@@ -169,15 +147,15 @@ public:
    * @param aSink can be null if the breaks are not actually needed (we may
    * still be setting up state for later breaks)
    */
-  nsresult AppendText(nsIAtom* aLangGroup, const PRUnichar* aText, PRUint32 aLength,
-                      PRUint32 aFlags, nsILineBreakSink* aSink);
+  nsresult AppendText(nsIAtom* aHyphenationLanguage, const PRUnichar* aText, uint32_t aLength,
+                      uint32_t aFlags, nsILineBreakSink* aSink);
   /**
    * Feed 8-bit text into the linebreaker for analysis. aLength must be nonzero.
    * @param aSink can be null if the breaks are not actually needed (we may
    * still be setting up state for later breaks)
    */
-  nsresult AppendText(nsIAtom* aLangGroup, const PRUint8* aText, PRUint32 aLength,
-                      PRUint32 aFlags, nsILineBreakSink* aSink);
+  nsresult AppendText(nsIAtom* aHyphenationLanguage, const uint8_t* aText, uint32_t aLength,
+                      uint32_t aFlags, nsILineBreakSink* aSink);
   /**
    * Reset all state. This means the current run has ended; any outstanding
    * calls through nsILineBreakSink are made, and all outstanding references to
@@ -189,21 +167,27 @@ public:
    * at the end of the text. This will normally only be declared true when there
    * is breakable whitespace at the end.
    */
-  nsresult Reset(PRBool* aTrailingBreak);
+  nsresult Reset(bool* aTrailingBreak);
+
+  /*
+   * Set word-break mode for linebreaker.  This is set by word-break property.
+   * @param aMode is nsILineBreaker::kWordBreak_* value.
+   */
+  void SetWordBreak(uint8_t aMode) { mWordBreak = aMode; }
 
 private:
   // This is a list of text sources that make up the "current word" (i.e.,
   // run of text which does not contain any whitespace). All the mLengths
   // are are nonzero, these cannot overlap.
   struct TextItem {
-    TextItem(nsILineBreakSink* aSink, PRUint32 aSinkOffset, PRUint32 aLength,
-             PRUint32 aFlags)
+    TextItem(nsILineBreakSink* aSink, uint32_t aSinkOffset, uint32_t aLength,
+             uint32_t aFlags)
       : mSink(aSink), mSinkOffset(aSinkOffset), mLength(aLength), mFlags(aFlags) {}
 
     nsILineBreakSink* mSink;
-    PRUint32          mSinkOffset;
-    PRUint32          mLength;
-    PRUint32          mFlags;
+    uint32_t          mSinkOffset;
+    uint32_t          mLength;
+    uint32_t          mFlags;
   };
 
   // State for the nonwhitespace "word" that started in previous text and hasn't
@@ -214,16 +198,27 @@ private:
   // appropriate sink(s). Then we clear the current word state.
   nsresult FlushCurrentWord();
 
+  void UpdateCurrentWordLanguage(nsIAtom *aHyphenationLanguage);
+
+  void FindHyphenationPoints(nsHyphenator *aHyphenator,
+                             const PRUnichar *aTextStart,
+                             const PRUnichar *aTextLimit,
+                             uint8_t *aBreakState);
+
   nsAutoTArray<PRUnichar,100> mCurrentWord;
   // All the items that contribute to mCurrentWord
   nsAutoTArray<TextItem,2>    mTextItems;
-  PRPackedBool                mCurrentWordContainsComplexChar;
+  nsIAtom*                    mCurrentWordLanguage;
+  bool                        mCurrentWordContainsMixedLang;
+  bool                        mCurrentWordContainsComplexChar;
 
   // True if the previous character was breakable whitespace
-  PRPackedBool                mAfterBreakableSpace;
+  bool                        mAfterBreakableSpace;
   // True if a break must be allowed at the current position because
   // a run of breakable whitespace ends here
-  PRPackedBool                mBreakHere;
+  bool                        mBreakHere;
+  // line break mode by "word-break" style
+  uint8_t                     mWordBreak;
 };
 
 #endif /*NSLINEBREAKER_H_*/

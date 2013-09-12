@@ -1,4 +1,8 @@
 <?xml version="1.0"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 
 <bindings id="toolbarBindings"
           xmlns="http://www.mozilla.org/xbl"
@@ -24,7 +28,11 @@
       <field name="customToolbarCount">
         0
       </field>
-      
+
+      <field name="externalToolbars">
+       []
+      </field>
+
       <!-- Set by customizeToolbar.js -->
       <property name="customizing">
         <getter><![CDATA[
@@ -63,6 +71,8 @@
         <parameter name="aCurrentSet"/>
         <body>
           <![CDATA[            
+            if (!this.toolbarset)
+              return null;
             var toolbar = document.createElementNS("http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul",
                                                   "toolbar");
             toolbar.id = "__customToolbar_" + aName.replace(" ", "_");
@@ -95,13 +105,55 @@
                 onget="return this.getAttribute('toolbarname');"
                 onset="this.setAttribute('toolbarname', val); return val;"/>
 
-      <field name="toolbox" readonly="true">
-      <![CDATA[
-        this.parentNode && this.parentNode.localName == "toolbox" ? this.parentNode : null;
-      ]]>
-      </field>
+      <field name="_toolbox">null</field>
+      <property name="toolbox" readonly="true">
+        <getter><![CDATA[
+          if (this._toolbox)
+            return this._toolbox;
+
+          let toolboxId = this.getAttribute("toolboxid");
+          if (toolboxId) {
+            let toolbox = document.getElementById(toolboxId);
+            if (!toolbox) {
+              let tbName = this.toolbarName;
+              if (tbName)
+                tbName = " (" + tbName + ")";
+              else
+                tbName = "";
+              throw("toolbar ID " + this.id + tbName + ": toolboxid attribute '" + toolboxId + "' points to a toolbox that doesn't exist");
+            }
+
+            if (toolbox.externalToolbars.indexOf(this) == -1)
+              toolbox.externalToolbars.push(this);
+
+            return this._toolbox = toolbox;
+          }
+
+          return this._toolbox = (this.parentNode &&
+                                  this.parentNode.localName == "toolbox") ?
+                                 this.parentNode : null;
+        ]]></getter>
+      </property>
 
       <constructor>
+        <![CDATA[
+          if (document.readyState == "complete") {
+            this._init();
+          } else {
+            // Need to wait until XUL overlays are loaded. See bug 554279.
+            let self = this;
+            document.addEventListener("readystatechange", function (event) {
+              if (document.readyState != "complete")
+                return;
+              document.removeEventListener("readystatechange", arguments.callee, false);
+              self._init();
+            }, false);
+          }
+        ]]>
+      </constructor>
+
+      <method name="_init">
+        <body>
         <![CDATA[
           // Searching for the toolbox palette in the toolbar binding because
           // toolbars are constructed first.
@@ -133,12 +185,16 @@
           if (currentSet)
             this.currentSet = currentSet;
         ]]>
-      </constructor>
+        </body>
+      </method>
 
       <method name="_idFromNode">
         <parameter name="aNode"/>
         <body>
         <![CDATA[
+          if (aNode.getAttribute("skipintoolbarset") == "true")
+            return "";
+
           switch (aNode.localName) {
             case "toolbarseparator":
               return "separator";
@@ -172,6 +228,9 @@
 
         <setter>
           <![CDATA[
+            if (val == this.currentSet)
+              return val;
+
             var ids = (val == "__empty") ? [] : val.split(",");
 
             var nodeidx = 0;
@@ -192,7 +251,6 @@
             // iterate over the ids to use on the toolbar
             for (let i = 0; i < ids.length; i++) {
               let  id = ids[i];
-
               // iterate over the existing nodes on the toolbar. nodeidx is the
               // spot where we want to insert items.
               for (let c = nodeidx; c < children.length; c++) {
@@ -240,6 +298,7 @@
         </setter>
       </property>
 
+      <field name="_newElementCount">0</field>
       <method name="_getToolbarItem">
         <parameter name="aId"/>
         <body>
@@ -254,7 +313,10 @@
               case "spring":
               case "spacer":
                 newItem = document.createElementNS(XUL_NS, "toolbar" + aId);
-                newItem.id = aId + Date.now() + this.childNodes.length;
+                // Due to timers resolution Date.now() can be the same for
+                // elements created in small timeframes.  So ids are
+                // differentiated through a unique count suffix.
+                newItem.id = aId + Date.now() + (++this._newElementCount);
                 if (aId == "spring")
                   newItem.flex = 1;
                 break;
@@ -266,7 +328,9 @@
                 // look for an item with the same id, as the item may be
                 // in a different toolbar.
                 var item = document.getElementById(aId);
-                if (item && item.parentNode && item.parentNode.parentNode == toolbox) {
+                if (item && item.parentNode && 
+                    item.parentNode.localName == "toolbar" && 
+                    item.parentNode.toolbox == toolbox) {
                   newItem = item;
                   break;
                 }
@@ -433,18 +497,19 @@
   <binding id="toolbar-drag"
            extends="chrome://global/content/bindings/toolbar.xml#toolbar">
     <implementation>
-      <field name="_alive">true</field>
+      <field name="_dragBindingAlive">true</field>
       <constructor><![CDATA[
         if (!this._draggableStarted) {
           this._draggableStarted = true;
           try {
             let tmp = {};
             Components.utils.import("resource://gre/modules/WindowDraggingUtils.jsm", tmp);
-            let draggableThis = new tmp.WindowDraggingElement(this, window);
+            let draggableThis = new tmp.WindowDraggingElement(this);
             draggableThis.mouseDownCheck = function(e) {
               // Don't move while customizing.
-              return !this.parentNode.customizing;
-            }
+              return this._dragBindingAlive &&
+                     this.getAttribute("customizing") != "true";
+            };
           } catch (e) {}
         }
       ]]></constructor>

@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape Portable Runtime (NSPR).
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nspr_xhppa_defs_h___
 #define nspr_xhppa_defs_h___
@@ -110,6 +78,30 @@ extern PRInt32 _PR_ia64_AtomicSet(PRInt32 *val, PRInt32 newval);
 #define _PR_HAVE_INET_NTOP
 #else
 #define _PR_INET6_PROBE
+
+/* for HP-UX 11.11 without IPv6 */
+#ifndef AF_INET6
+#define AF_INET6       22
+#define AI_CANONNAME   2
+#define AI_NUMERICHOST 4
+#define AI_NUMERICSERV 8
+#define AI_V4MAPPED    0x00000010
+#define AI_ADDRCONFIG  0x00000040
+#define AI_ALL         0x00000020
+#define AI_DEFAULT     (AI_V4MAPPED|AI_ADDRCONFIG)
+#define NI_NUMERICHOST 2
+struct addrinfo {
+    int        ai_flags;    /* AI_PASSIVE, AI_CANONNAME */
+    int        ai_family;   /* PF_xxx */
+    int        ai_socktype; /* SOCK_xxx */
+    int        ai_protocol; /* IPPROTO_xxx for IPv4 and IPv6 */
+    socklen_t  ai_addrlen;  /* length of ai_addr */
+    char            *ai_canonname;    /* canonical name for host */
+    struct sockaddr *ai_addr;     /* binary address */
+    struct addrinfo *ai_next;     /* next structure in linked list */
+};
+#endif    /* for HP-UX 11.11 without IPv6 */
+
 #define _PR_HAVE_MD_SOCKADDR_IN6
 /* isomorphic to struct in6_addr on HP-UX B.11.23 */
 struct _md_in6_addr {
@@ -277,8 +269,7 @@ extern PRIntervalTime _PR_HPUX_LW_GetInterval(void);
 #define _MD_GET_INTERVAL                  _PR_HPUX_LW_GetInterval
 #define _MD_INTERVAL_PER_SEC()            1000
 #else
-#define _MD_GET_INTERVAL                  _PR_UNIX_GetInterval
-#define _MD_INTERVAL_PER_SEC              _PR_UNIX_TicksPerSecond
+#define _MD_INTERVAL_USE_GTOD
 #endif
 
 /*

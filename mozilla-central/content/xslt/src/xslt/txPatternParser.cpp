@@ -1,45 +1,12 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is TransforMiiX XSLT processor code.
- *
- * The Initial Developer of the Original Code is
- * Axel Hecht.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Axel Hecht <axel@pike.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "txPatternParser.h"
 #include "txExprLexer.h"
-#include "txAtoms.h"
-#include "txError.h"
+#include "nsGkAtoms.h"
+#include "nsError.h"
 #include "txStringUtils.h"
 #include "txXSLTPatterns.h"
 #include "txIXPathContext.h"
@@ -63,9 +30,9 @@ txPattern* txPatternParser::createPattern(const nsAFlatString& aPattern,
     }
 
     txPatternOptimizer optimizer;
-    txPattern* newPattern = nsnull;
+    txPattern* newPattern = nullptr;
     rv = optimizer.optimize(pattern, &newPattern);
-    NS_ENSURE_SUCCESS(rv, nsnull);
+    NS_ENSURE_SUCCESS(rv, nullptr);
 
     return newPattern ? newPattern : pattern.forget();
 }
@@ -139,21 +106,21 @@ nsresult txPatternParser::createLocPathPattern(txExprLexer& aLexer,
 {
     nsresult rv = NS_OK;
 
-    MBool isChild = MB_TRUE;
-    MBool isAbsolute = MB_FALSE;
+    bool isChild = true;
+    bool isAbsolute = false;
     txPattern* stepPattern = 0;
     txLocPathPattern* pathPattern = 0;
 
     Token::Type type = aLexer.peek()->mType;
     switch (type) {
         case Token::ANCESTOR_OP:
-            isChild = MB_FALSE;
-            isAbsolute = MB_TRUE;
+            isChild = false;
+            isAbsolute = true;
             aLexer.nextToken();
             break;
         case Token::PARENT_OP:
             aLexer.nextToken();
-            isAbsolute = MB_TRUE;
+            isAbsolute = true;
             if (aLexer.peek()->mType == Token::END || 
                 aLexer.peek()->mType == Token::UNION_OP) {
                 aPattern = new txRootPattern();
@@ -166,10 +133,10 @@ nsresult txPatternParser::createLocPathPattern(txExprLexer& aLexer,
             {
                 nsCOMPtr<nsIAtom> nameAtom =
                     do_GetAtom(aLexer.nextToken()->Value());
-                if (nameAtom == txXPathAtoms::id) {
+                if (nameAtom == nsGkAtoms::id) {
                     rv = createIdPattern(aLexer, stepPattern);
                 }
-                else if (nameAtom == txXSLTAtoms::key) {
+                else if (nameAtom == nsGkAtoms::key) {
                     rv = createKeyPattern(aLexer, aContext, stepPattern);
                 }
                 if (NS_FAILED(rv))
@@ -207,7 +174,7 @@ nsresult txPatternParser::createLocPathPattern(txExprLexer& aLexer,
         }
 
 #ifdef TX_TO_STRING
-        root->setSerialize(PR_FALSE);
+        root->setSerialize(false);
 #endif
 
         rv = pathPattern->addStep(root, isChild);
@@ -283,7 +250,7 @@ nsresult txPatternParser::createKeyPattern(txExprLexer& aLexer,
     if (!XMLUtils::isValidQName(PromiseFlatString(key), &colon))
         return NS_ERROR_XPATH_PARSE_FAILURE;
     nsCOMPtr<nsIAtom> prefix, localName;
-    PRInt32 namespaceID;
+    int32_t namespaceID;
     nsresult rv = resolveQName(key, getter_AddRefs(prefix), aContext,
                                getter_AddRefs(localName), namespaceID);
     if (NS_FAILED(rv))
@@ -299,13 +266,13 @@ nsresult txPatternParser::createStepPattern(txExprLexer& aLexer,
                                             txPattern*& aPattern)
 {
     nsresult rv = NS_OK;
-    MBool isAttr = MB_FALSE;
+    bool isAttr = false;
     Token* tok = aLexer.peek();
     if (tok->mType == Token::AXIS_IDENTIFIER) {
-        if (TX_StringEqualsAtom(tok->Value(), txXPathAtoms::attribute)) {
-            isAttr = MB_TRUE;
+        if (TX_StringEqualsAtom(tok->Value(), nsGkAtoms::attribute)) {
+            isAttr = true;
         }
-        else if (!TX_StringEqualsAtom(tok->Value(), txXPathAtoms::child)) {
+        else if (!TX_StringEqualsAtom(tok->Value(), nsGkAtoms::child)) {
             // all done already for CHILD_AXIS, for all others
             // XXX report unexpected axis error
             return NS_ERROR_XPATH_PARSE_FAILURE;
@@ -314,32 +281,32 @@ nsresult txPatternParser::createStepPattern(txExprLexer& aLexer,
     }
     else if (tok->mType == Token::AT_SIGN) {
         aLexer.nextToken();
-        isAttr = MB_TRUE;
+        isAttr = true;
     }
-    tok = aLexer.nextToken();
 
     txNodeTest* nodeTest;
-    if (tok->mType == Token::CNAME) {
+    if (aLexer.peek()->mType == Token::CNAME) {
+        tok = aLexer.nextToken();
+
         // resolve QName
         nsCOMPtr<nsIAtom> prefix, lName;
-        PRInt32 nspace;
+        int32_t nspace;
         rv = resolveQName(tok->Value(), getter_AddRefs(prefix), aContext,
-                          getter_AddRefs(lName), nspace, PR_TRUE);
+                          getter_AddRefs(lName), nspace, true);
         if (NS_FAILED(rv)) {
             // XXX error report namespace resolve failed
             return rv;
         }
 
-        PRUint16 nodeType = isAttr ?
-                            (PRUint16)txXPathNodeType::ATTRIBUTE_NODE :
-                            (PRUint16)txXPathNodeType::ELEMENT_NODE;
+        uint16_t nodeType = isAttr ?
+                            (uint16_t)txXPathNodeType::ATTRIBUTE_NODE :
+                            (uint16_t)txXPathNodeType::ELEMENT_NODE;
         nodeTest = new txNameTest(prefix, lName, nspace, nodeType);
         if (!nodeTest) {
             return NS_ERROR_OUT_OF_MEMORY;
         }
     }
     else {
-        aLexer.pushBack();
         rv = createNodeTypeTest(aLexer, &nodeTest);
         NS_ENSURE_SUCCESS(rv, rv);
     }

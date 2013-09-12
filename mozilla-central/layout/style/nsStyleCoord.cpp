@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* representation of length values in computed style data */
 
@@ -43,6 +11,7 @@
 #include "prlog.h"
 #include "nsMathUtils.h"
 #include "nsStyleContext.h"
+#include "mozilla/HashFunctions.h"
 
 nsStyleCoord::nsStyleCoord(nsStyleUnit aUnit)
   : mUnit(aUnit)
@@ -54,7 +23,7 @@ nsStyleCoord::nsStyleCoord(nsStyleUnit aUnit)
   mValue.mInt = 0;
 }
 
-nsStyleCoord::nsStyleCoord(PRInt32 aValue, nsStyleUnit aUnit)
+nsStyleCoord::nsStyleCoord(int32_t aValue, nsStyleUnit aUnit)
   : mUnit(aUnit)
 {
   //if you want to pass in eStyleUnit_Coord, don't. instead, use the
@@ -82,35 +51,66 @@ nsStyleCoord::nsStyleCoord(float aValue, nsStyleUnit aUnit)
   }
 }
 
-// FIXME: In C++0x we can rely on the default copy constructor since
-// default copy construction is defined properly for unions.  But when
-// can we actually use that?  (It seems to work in gcc 4.4.)
-nsStyleCoord& nsStyleCoord::operator=(const nsStyleCoord& aCopy)
+bool nsStyleCoord::operator==(const nsStyleCoord& aOther) const
 {
-  mUnit = aCopy.mUnit;
-  if ((eStyleUnit_Percent <= mUnit) && (mUnit < eStyleUnit_Coord)) {
-    mValue.mFloat = aCopy.mValue.mFloat;
+  if (mUnit != aOther.mUnit) {
+    return false;
   }
-  else if (IsArrayValue()) {
-    mValue.mPointer = aCopy.mValue.mPointer;
+  switch (mUnit) {
+    case eStyleUnit_Null:
+    case eStyleUnit_Normal:
+    case eStyleUnit_Auto:
+    case eStyleUnit_None:
+      return true;
+    case eStyleUnit_Percent:
+    case eStyleUnit_Factor:
+    case eStyleUnit_Degree:
+    case eStyleUnit_Grad:
+    case eStyleUnit_Radian:
+    case eStyleUnit_Turn:
+      return mValue.mFloat == aOther.mValue.mFloat;
+    case eStyleUnit_Coord:
+    case eStyleUnit_Integer:
+    case eStyleUnit_Enumerated:
+      return mValue.mInt == aOther.mValue.mInt;
+    case eStyleUnit_Calc:
+      return *this->GetCalcValue() == *aOther.GetCalcValue();
   }
-  else {
-    mValue.mInt = aCopy.mValue.mInt;
-  }
-  return *this;
+  NS_ABORT_IF_FALSE(false, "unexpected unit");
+  return false;
 }
 
-PRBool nsStyleCoord::operator==(const nsStyleCoord& aOther) const
+uint32_t nsStyleCoord::HashValue(uint32_t aHash = 0) const
 {
-  if (mUnit == aOther.mUnit) {
-    if ((eStyleUnit_Percent <= mUnit) && (mUnit < eStyleUnit_Coord)) {
-      return PRBool(mValue.mFloat == aOther.mValue.mFloat);
-    }
-    else {
-      return PRBool(mValue.mInt == aOther.mValue.mInt);
-    }
+  aHash = mozilla::AddToHash(aHash, mUnit);
+
+  switch (mUnit) {
+    case eStyleUnit_Null:
+    case eStyleUnit_Normal:
+    case eStyleUnit_Auto:
+    case eStyleUnit_None:
+      return mozilla::AddToHash(aHash, true);
+    case eStyleUnit_Percent:
+    case eStyleUnit_Factor:
+    case eStyleUnit_Degree:
+    case eStyleUnit_Grad:
+    case eStyleUnit_Radian:
+    case eStyleUnit_Turn:
+      return mozilla::AddToHash(aHash, mValue.mFloat);
+    case eStyleUnit_Coord:
+    case eStyleUnit_Integer:
+    case eStyleUnit_Enumerated:
+      return mozilla::AddToHash(aHash, mValue.mInt);
+    case eStyleUnit_Calc:
+      Calc* calcValue = GetCalcValue();
+      aHash = mozilla::AddToHash(aHash, calcValue->mLength);
+      if (HasPercent()) {
+        return mozilla::AddToHash(aHash, calcValue->mPercent);
+      }
+      return aHash;
   }
-  return PR_FALSE;
+  NS_ABORT_IF_FALSE(false, "unexpected unit");
+  return aHash;
 }
 
 void nsStyleCoord::Reset()
@@ -125,7 +125,7 @@ void nsStyleCoord::SetCoordValue(nscoord aValue)
   mValue.mInt = aValue;
 }
 
-void nsStyleCoord::SetIntValue(PRInt32 aValue, nsStyleUnit aUnit)
+void nsStyleCoord::SetIntValue(int32_t aValue, nsStyleUnit aUnit)
 {
   NS_ASSERTION((aUnit == eStyleUnit_Enumerated) ||
                (aUnit == eStyleUnit_Integer), "not an int value");
@@ -155,7 +155,8 @@ void nsStyleCoord::SetAngleValue(float aValue, nsStyleUnit aUnit)
 {
   if (aUnit == eStyleUnit_Degree ||
       aUnit == eStyleUnit_Grad ||
-      aUnit == eStyleUnit_Radian) {
+      aUnit == eStyleUnit_Radian ||
+      aUnit == eStyleUnit_Turn) {
     mUnit = aUnit;
     mValue.mFloat = aValue;
   } else {
@@ -164,15 +165,10 @@ void nsStyleCoord::SetAngleValue(float aValue, nsStyleUnit aUnit)
   }
 }
 
-void nsStyleCoord::SetArrayValue(Array* aValue, nsStyleUnit aUnit)
+void nsStyleCoord::SetCalcValue(Calc* aValue)
 {
-  mUnit = aUnit;
-  if (IsArrayValue()) {
-    mValue.mPointer = aValue;
-  } else {
-    NS_NOTREACHED("not a pointer value");
-    Reset();
-  }
+  mUnit = eStyleUnit_Calc;
+  mValue.mPointer = aValue;
 }
 
 void nsStyleCoord::SetNormalValue()
@@ -202,6 +198,7 @@ nsStyleCoord::GetAngleValueInRadians() const
 
   switch (GetUnit()) {
   case eStyleUnit_Radian: return angle;
+  case eStyleUnit_Turn:   return angle * 2 * M_PI;
   case eStyleUnit_Degree: return angle * M_PI / 180.0;
   case eStyleUnit_Grad:   return angle * M_PI / 200.0;
 
@@ -211,91 +208,20 @@ nsStyleCoord::GetAngleValueInRadians() const
   }
 }
 
-PRBool
-nsStyleCoord::CalcHasPercent() const
-{
-  NS_ABORT_IF_FALSE(IsCalcUnit(), "caller should check IsCalcUnit()");
-  nsStyleCoord::Array *a = GetArrayValue();
-  for (size_t i = 0, i_end = a->Count(); i < i_end; ++i) {
-    const nsStyleCoord &v = a->Item(i);
-    if (v.GetUnit() == eStyleUnit_Percent) {
-      return PR_TRUE;
-    }
-    if (v.IsCalcUnit() && v.CalcHasPercent()) {
-      return PR_TRUE;
-    }
-  }
-  return PR_FALSE;
-}
-
-
-inline void*
-nsStyleCoord::Array::operator new(size_t aSelfSize,
-                                  nsStyleContext *aAllocationContext,
-                                  size_t aItemCount) CPP_THROW_NEW
-{
-  NS_ABORT_IF_FALSE(aItemCount > 0, "cannot have 0 item count");
-  return aAllocationContext->Alloc(
-           aSelfSize + sizeof(nsStyleCoord) * (aItemCount - 1));
-}
-
-/* static */ nsStyleCoord::Array*
-nsStyleCoord::Array::Create(nsStyleContext *aAllocationContext,
-                            PRBool& aCanStoreInRuleTree,
-                            size_t aCount)
-{
-  // While it's not ideal that every time we use an array, we force it
-  // not to be stored in the rule tree, it's the easiest option for now.
-  // (This is done only because of the style-context-scoped allocation.)
-  aCanStoreInRuleTree = PR_FALSE;
-
-  return new(aAllocationContext, aCount) Array(aCount);
-}
-
-bool
-nsStyleCoord::Array::operator==(const Array& aOther) const
-{
-  if (Count() != aOther.Count()) {
-    return false;
-  }
-
-  for (size_t i = 0; i < mCount; ++i) {
-    if ((*this)[i] != aOther[i]) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-// used by nsStyleSides and nsStyleCorners
-#define COMPARE_INDEXED_COORD(i)                                              \
-  PR_BEGIN_MACRO                                                              \
-  if (mUnits[i] != aOther.mUnits[i])                                          \
-    return PR_FALSE;                                                          \
-  if ((eStyleUnit_Percent <= mUnits[i]) &&                                    \
-      (mUnits[i] < eStyleUnit_Coord)) {                                       \
-    if (mValues[i].mFloat != aOther.mValues[i].mFloat)                        \
-      return PR_FALSE;                                                        \
-  }                                                                           \
-  else {                                                                      \
-    if (mValues[i].mInt != aOther.mValues[i].mInt)                            \
-      return PR_FALSE;                                                        \
-  }                                                                           \
-  PR_END_MACRO
-
-
 nsStyleSides::nsStyleSides()
 {
   memset(this, 0x00, sizeof(nsStyleSides));
 }
 
-PRBool nsStyleSides::operator==(const nsStyleSides& aOther) const
+bool nsStyleSides::operator==(const nsStyleSides& aOther) const
 {
   NS_FOR_CSS_SIDES(i) {
-    COMPARE_INDEXED_COORD(i);
+    if (nsStyleCoord(mValues[i], (nsStyleUnit)mUnits[i]) !=
+        nsStyleCoord(aOther.mValues[i], (nsStyleUnit)aOther.mUnits[i])) {
+      return false;
+    }
   }
-  return PR_TRUE;
+  return true;
 }
 
 void nsStyleSides::Reset()
@@ -308,13 +234,16 @@ nsStyleCorners::nsStyleCorners()
   memset(this, 0x00, sizeof(nsStyleCorners));
 }
 
-PRBool
+bool
 nsStyleCorners::operator==(const nsStyleCorners& aOther) const
 {
   NS_FOR_CSS_HALF_CORNERS(i) {
-    COMPARE_INDEXED_COORD(i);
+    if (nsStyleCoord(mValues[i], (nsStyleUnit)mUnits[i]) !=
+        nsStyleCoord(aOther.mValues[i], (nsStyleUnit)aOther.mUnits[i])) {
+      return false;
+    }
   }
-  return PR_TRUE;
+  return true;
 }
 
 void nsStyleCorners::Reset()
@@ -324,28 +253,31 @@ void nsStyleCorners::Reset()
 
 // Validation of NS_SIDE_IS_VERTICAL and NS_HALF_CORNER_IS_X.
 #define CASE(side, result)                                                    \
-  PR_STATIC_ASSERT(NS_SIDE_IS_VERTICAL(side) == result)
-CASE(NS_SIDE_TOP,    PR_FALSE);
-CASE(NS_SIDE_RIGHT,  PR_TRUE);
-CASE(NS_SIDE_BOTTOM, PR_FALSE);
-CASE(NS_SIDE_LEFT,   PR_TRUE);
+  MOZ_STATIC_ASSERT(NS_SIDE_IS_VERTICAL(side) == result,                      \
+                    "NS_SIDE_IS_VERTICAL is wrong")
+CASE(NS_SIDE_TOP,    false);
+CASE(NS_SIDE_RIGHT,  true);
+CASE(NS_SIDE_BOTTOM, false);
+CASE(NS_SIDE_LEFT,   true);
 #undef CASE
 
 #define CASE(corner, result)                                                  \
-  PR_STATIC_ASSERT(NS_HALF_CORNER_IS_X(corner) == result)
-CASE(NS_CORNER_TOP_LEFT_X,     PR_TRUE);
-CASE(NS_CORNER_TOP_LEFT_Y,     PR_FALSE);
-CASE(NS_CORNER_TOP_RIGHT_X,    PR_TRUE);
-CASE(NS_CORNER_TOP_RIGHT_Y,    PR_FALSE);
-CASE(NS_CORNER_BOTTOM_RIGHT_X, PR_TRUE);
-CASE(NS_CORNER_BOTTOM_RIGHT_Y, PR_FALSE);
-CASE(NS_CORNER_BOTTOM_LEFT_X,  PR_TRUE);
-CASE(NS_CORNER_BOTTOM_LEFT_Y,  PR_FALSE);
+  MOZ_STATIC_ASSERT(NS_HALF_CORNER_IS_X(corner) == result,                    \
+                    "NS_HALF_CORNER_IS_X is wrong")
+CASE(NS_CORNER_TOP_LEFT_X,     true);
+CASE(NS_CORNER_TOP_LEFT_Y,     false);
+CASE(NS_CORNER_TOP_RIGHT_X,    true);
+CASE(NS_CORNER_TOP_RIGHT_Y,    false);
+CASE(NS_CORNER_BOTTOM_RIGHT_X, true);
+CASE(NS_CORNER_BOTTOM_RIGHT_Y, false);
+CASE(NS_CORNER_BOTTOM_LEFT_X,  true);
+CASE(NS_CORNER_BOTTOM_LEFT_Y,  false);
 #undef CASE
 
 // Validation of NS_HALF_TO_FULL_CORNER.
 #define CASE(corner, result)                                                  \
-  PR_STATIC_ASSERT(NS_HALF_TO_FULL_CORNER(corner) == result)
+  MOZ_STATIC_ASSERT(NS_HALF_TO_FULL_CORNER(corner) == result,                 \
+                    "NS_HALF_TO_FULL_CORNER is wrong")
 CASE(NS_CORNER_TOP_LEFT_X,     NS_CORNER_TOP_LEFT);
 CASE(NS_CORNER_TOP_LEFT_Y,     NS_CORNER_TOP_LEFT);
 CASE(NS_CORNER_TOP_RIGHT_X,    NS_CORNER_TOP_RIGHT);
@@ -358,52 +290,55 @@ CASE(NS_CORNER_BOTTOM_LEFT_Y,  NS_CORNER_BOTTOM_LEFT);
 
 // Validation of NS_FULL_TO_HALF_CORNER.
 #define CASE(corner, vert, result)                                            \
-  PR_STATIC_ASSERT(NS_FULL_TO_HALF_CORNER(corner, vert) == result)
-CASE(NS_CORNER_TOP_LEFT,     PR_FALSE, NS_CORNER_TOP_LEFT_X);
-CASE(NS_CORNER_TOP_LEFT,     PR_TRUE,  NS_CORNER_TOP_LEFT_Y);
-CASE(NS_CORNER_TOP_RIGHT,    PR_FALSE, NS_CORNER_TOP_RIGHT_X);
-CASE(NS_CORNER_TOP_RIGHT,    PR_TRUE,  NS_CORNER_TOP_RIGHT_Y);
-CASE(NS_CORNER_BOTTOM_RIGHT, PR_FALSE, NS_CORNER_BOTTOM_RIGHT_X);
-CASE(NS_CORNER_BOTTOM_RIGHT, PR_TRUE,  NS_CORNER_BOTTOM_RIGHT_Y);
-CASE(NS_CORNER_BOTTOM_LEFT,  PR_FALSE, NS_CORNER_BOTTOM_LEFT_X);
-CASE(NS_CORNER_BOTTOM_LEFT,  PR_TRUE,  NS_CORNER_BOTTOM_LEFT_Y);
+  MOZ_STATIC_ASSERT(NS_FULL_TO_HALF_CORNER(corner, vert) == result,           \
+                    "NS_FULL_TO_HALF_CORNER is wrong")
+CASE(NS_CORNER_TOP_LEFT,     false, NS_CORNER_TOP_LEFT_X);
+CASE(NS_CORNER_TOP_LEFT,     true,  NS_CORNER_TOP_LEFT_Y);
+CASE(NS_CORNER_TOP_RIGHT,    false, NS_CORNER_TOP_RIGHT_X);
+CASE(NS_CORNER_TOP_RIGHT,    true,  NS_CORNER_TOP_RIGHT_Y);
+CASE(NS_CORNER_BOTTOM_RIGHT, false, NS_CORNER_BOTTOM_RIGHT_X);
+CASE(NS_CORNER_BOTTOM_RIGHT, true,  NS_CORNER_BOTTOM_RIGHT_Y);
+CASE(NS_CORNER_BOTTOM_LEFT,  false, NS_CORNER_BOTTOM_LEFT_X);
+CASE(NS_CORNER_BOTTOM_LEFT,  true,  NS_CORNER_BOTTOM_LEFT_Y);
 #undef CASE
 
 // Validation of NS_SIDE_TO_{FULL,HALF}_CORNER.
 #define CASE(side, second, result)                                            \
-  PR_STATIC_ASSERT(NS_SIDE_TO_FULL_CORNER(side, second) == result)
-CASE(NS_SIDE_TOP,    PR_FALSE, NS_CORNER_TOP_LEFT);
-CASE(NS_SIDE_TOP,    PR_TRUE,  NS_CORNER_TOP_RIGHT);
+  MOZ_STATIC_ASSERT(NS_SIDE_TO_FULL_CORNER(side, second) == result,           \
+                    "NS_SIDE_TO_FULL_CORNER is wrong")
+CASE(NS_SIDE_TOP,    false, NS_CORNER_TOP_LEFT);
+CASE(NS_SIDE_TOP,    true,  NS_CORNER_TOP_RIGHT);
 
-CASE(NS_SIDE_RIGHT,  PR_FALSE, NS_CORNER_TOP_RIGHT);
-CASE(NS_SIDE_RIGHT,  PR_TRUE,  NS_CORNER_BOTTOM_RIGHT);
+CASE(NS_SIDE_RIGHT,  false, NS_CORNER_TOP_RIGHT);
+CASE(NS_SIDE_RIGHT,  true,  NS_CORNER_BOTTOM_RIGHT);
 
-CASE(NS_SIDE_BOTTOM, PR_FALSE, NS_CORNER_BOTTOM_RIGHT);
-CASE(NS_SIDE_BOTTOM, PR_TRUE,  NS_CORNER_BOTTOM_LEFT);
+CASE(NS_SIDE_BOTTOM, false, NS_CORNER_BOTTOM_RIGHT);
+CASE(NS_SIDE_BOTTOM, true,  NS_CORNER_BOTTOM_LEFT);
 
-CASE(NS_SIDE_LEFT,   PR_FALSE, NS_CORNER_BOTTOM_LEFT);
-CASE(NS_SIDE_LEFT,   PR_TRUE,  NS_CORNER_TOP_LEFT);
+CASE(NS_SIDE_LEFT,   false, NS_CORNER_BOTTOM_LEFT);
+CASE(NS_SIDE_LEFT,   true,  NS_CORNER_TOP_LEFT);
 #undef CASE
 
 #define CASE(side, second, parallel, result)                                  \
-  PR_STATIC_ASSERT(NS_SIDE_TO_HALF_CORNER(side, second, parallel) == result)
-CASE(NS_SIDE_TOP,    PR_FALSE, PR_TRUE,  NS_CORNER_TOP_LEFT_X);
-CASE(NS_SIDE_TOP,    PR_FALSE, PR_FALSE, NS_CORNER_TOP_LEFT_Y);
-CASE(NS_SIDE_TOP,    PR_TRUE,  PR_TRUE,  NS_CORNER_TOP_RIGHT_X);
-CASE(NS_SIDE_TOP,    PR_TRUE,  PR_FALSE, NS_CORNER_TOP_RIGHT_Y);
+  MOZ_STATIC_ASSERT(NS_SIDE_TO_HALF_CORNER(side, second, parallel) == result, \
+                    "NS_SIDE_TO_HALF_CORNER is wrong")
+CASE(NS_SIDE_TOP,    false, true,  NS_CORNER_TOP_LEFT_X);
+CASE(NS_SIDE_TOP,    false, false, NS_CORNER_TOP_LEFT_Y);
+CASE(NS_SIDE_TOP,    true,  true,  NS_CORNER_TOP_RIGHT_X);
+CASE(NS_SIDE_TOP,    true,  false, NS_CORNER_TOP_RIGHT_Y);
 
-CASE(NS_SIDE_RIGHT,  PR_FALSE, PR_FALSE, NS_CORNER_TOP_RIGHT_X);
-CASE(NS_SIDE_RIGHT,  PR_FALSE, PR_TRUE,  NS_CORNER_TOP_RIGHT_Y);
-CASE(NS_SIDE_RIGHT,  PR_TRUE,  PR_FALSE, NS_CORNER_BOTTOM_RIGHT_X);
-CASE(NS_SIDE_RIGHT,  PR_TRUE,  PR_TRUE,  NS_CORNER_BOTTOM_RIGHT_Y);
+CASE(NS_SIDE_RIGHT,  false, false, NS_CORNER_TOP_RIGHT_X);
+CASE(NS_SIDE_RIGHT,  false, true,  NS_CORNER_TOP_RIGHT_Y);
+CASE(NS_SIDE_RIGHT,  true,  false, NS_CORNER_BOTTOM_RIGHT_X);
+CASE(NS_SIDE_RIGHT,  true,  true,  NS_CORNER_BOTTOM_RIGHT_Y);
 
-CASE(NS_SIDE_BOTTOM, PR_FALSE, PR_TRUE,  NS_CORNER_BOTTOM_RIGHT_X);
-CASE(NS_SIDE_BOTTOM, PR_FALSE, PR_FALSE, NS_CORNER_BOTTOM_RIGHT_Y);
-CASE(NS_SIDE_BOTTOM, PR_TRUE,  PR_TRUE,  NS_CORNER_BOTTOM_LEFT_X);
-CASE(NS_SIDE_BOTTOM, PR_TRUE,  PR_FALSE, NS_CORNER_BOTTOM_LEFT_Y);
+CASE(NS_SIDE_BOTTOM, false, true,  NS_CORNER_BOTTOM_RIGHT_X);
+CASE(NS_SIDE_BOTTOM, false, false, NS_CORNER_BOTTOM_RIGHT_Y);
+CASE(NS_SIDE_BOTTOM, true,  true,  NS_CORNER_BOTTOM_LEFT_X);
+CASE(NS_SIDE_BOTTOM, true,  false, NS_CORNER_BOTTOM_LEFT_Y);
 
-CASE(NS_SIDE_LEFT,   PR_FALSE, PR_FALSE, NS_CORNER_BOTTOM_LEFT_X);
-CASE(NS_SIDE_LEFT,   PR_FALSE, PR_TRUE,  NS_CORNER_BOTTOM_LEFT_Y);
-CASE(NS_SIDE_LEFT,   PR_TRUE,  PR_FALSE, NS_CORNER_TOP_LEFT_X);
-CASE(NS_SIDE_LEFT,   PR_TRUE,  PR_TRUE,  NS_CORNER_TOP_LEFT_Y);
+CASE(NS_SIDE_LEFT,   false, false, NS_CORNER_BOTTOM_LEFT_X);
+CASE(NS_SIDE_LEFT,   false, true,  NS_CORNER_BOTTOM_LEFT_Y);
+CASE(NS_SIDE_LEFT,   true,  false, NS_CORNER_TOP_LEFT_X);
+CASE(NS_SIDE_LEFT,   true,  true,  NS_CORNER_TOP_LEFT_Y);
 #undef CASE

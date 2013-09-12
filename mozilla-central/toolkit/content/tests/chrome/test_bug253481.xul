@@ -11,8 +11,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=253481
   xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
 
   <script type="application/javascript" 
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript" 
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>      
   <script type="application/javascript" 
           src="chrome://mochikit/content/tests/SimpleTest/EventUtils.js"></script>      
@@ -58,11 +56,11 @@ var expectedResults = {
 // "pastetofirst" strips leading newlines
 "pastetofirst": testString.replace(/^\n/, '').split(/\n/)[0],
 // "replacewithspaces" strips trailing newlines first - bug 432415
-"replacewithspaces": testString.replace(/\n$/, '').replace('\n',' ','g'),
+"replacewithspaces": testString.replace(/\n$/, '').replace(/\n/g,' '),
 // "strip" is pretty straightforward
-"strip": testString.replace('\n','','g'),
+"strip": testString.replace(/\n/g,''),
 // "replacewithcommas" strips leading and trailing newlines first
-"replacewithcommas": testString.replace(/^\n/, '').replace(/\n$/, '').replace('\n',',','g'),
+"replacewithcommas": testString.replace(/^\n/, '').replace(/\n$/, '').replace(/\n/g,','),
 // "stripsurroundingwhitespace" strips all newlines and whitespace around them
 "stripsurroundingwhitespace": testString.replace(/\s*\n\s*/g,'')
 };
@@ -71,7 +69,7 @@ var expectedResults = {
 SimpleTest.waitForClipboard(testString, function() {
   var clip = Components.classes["@mozilla.org/widget/clipboardhelper;1"]
                        .getService(Components.interfaces.nsIClipboardHelper);
-  clip.copyString(testString);
+  clip.copyString(testString, document);
 }, function() {
   for (let [item, expected] in Iterator(expectedResults)) {
      testPaste(item, $(item), expected);

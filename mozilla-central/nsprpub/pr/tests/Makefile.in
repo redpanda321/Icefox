@@ -1,39 +1,7 @@
 # 
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is the Netscape Portable Runtime (NSPR).
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1998-2000
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 
 #! gmake
@@ -146,6 +114,7 @@ CSRCS =             \
 	provider.c		\
 	prpoll.c		\
 	prpollml.c		\
+	pushtop.c		\
 	ranfile.c       \
 	randseed.c      \
 	reinit.c        \
@@ -327,56 +296,19 @@ endif
 
 # Solaris
 ifeq ($(OS_ARCH), SunOS)
-    ifneq ($(OS_RELEASE), 4.1.3_U1)
-        ifdef NS_USE_GCC
-            LDOPTS += -Xlinker -R -Xlinker $(ABSOLUTE_LIB_DIR)
-        else
-            ifeq ($(USE_CPLUS), 1)
-                CC = CC
-            endif
-            LDOPTS += -R $(ABSOLUTE_LIB_DIR)
+    ifdef NS_USE_GCC
+        LDOPTS += -Xlinker -R -Xlinker $(ABSOLUTE_LIB_DIR)
+    else
+        ifeq ($(USE_CPLUS), 1)
+            CC = CC
         endif
+        LDOPTS += -R $(ABSOLUTE_LIB_DIR)
     endif
 
     ifdef USE_PTHREADS
         EXTRA_LIBS = -lpthread
     endif
 endif # SunOS
-
-ifeq ($(OS_ARCH), NEC)
-    EXTRA_LIBS = $(OS_LIBS)
-# This hardcodes in the executable programs the directory to find
-# libnspr.so etc. at program startup.  Equivalent to the -R or -rpath
-# option for ld on other platforms.
-    export LD_RUN_PATH = $(ABSOLUTE_LIB_DIR)
-endif
-
-ifeq ($(OS_ARCH), NCR)
-# NCR needs to link against -lsocket -lnsl -ldl (and -lc, which is
-# linked implicitly by $(CC)).  Note that we did not link with these
-# system libraries when we built libnspr.so.
-    EXTRA_LIBS = -lsocket -lnsl -ldl
-# This hardcodes in the executable programs the directory to find
-# libnspr.so etc. at program startup.  Equivalent to the -R or -rpath 
-# option for ld on other platforms.
-    export LD_RUN_PATH = $(ABSOLUTE_LIB_DIR)
-endif
-
-ifeq ($(OS_ARCH), NEXTSTEP)
-# balazs.pataki@sztaki.hu: linkage is done in a different pass in the `tests'
-# modeul, so we have to pass the `-posix' flag by "hand" to `ld'
-LDOPTS += -posix
-endif
-
-ifeq ($(OS_ARCH), NEWS-OS)
-# This hardcodes in the executable programs the directory to find
-# libnspr.so etc. at program startup.  Equivalent to the -R or -rpath 
-# option for ld on other platforms.
-#export LD_RUN_PATH = $(ABSOLUTE_LIB_DIR)
-    LIBNSPR = $(dist_libdir)/libnspr$(MOD_MAJOR_VERSION).a
-    LIBPLC = $(dist_libdir)/libplc$(MOD_MAJOR_VERSION).a
-    EXTRA_LIBS = -lsocket -lnsl -lgen -lresolv
-endif
 
 ifeq (,$(filter-out Linux GNU GNU_%,$(OS_ARCH)))
     LDOPTS += -Xlinker -rpath $(ABSOLUTE_LIB_DIR)
@@ -391,14 +323,6 @@ ifeq ($(OS_ARCH), SCOOS)
 EXTRA_LIBS = -lsocket
 # This hardcodes in the executable programs the directory to find
 # libnspr.so etc. at program startup.  Equivalent to the -R or -rpath 
-# option for ld on other platforms.
-export LD_RUN_PATH = $(ABSOLUTE_LIB_DIR)
-endif
-
-ifeq ($(OS_ARCH),SINIX)
-EXTRA_LIBS = -lsocket -lnsl -lresolv -ldl
-# This hardcodes in the executable programs the directory to find
-# libnspr.so etc. at program startup.  Equivalent to the -R or -rpath
 # option for ld on other platforms.
 export LD_RUN_PATH = $(ABSOLUTE_LIB_DIR)
 endif
@@ -451,9 +375,8 @@ endif
 endif
 
 ifeq ($(OS_TARGET),Android)
-LDOPTS=$(OS_LDFLAGS)
-LIBPTHREAD=
-XCFLAGS=${OS_CFLAGS}
+LIBPTHREAD =
+XCFLAGS = $(OS_CFLAGS)
 endif
 
 #####################################################
@@ -516,14 +439,12 @@ clean::
 # The following tests call BSD socket functions, so they need to link
 # with -lsocket on some platforms.
 ifeq ($(OS_ARCH),SunOS)
-ifneq ($(OS_RELEASE),4.1.3_U1)
 ifeq ($(USE_IPV6),1)
 $(OBJDIR)/gethost: $(OBJDIR)/gethost.o
 	$(PURE) $(CC) $(XCFLAGS) $< $(LDOPTS) $(LIBPLC) $(LIBNSPR) -lsocket $(EXTRA_LIBS) -o $@
 endif
 $(OBJDIR)/prpoll: $(OBJDIR)/prpoll.o
 	$(PURE) $(CC) $(XCFLAGS) $< $(LDOPTS) $(LIBPLC) $(LIBNSPR) -lsocket $(EXTRA_LIBS) -o $@
-endif
 endif
 
 ifeq ($(USE_PTHREADS), 1)

@@ -2,7 +2,6 @@
 <html>
 <head>
   <title>Test for serialization and equivalence of angle units</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
 </head>
@@ -31,8 +30,8 @@ var tests = {
 var p = document.getElementById("display");
 
 for (var test in tests) {
-  p.setAttribute("style", "elevation: " + test);
-  is(p.style.getPropertyValue("elevation"), test,
+  p.setAttribute("style", "-moz-transform: rotate(" + test + ")");
+  is(p.style.getPropertyValue("-moz-transform"), "rotate(" + test + ")",
      test + " serializes to exactly itself");
   // We can't test any equivalence since we don't have any properties
   // with angle values that we compute.  (-moz-transform doesn't help.)

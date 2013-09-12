@@ -1,4 +1,8 @@
 <?xml version="1.0"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 
 <bindings id="scrollbarBindings"
    xmlns="http://www.mozilla.org/xbl"
@@ -17,7 +21,7 @@
   </binding>
 
   <binding id="scrollbar" extends="chrome://global/content/bindings/scrollbar.xml#scrollbar-base">
-    <content allowclickthrough="always">
+    <content clickthrough="always">
       <xul:scrollbarbutton sbattr="scrollbar-up-top" type="decrement" xbl:inherits="curpos,maxpos,disabled,sborient=orient"/>
       <xul:scrollbarbutton sbattr="scrollbar-down-top" type="increment" xbl:inherits="curpos,maxpos,disabled,sborient=orient"/>
       <xul:slider flex="1" xbl:inherits="disabled,curpos,maxpos,pageincrement,increment,orient,sborient=orient">

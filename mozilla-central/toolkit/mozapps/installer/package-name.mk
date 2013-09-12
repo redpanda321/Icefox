@@ -1,46 +1,15 @@
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is Mozilla toolkit packaging scripts.
-#
-# The Initial Developer of the Original Code is
-# Benjamin Smedberg <bsmedberg@covad.net>
-# 
-# Portions created by the Initial Developer are Copyright (C) 2004
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Robert Kaiser <kairo@kairo.at>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 # assemble package names, see convention at
 # http://developer.mozilla.org/index.php?title=En/Package_Filename_Convention
 # for (at least Firefox) releases we use a different format with directories,
 # e.g. win32/de/Firefox Setup 3.0.1.exe
 # the latter format is triggered with MOZ_PKG_PRETTYNAMES=1
+
+ifndef PACKAGE_NAME_MK_INCLUDED
+PACKAGE_NAME_MK_INCLUDED := 1
 
 ifndef MOZ_PKG_VERSION
 MOZ_PKG_VERSION = $(MOZ_APP_VERSION)
@@ -58,10 +27,14 @@ MOZ_PKG_PLATFORM := win32
 endif
 endif
 ifeq ($(OS_ARCH),Darwin)
+ifdef UNIVERSAL_BINARY
+MOZ_PKG_PLATFORM := mac
+else
 ifeq ($(TARGET_CPU),x86_64)
 MOZ_PKG_PLATFORM := mac64
 else
 MOZ_PKG_PLATFORM := mac
+endif
 endif
 endif
 ifeq ($(TARGET_OS),linux-gnu)
@@ -70,25 +43,6 @@ endif
 ifeq ($(OS_ARCH),OS2)
 MOZ_PKG_PLATFORM := os2
 endif
-ifeq ($(OS_ARCH),BeOS)
-ifeq (,$(filter-out 6.%, $(OS_RELEASE)))
-MOZ_PKG_PLATFORM := Zeta
-else
-ifeq (,$(filter-out 5.1, $(OS_RELEASE)))
-MOZ_PKG_PLATFORM := BeOS-bone
-else
-ifeq (,$(filter-out 5.0.4, $(OS_RELEASE)))
-MOZ_PKG_PLATFORM := BeOS-bone
-else
-ifeq (,$(filter-out 5.0, $(OS_RELEASE)))
-MOZ_PKG_PLATFORM := BeOS-net_server
-else
-MOZ_PKG_PLATFORM := BeOS-$(OS_RELEASE)
-endif # 5.0
-endif # 5.0.4
-endif # 5.1
-endif # 6.
-endif # OS_ARCH BeOS
 endif #MOZ_PKG_PLATFORM
 
 ifdef MOZ_PKG_SPECIAL
@@ -106,16 +60,20 @@ endif
 PKG_BASENAME = $(MOZ_PKG_APPNAME)-$(MOZ_PKG_VERSION).$(AB_CD).$(MOZ_PKG_PLATFORM)
 PKG_PATH =
 PKG_INST_BASENAME = $(PKG_BASENAME).installer
+PKG_STUB_BASENAME = $(PKG_BASENAME).installer-stub
 PKG_INST_PATH = install/sea/
 PKG_UPDATE_BASENAME = $(PKG_BASENAME)
+CHECKSUMS_FILE_BASENAME = $(PKG_BASENAME)
+MOZ_SOURCESTAMP_FILE_BASENAME = $(PKG_BASENAME)
 PKG_UPDATE_PATH = update/
 COMPLETE_MAR = $(PKG_UPDATE_PATH)$(PKG_UPDATE_BASENAME).complete.mar
 # PARTIAL_MAR needs to be processed by $(wildcard) before you use it.
 PARTIAL_MAR = $(PKG_UPDATE_PATH)$(PKG_UPDATE_BASENAME).partial.*.mar
 PKG_LANGPACK_BASENAME = $(MOZ_PKG_APPNAME)-$(MOZ_PKG_VERSION).$(AB_CD).langpack
-PKG_LANGPACK_PATH = install/
+PKG_LANGPACK_PATH = $(MOZ_PKG_PLATFORM)/xpi/
 LANGPACK = $(PKG_LANGPACK_PATH)$(PKG_LANGPACK_BASENAME).xpi
 PKG_SRCPACK_BASENAME = $(MOZ_PKG_APPNAME)-$(MOZ_PKG_VERSION).source
+PKG_BUNDLE_BASENAME = $(MOZ_PKG_APPNAME)-$(MOZ_PKG_VERSION)
 PKG_SRCPACK_PATH =
 
 else # "pretty" release package names
@@ -127,10 +85,7 @@ MOZ_PKG_APPNAME_LC = $(shell echo $(MOZ_PKG_APPNAME) | tr '[A-Z]' '[a-z]')
 
 
 ifndef MOZ_PKG_LONGVERSION
-MOZ_PKG_LONGVERSION = $(shell echo $(MOZ_PKG_VERSION) |\
-                       sed -e 's/a\([0-9][0-9]*\)$$/ Alpha \1/' |\
-                       sed -e 's/b\([0-9][0-9]*\)$$/ Beta \1/' |\
-                       sed -e 's/rc\([0-9][0-9]*\)$$/ RC \1/')
+MOZ_PKG_LONGVERSION = $(shell echo $(MOZ_PKG_VERSION))
 endif
 
 ifeq (,$(filter-out Darwin OS2, $(OS_ARCH))) # Mac and OS2
@@ -140,15 +95,20 @@ else
 ifeq (,$(filter-out WINNT, $(OS_ARCH))) # Windows
 PKG_BASENAME = $(MOZ_PKG_APPNAME_LC)-$(MOZ_PKG_VERSION)
 PKG_INST_BASENAME = $(MOZ_PKG_APPNAME) Setup $(MOZ_PKG_LONGVERSION)
+PKG_STUB_BASENAME = $(MOZ_PKG_APPNAME) Setup Stub $(MOZ_PKG_LONGVERSION)
 else # unix (actually, not Windows, Mac or OS/2)
 PKG_BASENAME = $(MOZ_PKG_APPNAME_LC)-$(MOZ_PKG_VERSION)
 PKG_INST_BASENAME = $(MOZ_PKG_APPNAME_LC)-setup-$(MOZ_PKG_VERSION)
 endif
 endif
 PKG_PATH = $(MOZ_PKG_PLATFORM)/$(AB_CD)/
+CHECKSUMS_FILE_BASENAME = $(MOZ_PKG_APPNAME_LC)-$(MOZ_PKG_VERSION)
+MOZ_SOURCESTAMP_FILE_BASENAME = $(MOZ_PKG_APPNAME_LC)-$(MOZ_PKG_VERSION)
 ifeq ($(MOZ_APP_NAME),xulrunner)
 PKG_PATH = runtimes/
 PKG_BASENAME = $(MOZ_APP_NAME)-$(MOZ_PKG_VERSION).$(AB_CD).$(MOZ_PKG_PLATFORM)
+CHECKSUMS_FILE_BASENAME = $(PKG_BASENAME)
+MOZ_SOURCESTAMP_FILE_BASENAME = $(PKG_BASENAME)
 endif
 PKG_INST_PATH = $(PKG_PATH)
 PKG_UPDATE_BASENAME = $(MOZ_PKG_APPNAME_LC)-$(MOZ_PKG_VERSION)
@@ -160,6 +120,7 @@ PKG_LANGPACK_BASENAME = $(AB_CD)
 PKG_LANGPACK_PATH = $(MOZ_PKG_PLATFORM)/xpi/
 LANGPACK = $(PKG_LANGPACK_PATH)$(PKG_LANGPACK_BASENAME).xpi
 PKG_SRCPACK_BASENAME = $(MOZ_PKG_APPNAME_LC)-$(MOZ_PKG_VERSION).source
+PKG_BUNDLE_BASENAME = $(MOZ_PKG_APPNAME_LC)-$(MOZ_PKG_VERSION)
 PKG_SRCPACK_PATH = source/
 
 endif # MOZ_PKG_PRETTYNAMES
@@ -177,4 +138,17 @@ else
 BUILDID = $(shell $(PYTHON) $(MOZILLA_DIR)/config/printconfigsetting.py $(DIST)/bin/platform.ini Build BuildID)
 endif
 
-MOZ_SOURCE_STAMP = $(firstword $(shell hg -R $(topsrcdir) parent --template="{node|short}\n" 2>/dev/null))
+MOZ_SOURCE_STAMP = $(firstword $(shell hg -R $(MOZILLA_DIR) parent --template="{node|short}\n" 2>/dev/null))
+
+# strip a trailing slash from the repo URL because it's not always present,
+# and we want to construct a working URL in the sourcestamp file.
+# make+shell+sed = awful
+_dollar=$$
+MOZ_SOURCE_REPO = $(shell cd $(MOZILLA_DIR) && hg showconfig paths.default 2>/dev/null | head -n1 | sed -e "s/^ssh:/http:/" -e "s/\/$(_dollar)//" )
+
+MOZ_SOURCESTAMP_FILE = $(DIST)/$(PKG_PATH)/$(MOZ_SOURCESTAMP_FILE_BASENAME).txt
+
+# JavaScript Shell
+PKG_JSSHELL = $(DIST)/jsshell-$(MOZ_PKG_PLATFORM).zip
+
+endif # PACKAGE_NAME_MK_INCLUDED

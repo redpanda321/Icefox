@@ -1,44 +1,9 @@
 /* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  * vim: sw=2 ts=8 et :
  */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla IPC.
- *
- * The Initial Developer of the Original Code is
- *   The Mozilla Foundation
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Chris Jones <jones.chris.g@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-
-#include <math.h>
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "Shmem.h"
 
@@ -47,6 +12,7 @@
 #include "SharedMemorySysV.h"
 
 #include "nsAutoPtr.h"
+#include "mozilla/unused.h"
 
 
 namespace mozilla {
@@ -58,7 +24,7 @@ private:
   typedef Shmem::id_t id_t;
 
 public:
-  ShmemCreated(int32 routingId,
+  ShmemCreated(int32_t routingId,
                const id_t& aIPDLId,
                const size_t& aSize,
                const SharedMemoryBasic::Handle& aHandle) :
@@ -66,7 +32,7 @@ public:
   {
     IPC::WriteParam(this, aIPDLId);
     IPC::WriteParam(this, aSize);
-    IPC::WriteParam(this, int32(SharedMemory::TYPE_BASIC)),
+    IPC::WriteParam(this, int32_t(SharedMemory::TYPE_BASIC)),
     IPC::WriteParam(this, aHandle);
   }
 
@@ -83,7 +49,7 @@ public:
   {
     if (!IPC::ReadParam(msg, iter, aIPDLId) ||
         !IPC::ReadParam(msg, iter, aSize) ||
-        !IPC::ReadParam(msg, iter, reinterpret_cast<int32*>(aType)))
+        !IPC::ReadParam(msg, iter, reinterpret_cast<int32_t*>(aType)))
       return false;
     return true;
   }
@@ -99,7 +65,7 @@ public:
   }
 
 #ifdef MOZ_HAVE_SHAREDMEMORYSYSV
-  ShmemCreated(int32 routingId,
+  ShmemCreated(int32_t routingId,
                const id_t& aIPDLId,
                const size_t& aSize,
                const SharedMemorySysV::Handle& aHandle) :
@@ -107,7 +73,7 @@ public:
   {
     IPC::WriteParam(this, aIPDLId);
     IPC::WriteParam(this, aSize);
-    IPC::WriteParam(this, int32(SharedMemory::TYPE_SYSV)),
+    IPC::WriteParam(this, int32_t(SharedMemory::TYPE_SYSV)),
     IPC::WriteParam(this, aHandle);
   }
 
@@ -135,7 +101,7 @@ private:
   typedef Shmem::id_t id_t;
 
 public:
-  ShmemDestroyed(int32 routingId,
+  ShmemDestroyed(int32_t routingId,
                  const id_t& aIPDLId) :
     IPC::Message(routingId, SHMEM_DESTROYED_MESSAGE_TYPE, PRIORITY_NORMAL)
   {
@@ -196,14 +162,6 @@ DestroySegment(SharedMemory* aSegment)
     aSegment->Release();
 }
 
-static size_t
-PageAlignedSize(size_t aSize)
-{
-  size_t pageSize = SharedMemory::SystemPageSize();
-  size_t nPagesNeeded = int(ceil(double(aSize) / double(pageSize)));
-  return pageSize * nPagesNeeded;
-}
-
 
 #if defined(DEBUG)
 
@@ -216,12 +174,16 @@ static const char sMagic[] =
 
 
 struct Header {
-  size_t mSize;
+  // Don't use size_t or bool here because their size depends on the
+  // architecture.
+  uint32_t mSize;
+  uint32_t mUnsafe;
   char mMagic[sizeof(sMagic)];
 };
 
 static void
 GetSections(Shmem::SharedMemory* aSegment,
+            Header** aHeader,
             char** aFrontSentinel,
             char** aData,
             char** aBackSentinel)
@@ -232,10 +194,21 @@ GetSections(Shmem::SharedMemory* aSegment,
   *aFrontSentinel = reinterpret_cast<char*>(aSegment->memory());
   NS_ABORT_IF_FALSE(*aFrontSentinel, "NULL memory()");
 
+  *aHeader = reinterpret_cast<Header*>(*aFrontSentinel);
+
   size_t pageSize = Shmem::SharedMemory::SystemPageSize();
   *aData = *aFrontSentinel + pageSize;
 
   *aBackSentinel = *aFrontSentinel + aSegment->Size() - pageSize;
+}
+
+static Header*
+GetHeader(Shmem::SharedMemory* aSegment)
+{
+  Header* header;
+  char* dontcare;
+  GetSections(aSegment, &header, &dontcare, &dontcare, &dontcare);
+  return header;
 }
 
 static void
@@ -316,19 +289,19 @@ Shmem::Shmem(IHadBetterBeIPDLCodeCallingThis_OtherwiseIAmADoodyhead,
 
   Unprotect(mSegment);
 
+  Header* header;
   char* frontSentinel;
   char* data;
   char* backSentinel;
-  GetSections(aSegment, &frontSentinel, &data, &backSentinel);
+  GetSections(aSegment, &header, &frontSentinel, &data, &backSentinel);
 
   // do a quick validity check to avoid weird-looking crashes in libc
   char check = *frontSentinel;
   (void)check;
 
-  Header* header = reinterpret_cast<Header*>(frontSentinel);
   NS_ABORT_IF_FALSE(!strncmp(header->mMagic, sMagic, sizeof(sMagic)),
                       "invalid segment");
-  mSize = header->mSize;
+  mSize = static_cast<size_t>(header->mSize);
 
   size_t pageSize = SharedMemory::SystemPageSize();
   // transition into the "mapped" state by protecting the front and
@@ -351,14 +324,28 @@ Shmem::AssertInvariants() const
   // trigger SIGSEGV
   char checkMappingFront = *reinterpret_cast<char*>(mData);
   char checkMappingBack = *(reinterpret_cast<char*>(mData) + mSize - 1);
-  checkMappingFront = checkMappingBack; // avoid "unused" warnings
+
+  // avoid "unused" warnings for these variables:
+  unused << checkMappingFront;
+  unused << checkMappingBack;
 }
 
 void
 Shmem::RevokeRights(IHadBetterBeIPDLCodeCallingThis_OtherwiseIAmADoodyhead)
 {
   AssertInvariants();
-  Protect(mSegment);
+
+  size_t pageSize = SharedMemory::SystemPageSize();
+  Header* header = GetHeader(mSegment);
+
+  // Open this up for reading temporarily
+  mSegment->Protect(reinterpret_cast<char*>(header), pageSize, RightsRead);
+
+  if (!header->mUnsafe) {
+    Protect(mSegment);
+  } else {
+    mSegment->Protect(reinterpret_cast<char*>(header), pageSize, RightsNone);
+  }
 }
 
 // static
@@ -366,12 +353,16 @@ Shmem::SharedMemory*
 Shmem::Alloc(IHadBetterBeIPDLCodeCallingThis_OtherwiseIAmADoodyhead,
              size_t aNBytes,
              SharedMemoryType aType,
+             bool aUnsafe,
              bool aProtect)
 {
+  NS_ASSERTION(aNBytes <= UINT32_MAX, "Will truncate shmem segment size!");
+  NS_ABORT_IF_FALSE(!aProtect || !aUnsafe, "protect => !unsafe");
+
   size_t pageSize = SharedMemory::SystemPageSize();
-  SharedMemory* segment = nsnull;
+  SharedMemory* segment = nullptr;
   // |2*pageSize| is for the front and back sentinel
-  size_t segmentSize = PageAlignedSize(aNBytes + 2*pageSize);
+  size_t segmentSize = SharedMemory::PageAlignedSize(aNBytes + 2*pageSize);
 
   if (aType == SharedMemory::TYPE_BASIC)
     segment = CreateSegment(segmentSize, SharedMemoryBasic::NULLHandle());
@@ -385,15 +376,22 @@ Shmem::Alloc(IHadBetterBeIPDLCodeCallingThis_OtherwiseIAmADoodyhead,
   if (!segment)
     return 0;
 
+  Header* header;
   char *frontSentinel;
   char *data;
   char *backSentinel;
-  GetSections(segment, &frontSentinel, &data, &backSentinel);
+  GetSections(segment, &header, &frontSentinel, &data, &backSentinel);
 
   // initialize the segment with Shmem-internal information
-  Header* header = reinterpret_cast<Header*>(frontSentinel);
+
+  // NB: this can't be a static assert because technically pageSize
+  // isn't known at compile time, event though in practice it's always
+  // going to be 4KiB
+  NS_ABORT_IF_FALSE(sizeof(Header) <= pageSize,
+                    "Shmem::Header has gotten too big");
   memcpy(header->mMagic, sMagic, sizeof(sMagic));
-  header->mSize = aNBytes;
+  header->mSize = static_cast<uint32_t>(aNBytes);
+  header->mUnsafe = aUnsafe;
 
   if (aProtect)
     Protect(segment);
@@ -420,7 +418,7 @@ Shmem::OpenExisting(IHadBetterBeIPDLCodeCallingThis_OtherwiseIAmADoodyhead,
   SharedMemory* segment = 0;
   size_t pageSize = SharedMemory::SystemPageSize();
   // |2*pageSize| is for the front and back sentinels
-  size_t segmentSize = PageAlignedSize(size + 2*pageSize);
+  size_t segmentSize = SharedMemory::PageAlignedSize(size + 2*pageSize);
 
   if (SharedMemory::TYPE_BASIC == type) {
     SharedMemoryBasic::Handle handle;
@@ -449,7 +447,10 @@ Shmem::OpenExisting(IHadBetterBeIPDLCodeCallingThis_OtherwiseIAmADoodyhead,
   if (!segment)
     return 0;
 
-  if (aProtect)
+  // The caller of this function may not know whether the segment is
+  // unsafe or not
+  Header* header = GetHeader(segment);
+  if (!header->mUnsafe && aProtect)
     Protect(segment);
 
   return segment;
@@ -464,15 +465,16 @@ Shmem::Dealloc(IHadBetterBeIPDLCodeCallingThis_OtherwiseIAmADoodyhead,
     return;
 
   size_t pageSize = SharedMemory::SystemPageSize();
+  Header* header;
   char *frontSentinel;
   char *data;
   char *backSentinel;
-  GetSections(aSegment, &frontSentinel, &data, &backSentinel);
+  GetSections(aSegment, &header, &frontSentinel, &data, &backSentinel);
 
   aSegment->Protect(frontSentinel, pageSize, RightsWrite | RightsRead);
-  Header* header = reinterpret_cast<Header*>(frontSentinel);
   memset(header->mMagic, 0, sizeof(sMagic));
   header->mSize = 0;
+  header->mUnsafe = false;          // make it "safe" so as to catch errors
 
   DestroySegment(aSegment);
 }
@@ -485,16 +487,17 @@ Shmem::SharedMemory*
 Shmem::Alloc(IHadBetterBeIPDLCodeCallingThis_OtherwiseIAmADoodyhead,
              size_t aNBytes, 
              SharedMemoryType aType,
+             bool /*unused*/,
              bool /*unused*/)
 {
-  SharedMemory *segment = nsnull;
+  SharedMemory *segment = nullptr;
 
   if (aType == SharedMemory::TYPE_BASIC)
-    segment = CreateSegment(PageAlignedSize(aNBytes + sizeof(size_t)),
+    segment = CreateSegment(SharedMemory::PageAlignedSize(aNBytes + sizeof(uint32_t)),
                             SharedMemoryBasic::NULLHandle());
 #ifdef MOZ_HAVE_SHAREDMEMORYSYSV
   else if (aType == SharedMemory::TYPE_SYSV)
-    segment = CreateSegment(PageAlignedSize(aNBytes + sizeof(size_t)),
+    segment = CreateSegment(SharedMemory::PageAlignedSize(aNBytes + sizeof(uint32_t)),
                             SharedMemorySysV::NULLHandle());
 #endif
   else
@@ -504,7 +507,7 @@ Shmem::Alloc(IHadBetterBeIPDLCodeCallingThis_OtherwiseIAmADoodyhead,
   if (!segment)
     return 0;
 
-  *PtrToSize(segment) = aNBytes;
+  *PtrToSize(segment) = static_cast<uint32_t>(aNBytes);
 
   return segment;
 }
@@ -526,7 +529,7 @@ Shmem::OpenExisting(IHadBetterBeIPDLCodeCallingThis_OtherwiseIAmADoodyhead,
     return 0;
 
   SharedMemory* segment = 0;
-  size_t segmentSize = PageAlignedSize(size + sizeof(size_t));
+  size_t segmentSize = SharedMemory::PageAlignedSize(size + sizeof(uint32_t));
 
   if (SharedMemory::TYPE_BASIC == type) {
     SharedMemoryBasic::Handle handle;
@@ -557,7 +560,7 @@ Shmem::OpenExisting(IHadBetterBeIPDLCodeCallingThis_OtherwiseIAmADoodyhead,
     return 0;
 
   // this is the only validity check done OPT builds
-  if (size != *PtrToSize(segment))
+  if (size != static_cast<size_t>(*PtrToSize(segment)))
     NS_RUNTIMEABORT("Alloc() segment size disagrees with OpenExisting()'s");
 
   return segment;
@@ -593,7 +596,7 @@ Shmem::GetSysVID() const
 IPC::Message*
 Shmem::ShareTo(IHadBetterBeIPDLCodeCallingThis_OtherwiseIAmADoodyhead,
                base::ProcessHandle aProcess,
-               int32 routingId)
+               int32_t routingId)
 {
   AssertInvariants();
 
@@ -621,7 +624,7 @@ Shmem::ShareTo(IHadBetterBeIPDLCodeCallingThis_OtherwiseIAmADoodyhead,
 IPC::Message*
 Shmem::UnshareFrom(IHadBetterBeIPDLCodeCallingThis_OtherwiseIAmADoodyhead,
                    base::ProcessHandle aProcess,
-                   int32 routingId)
+                   int32_t routingId)
 {
   AssertInvariants();
   return new ShmemDestroyed(routingId, mId);

@@ -6,47 +6,32 @@
 <window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         title="Accessible Table selection tests">
 
-  <script type="application/javascript" 
-          src="chrome://mochikit/content/MochiKit/packed.js" />
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/treeview.js" />
+          src="../treeview.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js" />
+          src="../common.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/states.js" />
+          src="../events.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/table.js" />
+          src="../role.js" />
+  <script type="application/javascript"
+          src="../states.js" />
+  <script type="application/javascript"
+          src="../table.js" />
 
   <script type="application/javascript">
   <![CDATA[
     ////////////////////////////////////////////////////////////////////////////
     // Test
 
-    var gTree = null;
-    var gTreeBox = null;
-    var gTreeView = null;
-
     // gA11yEventDumpID = "debug";
 
     function doTest()
     {
-      // Initialize the tree
-      gTree = document.getElementById("tree");
-      gTreeBox = gTree.treeBoxObject;
-      gView = new nsTableTreeView(3);
-
-      gTree.addEventListener("TreeViewChanged", continueTest, false);
-      gTreeBox.view = gView;
-    }
-
-    function continueTest()
-    {
-      gTree.removeEventListener("TreeViewChanged", continueTest, false);
-
       var cellsArray =
       [
         [false, false],
@@ -54,15 +39,15 @@
         [false, false]
       ];
 
-      testTableSelection(gTree, cellsArray);
-      testSelectTableRow(gTree, 0, cellsArray);
-      testUnselectTableRow(gTree, 0, cellsArray);
+      testTableSelection("tree", cellsArray);
+      testSelectTableRow("tree", 0, cellsArray);
+      testUnselectTableRow("tree", 0, cellsArray);
 
       SimpleTest.finish();
     }
 
     SimpleTest.waitForExplicitFinish();
-    addA11yLoadEvent(doTest);
+    addA11yXULTreeLoadEvent(doTest, "tree", new nsTableTreeView(3));
   ]]>
   </script>
 

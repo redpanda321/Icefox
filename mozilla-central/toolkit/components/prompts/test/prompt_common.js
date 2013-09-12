@@ -7,6 +7,10 @@ ok(Cc != null, "Access Cc");
 
 var didDialog;
 
+var isSelectDialog = false;
+var isTabModal = false;
+var usePromptService = true;
+
 var timer; // keep in outer scope so it's not GC'd before firing
 function startCallbackTimer() {
     didDialog = false;
@@ -15,7 +19,9 @@ function startCallbackTimer() {
     const dialogDelay = 10;
 
     // Use a timer to invoke a callback to twiddle the authentication dialog
-    timer = Cc["@mozilla.org/timer;1"].createInstance(Ci.nsITimer);
+    timer = SpecialPowers.wrap(Components)
+                         .classes["@mozilla.org/timer;1"]
+                         .createInstance(Ci.nsITimer);
     timer.init(observer, dialogDelay, Ci.nsITimer.TYPE_ONE_SHOT);
 }
 
@@ -34,17 +40,58 @@ var observer = {
         netscape.security.PrivilegeManager
                          .enablePrivilege('UniversalXPConnect');
 
-        var doc = getDialogDoc();
-        if (doc)
-            handleDialog(doc, testNum);
-        else
-            startCallbackTimer(); // try again in a bit
+        if (isTabModal) {
+          var promptBox = getTabModalPromptBox(window);
+          ok(promptBox, "got tabmodal promptbox");
+          var prompts = promptBox.listPrompts();
+          if (prompts.length)
+              handleDialog(prompts[0].Dialog.ui, testNum);
+          else
+              startCallbackTimer(); // try again in a bit
+        } else {
+          var doc = getDialogDoc();
+          if (isSelectDialog && doc)
+              handleDialog(doc, testNum);
+          else if (doc)
+              handleDialog(doc.defaultView.Dialog.ui, testNum);
+          else
+              startCallbackTimer(); // try again in a bit
+        }
     }
 };
 
+function getTabModalPromptBox(domWin) {
+    var promptBox = null;
+
+    // Given a content DOM window, returns the chrome window it's in.
+    function getChromeWindow(aWindow) {
+        var chromeWin = SpecialPowers.wrap(aWindow).QueryInterface(Ci.nsIInterfaceRequestor)
+                               .getInterface(Ci.nsIWebNavigation)
+                               .QueryInterface(Ci.nsIDocShell)
+                               .chromeEventHandler.ownerDocument.defaultView;
+        return chromeWin;
+    }
+
+    try {
+        // Get the topmost window, in case we're in a frame.
+        var promptWin = domWin.top;
+
+        // Get the chrome window for the content window we're using.
+        var chromeWin = getChromeWindow(promptWin);
+
+        if (chromeWin.getTabModalPromptBox)
+            promptBox = chromeWin.getTabModalPromptBox(promptWin);
+    } catch (e) {
+        // If any errors happen, just assume no tabmodal prompter.
+    }
+
+    // Callers get confused by a wrapped promptBox here.
+    return SpecialPowers.unwrap(promptBox);
+}
+
 function getDialogDoc() {
-  // Find the <browser> which contains notifyWindow, by looking
-  // through all the open windows and all the <browsers> in each.
+  // Trudge through all the open windows, until we find the one
+  // that has either commonDialog.xul or selectDialog.xul loaded.
   var wm = Cc["@mozilla.org/appshell/window-mediator;1"].
            getService(Ci.nsIWindowMediator);
   //var enumerator = wm.getEnumerator("navigator:browser");

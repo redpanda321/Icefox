@@ -1,0 +1,1388 @@
+This file contains any messages produced by compilers while
+running configure, to aid debugging if configure makes a mistake.
+
+configure:1104: checking host system type
+configure:1125: checking target system type
+configure:1143: checking build system type
+configure:1220: checking for mawk
+configure:1220: checking for gawk
+configure:1304: checking for python2.7
+configure:1559: checking for perl5
+configure:1559: checking for perl
+configure:1977: checking for host c compiler
+configure:1983: checking for gcc
+configure:2018: checking for host c++ compiler
+configure:2024: checking for c++
+configure:2076: checking for ranlib
+configure:2111: checking for ar
+configure:2146: checking whether the host c compiler (gcc  ) works
+configure:2155: gcc -c   conftest.c 1>&5
+configure:2170: checking whether the host c++ compiler (c++  ) works
+configure:2179: c++ -c   conftest.c 1>&5
+clang: warning: treating 'c' input as 'c++' when in C++ mode, this behavior is deprecated
+configure:2199: checking for /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang
+configure:2233: checking for gcc
+configure:2346: checking whether the C compiler (/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk  ) works
+configure:2362: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest    conftest.c  1>&5
+configure:2359:1: warning: type specifier missing, defaults to 'int' [-Wimplicit-int]
+main(){return(0);}
+^~~~
+1 warning generated.
+configure:2388: checking whether the C compiler (/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk  ) is a cross-compiler
+configure:2393: checking whether we are using GNU C
+configure:2402: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -E conftest.c
+configure:2421: checking whether /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk accepts -g
+configure:2457: checking for /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++
+configure:2493: checking for c++
+configure:2525: checking whether the C++ compiler (/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk  ) works
+configure:2541: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest    conftest.C  1>&5
+configure:2567: checking whether the C++ compiler (/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk  ) is a cross-compiler
+configure:2572: checking whether we are using GNU C++
+configure:2581: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -E conftest.C
+configure:2600: checking whether /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk accepts -g
+configure:2637: checking for arm-apple-darwin10-ranlib
+configure:2637: checking for arm-apple-darwin10-ranlib
+configure:2672: checking for /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/ar
+configure:2707: checking for arm-apple-darwin10-as
+configure:2707: checking for arm-apple-darwin10-as
+configure:2761: checking for /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/ld
+configure:2796: checking for /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/strip
+configure:2831: checking for arm-apple-darwin10-windres
+configure:2831: checking for arm-apple-darwin10-windres
+configure:4344: checking how to run the C preprocessor
+configure:4365: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -E  conftest.c >/dev/null 2>conftest.out
+configure:4424: checking how to run the C++ preprocessor
+configure:4442: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -E  conftest.C >/dev/null 2>conftest.out
+configure:4526: checking for a BSD compatible install
+configure:4579: checking whether ln -s works
+configure:4602: checking for minimum required perl version >= 5.006
+configure:4613: checking for full perl installation
+configure:4650: checking for doxygen
+configure:4699: checking for autoconf
+configure:4750: checking for unzip
+configure:4806: checking for zip
+configure:4860: checking for xargs
+configure:4912: checking for rpmbuild
+configure:4985: checking for pbbuild
+configure:4985: checking for xcodebuild
+configure:5037: checking for sdp
+configure:5148: checking for valid compiler/Mac OS X SDK combination
+configure:5164: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk  conftest.C 1>&5
+configure:5191: checking compiler version
+configure:5265: checking for gmake
+configure:5265: checking for make
+configure:5332: checking for X
+configure:5399: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -E -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk  conftest.c >/dev/null 2>conftest.out
+configure:5395:10: fatal error: 'X11/Intrinsic.h' file not found
+#include <X11/Intrinsic.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 5394 "configure"
+#include "confdefs.h"
+#include <X11/Intrinsic.h>
+configure:5475: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk   conftest.c -lXt  1>&5
+configure:5471:1: warning: implicit declaration of function 'XtMalloc' is invalid in C99 [-Wimplicit-function-declaration]
+XtMalloc()
+^
+1 warning generated.
+ld: library not found for -lXt
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 5468 "configure"
+#include "confdefs.h"
+
+int main() {
+XtMalloc()
+; return 0; }
+configure:6548: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c   conftest.c 1>&5
+configure:6652: checking for ARM SIMD support in compiler
+configure:6663: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk   conftest.c  1>&5
+configure:6686: checking for ARM NEON support in compiler
+configure:6697: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk   conftest.c  1>&5
+<inline asm>:1:2: error: unknown directive
+        .fpu neon
+        ^
+1 error generated.
+configure: failed program was:
+#line 6690 "configure"
+#include "confdefs.h"
+
+int main() {
+asm(".fpu neon\n vadd.i8 d0, d0, d0");
+; return 0; }
+configure:6742: checking that static assertion macros used in autoconf tests work
+configure:6763: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk  conftest.c 1>&5
+configure:6780: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk  conftest.c 1>&5
+configure:6780:1: error: 'static_assert_line_6780' declared as an array with a negative size
+CONFIGURE_STATIC_ASSERT(0)
+^~~~~~~~~~~~~~~~~~~~~~~~~~
+configure:6775:44: note: expanded from macro 'CONFIGURE_STATIC_ASSERT'
+#define CONFIGURE_STATIC_ASSERT(condition) CONFIGURE_STATIC_ASSERT_IMPL(condition, __LINE__)
+                                           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+configure:6776:55: note: expanded from macro 'CONFIGURE_STATIC_ASSERT_IMPL'
+#define CONFIGURE_STATIC_ASSERT_IMPL(condition, line) CONFIGURE_STATIC_ASSERT_IMPL2(condition, line)
+                                                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+configure:6777:94: note: expanded from macro 'CONFIGURE_STATIC_ASSERT_IMPL2'
+#define CONFIGURE_STATIC_ASSERT_IMPL2(condition, line) typedef int static_assert_line_##line[(condition) ? 1 : -1]
+                                                                                             ^~~~~~~~~~~~~~~~~~~~
+1 error generated.
+configure: failed program was:
+#line 6773 "configure"
+#include "confdefs.h"
+
+#define CONFIGURE_STATIC_ASSERT(condition) CONFIGURE_STATIC_ASSERT_IMPL(condition, __LINE__)
+#define CONFIGURE_STATIC_ASSERT_IMPL(condition, line) CONFIGURE_STATIC_ASSERT_IMPL2(condition, line)
+#define CONFIGURE_STATIC_ASSERT_IMPL2(condition, line) typedef int static_assert_line_##line[(condition) ? 1 : -1]
+
+int main() {
+CONFIGURE_STATIC_ASSERT(0)
+; return 0; }
+configure:6803: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk  conftest.C 1>&5
+configure:6820: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk  conftest.C 1>&5
+configure:6820:1: error: 'static_assert_line_6820' declared as an array with a negative size
+CONFIGURE_STATIC_ASSERT(0)
+^~~~~~~~~~~~~~~~~~~~~~~~~~
+configure:6815:44: note: expanded from macro 'CONFIGURE_STATIC_ASSERT'
+#define CONFIGURE_STATIC_ASSERT(condition) CONFIGURE_STATIC_ASSERT_IMPL(condition, __LINE__)
+                                           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+configure:6816:55: note: expanded from macro 'CONFIGURE_STATIC_ASSERT_IMPL'
+#define CONFIGURE_STATIC_ASSERT_IMPL(condition, line) CONFIGURE_STATIC_ASSERT_IMPL2(condition, line)
+                                                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+configure:6817:94: note: expanded from macro 'CONFIGURE_STATIC_ASSERT_IMPL2'
+#define CONFIGURE_STATIC_ASSERT_IMPL2(condition, line) typedef int static_assert_line_##line[(condition) ? 1 : -1]
+                                                                                             ^~~~~~~~~~~~~~~~~~~~
+1 error generated.
+configure: failed program was:
+#line 6813 "configure"
+#include "confdefs.h"
+
+#define CONFIGURE_STATIC_ASSERT(condition) CONFIGURE_STATIC_ASSERT_IMPL(condition, __LINE__)
+#define CONFIGURE_STATIC_ASSERT_IMPL(condition, line) CONFIGURE_STATIC_ASSERT_IMPL2(condition, line)
+#define CONFIGURE_STATIC_ASSERT_IMPL2(condition, line) typedef int static_assert_line_##line[(condition) ? 1 : -1]
+
+int main() {
+CONFIGURE_STATIC_ASSERT(0)
+; return 0; }
+configure:6979: checking for --noexecstack option to as
+configure:6990: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -Wa,--noexecstack  conftest.c 1>&5
+configure:7003: checking for -z noexecstack option to ld
+configure:7014: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing   -Wl,-z,noexecstack conftest.c  1>&5
+ld: unknown option: -z
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 7007 "configure"
+#include "confdefs.h"
+
+int main() {
+
+; return 0; }
+configure:7026: checking for --build-id option to ld
+configure:7037: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing   -Wl,--build-id conftest.c  1>&5
+ld: unknown option: --build-id
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 7030 "configure"
+#include "confdefs.h"
+
+int main() {
+
+; return 0; }
+configure:7053: checking if toolchain supports -mssse3 option
+configure:7065: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -mssse3  conftest.c 1>&5
+clang: warning: argument unused during compilation: '-mssse3'
+<inline asm>:1:11: error: unexpected token in operand
+pmaddubsw %xmm2,%xmm3
+          ^
+1 error generated.
+configure: failed program was:
+#line 7058 "configure"
+#include "confdefs.h"
+asm ("pmaddubsw %xmm2,%xmm3");
+int main() {
+
+; return 0; }
+configure:7091: checking whether the C compiler supports -Werror=return-type
+configure:7114: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -Werror -Werror=return-type  conftest.c 1>&5
+configure:7142: checking whether the C compiler supports -Wtype-limits
+configure:7165: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -Werror -Wtype-limits  conftest.c 1>&5
+configure:7193: checking whether the C compiler supports -Wempty-body
+configure:7216: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -Werror -Wempty-body  conftest.c 1>&5
+configure:7250: checking whether the C compiler supports -Wno-overlength-strings
+configure:7273: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -Werror -Woverlength-strings  conftest.c 1>&5
+configure:7357: checking whether the C++ compiler supports -Werror=return-type
+configure:7380: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -Werror -Werror=return-type  conftest.C 1>&5
+configure:7408: checking whether the C++ compiler supports -Wtype-limits
+configure:7431: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -Werror -Wtype-limits  conftest.C 1>&5
+configure:7459: checking whether the C++ compiler supports -Wempty-body
+configure:7482: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -Werror -Wempty-body  conftest.C 1>&5
+configure:7518: checking whether the C++ compiler supports -Wno-overlength-strings
+configure:7541: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -Werror -Woverlength-strings  conftest.C 1>&5
+configure:7569: checking whether the C++ compiler supports -Wno-invalid-offsetof
+configure:7592: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -Werror -Winvalid-offsetof  conftest.C 1>&5
+configure:7620: checking whether the C++ compiler supports -Wno-variadic-macros
+configure:7643: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -Werror -Wvariadic-macros  conftest.C 1>&5
+configure:7756: checking whether ld has archive extraction flags
+configure:7780: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing  -Wl,--whole-archive conftest.c -Wl,--no-whole-archive 1>&5
+ld: unknown option: --whole-archive
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 7773 "configure"
+#include "confdefs.h"
+
+int main() {
+
+; return 0; }
+configure:7780: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing  -Wl,-z -Wl,allextract conftest.c -Wl,-z -Wl,defaultextract 1>&5
+ld: unknown option: -z
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 7773 "configure"
+#include "confdefs.h"
+
+int main() {
+
+; return 0; }
+configure:7780: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing  -Wl,-all conftest.c -Wl,-none 1>&5
+ld: unknown option: -all
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 7773 "configure"
+#include "confdefs.h"
+
+int main() {
+
+; return 0; }
+configure:7815: checking for 64-bit OS
+configure:7824: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing  conftest.c 1>&5
+configure:7824:1: error: 'static_assert_line_7824' declared as an array with a negative size
+CONFIGURE_STATIC_ASSERT(sizeof(void*) == 8)
+^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+configure:7819:44: note: expanded from macro 'CONFIGURE_STATIC_ASSERT'
+#define CONFIGURE_STATIC_ASSERT(condition) CONFIGURE_STATIC_ASSERT_IMPL(condition, __LINE__)
+                                           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+configure:7820:55: note: expanded from macro 'CONFIGURE_STATIC_ASSERT_IMPL'
+#define CONFIGURE_STATIC_ASSERT_IMPL(condition, line) CONFIGURE_STATIC_ASSERT_IMPL2(condition, line)
+                                                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+configure:7821:94: note: expanded from macro 'CONFIGURE_STATIC_ASSERT_IMPL2'
+#define CONFIGURE_STATIC_ASSERT_IMPL2(condition, line) typedef int static_assert_line_##line[(condition) ? 1 : -1]
+                                                                                             ^~~~~~~~~~~~~~~~~~~~
+1 error generated.
+configure: failed program was:
+#line 7817 "configure"
+#include "confdefs.h"
+
+#define CONFIGURE_STATIC_ASSERT(condition) CONFIGURE_STATIC_ASSERT_IMPL(condition, __LINE__)
+#define CONFIGURE_STATIC_ASSERT_IMPL(condition, line) CONFIGURE_STATIC_ASSERT_IMPL2(condition, line)
+#define CONFIGURE_STATIC_ASSERT_IMPL2(condition, line) typedef int static_assert_line_##line[(condition) ? 1 : -1]
+
+int main() {
+CONFIGURE_STATIC_ASSERT(sizeof(void*) == 8)
+; return 0; }
+configure:8294: checking for custom <stdint.h> implementation
+configure:8508: checking for iOS target
+configure:8523: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing  conftest.c 1>&5
+configure:8582: checking for -dead_strip option to ld
+configure:8593: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing   -Wl,-dead_strip conftest.c  1>&5
+configure:8614: checking for -allow_heap_execute option to ld
+configure:8625: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing   -Wl,-allow_heap_execute conftest.c  1>&5
+ld: -allow_heap_execute option can only be used when linking for i386
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 8618 "configure"
+#include "confdefs.h"
+
+int main() {
+return 0;
+; return 0; }
+configure:9686: checking for ANSI C header files
+configure:9699: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -E -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk  conftest.c >/dev/null 2>conftest.out
+configure:9793: checking for working const
+configure:9847: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:9871: checking for mode_t
+configure:9907: checking for off_t
+configure:9943: checking for pid_t
+configure:9979: checking for size_t
+configure:10022: checking for __stdcall
+configure:10036: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions  conftest.C 1>&5
+configure:10030:48: warning: calling convention '__stdcall' ignored for this target [-Wignored-attributes]
+                  template <> struct foo<void (__stdcall*)()> {};
+                                               ^
+configure:10030:38: error: redefinition of 'foo<void (*)()>'
+                  template <> struct foo<void (__stdcall*)()> {};
+                                     ^~~~~~~~~~~~~~~~~~~~~~~~
+configure:10029:38: note: previous definition is here
+                  template <> struct foo<void (*)()> {};
+                                     ^
+1 warning and 1 error generated.
+configure: failed program was:
+#line 10027 "configure"
+#include "confdefs.h"
+template <typename Method> struct foo;
+                  template <> struct foo<void (*)()> {};
+                  template <> struct foo<void (__stdcall*)()> {};
+int main() {
+
+; return 0; }
+configure:10068: checking for ssize_t
+configure:10081: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:10106: checking for st_blksize in struct stat
+configure:10119: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:10115:18: warning: expression result unused [-Wunused-value]
+struct stat s; s.st_blksize;
+               ~ ^~~~~~~~~~
+1 warning generated.
+configure:10143: checking for siginfo_t
+configure:10156: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:10182: checking for int64
+configure:10195: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:10191:1: error: use of undeclared identifier 'int64'
+int64 foo = 0;
+^
+1 error generated.
+configure: failed program was:
+#line 10187 "configure"
+#include "confdefs.h"
+#include <stdio.h>
+                  #include <sys/types.h>
+int main() {
+int64 foo = 0;
+; return 0; }
+configure:10220: checking for uint
+configure:10233: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:10258: checking for uint_t
+configure:10271: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:10267:1: error: unknown type name 'uint_t'; did you mean 'uint8_t'?
+uint_t foo = 0;
+^~~~~~
+uint8_t
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/stdint.h:40:31: note: 'uint8_t' declared here
+typedef unsigned char         uint8_t;
+                              ^
+1 error generated.
+configure: failed program was:
+#line 10263 "configure"
+#include "confdefs.h"
+#include <stdio.h>
+                  #include <sys/types.h>
+int main() {
+uint_t foo = 0;
+; return 0; }
+configure:10305: checking for uname.domainname
+configure:10318: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions  conftest.C 1>&5
+configure:10314:62: error: no member named 'domainname' in 'utsname'
+            (void)uname(res);  if (res != 0) { domain = res->domainname; } 
+                                                        ~~~  ^
+1 error generated.
+configure: failed program was:
+#line 10310 "configure"
+#include "confdefs.h"
+#include <sys/utsname.h>
+int main() {
+ struct utsname *res; char *domain;
+            (void)uname(res);  if (res != 0) { domain = res->domainname; } 
+; return 0; }
+configure:10345: checking for uname.__domainname
+configure:10358: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions  conftest.C 1>&5
+configure:10354:62: error: no member named '__domainname' in 'utsname'
+            (void)uname(res);  if (res != 0) { domain = res->__domainname; } 
+                                                        ~~~  ^
+1 error generated.
+configure: failed program was:
+#line 10350 "configure"
+#include "confdefs.h"
+#include <sys/utsname.h>
+int main() {
+ struct utsname *res; char *domain;
+            (void)uname(res);  if (res != 0) { domain = res->__domainname; } 
+; return 0; }
+configure:10397: checking for gcc c++0x headers bug without rtti
+configure:10409: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x  conftest.C 1>&5
+configure:10429: checking for usable char16_t (2 bytes, unsigned)
+configure:10445: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x  conftest.C 1>&5
+configure:10473: checking for usable wchar_t (2 bytes, unsigned)
+configure:10487: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x  conftest.C 1>&5
+configure:10486:1: error: 'static_assert_line_10486' declared as an array with a negative size
+CONFIGURE_STATIC_ASSERT(sizeof(wchar_t) == 2);
+^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+configure:10481:44: note: expanded from macro 'CONFIGURE_STATIC_ASSERT'
+#define CONFIGURE_STATIC_ASSERT(condition) CONFIGURE_STATIC_ASSERT_IMPL(condition, __LINE__)
+                                           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+configure:10482:55: note: expanded from macro 'CONFIGURE_STATIC_ASSERT_IMPL'
+#define CONFIGURE_STATIC_ASSERT_IMPL(condition, line) CONFIGURE_STATIC_ASSERT_IMPL2(condition, line)
+                                                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+configure:10483:94: note: expanded from macro 'CONFIGURE_STATIC_ASSERT_IMPL2'
+#define CONFIGURE_STATIC_ASSERT_IMPL2(condition, line) typedef int static_assert_line_##line[(condition) ? 1 : -1]
+                                                                                             ^~~~~~~~~~~~~~~~~~~~
+configure:10487:22: error: 'static_assert_line_10487' declared as an array with a negative size
+                     CONFIGURE_STATIC_ASSERT((wchar_t)-1 > (wchar_t) 0)
+                     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+configure:10481:44: note: expanded from macro 'CONFIGURE_STATIC_ASSERT'
+#define CONFIGURE_STATIC_ASSERT(condition) CONFIGURE_STATIC_ASSERT_IMPL(condition, __LINE__)
+                                           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+configure:10482:55: note: expanded from macro 'CONFIGURE_STATIC_ASSERT_IMPL'
+#define CONFIGURE_STATIC_ASSERT_IMPL(condition, line) CONFIGURE_STATIC_ASSERT_IMPL2(condition, line)
+                                                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+configure:10483:94: note: expanded from macro 'CONFIGURE_STATIC_ASSERT_IMPL2'
+#define CONFIGURE_STATIC_ASSERT_IMPL2(condition, line) typedef int static_assert_line_##line[(condition) ? 1 : -1]
+                                                                                             ^~~~~~~~~~~~~~~~~~~~
+2 errors generated.
+configure: failed program was:
+#line 10478 "configure"
+#include "confdefs.h"
+#include <stddef.h>
+                     
+#define CONFIGURE_STATIC_ASSERT(condition) CONFIGURE_STATIC_ASSERT_IMPL(condition, __LINE__)
+#define CONFIGURE_STATIC_ASSERT_IMPL(condition, line) CONFIGURE_STATIC_ASSERT_IMPL2(condition, line)
+#define CONFIGURE_STATIC_ASSERT_IMPL2(condition, line) typedef int static_assert_line_##line[(condition) ? 1 : -1]
+
+int main() {
+CONFIGURE_STATIC_ASSERT(sizeof(wchar_t) == 2);
+                     CONFIGURE_STATIC_ASSERT((wchar_t)-1 > (wchar_t) 0)
+; return 0; }
+configure:10575: checking for visibility(hidden) attribute
+configure:10603: checking for visibility(default) attribute
+configure:10631: checking for visibility pragma support
+configure:10656: checking For gcc visibility bug with class-level attributes (GCC bug 26905)
+configure:10684: checking For x86_64 gcc visibility bug with builtins (GCC bug 20297)
+configure:10738: checking for gcc PR49911
+configure:10832: checking for gcc pr39608
+configure:10862: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x  conftest.C 1>&5
+configure:10858:1: warning: expression result unused [-Wunused-value]
+true
+^~~~
+1 warning generated.
+configure:10889: checking for llvm pr8927
+configure:10966: checking for __force_align_arg_pointer__ attribute
+configure:10978: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -Werror  conftest.c 1>&5
+configure:10972:17: error: unknown attribute '__force_align_arg_pointer__' ignored [-Werror,-Wattributes]
+__attribute__ ((__force_align_arg_pointer__)) void test() {}
+                ^
+1 error generated.
+configure: failed program was:
+#line 10971 "configure"
+#include "confdefs.h"
+__attribute__ ((__force_align_arg_pointer__)) void test() {}
+int main() {
+
+; return 0; }
+configure:11005: checking for dirent.h that defines DIR
+configure:11018: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11046: checking for opendir in -ldir
+configure:11065: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections   conftest.c -ldir   1>&5
+ld: library not found for -ldir
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 11054 "configure"
+#include "confdefs.h"
+/* Override any gcc2 internal prototype to avoid an error.  */
+/* We use char because int might match the return type of a gcc2
+    builtin and then its argument prototype would still apply.  */
+char opendir();
+
+int main() {
+opendir()
+; return 0; }
+configure:11140: checking for sys/byteorder.h
+configure:11153: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11147:10: fatal error: 'sys/byteorder.h' file not found
+#include <sys/byteorder.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 11145 "configure"
+#include "confdefs.h"
+
+#include <sys/byteorder.h>
+int main() {
+
+; return 0; }
+configure:11140: checking for compat.h
+configure:11153: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11147:10: fatal error: 'compat.h' file not found
+#include <compat.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 11145 "configure"
+#include "confdefs.h"
+
+#include <compat.h>
+int main() {
+
+; return 0; }
+configure:11140: checking for getopt.h
+configure:11153: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11140: checking for sys/bitypes.h
+configure:11153: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11147:10: fatal error: 'sys/bitypes.h' file not found
+#include <sys/bitypes.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 11145 "configure"
+#include "confdefs.h"
+
+#include <sys/bitypes.h>
+int main() {
+
+; return 0; }
+configure:11140: checking for memory.h
+configure:11153: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11140: checking for unistd.h
+configure:11153: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11140: checking for gnu/libc-version.h
+configure:11153: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11147:10: fatal error: 'gnu/libc-version.h' file not found
+#include <gnu/libc-version.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 11145 "configure"
+#include "confdefs.h"
+
+#include <gnu/libc-version.h>
+int main() {
+
+; return 0; }
+configure:11140: checking for nl_types.h
+configure:11153: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11140: checking for malloc.h
+configure:11153: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11147:10: fatal error: 'malloc.h' file not found
+#include <malloc.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 11145 "configure"
+#include "confdefs.h"
+
+#include <malloc.h>
+int main() {
+
+; return 0; }
+configure:11140: checking for X11/XKBlib.h
+configure:11153: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11147:10: fatal error: 'X11/XKBlib.h' file not found
+#include <X11/XKBlib.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 11145 "configure"
+#include "confdefs.h"
+
+#include <X11/XKBlib.h>
+int main() {
+
+; return 0; }
+configure:11140: checking for io.h
+configure:11153: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11147:10: fatal error: 'io.h' file not found
+#include <io.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 11145 "configure"
+#include "confdefs.h"
+
+#include <io.h>
+int main() {
+
+; return 0; }
+configure:11140: checking for cpuid.h
+configure:11153: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+In file included from configure:11147:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/../lib/clang/4.2/include/cpuid.h:25:2: error: this header is for x86 only
+#error this header is for x86 only
+ ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/../lib/clang/4.2/include/cpuid.h:31:19: error: invalid output constraint '=a' in asm
+    asm("cpuid" : "=a"(*eax), "=b" (*ebx), "=c"(*ecx), "=d"(*edx) : "0"(level));
+                  ^
+2 errors generated.
+configure: failed program was:
+#line 11145 "configure"
+#include "confdefs.h"
+
+#include <cpuid.h>
+int main() {
+
+; return 0; }
+configure:11188: checking for sys/statvfs.h
+configure:11201: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11188: checking for sys/statfs.h
+configure:11201: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11195:10: fatal error: 'sys/statfs.h' file not found
+#include <sys/statfs.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 11193 "configure"
+#include "confdefs.h"
+
+#include <sys/statfs.h>
+int main() {
+
+; return 0; }
+configure:11188: checking for sys/vfs.h
+configure:11201: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11195:10: fatal error: 'sys/vfs.h' file not found
+#include <sys/vfs.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 11193 "configure"
+#include "confdefs.h"
+
+#include <sys/vfs.h>
+int main() {
+
+; return 0; }
+configure:11188: checking for sys/mount.h
+configure:11201: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11235: checking for sys/quota.h
+configure:11248: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+In file included from configure:11242:
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:146:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqh_magic;            
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:147:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqh_version;          /* == QF_VERSION */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:148:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqh_maxentries;       /* must be a power of 2 */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:149:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqh_entrycnt;         /* count of active entries */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:150:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqh_flags;            /* reserved for now (0) */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:151:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqh_chktime;          /* time of last quota check */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:152:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqh_btime;            /* time limit for excessive disk use */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:153:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqh_itime;            /* time limit for excessive files */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:155:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqh_spare[4];         /* pad struct to power of 2 */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:159:2: error: unknown type name 'u_int64_t'
+        u_int64_t dqb_bhardlimit;       /* absolute limit on disk bytes alloc */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:160:2: error: unknown type name 'u_int64_t'
+        u_int64_t dqb_bsoftlimit;       /* preferred limit on disk bytes */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:161:2: error: unknown type name 'u_int64_t'
+        u_int64_t dqb_curbytes;         /* current byte count */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:162:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqb_ihardlimit;       /* maximum # allocated inodes + 1 */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:163:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqb_isoftlimit;       /* preferred inode limit */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:164:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqb_curinodes;        /* current # allocated inodes */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:165:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqb_btime;            /* time limit for excessive disk use */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:166:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqb_itime;            /* time limit for excessive files */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:167:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqb_id;               /* identifier (0 for empty entries) */
+        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/sys/quota.h:168:2: error: unknown type name 'u_int32_t'
+        u_int32_t dqb_spare[4];         /* pad struct to power of 2 */
+        ^
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+20 errors generated.
+configure: failed program was:
+#line 11240 "configure"
+#include "confdefs.h"
+
+#include <sys/quota.h>
+int main() {
+
+; return 0; }
+configure:11235: checking for sys/sysmacros.h
+configure:11248: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11242:10: fatal error: 'sys/sysmacros.h' file not found
+#include <sys/sysmacros.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 11240 "configure"
+#include "confdefs.h"
+
+#include <sys/sysmacros.h>
+int main() {
+
+; return 0; }
+configure:11281: checking for linux/quota.h
+configure:11294: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11288:10: fatal error: 'linux/quota.h' file not found
+#include <linux/quota.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 11286 "configure"
+#include "confdefs.h"
+#include <sys/socket.h>
+#include <linux/quota.h>
+int main() {
+
+; return 0; }
+configure:11328: checking for linux/if_addr.h
+configure:11341: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11335:10: fatal error: 'linux/if_addr.h' file not found
+#include <linux/if_addr.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 11333 "configure"
+#include "confdefs.h"
+#include <sys/socket.h>
+#include <linux/if_addr.h>
+int main() {
+
+; return 0; }
+configure:11328: checking for linux/rtnetlink.h
+configure:11341: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11335:10: fatal error: 'linux/rtnetlink.h' file not found
+#include <linux/rtnetlink.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 11333 "configure"
+#include "confdefs.h"
+#include <sys/socket.h>
+#include <linux/rtnetlink.h>
+int main() {
+
+; return 0; }
+configure:11375: checking for sys/types.h
+configure:11388: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11375: checking for netinet/in.h
+configure:11388: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11375: checking for byteswap.h
+configure:11388: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11382:10: fatal error: 'byteswap.h' file not found
+#include <byteswap.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 11380 "configure"
+#include "confdefs.h"
+
+#include <byteswap.h>
+int main() {
+
+; return 0; }
+configure:11419: checking for sockaddr_in.sin_len
+configure:11436: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11467: checking for sockaddr_in6.sin6_len
+configure:11484: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11508: checking for sockaddr.sa_len
+configure:11525: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11558: checking for new
+configure:11571: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x  conftest.C 1>&5
+configure:11670: checking for sys/cdefs.h
+configure:11683: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections  conftest.c 1>&5
+configure:11735: checking for linux/perf_event.h
+configure:11748: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections   conftest.c 1>&5
+configure:11742:10: fatal error: 'linux/perf_event.h' file not found
+#include <linux/perf_event.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 11740 "configure"
+#include "confdefs.h"
+
+#include <linux/perf_event.h>
+int main() {
+
+; return 0; }
+configure:11811: checking for gethostbyname_r in -lc_r
+configure:11830: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections   conftest.c -lc_r   1>&5
+ld: library not found for -lc_r
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 11819 "configure"
+#include "confdefs.h"
+/* Override any gcc2 internal prototype to avoid an error.  */
+/* We use char because int might match the return type of a gcc2
+    builtin and then its argument prototype would still apply.  */
+char gethostbyname_r();
+
+int main() {
+gethostbyname_r()
+; return 0; }
+configure:11979: checking for dladdr
+configure:12007: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -D_GNU_SOURCE   conftest.c  1>&5
+configure:11979: checking for memmem
+configure:12007: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -D_GNU_SOURCE   conftest.c  1>&5
+configure:12151: checking for socket in -lsocket
+configure:12170: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections   conftest.c -lsocket   1>&5
+ld: library not found for -lsocket
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 12159 "configure"
+#include "confdefs.h"
+/* Override any gcc2 internal prototype to avoid an error.  */
+/* We use char because int might match the return type of a gcc2
+    builtin and then its argument prototype would still apply.  */
+char socket();
+
+int main() {
+socket()
+; return 0; }
+configure:12748: checking whether /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk accepts -pthread
+configure:12876: checking whether /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk needs -traditional
+configure:12883:10: fatal error: 'sgtty.h' file not found
+#include <sgtty.h>
+         ^
+1 error generated.
+configure:12901:10: fatal error: 'termio.h' file not found
+#include <termio.h>
+         ^
+1 error generated.
+configure:12922: checking for 8-bit clean memcmp
+configure:12960: checking for random
+configure:12988: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:12960: checking for strerror
+configure:12988: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:12972:6: warning: incompatible redeclaration of library function 'strerror'
+char strerror();
+     ^
+configure:12972:6: note: 'strerror' is a builtin with type 'char *(int)'
+1 warning generated.
+configure:12960: checking for lchown
+configure:12988: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:12960: checking for fchmod
+configure:12988: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:12960: checking for snprintf
+configure:12988: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:12972:6: warning: incompatible redeclaration of library function 'snprintf'
+char snprintf();
+     ^
+configure:12972:6: note: 'snprintf' is a builtin with type 'int (char *, unsigned long, const char *, ...)'
+1 warning generated.
+configure:12960: checking for memmove
+configure:12988: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:12972:6: warning: incompatible redeclaration of library function 'memmove'
+char memmove();
+     ^
+configure:12972:6: note: 'memmove' is a builtin with type 'void *(void *, const void *, unsigned long)'
+1 warning generated.
+configure:12960: checking for rint
+configure:12988: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:12972:6: warning: incompatible redeclaration of library function 'rint'
+char rint();
+     ^
+configure:12972:6: note: 'rint' is a builtin with type 'double (double)'
+1 warning generated.
+configure:12960: checking for stat64
+configure:12988: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:12960: checking for lstat64
+configure:12988: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:12960: checking for truncate64
+configure:12988: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+Undefined symbols for architecture armv7:
+  "_truncate64", referenced from:
+      _main in conftest-2blnE3.o
+ld: symbol(s) not found for architecture armv7
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 12965 "configure"
+#include "confdefs.h"
+/* System header to define __stub macros and hopefully few prototypes,
+    which can conflict with char truncate64(); below.  */
+#include <assert.h>
+/* Override any gcc2 internal prototype to avoid an error.  */
+/* We use char because int might match the return type of a gcc2
+    builtin and then its argument prototype would still apply.  */
+char truncate64();
+
+int main() {
+
+/* The GNU C library defines this for functions which it implements
+    to always fail with ENOSYS.  Some functions are actually named
+    something starting with __ and the normal name is an alias.  */
+#if defined (__stub_truncate64) || defined (__stub___truncate64)
+choke me
+#else
+truncate64();
+#endif
+
+; return 0; }
+configure:12960: checking for setbuf
+configure:12988: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:12960: checking for isatty
+configure:12988: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:13018: checking for statvfs64
+configure:13046: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+Undefined symbols for architecture armv7:
+  "_statvfs64", referenced from:
+      _main in conftest-sJN2yQ.o
+ld: symbol(s) not found for architecture armv7
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 13023 "configure"
+#include "confdefs.h"
+/* System header to define __stub macros and hopefully few prototypes,
+    which can conflict with char statvfs64(); below.  */
+#include <assert.h>
+/* Override any gcc2 internal prototype to avoid an error.  */
+/* We use char because int might match the return type of a gcc2
+    builtin and then its argument prototype would still apply.  */
+char statvfs64();
+
+int main() {
+
+/* The GNU C library defines this for functions which it implements
+    to always fail with ENOSYS.  Some functions are actually named
+    something starting with __ and the normal name is an alias.  */
+#if defined (__stub_statvfs64) || defined (__stub___statvfs64)
+choke me
+#else
+statvfs64();
+#endif
+
+; return 0; }
+configure:13018: checking for statvfs
+configure:13046: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:13018: checking for statfs64
+configure:13046: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:13018: checking for statfs
+configure:13046: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:13076: checking for flockfile
+configure:13104: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:13076: checking for getpagesize
+configure:13104: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:13134: checking for localtime_r
+configure:13162: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:13134: checking for strtok_r
+configure:13162: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:13191: checking for clock_gettime(CLOCK_MONOTONIC)
+configure:13207: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c   1>&5
+configure:13203:36: warning: implicit declaration of function 'clock_gettime' is invalid in C99 [-Wimplicit-function-declaration]
+                                   clock_gettime(CLOCK_MONOTONIC, &ts); 
+                                   ^
+configure:13203:50: error: use of undeclared identifier 'CLOCK_MONOTONIC'
+                                   clock_gettime(CLOCK_MONOTONIC, &ts); 
+                                                 ^
+1 warning and 1 error generated.
+configure: failed program was:
+#line 13199 "configure"
+#include "confdefs.h"
+#include <time.h>
+int main() {
+ struct timespec ts;
+                                   clock_gettime(CLOCK_MONOTONIC, &ts); 
+; return 0; }
+configure:13207: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  -lrt 1>&5
+configure:13203:36: warning: implicit declaration of function 'clock_gettime' is invalid in C99 [-Wimplicit-function-declaration]
+                                   clock_gettime(CLOCK_MONOTONIC, &ts); 
+                                   ^
+configure:13203:50: error: use of undeclared identifier 'CLOCK_MONOTONIC'
+                                   clock_gettime(CLOCK_MONOTONIC, &ts); 
+                                                 ^
+1 warning and 1 error generated.
+configure: failed program was:
+#line 13199 "configure"
+#include "confdefs.h"
+#include <time.h>
+int main() {
+ struct timespec ts;
+                                   clock_gettime(CLOCK_MONOTONIC, &ts); 
+; return 0; }
+configure:13248: checking for wcrtomb
+configure:13260: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread    conftest.C  1>&5
+configure:13283: checking for mbrtowc
+configure:13295: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread    conftest.C  1>&5
+configure:13327: checking for res_ninit()
+configure:13344: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+Undefined symbols for architecture armv7:
+  "_res_9_ninit", referenced from:
+      _main in conftest-Y6JLJ7.o
+ld: symbol(s) not found for architecture armv7
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 13332 "configure"
+#include "confdefs.h"
+
+        #ifdef linux
+        #define _BSD_SOURCE 1
+        #endif
+        #include <resolv.h>
+        
+int main() {
+int foo = res_ninit(&_res);
+; return 0; }
+configure:13377: checking for gnu_get_libc_version()
+configure:13393: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread    conftest.C  1>&5
+configure:13389:29: error: use of undeclared identifier 'gnu_get_libc_version'
+const char *glibc_version = gnu_get_libc_version();
+                            ^
+1 error generated.
+configure: failed program was:
+#line 13382 "configure"
+#include "confdefs.h"
+
+        #ifdef HAVE_GNU_LIBC_VERSION_H
+        #include <gnu/libc-version.h>
+        #endif
+        
+int main() {
+const char *glibc_version = gnu_get_libc_version();
+; return 0; }
+configure:13654: checking for nl_langinfo and CODESET
+configure:13666: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread    conftest.C  1>&5
+configure:13701: checking for an implementation of va_copy()
+configure:13742: checking for an implementation of __va_copy()
+configure:13783: checking whether va_lists can be copied by value
+configure:13877: checking for ARM EABI
+configure:13895: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread  conftest.C 1>&5
+configure:13889:2: error: Not ARM EABI.
+#error Not ARM EABI.
+ ^
+1 error generated.
+configure: failed program was:
+#line 13882 "configure"
+#include "confdefs.h"
+
+int main() {
+
+#if defined(__ARM_EABI__)
+  return 0;
+#else
+#error Not ARM EABI.
+#endif
+                        
+; return 0; }
+configure:13920: checking for modern C++ template specialization syntax support
+configure:13935: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread  conftest.C 1>&5
+configure:13953: checking whether partial template specialization works
+configure:13966: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread  conftest.C 1>&5
+configure:13990: checking whether the C++ "using" keyword resolves ambiguity
+configure:14011: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread  conftest.C 1>&5
+configure:14035: checking for C++ dynamic_cast to void*
+configure:14089: checking whether C++ requires implementation of unused virtual methods
+configure:14101: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread    conftest.C  1>&5
+Undefined symbols for architecture armv7:
+  "vtable for X", referenced from:
+      X::X() in conftest-dufeAA.o
+  NOTE: a missing vtable usually means the first non-inline virtual member function has no definition.
+ld: symbol(s) not found for architecture armv7
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 14094 "configure"
+#include "confdefs.h"
+class X {private: virtual void never_called();};
+int main() {
+X x;
+; return 0; }
+configure:14127: checking for trouble comparing to zero near std::operator!=()
+configure:14143: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread  conftest.C 1>&5
+configure:14173: checking for __thread keyword for TLS variables
+configure:14185: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread    -fPIC  -Wl,-dead_strip conftest.C  1>&5
+configure:14179:1: error: thread-local storage is unsupported for the current target
+__thread bool tlsIsMainThread = false;
+^
+1 error generated.
+configure: failed program was:
+#line 14178 "configure"
+#include "confdefs.h"
+__thread bool tlsIsMainThread = false;
+int main() {
+return tlsIsMainThread;
+; return 0; }
+configure:14272: checking for malloc.h
+configure:14272: checking for malloc_np.h
+configure:14285: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread  conftest.C 1>&5
+configure:14279:10: fatal error: 'malloc_np.h' file not found
+#include <malloc_np.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 14277 "configure"
+#include "confdefs.h"
+
+#include <malloc_np.h>
+int main() {
+
+; return 0; }
+configure:14272: checking for malloc/malloc.h
+configure:14285: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread  conftest.C 1>&5
+configure:14321: checking for strndup
+configure:14352: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread    conftest.C  1>&5
+configure:14321: checking for posix_memalign
+configure:14352: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread    conftest.C  1>&5
+configure:14336:6: error: functions that differ only in their return type cannot be overloaded
+char posix_memalign();
+     ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/stdlib.h:173:7: note: previous declaration is here
+int      posix_memalign(void **, size_t, size_t) __OSX_AVAILABLE_STARTING(__MAC_10_6, __IPHONE_3_0);
+         ^
+configure:14346:1: error: no matching function for call to 'posix_memalign'
+posix_memalign();
+^~~~~~~~~~~~~~
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/stdlib.h:173:7: note: candidate function not viable: requires 3 arguments, but 0 were provided
+int      posix_memalign(void **, size_t, size_t) __OSX_AVAILABLE_STARTING(__MAC_10_6, __IPHONE_3_0);
+         ^
+2 errors generated.
+configure: failed program was:
+#line 14326 "configure"
+#include "confdefs.h"
+/* System header to define __stub macros and hopefully few prototypes,
+    which can conflict with char posix_memalign(); below.  */
+#include <assert.h>
+/* Override any gcc2 internal prototype to avoid an error.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+/* We use char because int might match the return type of a gcc2
+    builtin and then its argument prototype would still apply.  */
+char posix_memalign();
+
+int main() {
+
+/* The GNU C library defines this for functions which it implements
+    to always fail with ENOSYS.  Some functions are actually named
+    something starting with __ and the normal name is an alias.  */
+#if defined (__stub_posix_memalign) || defined (__stub___posix_memalign)
+choke me
+#else
+posix_memalign();
+#endif
+
+; return 0; }
+configure:14321: checking for memalign
+configure:14352: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread    conftest.C  1>&5
+Undefined symbols for architecture armv7:
+  "_memalign", referenced from:
+      _main in conftest-GMR2BG.o
+ld: symbol(s) not found for architecture armv7
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 14326 "configure"
+#include "confdefs.h"
+/* System header to define __stub macros and hopefully few prototypes,
+    which can conflict with char memalign(); below.  */
+#include <assert.h>
+/* Override any gcc2 internal prototype to avoid an error.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+/* We use char because int might match the return type of a gcc2
+    builtin and then its argument prototype would still apply.  */
+char memalign();
+
+int main() {
+
+/* The GNU C library defines this for functions which it implements
+    to always fail with ENOSYS.  Some functions are actually named
+    something starting with __ and the normal name is an alias.  */
+#if defined (__stub_memalign) || defined (__stub___memalign)
+choke me
+#else
+memalign();
+#endif
+
+; return 0; }
+configure:14321: checking for valloc
+configure:14352: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread    conftest.C  1>&5
+configure:14336:6: error: functions that differ only in their return type cannot be overloaded
+char valloc();
+     ^
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/stdlib.h:341:7: note: previous declaration is here
+void    *valloc(size_t);
+         ^
+configure:14346:1: error: no matching function for call to 'valloc'
+valloc();
+^~~~~~
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include/stdlib.h:341:7: note: candidate function not viable: requires 1 argument, but 0 were provided
+void    *valloc(size_t);
+         ^
+2 errors generated.
+configure: failed program was:
+#line 14326 "configure"
+#include "confdefs.h"
+/* System header to define __stub macros and hopefully few prototypes,
+    which can conflict with char valloc(); below.  */
+#include <assert.h>
+/* Override any gcc2 internal prototype to avoid an error.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+/* We use char because int might match the return type of a gcc2
+    builtin and then its argument prototype would still apply.  */
+char valloc();
+
+int main() {
+
+/* The GNU C library defines this for functions which it implements
+    to always fail with ENOSYS.  Some functions are actually named
+    something starting with __ and the normal name is an alias.  */
+#if defined (__stub_valloc) || defined (__stub___valloc)
+choke me
+#else
+valloc();
+#endif
+
+; return 0; }
+configure:14383: checking for malloc_usable_size
+configure:14414: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread    conftest.C  1>&5
+Undefined symbols for architecture armv7:
+  "_malloc_usable_size", referenced from:
+      _main in conftest-R1EnRZ.o
+ld: symbol(s) not found for architecture armv7
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 14388 "configure"
+#include "confdefs.h"
+/* System header to define __stub macros and hopefully few prototypes,
+    which can conflict with char malloc_usable_size(); below.  */
+#include <assert.h>
+/* Override any gcc2 internal prototype to avoid an error.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+/* We use char because int might match the return type of a gcc2
+    builtin and then its argument prototype would still apply.  */
+char malloc_usable_size();
+
+int main() {
+
+/* The GNU C library defines this for functions which it implements
+    to always fail with ENOSYS.  Some functions are actually named
+    something starting with __ and the normal name is an alias.  */
+#if defined (__stub_malloc_usable_size) || defined (__stub___malloc_usable_size)
+choke me
+#else
+malloc_usable_size();
+#endif
+
+; return 0; }
+configure:14444: checking for __attribute__((always_inline))
+configure:14456: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread  conftest.C 1>&5
+configure:14471: checking for __attribute__((malloc))
+configure:14483: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread  conftest.C 1>&5
+configure:14498: checking for __attribute__((warn_unused_result))
+configure:14510: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread  conftest.C 1>&5
+configure:14534: checking for LC_MESSAGES
+configure:14546: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread  conftest.c 1>&5
+configure:14572: checking for localeconv
+configure:14600: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread    conftest.c  1>&5
+configure:15300: checking for YASM assembler
+configure:15306: checking for yasm
+configure:16243: checking for application to build
+configure:16286: checking if app-specific confvars.sh exists
+configure:19389: checking __attribute__ ((aligned ())) support
+configure:19406: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread -DNO_X11 -Werror  conftest.c 1>&5
+configure:20591: checking for java
+configure:20640: checking for javac
+configure:20689: checking for jar
+configure:21452: checking for tar archiver
+configure:21458: checking for gnutar
+configure:21495: checking for wget
+configure:21501: checking for wget
+configure:22148: checking for pkg-config
+configure:22192: checking for conic
+configure:24717: checking for __cxa_demangle
+configure:24748: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread -DNO_X11    -framework UIKit -lobjc conftest.C  1>&5
+configure:24802: checking for unwind.h
+configure:24815: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread -DNO_X11  conftest.c 1>&5
+configure:24832: checking for _Unwind_Backtrace
+configure:24860: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread -DNO_X11    -framework UIKit -lobjc conftest.c  1>&5
+Undefined symbols for architecture armv7:
+  "__Unwind_Backtrace", referenced from:
+      _main in conftest-4UdmAB.o
+ld: symbol(s) not found for architecture armv7
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 24837 "configure"
+#include "confdefs.h"
+/* System header to define __stub macros and hopefully few prototypes,
+    which can conflict with char _Unwind_Backtrace(); below.  */
+#include <assert.h>
+/* Override any gcc2 internal prototype to avoid an error.  */
+/* We use char because int might match the return type of a gcc2
+    builtin and then its argument prototype would still apply.  */
+char _Unwind_Backtrace();
+
+int main() {
+
+/* The GNU C library defines this for functions which it implements
+    to always fail with ENOSYS.  Some functions are actually named
+    something starting with __ and the normal name is an alias.  */
+#if defined (__stub__Unwind_Backtrace) || defined (__stub____Unwind_Backtrace)
+choke me
+#else
+_Unwind_Backtrace();
+#endif
+
+; return 0; }
+configure:25039: checking for -pipe support
+configure:25053: checking whether C compiler supports -fprofile-generate
+configure:25062: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread -DNO_X11 -pipe -fprofile-generate -fprofile-correction  conftest.c 1>&5
+clang: warning: argument unused during compilation: '-fprofile-generate'
+clang: warning: argument unused during compilation: '-fprofile-correction'
+configure:25162: checking for correct overload resolution with const and templates
+configure:25197: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-exceptions -fno-strict-aliasing -fno-rtti -ffunction-sections -fdata-sections -fno-exceptions -std=gnu++0x -pthread -DNO_X11 -pipe  -Wall -Wpointer-arith -Woverloaded-virtual -Werror=return-type -Wtype-limits -Wempty-body -Wno-ctor-dtor-privacy -Wno-overlength-strings -Wno-invalid-offsetof -Wno-variadic-macros  conftest.C 1>&5
+configure:25192:37: warning: variable 'bar' is uninitialized when used here [-Wuninitialized]
+                      return foo == bar;
+                                    ^~~
+configure:25191:37: note: initialize the variable 'bar' to silence this warning
+                      const int* bar;
+                                    ^
+                                     = nullptr
+1 warning generated.
+configure:25242: checking what kind of list files are supported by the linker
+configure:25247: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest.o -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread -DNO_X11 -pipe  conftest.c 1>&5
+configure:25249: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest   -framework UIKit -lobjc conftest.list  1>&5
+ld: file too small for architecture armv7
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure:25253: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest   -framework UIKit -lobjc @conftest.list  1>&5
+configure:26032: checking for stdint.h
+configure:26045: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread -DNO_X11 -pipe  conftest.c 1>&5
+configure:26032: checking for inttypes.h
+configure:26045: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread -DNO_X11 -pipe  conftest.c 1>&5
+configure:26032: checking for sys/int_types.h
+configure:26045: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -c  -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread -DNO_X11 -pipe  conftest.c 1>&5
+configure:26039:10: fatal error: 'sys/int_types.h' file not found
+#include <sys/int_types.h>
+         ^
+1 error generated.
+configure: failed program was:
+#line 26037 "configure"
+#include "confdefs.h"
+
+#include <sys/int_types.h>
+int main() {
+
+; return 0; }
+configure:27323: checking for posix_fallocate
+configure:27333: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -miphoneos-version-min=5.1 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -o conftest -Wall -Wpointer-arith -Wdeclaration-after-statement -Werror=return-type -Wtype-limits -Wempty-body -Wno-unused -Wno-overlength-strings -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -fno-strict-aliasing -ffunction-sections -fdata-sections -pthread -DNO_X11 -pipe    -framework UIKit -lobjc conftest.c  1>&5
+configure:27329:1: warning: implicit declaration of function 'posix_fallocate' is invalid in C99 [-Wimplicit-function-declaration]
+posix_fallocate(0, 0, 0);
+^
+1 warning generated.
+Undefined symbols for architecture armv7:
+  "_posix_fallocate", referenced from:
+      _main in conftest-FJyJWh.o
+ld: symbol(s) not found for architecture armv7
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+configure: failed program was:
+#line 27325 "configure"
+#include "confdefs.h"
+#define _XOPEN_SOURCE 600
+  #include <fcntl.h>
+int main() {
+posix_fallocate(0, 0, 0);
+; return 0; }

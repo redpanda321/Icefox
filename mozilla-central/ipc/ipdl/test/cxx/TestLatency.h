@@ -9,7 +9,7 @@
 #include "mozilla/TimeStamp.h"
 
 #define NR_TRIALS 10000
-#define NR_SPAMS  50000
+#define NR_SPAMS  25000
 
 namespace mozilla {
 namespace _ipdltest {
@@ -25,16 +25,16 @@ public:
     TestLatencyParent();
     virtual ~TestLatencyParent();
 
+    static bool RunTestInProcesses() { return true; }
+    static bool RunTestInThreads() { return true; }
+
     void Main();
 
 protected:
-    NS_OVERRIDE
-    virtual bool RecvPong();
-    NS_OVERRIDE
-    virtual bool RecvPong5();
+    virtual bool RecvPong() MOZ_OVERRIDE;
+    virtual bool RecvPong5() MOZ_OVERRIDE;
 
-    NS_OVERRIDE
-    virtual void ActorDestroy(ActorDestroyReason why)
+    virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE
     {
         if (NormalShutdown != why)
             fail("unexpected destruction!");  
@@ -43,11 +43,14 @@ protected:
                "  average #ping-pong/sec:        %g\n"
                "  average #ping5-pong5/sec:      %g\n"
                "  average #RPC call-answer/sec:  %g\n"
-               "  average #spams/sec:            %g\n",
+               "  average #spams/sec:            %g\n"
+               "  pct. spams compressed away:    %g\n",
                double(NR_TRIALS) / mPPTimeTotal.ToSecondsSigDigits(),
                double(NR_TRIALS) / mPP5TimeTotal.ToSecondsSigDigits(),
                double(NR_TRIALS) / mRpcTimeTotal.ToSecondsSigDigits(),
-               double(NR_SPAMS) / mSpamTimeTotal.ToSecondsSigDigits());
+               double(NR_SPAMS) / mSpamTimeTotal.ToSecondsSigDigits(),
+               100.0 * (double(NR_SPAMS - mNumChildProcessedCompressedSpams) /
+                        double(NR_SPAMS)));
 
         QuitParent();
     }
@@ -57,6 +60,7 @@ private:
     void Ping5Pong5Trial();
     void RpcTrials();
     void SpamTrial();
+    void CompressedSpamTrial();
     void Exit();
 
     TimeStamp mStart;
@@ -67,7 +71,7 @@ private:
 
     int mPPTrialsToGo;
     int mPP5TrialsToGo;
-    int mSpamsToGo;
+    uint32_t mNumChildProcessedCompressedSpams;
 };
 
 
@@ -79,24 +83,24 @@ public:
     virtual ~TestLatencyChild();
 
 protected:
-    NS_OVERRIDE
-    virtual bool RecvPing();
-    NS_OVERRIDE
-    virtual bool RecvPing5();
-    NS_OVERRIDE
-    virtual bool AnswerRpc();
-    NS_OVERRIDE
-    virtual bool RecvSpam();
-    NS_OVERRIDE
-    virtual bool AnswerSynchro();
+    virtual bool RecvPing() MOZ_OVERRIDE;
+    virtual bool RecvPing5() MOZ_OVERRIDE;
+    virtual bool AnswerRpc() MOZ_OVERRIDE;
+    virtual bool RecvSpam() MOZ_OVERRIDE;
+    virtual bool AnswerSynchro() MOZ_OVERRIDE;
+    virtual bool RecvCompressedSpam(const uint32_t& seqno) MOZ_OVERRIDE;
+    virtual bool AnswerSynchro2(uint32_t* lastSeqno,
+                                uint32_t* numMessagesDispatched) MOZ_OVERRIDE;
 
-    NS_OVERRIDE
-    virtual void ActorDestroy(ActorDestroyReason why)
+    virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE
     {
         if (NormalShutdown != why)
             fail("unexpected destruction!");
         QuitChild();
     }
+
+    uint32_t mLastSeqno;
+    uint32_t mNumProcessedCompressedSpams;
 };
 
 

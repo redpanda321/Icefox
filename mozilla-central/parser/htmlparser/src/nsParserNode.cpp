@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #include "nsIAtom.h"
@@ -48,12 +16,12 @@
  *  Default Constructor
  */
 nsCParserNode::nsCParserNode()
-  : mRefCnt(0), mGenericState(PR_FALSE), mUseCount(0), mToken(nsnull),
-    mTokenAllocator(nsnull)
+  : mRefCnt(0), mGenericState(false), mUseCount(0), mToken(nullptr),
+    mTokenAllocator(nullptr)
 {
   MOZ_COUNT_CTOR(nsCParserNode);
 #ifdef HEAP_ALLOCATED_NODES
-  mNodeAllocator = nsnull;
+  mNodeAllocator = nullptr;
 #endif
 }
 
@@ -67,7 +35,7 @@ nsCParserNode::nsCParserNode()
 nsCParserNode::nsCParserNode(CToken* aToken,
                              nsTokenAllocator* aTokenAllocator,
                              nsNodeAllocator* aNodeAllocator)
-  : mRefCnt(0), mGenericState(PR_FALSE), mUseCount(0), mToken(aToken),
+  : mRefCnt(0), mGenericState(false), mUseCount(0), mToken(aToken),
     mTokenAllocator(aTokenAllocator)
 {
   MOZ_COUNT_CTOR(nsCParserNode);
@@ -98,7 +66,7 @@ nsCParserNode::~nsCParserNode() {
   if(mNodeAllocator) {
     mNodeAllocator->Recycle(this);
   }
-  mNodeAllocator = nsnull;
+  mNodeAllocator = nullptr;
 #endif
   mTokenAllocator = 0;
 }
@@ -122,7 +90,7 @@ nsCParserNode::Init(CToken* aToken,
   if (mTokenAllocator) {
     IF_HOLD(mToken);
   } // Else a stack-based token
-  mGenericState = PR_FALSE;
+  mGenericState = false;
   mUseCount=0;
 #ifdef HEAP_ALLOCATED_NODES
   mNodeAllocator = aNodeAllocator;
@@ -174,7 +142,7 @@ nsCParserNode::GetText() const
  *  @param   
  *  @return  int value that represents tag type
  */
-PRInt32 
+int32_t 
 nsCParserNode::GetNodeType(void) const
 {
   return (mToken) ? mToken->GetTypeID() : 0;
@@ -189,7 +157,7 @@ nsCParserNode::GetNodeType(void) const
  *  @param   
  *  @return  
  */
-PRInt32 
+int32_t 
 nsCParserNode::GetTokenType(void) const
 {
   return (mToken) ? mToken->GetTokenType() : 0;
@@ -203,8 +171,8 @@ nsCParserNode::GetTokenType(void) const
  *  @param   
  *  @return  int -- representing attribute count
  */
-PRInt32 
-nsCParserNode::GetAttributeCount(PRBool askToken) const
+int32_t 
+nsCParserNode::GetAttributeCount(bool askToken) const
 {
   return 0;
 }
@@ -218,7 +186,7 @@ nsCParserNode::GetAttributeCount(PRBool askToken) const
  *  @return  string rep of given attribute text key
  */
 const nsAString&
-nsCParserNode::GetKeyAt(PRUint32 anIndex) const 
+nsCParserNode::GetKeyAt(uint32_t anIndex) const 
 {
   return EmptyString();
 }
@@ -232,12 +200,12 @@ nsCParserNode::GetKeyAt(PRUint32 anIndex) const
  *  @return  string rep of given attribute text value
  */
 const nsAString&
-nsCParserNode::GetValueAt(PRUint32 anIndex) const 
+nsCParserNode::GetValueAt(uint32_t anIndex) const 
 {
   return EmptyString();
 }
 
-PRInt32 
+int32_t 
 nsCParserNode::TranslateToUnicodeStr(nsString& aString) const
 {
   if (eToken_entity == mToken->GetTokenType()) {
@@ -252,7 +220,7 @@ nsCParserNode::TranslateToUnicodeStr(nsString& aString) const
  * @update	gess7/24/98
  * @return  int containing the line number the token was found on
  */
-PRInt32
+int32_t
 nsCParserNode::GetSourceLineNumber(void) const {
   return mToken ? mToken->GetLineNumber() : 0;
 }
@@ -317,10 +285,10 @@ void nsCParserStartNode::AddAttribute(CToken* aToken)
   mAttributes.Push(aToken);
 }
 
-PRInt32 
-nsCParserStartNode::GetAttributeCount(PRBool askToken) const
+int32_t 
+nsCParserStartNode::GetAttributeCount(bool askToken) const
 {
-  PRInt32 result = 0;
+  int32_t result = 0;
   if (askToken) {
     result = mToken ? mToken->GetAttributeCount() : 0;
   }
@@ -331,9 +299,9 @@ nsCParserStartNode::GetAttributeCount(PRBool askToken) const
 }
 
 const nsAString&
-nsCParserStartNode::GetKeyAt(PRUint32 anIndex) const 
+nsCParserStartNode::GetKeyAt(uint32_t anIndex) const 
 {
-  if ((PRInt32)anIndex < mAttributes.GetSize()) {
+  if ((int32_t)anIndex < mAttributes.GetSize()) {
     CAttributeToken* attr = 
       static_cast<CAttributeToken*>(mAttributes.ObjectAt(anIndex));
     if (attr) {
@@ -344,9 +312,9 @@ nsCParserStartNode::GetKeyAt(PRUint32 anIndex) const
 }
 
 const nsAString&
-nsCParserStartNode::GetValueAt(PRUint32 anIndex) const 
+nsCParserStartNode::GetValueAt(uint32_t anIndex) const 
 {
-  if (PRInt32(anIndex) < mAttributes.GetSize()) {
+  if (int32_t(anIndex) < mAttributes.GetSize()) {
     CAttributeToken* attr = 
       static_cast<CAttributeToken*>(mAttributes.ObjectAt(anIndex));
     if (attr) {
@@ -376,8 +344,8 @@ void nsCParserStartNode::GetSource(nsString& aString) const
   if (theTagName) {
     aString.Append(theTagName);
   }
-  PRInt32 index;
-  PRInt32 size = mAttributes.GetSize();
+  int32_t index;
+  int32_t size = mAttributes.GetSize();
   for (index = 0 ; index < size; ++index) {
     CAttributeToken *theToken = 
       static_cast<CAttributeToken*>(mAttributes.ObjectAt(index));

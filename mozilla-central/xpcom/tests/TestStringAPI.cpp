@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is XPCOM external strings test.
- *
- * The Initial Developer of the Original Code is
- * Mook <mook.moz@gmail.com>.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *    Prasad Sunkari <prasad@medhas.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include <stdio.h>
 #include "nsStringAPI.h"
@@ -81,7 +48,7 @@ int testWrite() {
   nsString s(NS_LITERAL_STRING("xyzz"));
   PRUnichar *begin, *end;
   int res = CHECK(4 == s.Length());
-  PRUint32 len = s.BeginWriting(&begin, &end, 5);
+  uint32_t len = s.BeginWriting(&begin, &end, 5);
   res += CHECK(5 == s.Length()) +
          CHECK(5 == len) +
          CHECK(end == begin + 5) +
@@ -112,16 +79,16 @@ int testFind() {
   nsString str_needle;
   str_needle.AssignLiteral("world");
 
-  PRInt32 ret = 0;
+  int32_t ret = 0;
   ret += CHECK(-1 == str_haystack.Find("world"));
   ret += CHECK(-1 == str_haystack.Find(str_needle));
 
   str_haystack.AssignLiteral("hello world hello world hello");
   ret += CHECK( 6 == str_haystack.Find("world"));
   ret += CHECK( 6 == str_haystack.Find(str_needle));
-  ret += CHECK(-1 == str_haystack.Find("world", 20, PR_FALSE));
+  ret += CHECK(-1 == str_haystack.Find("world", 20, false));
   ret += CHECK(-1 == str_haystack.Find(str_needle, 20));
-  ret += CHECK(18 == str_haystack.Find("world", 12, PR_FALSE));
+  ret += CHECK(18 == str_haystack.Find("world", 12, false));
   ret += CHECK(18 == str_haystack.Find(str_needle, 12));
 
   nsCString cstr_haystack;
@@ -144,20 +111,20 @@ int testFind() {
 int testVoid() {
   nsString s;
   int ret = CHECK(!s.IsVoid());
-  s.SetIsVoid(PR_FALSE);
+  s.SetIsVoid(false);
   ret += CHECK(!s.IsVoid());
-  s.SetIsVoid(PR_TRUE);
+  s.SetIsVoid(true);
   ret += CHECK(s.IsVoid());
-  s.SetIsVoid(PR_FALSE);
+  s.SetIsVoid(false);
   ret += CHECK(!s.IsVoid());
-  s.SetIsVoid(PR_TRUE);
+  s.SetIsVoid(true);
   s.AssignLiteral("hello");
   ret += CHECK(!s.IsVoid());
   return ret;
 }
 
 int testRFind() {
-  PRInt32 ret = 0;
+  int32_t ret = 0;
 
   // nsString.RFind
   nsString str_haystack;
@@ -172,15 +139,15 @@ int testRFind() {
   ret += CHECK( 6 == str_haystack.RFind(str_needle));
   ret += CHECK( 6 == str_haystack.RFind(str_needle, -1));
   ret += CHECK( 6 == str_haystack.RFind(str_needle, 17));
-  ret += CHECK( 6 == str_haystack.RFind("world", PR_FALSE));
-  ret += CHECK(18 == str_haystack.RFind("world", PR_TRUE));
-  ret += CHECK( 6 == str_haystack.RFind("world", -1, PR_FALSE));
-  ret += CHECK(18 == str_haystack.RFind("world", -1, PR_TRUE));
-  ret += CHECK( 6 == str_haystack.RFind("world", 17, PR_FALSE));
-  ret += CHECK( 0 == str_haystack.RFind("hello", 0, PR_FALSE));
-  ret += CHECK(18 == str_haystack.RFind("world", 19, PR_TRUE));
-  ret += CHECK(18 == str_haystack.RFind("world", 22, PR_TRUE));
-  ret += CHECK(18 == str_haystack.RFind("world", 23, PR_TRUE));
+  ret += CHECK( 6 == str_haystack.RFind("world", false));
+  ret += CHECK(18 == str_haystack.RFind("world", true));
+  ret += CHECK( 6 == str_haystack.RFind("world", -1, false));
+  ret += CHECK(18 == str_haystack.RFind("world", -1, true));
+  ret += CHECK( 6 == str_haystack.RFind("world", 17, false));
+  ret += CHECK( 0 == str_haystack.RFind("hello", 0, false));
+  ret += CHECK(18 == str_haystack.RFind("world", 19, true));
+  ret += CHECK(18 == str_haystack.RFind("world", 22, true));
+  ret += CHECK(18 == str_haystack.RFind("world", 23, true));
 
   // nsCString.RFind
   nsCString cstr_haystack;
@@ -202,7 +169,7 @@ int testRFind() {
 }
 
 int testCompressWhitespace() {
-  PRInt32 ret = 0;
+  int32_t ret = 0;
 
   // CompressWhitespace utility function
   nsString s;

@@ -1,65 +1,39 @@
 /* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set ts=2 et sw=2 tw=80: */
-/****** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is IPC External Helper App module.
- *
- * The Initial Developer of the Original Code is
- * Brian Crowder <crowderbt@gmail.com>.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "mozilla/DebugOnly.h"
 
 #include "ExternalHelperAppParent.h"
 #include "nsIContent.h"
-#include "nsIDocument.h"
 #include "nsCExternalHandlerService.h"
 #include "nsIExternalHelperAppService.h"
-#include "mozilla/dom/TabParent.h"
+#include "mozilla/dom/ContentParent.h"
 #include "nsIBrowserDOMWindow.h"
 #include "nsStringStream.h"
+#include "mozilla/ipc/URIUtils.h"
 
 #include "mozilla/unused.h"
+
+using namespace mozilla::ipc;
 
 namespace mozilla {
 namespace dom {
 
-NS_IMPL_ISUPPORTS_INHERITED2(ExternalHelperAppParent,
+NS_IMPL_ISUPPORTS_INHERITED4(ExternalHelperAppParent,
                              nsHashPropertyBag,
                              nsIRequest,
-                             nsIChannel)
+                             nsIChannel,
+                             nsIMultiPartChannel,
+                             nsIResumableChannel)
 
 ExternalHelperAppParent::ExternalHelperAppParent(
-    const IPC::URI& uri,
-    const PRInt64& aContentLength)
-  : mURI(uri)
-  , mPending(PR_FALSE)
+    const OptionalURIParams& uri,
+    const int64_t& aContentLength)
+  : mURI(DeserializeURI(uri))
+  , mPending(false)
   , mLoadFlags(0)
   , mStatus(NS_OK)
   , mContentLength(aContentLength)
@@ -67,24 +41,26 @@ ExternalHelperAppParent::ExternalHelperAppParent(
 }
 
 void
-ExternalHelperAppParent::Init(TabParent *parent,
+ExternalHelperAppParent::Init(ContentParent *parent,
                               const nsCString& aMimeContentType,
-                              const nsCString& aContentDisposition,
-                              const PRBool& aForceSave)
+                              const nsCString& aContentDispositionHeader,
+                              const bool& aForceSave,
+                              const OptionalURIParams& aReferrer)
 {
   nsHashPropertyBag::Init();
-
-  NS_ASSERTION(parent, "must have a non-null TabParent");
-  nsCOMPtr<nsIContent> frame = do_QueryInterface(parent->GetOwnerElement());
-  nsCOMPtr<nsISupports> container = frame->GetOwnerDoc()->GetContainer();
-  nsCOMPtr<nsIInterfaceRequestor> ir = do_QueryInterface(container);
 
   nsCOMPtr<nsIExternalHelperAppService> helperAppService =
     do_GetService(NS_EXTERNALHELPERAPPSERVICE_CONTRACTID);
   NS_ASSERTION(helperAppService, "No Helper App Service!");
 
-  mContentDisposition = aContentDisposition;
-  helperAppService->DoContent(aMimeContentType, this, ir,
+  nsCOMPtr<nsIURI> referrer = DeserializeURI(aReferrer);
+  if (referrer)
+    SetPropertyAsInterface(NS_LITERAL_STRING("docshell.internalReferrer"), referrer);
+
+  mContentDispositionHeader = aContentDispositionHeader;
+  NS_GetFilenameFromDisposition(mContentDispositionFilename, mContentDispositionHeader, mURI);
+  mContentDisposition = NS_GetContentDispositionFromHeader(mContentDispositionHeader, this);
+  helperAppService->DoContent(aMimeContentType, this, nullptr,
                               aForceSave, getter_AddRefs(mListener));
 }
 
@@ -92,24 +68,24 @@ bool
 ExternalHelperAppParent::RecvOnStartRequest(const nsCString& entityID)
 {
   mEntityID = entityID;
-  mPending = PR_TRUE;
-  mStatus = mListener->OnStartRequest(this, nsnull);
+  mPending = true;
+  mStatus = mListener->OnStartRequest(this, nullptr);
   return true;
 }
 
 bool
 ExternalHelperAppParent::RecvOnDataAvailable(const nsCString& data,
-                                             const PRUint32& offset,
-                                             const PRUint32& count)
+                                             const uint64_t& offset,
+                                             const uint32_t& count)
 {
   if (NS_FAILED(mStatus))
     return true;
 
   NS_ASSERTION(mPending, "must be pending!");
   nsCOMPtr<nsIInputStream> stringStream;
-  nsresult rv = NS_NewByteInputStream(getter_AddRefs(stringStream), data.get(), count, NS_ASSIGNMENT_DEPEND);
+  DebugOnly<nsresult> rv = NS_NewByteInputStream(getter_AddRefs(stringStream), data.get(), count, NS_ASSIGNMENT_DEPEND);
   NS_ASSERTION(NS_SUCCEEDED(rv), "failed to create dependent string!");
-  mStatus = mListener->OnDataAvailable(this, nsnull, stringStream, offset, count);
+  mStatus = mListener->OnDataAvailable(this, nullptr, stringStream, offset, count);
 
   return true;
 }
@@ -117,8 +93,8 @@ ExternalHelperAppParent::RecvOnDataAvailable(const nsCString& data,
 bool
 ExternalHelperAppParent::RecvOnStopRequest(const nsresult& code)
 {
-  mPending = PR_FALSE;
-  mListener->OnStopRequest(this, nsnull,
+  mPending = false;
+  mListener->OnStopRequest(this, nullptr,
                            (NS_SUCCEEDED(code) && NS_FAILED(mStatus)) ? mStatus : code);
   unused << Send__delete__(this);
   return true;
@@ -140,7 +116,7 @@ ExternalHelperAppParent::GetName(nsACString& aResult)
 }
 
 NS_IMETHODIMP
-ExternalHelperAppParent::IsPending(PRBool *aResult)
+ExternalHelperAppParent::IsPending(bool *aResult)
 {
   *aResult = mPending;
   return NS_OK;
@@ -228,7 +204,7 @@ ExternalHelperAppParent::SetLoadFlags(nsLoadFlags aLoadFlags)
 NS_IMETHODIMP
 ExternalHelperAppParent::GetLoadGroup(nsILoadGroup* *aLoadGroup)
 {
-  *aLoadGroup = nsnull;
+  *aLoadGroup = nullptr;
   return NS_OK;
 }
 
@@ -241,7 +217,7 @@ ExternalHelperAppParent::SetLoadGroup(nsILoadGroup* aLoadGroup)
 NS_IMETHODIMP
 ExternalHelperAppParent::GetOwner(nsISupports* *aOwner)
 {
-  *aOwner = nsnull;
+  *aOwner = nullptr;
   return NS_OK;
 }
 
@@ -254,7 +230,7 @@ ExternalHelperAppParent::SetOwner(nsISupports* aOwner)
 NS_IMETHODIMP
 ExternalHelperAppParent::GetNotificationCallbacks(nsIInterfaceRequestor* *aCallbacks)
 {
-  *aCallbacks = nsnull;
+  *aCallbacks = nullptr;
   return NS_OK;
 }
 
@@ -267,7 +243,7 @@ ExternalHelperAppParent::SetNotificationCallbacks(nsIInterfaceRequestor* aCallba
 NS_IMETHODIMP
 ExternalHelperAppParent::GetSecurityInfo(nsISupports * *aSecurityInfo)
 {
-  *aSecurityInfo = nsnull;
+  *aSecurityInfo = nullptr;
   return NS_OK;
 }
 
@@ -298,21 +274,59 @@ ExternalHelperAppParent::SetContentCharset(const nsACString& aContentCharset)
 }
 
 NS_IMETHODIMP
-ExternalHelperAppParent::GetContentDisposition(nsACString& aContentDisposition)
+ExternalHelperAppParent::GetContentDisposition(uint32_t *aContentDisposition)
 {
-  aContentDisposition = mContentDisposition;
+  if (mContentDispositionHeader.IsEmpty())
+    return NS_ERROR_NOT_AVAILABLE;
+
+  *aContentDisposition = mContentDisposition;
   return NS_OK;
 }
 
 NS_IMETHODIMP
-ExternalHelperAppParent::GetContentLength(PRInt64 *aContentLength)
+ExternalHelperAppParent::SetContentDisposition(uint32_t aContentDisposition)
 {
-  *aContentLength = mContentLength;
+  return NS_ERROR_NOT_AVAILABLE;
+}
+
+NS_IMETHODIMP
+ExternalHelperAppParent::GetContentDispositionFilename(nsAString& aContentDispositionFilename)
+{
+  if (mContentDispositionFilename.IsEmpty())
+    return NS_ERROR_NOT_AVAILABLE;
+
+  aContentDispositionFilename = mContentDispositionFilename;
   return NS_OK;
 }
 
 NS_IMETHODIMP
-ExternalHelperAppParent::SetContentLength(PRInt64 aContentLength)
+ExternalHelperAppParent::SetContentDispositionFilename(const nsAString& aContentDispositionFilename)
+{
+  return NS_ERROR_NOT_AVAILABLE;
+}
+
+NS_IMETHODIMP
+ExternalHelperAppParent::GetContentDispositionHeader(nsACString& aContentDispositionHeader)
+{
+  if (mContentDispositionHeader.IsEmpty())
+    return NS_ERROR_NOT_AVAILABLE;
+
+  aContentDispositionHeader = mContentDispositionHeader;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+ExternalHelperAppParent::GetContentLength(int64_t *aContentLength)
+{
+  if (mContentLength < 0)
+    *aContentLength = -1;
+  else
+    *aContentLength = mContentLength;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+ExternalHelperAppParent::SetContentLength(int64_t aContentLength)
 {
   mContentLength = aContentLength;
   return NS_OK;
@@ -323,7 +337,7 @@ ExternalHelperAppParent::SetContentLength(PRInt64 aContentLength)
 //
 
 NS_IMETHODIMP
-ExternalHelperAppParent::ResumeAt(PRUint64 startPos, const nsACString& entityID)
+ExternalHelperAppParent::ResumeAt(uint64_t startPos, const nsACString& entityID)
 {
   return NS_ERROR_NOT_IMPLEMENTED;
 }
@@ -333,6 +347,28 @@ ExternalHelperAppParent::GetEntityID(nsACString& aEntityID)
 {
   aEntityID = mEntityID;
   return NS_OK;
+}
+
+//
+// nsIMultiPartChannel implementation
+//
+
+NS_IMETHODIMP
+ExternalHelperAppParent::GetBaseChannel(nsIChannel* *aChannel)
+{
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
+ExternalHelperAppParent::GetPartID(uint32_t* aPartID)
+{
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
+ExternalHelperAppParent::GetIsLastPart(bool* aIsLastPart)
+{
+  return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 } // namespace dom

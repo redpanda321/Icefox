@@ -1,62 +1,34 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsFormData.h"
 #include "nsIVariant.h"
-#include "nsIDOMFileInternal.h"
 #include "nsIInputStream.h"
-#include "nsIFile.h"
-#include "nsContentUtils.h"
+#include "nsIDOMFile.h"
+#include "nsHTMLFormElement.h"
+#include "mozilla/dom/FormDataBinding.h"
 
-nsFormData::nsFormData()
-  : nsFormSubmission(NS_LITERAL_CSTRING("UTF-8"), nsnull)
+using namespace mozilla;
+using namespace mozilla::dom;
+
+nsFormData::nsFormData(nsISupports* aOwner)
+  : nsFormSubmission(NS_LITERAL_CSTRING("UTF-8"), nullptr)
+  , mOwner(aOwner)
 {
+  SetIsDOMBinding();
 }
 
 // -------------------------------------------------------------------------
 // nsISupports
 
-DOMCI_DATA(FormData, nsFormData)
-
-NS_IMPL_ADDREF(nsFormData)
-NS_IMPL_RELEASE(nsFormData)
-NS_INTERFACE_MAP_BEGIN(nsFormData)
+NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE_1(nsFormData, mOwner)
+NS_IMPL_CYCLE_COLLECTING_ADDREF(nsFormData)
+NS_IMPL_CYCLE_COLLECTING_RELEASE(nsFormData)
+NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(nsFormData)
+  NS_WRAPPERCACHE_INTERFACE_MAP_ENTRY
   NS_INTERFACE_MAP_ENTRY(nsIDOMFormData)
   NS_INTERFACE_MAP_ENTRY(nsIXHRSendable)
-  NS_DOM_INTERFACE_MAP_ENTRY_CLASSINFO(FormData)
   NS_INTERFACE_MAP_ENTRY_AMBIGUOUS(nsISupports, nsIDOMFormData)
 NS_INTERFACE_MAP_END
 
@@ -70,28 +42,22 @@ nsFormData::GetEncodedSubmission(nsIURI* aURI,
   return NS_OK;
 }
 
-nsresult
-nsFormData::AddNameValuePair(const nsAString& aName,
-                             const nsAString& aValue)
+void
+nsFormData::Append(const nsAString& aName, const nsAString& aValue)
 {
   FormDataTuple* data = mFormData.AppendElement();
   data->name = aName;
   data->stringValue = aValue;
-  data->valueIsFile = PR_FALSE;
-
-  return NS_OK;
+  data->valueIsFile = false;
 }
 
-nsresult
-nsFormData::AddNameFilePair(const nsAString& aName,
-                            nsIFile* aFile)
+void
+nsFormData::Append(const nsAString& aName, nsIDOMBlob* aBlob)
 {
   FormDataTuple* data = mFormData.AppendElement();
   data->name = aName;
-  data->fileValue = aFile;
-  data->valueIsFile = PR_TRUE;
-
-  return NS_OK;
+  data->fileValue = aBlob;
+  data->valueIsFile = true;
 }
 
 // -------------------------------------------------------------------------
@@ -100,7 +66,7 @@ nsFormData::AddNameFilePair(const nsAString& aName,
 NS_IMETHODIMP
 nsFormData::Append(const nsAString& aName, nsIVariant* aValue)
 {
-  PRUint16 dataType;
+  uint16_t dataType;
   nsresult rv = aValue->GetDataType(&dataType);
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -113,37 +79,54 @@ nsFormData::Append(const nsAString& aName, nsIVariant* aValue)
 
     nsMemory::Free(iid);
 
-    nsCOMPtr<nsIDOMFileInternal> domFile = do_QueryInterface(supports);
-    if (domFile) {
-      nsCOMPtr<nsIFile> file;
-      rv = domFile->GetInternalFile(getter_AddRefs(file));
-      NS_ENSURE_SUCCESS(rv, rv);
-
-      return AddNameFilePair(aName, file);
+    nsCOMPtr<nsIDOMBlob> domBlob = do_QueryInterface(supports);
+    if (domBlob) {
+      Append(aName, domBlob);
+      return NS_OK;
     }
   }
 
-  PRUnichar* stringData = nsnull;
-  PRUint32 stringLen = 0;
+  PRUnichar* stringData = nullptr;
+  uint32_t stringLen = 0;
   rv = aValue->GetAsWStringWithSize(&stringLen, &stringData);
   NS_ENSURE_SUCCESS(rv, rv);
 
   nsString valAsString;
   valAsString.Adopt(stringData, stringLen);
 
-  return AddNameValuePair(aName, valAsString);
+  Append(aName, valAsString);
+  return NS_OK;
+}
+
+/* virtual */ JSObject*
+nsFormData::WrapObject(JSContext* aCx, JSObject* aScope, bool* aTriedToWrap)
+{
+  return FormDataBinding::Wrap(aCx, aScope, this, aTriedToWrap);
+}
+
+/* static */ already_AddRefed<nsFormData>
+nsFormData::Constructor(nsISupports* aGlobal,
+                        const Optional<nsHTMLFormElement*>& aFormElement,
+                        ErrorResult& aRv)
+{
+  nsRefPtr<nsFormData> formData = new nsFormData(aGlobal);
+  if (aFormElement.WasPassed()) {
+    MOZ_ASSERT(aFormElement.Value());
+    aRv = aFormElement.Value()->WalkFormElements(formData);
+  }
+  return formData.forget();
 }
 
 // -------------------------------------------------------------------------
-// nsIDXHRSendable
+// nsIXHRSendable
 
 NS_IMETHODIMP
-nsFormData::GetSendInfo(nsIInputStream** aBody, nsACString& aContentType,
-                        nsACString& aCharset)
+nsFormData::GetSendInfo(nsIInputStream** aBody, uint64_t* aContentLength,
+                        nsACString& aContentType, nsACString& aCharset)
 {
-  nsFSMultipartFormData fs(NS_LITERAL_CSTRING("UTF-8"), nsnull);
+  nsFSMultipartFormData fs(NS_LITERAL_CSTRING("UTF-8"), nullptr);
   
-  for (PRUint32 i = 0; i < mFormData.Length(); ++i) {
+  for (uint32_t i = 0; i < mFormData.Length(); ++i) {
     if (mFormData[i].valueIsFile) {
       fs.AddNameFilePair(mFormData[i].name, mFormData[i].fileValue);
     }
@@ -154,7 +137,8 @@ nsFormData::GetSendInfo(nsIInputStream** aBody, nsACString& aContentType,
 
   fs.GetContentType(aContentType);
   aCharset.Truncate();
-  NS_ADDREF(*aBody = fs.GetSubmissionBody());
+  *aContentLength = 0;
+  NS_ADDREF(*aBody = fs.GetSubmissionBody(aContentLength));
 
   return NS_OK;
 }

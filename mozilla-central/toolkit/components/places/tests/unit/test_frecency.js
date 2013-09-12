@@ -1,43 +1,8 @@
 /* -*- Mode: Java; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Bug 378079 unit test code.
- *
- * The Initial Developer of the Original Code is POTI Inc.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Matt Crocker <matt@songbirdnest.com>
- *   Seth Spitzer <sspitzer@mozilla.org>
- *   Edward Lee <edward.lee@engineering.uiuc.edu>
- *   Kyle Huey <me@kylehuey.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  * Test for bug 406358 to make sure frecency works for empty input/search, but
@@ -108,6 +73,12 @@ AutoCompleteInput.prototype = {
 
 function ensure_results(uris, searchTerm)
 {
+  promiseAsyncUpdates().then(function () ensure_results_internal(uris,
+                                                                 searchTerm));
+}
+
+function ensure_results_internal(uris, searchTerm)
+{
   var controller = Components.classes["@mozilla.org/autocomplete/controller;1"].
                    getService(Components.interfaces.nsIAutoCompleteController);
 
@@ -132,7 +103,7 @@ function ensure_results(uris, searchTerm)
       do_check_eq(controller.getValueAt(i), uris[i].spec);
     }
 
-    next_test();
+    deferEnsureResults.resolve();
   };
 
   controller.startSearch(searchTerm);
@@ -151,11 +122,14 @@ try {
   do_throw("Could not get history service\n");
 } 
 
-function setCountDate(aURI, aCount, aDate)
+function task_setCountDate(aURI, aCount, aDate)
 {
   // We need visits so that frecency can be computed over multiple visits
-  for (let i = 0; i < aCount; i++)
-    histsvc.addVisit(aURI, aDate, null, histsvc.TRANSITION_TYPED, false, 0);
+  let visits = [];
+  for (let i = 0; i < aCount; i++) {
+    visits.push({ uri: aURI, visitDate: aDate, transition: TRANSITION_TYPED });
+  }
+  yield promiseAddVisits(visits);
 }
 
 function setBookmark(aURI)
@@ -185,103 +159,103 @@ var c2 = 1;
 var tests = [
 // test things without a search term
 function() {
-  print("Test 0: same count, different date");
-  setCountDate(uri1, c1, d1);
-  setCountDate(uri2, c1, d2);
+  print("TEST-INFO | Test 0: same count, different date");
+  yield task_setCountDate(uri1, c1, d1);
+  yield task_setCountDate(uri2, c1, d2);
   tagURI(uri1, ["site"]);
   ensure_results([uri1, uri2], "");
 },
 function() {
-  print("Test 1: same count, different date");
-  setCountDate(uri1, c1, d2);
-  setCountDate(uri2, c1, d1);
+  print("TEST-INFO | Test 1: same count, different date");
+  yield task_setCountDate(uri1, c1, d2);
+  yield task_setCountDate(uri2, c1, d1);
   tagURI(uri1, ["site"]);
   ensure_results([uri2, uri1], "");
 },
 function() {
-  print("Test 2: different count, same date");
-  setCountDate(uri1, c1, d1);
-  setCountDate(uri2, c2, d1);
+  print("TEST-INFO | Test 2: different count, same date");
+  yield task_setCountDate(uri1, c1, d1);
+  yield task_setCountDate(uri2, c2, d1);
   tagURI(uri1, ["site"]);
   ensure_results([uri1, uri2], "");
 },
 function() {
-  print("Test 3: different count, same date");
-  setCountDate(uri1, c2, d1);
-  setCountDate(uri2, c1, d1);
+  print("TEST-INFO | Test 3: different count, same date");
+  yield task_setCountDate(uri1, c2, d1);
+  yield task_setCountDate(uri2, c1, d1);
   tagURI(uri1, ["site"]);
   ensure_results([uri2, uri1], "");
 },
 
 // test things with a search term
 function() {
-  print("Test 4: same count, different date");
-  setCountDate(uri1, c1, d1);
-  setCountDate(uri2, c1, d2);
+  print("TEST-INFO | Test 4: same count, different date");
+  yield task_setCountDate(uri1, c1, d1);
+  yield task_setCountDate(uri2, c1, d2);
   tagURI(uri1, ["site"]);
   ensure_results([uri1, uri2], "site");
 },
 function() {
-  print("Test 5: same count, different date");
-  setCountDate(uri1, c1, d2);
-  setCountDate(uri2, c1, d1);
+  print("TEST-INFO | Test 5: same count, different date");
+  yield task_setCountDate(uri1, c1, d2);
+  yield task_setCountDate(uri2, c1, d1);
   tagURI(uri1, ["site"]);
   ensure_results([uri2, uri1], "site");
 },
 function() {
-  print("Test 6: different count, same date");
-  setCountDate(uri1, c1, d1);
-  setCountDate(uri2, c2, d1);
+  print("TEST-INFO | Test 6: different count, same date");
+  yield task_setCountDate(uri1, c1, d1);
+  yield task_setCountDate(uri2, c2, d1);
   tagURI(uri1, ["site"]);
   ensure_results([uri1, uri2], "site");
 },
 function() {
-  print("Test 7: different count, same date");
-  setCountDate(uri1, c2, d1);
-  setCountDate(uri2, c1, d1);
+  print("TEST-INFO | Test 7: different count, same date");
+  yield task_setCountDate(uri1, c2, d1);
+  yield task_setCountDate(uri2, c1, d1);
   tagURI(uri1, ["site"]);
   ensure_results([uri2, uri1], "site");
 },
 // There are multiple tests for 8, hence the multiple functions
 // Bug 426166 section
 function() {
-  print("Test 8.1: same count, same date");  
+  print("TEST-INFO | Test 8.1a: same count, same date");
   setBookmark(uri3);
   setBookmark(uri4);
   ensure_results([uri4, uri3], "a");
 },
 function() {
-  print("Test 8.1: same count, same date");  
+  print("TEST-INFO | Test 8.1b: same count, same date");
   setBookmark(uri3);
   setBookmark(uri4);
   ensure_results([uri4, uri3], "aa");
 },
 function() {
-  print("Test 8.2: same count, same date");
+  print("TEST-INFO | Test 8.2: same count, same date");
   setBookmark(uri3);
   setBookmark(uri4);
   ensure_results([uri4, uri3], "aaa");
 },
 function() {
-  print("Test 8.3: same count, same date");
+  print("TEST-INFO | Test 8.3: same count, same date");
   setBookmark(uri3);
   setBookmark(uri4);
   ensure_results([uri4, uri3], "aaaa");
 },
 function() {
-  print("Test 8.4: same count, same date");
+  print("TEST-INFO | Test 8.4: same count, same date");
   setBookmark(uri3);
   setBookmark(uri4);
   ensure_results([uri4, uri3], "aaa");
 },
 function() {
-  print("Test 8.5: same count, same date");
+  print("TEST-INFO | Test 8.5: same count, same date");
   setBookmark(uri3);
   setBookmark(uri4);
   ensure_results([uri4, uri3], "aa");
 },
 function() {
-  print("Test 8.6: same count, same date");
+  print("TEST-INFO | Test 8.6: same count, same date");
   setBookmark(uri3);
   setBookmark(uri4);
   ensure_results([uri4, uri3], "a");
@@ -289,25 +263,32 @@ function() {
 ];
 
 /**
+ * This deferred object contains a promise that is resolved when the
+ * ensure_results_internal function has finished its execution.
+ */
+let deferEnsureResults;
+
+/**
  * Test adaptive autocomplete
  */
-function run_test() {
+function run_test()
+{
+  run_next_test();
+}
+
+add_task(function test_frecency()
+{
   // always search in history + bookmarks, no matter what the default is
   var prefs = Cc["@mozilla.org/preferences-service;1"].
               getService(Ci.nsIPrefBranch);
   prefs.setIntPref("browser.urlbar.search.sources", 3);
   prefs.setIntPref("browser.urlbar.default.behavior", 0);
-
-  do_test_pending();
-  next_test();
-}
-
-function next_test() {
-  if (tests.length) {
+  for (let [, test] in Iterator(tests)) {
     remove_all_bookmarks();
-    let test = tests.shift();
-    waitForClearHistory(test);
+    yield promiseClearHistory();
+
+    deferEnsureResults = Promise.defer();
+    yield test();
+    yield deferEnsureResults.promise;
   }
-  else
-    do_test_finished();
-}
+});

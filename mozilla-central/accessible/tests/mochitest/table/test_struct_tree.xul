@@ -6,60 +6,43 @@
 <window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         title="Table accessible tree and table interface tests for XUL trees">
 
-  <script type="application/javascript" 
-          src="chrome://mochikit/content/MochiKit/packed.js" />
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/treeview.js" />
+          src="../treeview.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js" />
+          src="../common.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/role.js" />
+          src="../events.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/table.js" />
+          src="../role.js" />
+  <script type="application/javascript"
+          src="../table.js" />
 
   <script type="application/javascript">
   <![CDATA[
     ////////////////////////////////////////////////////////////////////////////
     // Test
 
-    var gTree = null;
-    var gTreeBox = null;
-    var gTreeView = null;
-
     // gA11yEventDumpID = "debug";
 
     function doTest()
     {
-      // Initialize the tree
-      gTree = document.getElementById("table");
-      gTreeBox = gTree.treeBoxObject;
-      gView = new nsTableTreeView(3);
-
-      gTree.addEventListener("TreeViewChanged", continueTest, false);
-      gTreeBox.view = gView;
-    }
-
-    function continueTest()
-    {
-      gTree.removeEventListener("TreeViewChanged", continueTest, false);
-
       var cellsArray = [
         [kDataCell, kDataCell],
         [kDataCell, kDataCell],
         [kDataCell, kDataCell]
       ];
 
-      testTableStruct(gTree, cellsArray, kTreeColumnHeader);
+      testTableStruct("table", cellsArray, kTreeColumnHeader);
 
       SimpleTest.finish();
     }
 
     SimpleTest.waitForExplicitFinish();
-    addA11yLoadEvent(doTest);
+    addA11yXULTreeLoadEvent(doTest, "table", new nsTableTreeView(3));
   ]]>
   </script>
 

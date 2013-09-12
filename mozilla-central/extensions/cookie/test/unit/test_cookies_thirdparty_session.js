@@ -1,6 +1,5 @@
 /* Any copyright is dedicated to the Public Domain.
- * http://creativecommons.org/publicdomain/zero/1.0/
- */
+   http://creativecommons.org/publicdomain/zero/1.0/ */
 
 // test third party persistence across sessions, for the cases:
 // 1) network.cookie.thirdparty.sessionOnly = false
@@ -36,7 +35,7 @@ function do_run_test() {
   // Force the channel URI to be used when determining the originating URI of
   // the channel.
   var httpchannel1 = channel1.QueryInterface(Ci.nsIHttpChannelInternal);
-  var httpchannel2 = channel1.QueryInterface(Ci.nsIHttpChannelInternal);
+  var httpchannel2 = channel2.QueryInterface(Ci.nsIHttpChannelInternal);
   httpchannel1.forceAllowThirdPartyCookie = true;
   httpchannel2.forceAllowThirdPartyCookie = true;
 
@@ -74,4 +73,3 @@ function do_run_test() {
 
   finish_test();
 }
-

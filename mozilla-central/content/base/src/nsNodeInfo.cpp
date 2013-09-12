@@ -1,45 +1,16 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Class that represents a prefix/namespace/localName triple; a single
  * nodeinfo is shared by all elements in a document that have that
  * prefix, namespace, and localName.
  */
+
+#include "mozilla/Util.h"
+#include "mozilla/Likely.h"
 
 #include "nscore.h"
 #include "nsNodeInfo.h"
@@ -54,77 +25,124 @@
 #include "nsAutoPtr.h"
 #include NEW_H
 #include "nsFixedSizeAllocator.h"
+#include "prprf.h"
+#include "nsIDocument.h"
+#include "nsGkAtoms.h"
+
+using namespace mozilla;
 
 static const size_t kNodeInfoPoolSizes[] = {
   sizeof(nsNodeInfo)
 };
 
-static const PRInt32 kNodeInfoPoolInitialSize = 
-  (NS_SIZE_IN_HEAP(sizeof(nsNodeInfo))) * 64;
+static const int32_t kNodeInfoPoolInitialSize = sizeof(nsNodeInfo) * 64;
 
 // static
-nsFixedSizeAllocator* nsNodeInfo::sNodeInfoPool = nsnull;
+nsFixedSizeAllocator* nsNodeInfo::sNodeInfoPool = nullptr;
 
 // static
 nsNodeInfo*
-nsNodeInfo::Create()
+nsNodeInfo::Create(nsIAtom *aName, nsIAtom *aPrefix, int32_t aNamespaceID,
+                   uint16_t aNodeType, nsIAtom *aExtraName,
+                   nsNodeInfoManager *aOwnerManager)
 {
   if (!sNodeInfoPool) {
     sNodeInfoPool = new nsFixedSizeAllocator();
     if (!sNodeInfoPool)
-      return nsnull;
+      return nullptr;
 
     nsresult rv = sNodeInfoPool->Init("NodeInfo Pool", kNodeInfoPoolSizes,
                                       1, kNodeInfoPoolInitialSize);
     if (NS_FAILED(rv)) {
       delete sNodeInfoPool;
-      sNodeInfoPool = nsnull;
-      return nsnull;
+      sNodeInfoPool = nullptr;
+      return nullptr;
     }
   }
 
   // Create a new one
   void* place = sNodeInfoPool->Alloc(sizeof(nsNodeInfo));
-  return place ? new (place) nsNodeInfo() : nsnull;
-}
-
-nsNodeInfo::nsNodeInfo()
-{
+  return place ?
+    new (place) nsNodeInfo(aName, aPrefix, aNamespaceID, aNodeType, aExtraName,
+                           aOwnerManager) :
+    nullptr;
 }
 
 nsNodeInfo::~nsNodeInfo()
 {
-  if (mOwnerManager) {
-    mOwnerManager->RemoveNodeInfo(this);
-    NS_RELEASE(mOwnerManager);
-  }
+  mOwnerManager->RemoveNodeInfo(this);
 
-  NS_IF_RELEASE(mInner.mName);
+  NS_RELEASE(mInner.mName);
   NS_IF_RELEASE(mInner.mPrefix);
+  NS_IF_RELEASE(mInner.mExtraName);
+  NS_RELEASE(mOwnerManager);
 }
 
 
-nsresult
-nsNodeInfo::Init(nsIAtom *aName, nsIAtom *aPrefix, PRInt32 aNamespaceID,
-                 nsNodeInfoManager *aOwnerManager)
+nsNodeInfo::nsNodeInfo(nsIAtom *aName, nsIAtom *aPrefix, int32_t aNamespaceID,
+                       uint16_t aNodeType, nsIAtom* aExtraName,
+                       nsNodeInfoManager *aOwnerManager)
 {
-  NS_ENSURE_TRUE(!mInner.mName && !mInner.mPrefix && !mOwnerManager,
-                 NS_ERROR_ALREADY_INITIALIZED);
-  NS_ENSURE_ARG_POINTER(aName);
-  NS_ENSURE_ARG_POINTER(aOwnerManager);
+  CheckValidNodeInfo(aNodeType, aName, aNamespaceID, aExtraName);
+  NS_ABORT_IF_FALSE(aOwnerManager, "Invalid aOwnerManager");
 
-  mInner.mName = aName;
-  NS_ADDREF(mInner.mName);
-
-  mInner.mPrefix = aPrefix;
-  NS_IF_ADDREF(mInner.mPrefix);
-
+  // Initialize mInner
+  NS_ADDREF(mInner.mName = aName);
+  NS_IF_ADDREF(mInner.mPrefix = aPrefix);
   mInner.mNamespaceID = aNamespaceID;
+  mInner.mNodeType = aNodeType;
+  NS_ADDREF(mOwnerManager = aOwnerManager);
+  NS_IF_ADDREF(mInner.mExtraName = aExtraName);
 
-  mOwnerManager = aOwnerManager;
-  NS_ADDREF(mOwnerManager);
+  mDocument = aOwnerManager->GetDocument();
 
-  return NS_OK;
+  // Now compute our cached members.
+
+  // Qualified name.  If we have no prefix, use ToString on
+  // mInner.mName so that we get to share its buffer.
+  if (aPrefix) {
+    mQualifiedName = nsDependentAtomString(mInner.mPrefix) +
+                     NS_LITERAL_STRING(":") +
+                     nsDependentAtomString(mInner.mName);
+  } else {
+    mInner.mName->ToString(mQualifiedName);
+  }
+
+  MOZ_ASSERT_IF(aNodeType != nsIDOMNode::ELEMENT_NODE &&
+                aNodeType != nsIDOMNode::ATTRIBUTE_NODE &&
+                aNodeType != UINT16_MAX,
+                aNamespaceID == kNameSpaceID_None && !aPrefix);
+
+  switch (aNodeType) {
+    case nsIDOMNode::ELEMENT_NODE:
+    case nsIDOMNode::ATTRIBUTE_NODE:
+      // Correct the case for HTML
+      if (aNodeType == nsIDOMNode::ELEMENT_NODE &&
+          aNamespaceID == kNameSpaceID_XHTML && GetDocument() &&
+          GetDocument()->IsHTML()) {
+        nsContentUtils::ASCIIToUpper(mQualifiedName, mNodeName);
+      } else {
+        mNodeName = mQualifiedName;
+      }
+      mInner.mName->ToString(mLocalName);
+      break;
+    case nsIDOMNode::TEXT_NODE:
+    case nsIDOMNode::CDATA_SECTION_NODE:
+    case nsIDOMNode::COMMENT_NODE:
+    case nsIDOMNode::DOCUMENT_NODE:
+    case nsIDOMNode::DOCUMENT_FRAGMENT_NODE:
+      mInner.mName->ToString(mNodeName);
+      SetDOMStringToNull(mLocalName);
+      break;
+    case nsIDOMNode::PROCESSING_INSTRUCTION_NODE:
+    case nsIDOMNode::DOCUMENT_TYPE_NODE:
+      mInner.mExtraName->ToString(mNodeName);
+      SetDOMStringToNull(mLocalName);
+      break;
+    default:
+      NS_ABORT_IF_FALSE(aNodeType == UINT16_MAX,
+                        "Unknown node type");
+  }
 }
 
 
@@ -132,9 +150,40 @@ nsNodeInfo::Init(nsIAtom *aName, nsIAtom *aPrefix, PRInt32 aNamespaceID,
 
 NS_IMPL_CYCLE_COLLECTION_CLASS(nsNodeInfo)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_0(nsNodeInfo)
-NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN(nsNodeInfo)
-  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NATIVE_MEMBER(mOwnerManager,
-                                                  nsNodeInfoManager)
+
+static const char* kNSURIs[] = {
+  " ([none])",
+  " (xmlns)",
+  " (xml)",
+  " (xhtml)",
+  " (XLink)",
+  " (XSLT)",
+  " (XBL)",
+  " (MathML)",
+  " (RDF)",
+  " (XUL)"
+};
+
+NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INTERNAL(nsNodeInfo)
+  if (MOZ_UNLIKELY(cb.WantDebugInfo())) {
+    char name[72];
+    uint32_t nsid = tmp->NamespaceID();
+    nsAtomCString localName(tmp->NameAtom());
+    if (nsid < ArrayLength(kNSURIs)) {
+      PR_snprintf(name, sizeof(name), "nsNodeInfo%s %s", kNSURIs[nsid],
+                  localName.get());
+    }
+    else {
+      PR_snprintf(name, sizeof(name), "nsNodeInfo %s", localName.get());
+    }
+
+    cb.DescribeRefCountedNode(tmp->mRefCnt.get(), name);
+  }
+  else {
+    NS_IMPL_CYCLE_COLLECTION_DESCRIBE(nsNodeInfo, tmp->mRefCnt.get())
+  }
+
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_RAWPTR(mOwnerManager)
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
 NS_IMPL_CYCLE_COLLECTING_ADDREF(nsNodeInfo)
@@ -145,39 +194,6 @@ NS_INTERFACE_TABLE_HEAD(nsNodeInfo)
 NS_INTERFACE_MAP_END
 
 // nsINodeInfo
-
-void
-nsNodeInfo::GetQualifiedName(nsAString& aQualifiedName) const
-{
-  if (mInner.mPrefix) {
-    mInner.mPrefix->ToString(aQualifiedName);
-
-    aQualifiedName.Append(PRUnichar(':'));
-  } else {
-    aQualifiedName.Truncate();
-  }
-
-  nsAutoString name;
-  mInner.mName->ToString(name);
-
-  aQualifiedName.Append(name);
-}
-
-
-void
-nsNodeInfo::GetLocalName(nsAString& aLocalName) const
-{
-#ifdef STRICT_DOM_LEVEL2_LOCALNAME
-  if (mInner.mNamespaceID > 0) {
-    mInner.mName->ToString(aLocalName);
-  } else {
-    SetDOMStringToNull(aLocalName);
-  }
-#else
-  mInner.mName->ToString(aLocalName);
-#endif
-}
-
 
 nsresult
 nsNodeInfo::GetNamespaceURI(nsAString& aNameSpaceURI) const
@@ -195,94 +211,13 @@ nsNodeInfo::GetNamespaceURI(nsAString& aNameSpaceURI) const
 }
 
 
-PRBool
-nsNodeInfo::Equals(const nsAString& aName) const
-{
-  return mInner.mName->Equals(aName);
-}
-
-
-PRBool
-nsNodeInfo::Equals(const nsAString& aName, const nsAString& aPrefix) const
-{
-  if (!mInner.mName->Equals(aName)) {
-    return PR_FALSE;
-  }
-
-  if (!mInner.mPrefix) {
-    return aPrefix.IsEmpty();
-  }
-
-  return mInner.mPrefix->Equals(aPrefix);
-}
-
-
-PRBool
-nsNodeInfo::Equals(const nsAString& aName, PRInt32 aNamespaceID) const
-{
-  return mInner.mNamespaceID == aNamespaceID &&
-    mInner.mName->Equals(aName);
-}
-
-
-PRBool
-nsNodeInfo::Equals(const nsAString& aName, const nsAString& aPrefix,
-                   PRInt32 aNamespaceID) const
-{
-  if (!mInner.mNamespaceID == aNamespaceID ||
-      !mInner.mName->Equals(aName))
-    return PR_FALSE;
-
-  return mInner.mPrefix ? mInner.mPrefix->Equals(aPrefix) :
-    aPrefix.IsEmpty();
-}
-
-
-PRBool
+bool
 nsNodeInfo::NamespaceEquals(const nsAString& aNamespaceURI) const
 {
-  PRInt32 nsid =
+  int32_t nsid =
     nsContentUtils::NameSpaceManager()->GetNameSpaceID(aNamespaceURI);
 
   return nsINodeInfo::NamespaceEquals(nsid);
-}
-
-PRBool
-nsNodeInfo::QualifiedNameEqualsInternal(const nsAString& aQualifiedName) const
-{
-  NS_PRECONDITION(mInner.mPrefix, "Must have prefix");
-  
-  nsAString::const_iterator start;
-  aQualifiedName.BeginReading(start);
-
-  nsAString::const_iterator colon(start);
-
-  nsDependentAtomString prefix(mInner.mPrefix);
-
-  if (prefix.Length() >= aQualifiedName.Length()) {
-    return PR_FALSE;
-  }
-
-  colon.advance(prefix.Length());
-
-  // If the character at the prefix length index is not a colon,
-  // aQualifiedName is not equal to this string.
-  if (*colon != ':') {
-    return PR_FALSE;
-  }
-
-  // Compare the prefix to the string from the start to the colon
-  if (!prefix.Equals(Substring(start, colon)))
-    return PR_FALSE;
-
-  ++colon; // Skip the ':'
-
-  nsAString::const_iterator end;
-  aQualifiedName.EndReading(end);
-
-  // Compare the local name to the string between the colon and the
-  // end of aQualifiedName
-  return mInner.mName->Equals(Substring(colon, end));
 }
 
 // static
@@ -291,7 +226,7 @@ nsNodeInfo::ClearCache()
 {
   // Clear our cache.
   delete sNodeInfoPool;
-  sNodeInfoPool = nsnull;
+  sNodeInfoPool = nullptr;
 }
 
 void

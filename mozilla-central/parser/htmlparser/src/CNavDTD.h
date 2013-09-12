@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /* vim: set sw=2 ts=2 et tw=78: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  * MODULE NOTES:
@@ -98,11 +66,9 @@
 
 #include "nsIDTD.h"
 #include "nsISupports.h"
-#include "nsIParser.h"
 #include "nsHTMLTags.h"
 #include "nsDeque.h"
 #include "nsParserCIID.h"
-#include "nsTime.h"
 #include "nsDTDUtils.h"
 #include "nsParser.h"
 #include "nsCycleCollectionParticipant.h"
@@ -156,7 +122,7 @@ public:
      */
     nsresult OpenContainer(const nsCParserNode *aNode,
                            eHTMLTags aTag,
-                           nsEntryStack* aStyleStack = nsnull);
+                           nsEntryStack* aStyleStack = nullptr);
 
     NS_DECL_CYCLE_COLLECTING_ISUPPORTS
     NS_DECL_NSIDTD
@@ -169,11 +135,11 @@ private:
      *  
      *  @param   aParent Tag of parent container
      *  @param   aChild Tag of child container
-     *  @return  PR_TRUE if parent can contain child
+     *  @return  true if parent can contain child
      */
-    PRBool CanPropagate(eHTMLTags aParent,
+    bool CanPropagate(eHTMLTags aParent,
                         eHTMLTags aChild,
-                        PRInt32 aParentContains);
+                        int32_t aParentContains);
 
     /**
      *  This method gets called to determine whether a given 
@@ -182,12 +148,12 @@ private:
      *  @param   aParent Parent tag being asked about omitting given child
      *  @param   aChild Child tag being tested for omittability by parent
      *  @param   aParentContains Can be 0,1,-1 (false,true, unknown)
-     *                           XXX should be PRInt32, not PRBool
-     *  @return  PR_TRUE if given tag can be omitted
+     *                           XXX should be int32_t, not bool
+     *  @return  true if given tag can be omitted
      */
-    PRBool CanOmit(eHTMLTags aParent, 
+    bool CanOmit(eHTMLTags aParent, 
                    eHTMLTags aChild,
-                   PRInt32& aParentContains);
+                   int32_t& aParentContains);
 
     /**
      * Looking at aParent, try to see if we can propagate from aChild to
@@ -196,9 +162,9 @@ private:
      *
      * @param   aParent Tag type of parent
      * @param   aChild Tag type of child
-     * @return  PR_TRUE if closure was achieved -- otherwise false
+     * @return  true if closure was achieved -- otherwise false
      */
-    PRBool ForwardPropagate(nsString& aSequence,
+    bool ForwardPropagate(nsString& aSequence,
                             eHTMLTags aParent,
                             eHTMLTags aChild);
 
@@ -210,9 +176,9 @@ private:
      *
      * @param   aParent Tag type of parent
      * @param   aChild Tag type of child
-     * @return  PR_TRUE if closure was achieved -- other false
+     * @return  true if closure was achieved -- other false
      */
-    PRBool BackwardPropagate(nsString& aSequence,
+    bool BackwardPropagate(nsString& aSequence,
                              eHTMLTags aParent,
                              eHTMLTags aChild) const;
 
@@ -231,16 +197,16 @@ private:
      * @param   id of container you want to test for
      * @return  TRUE if the given container type is open -- otherwise FALSE
      */
-    PRBool HasOpenContainer(eHTMLTags aContainer) const;
+    bool HasOpenContainer(eHTMLTags aContainer) const;
 
     /**
      * This method allows the caller to determine if a any member
      * in a set of tags is currently open.
      *
      * @param   aTagSet A set of tags you care about.
-     * @return  PR_TRUE if any of the members of aTagSet are currently open.
+     * @return  true if any of the members of aTagSet are currently open.
      */
-    PRBool HasOpenContainer(const eHTMLTags aTagSet[], PRInt32 aCount) const;
+    bool HasOpenContainer(const eHTMLTags aTagSet[], int32_t aCount) const;
 
     /**
      * Accessor that retrieves the tag type of the topmost item on the DTD's
@@ -256,7 +222,7 @@ private:
      * @param   tag to be found
      * @return  index of topmost tag occurrence -- may be -1 (kNotFound).
      */
-    PRInt32 LastOf(eHTMLTags aTagSet[], PRInt32 aCount) const;
+    int32_t LastOf(eHTMLTags aTagSet[], int32_t aCount) const;
 
     nsresult HandleToken(CToken* aToken);
 
@@ -306,12 +272,12 @@ private:
      * one or more open containers.
      * @return  error code - 0 if all went well.
      */
-    nsresult CloseContainer(const eHTMLTags aTag, PRBool aMalformed);
-    nsresult CloseContainersTo(eHTMLTags aTag, PRBool aClosedByStartTag);
-    nsresult CloseContainersTo(PRInt32 anIndex, eHTMLTags aTag,
-                               PRBool aClosedByStartTag);
+    nsresult CloseContainer(const eHTMLTags aTag, bool aMalformed);
+    nsresult CloseContainersTo(eHTMLTags aTag, bool aClosedByStartTag);
+    nsresult CloseContainersTo(int32_t anIndex, eHTMLTags aTag,
+                               bool aClosedByStartTag);
     nsresult CloseResidualStyleTags(const eHTMLTags aTag,
-                                    PRBool aClosedByStartTag);
+                                    bool aClosedByStartTag);
 
     /**
      * Causes leaf to be added to sink at current vector pos.
@@ -330,7 +296,7 @@ private:
      * @return  error code -- usually 0
      */
     nsresult  OpenTransientStyles(eHTMLTags aChildTag,
-                                  PRBool aCloseInvalid = PR_TRUE);
+                                  bool aCloseInvalid = true);
     void      PopStyle(eHTMLTags aTag);
 
     nsresult  PushIntoMisplacedStack(CToken* aToken)
@@ -344,7 +310,7 @@ private:
 
 protected:
 
-    nsresult        CollectAttributes(nsIParserNode* aNode,eHTMLTags aTag,PRInt32 aCount);
+    nsresult        CollectAttributes(nsIParserNode* aNode,eHTMLTags aTag,int32_t aCount);
 
     /**
      * This gets called before we've handled a given start tag.
@@ -370,11 +336,11 @@ protected:
      */
     void            HandleOmittedTag(CToken* aToken, eHTMLTags aChildTag,
                                      eHTMLTags aParent, nsIParserNode *aNode);
-    nsresult        HandleSavedTokens(PRInt32 anIndex);
+    nsresult        HandleSavedTokens(int32_t anIndex);
     nsresult        HandleKeyGen(nsIParserNode *aNode);
-    PRBool          IsAlternateTag(eHTMLTags aTag);
-    PRBool          IsBlockElement(PRInt32 aTagID, PRInt32 aParentID) const;
-    PRBool          IsInlineElement(PRInt32 aTagID, PRInt32 aParentID) const;
+    bool            IsAlternateTag(eHTMLTags aTag);
+    bool            IsBlockElement(int32_t aTagID, int32_t aParentID) const;
+    bool            IsInlineElement(int32_t aTagID, int32_t aParentID) const;
 
     nsDeque             mMisplacedContent;
     
@@ -382,7 +348,7 @@ protected:
     nsTokenAllocator*   mTokenAllocator;
     nsDTDContext*       mBodyContext;
     nsDTDContext*       mTempContext;
-    PRBool              mCountLines;
+    bool                mCountLines;
     nsITokenizer*       mTokenizer; // weak
    
     nsString            mFilename; 
@@ -394,11 +360,11 @@ protected:
     eParserDocType      mDocType;
     eParserCommands     mParserCommand;   //tells us to viewcontent/viewsource/viewerrors...
 
-    PRInt32             mLineNumber;
-    PRInt32             mOpenMapCount;
-    PRInt32             mHeadContainerPosition;
+    int32_t             mLineNumber;
+    int32_t             mOpenMapCount;
+    int32_t             mHeadContainerPosition;
 
-    PRUint16            mFlags;
+    uint16_t            mFlags;
 };
 
 #endif 

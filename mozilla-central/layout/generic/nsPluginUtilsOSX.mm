@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 // vim:set ts=2 sts=2 sw=2 et cin:
-/* ***** BEGIN LICENSE BLOCK *****
-  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
-  *
-  * The contents of this file are subject to the Mozilla Public License Version
-  * 1.1 (the "License"); you may not use this file except in compliance with
-  * the License. You may obtain a copy of the License at
-  * http://www.mozilla.org/MPL/
-  *
-  * Software distributed under the License is distributed on an "AS IS" basis,
-  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-  * for the specific language governing rights and limitations under the
-  * License.
-  *
-  * The Original Code is Mozilla.org code.
-  *
-  * The Initial Developer of the Original Code is
-  * Mozilla Corporation.
-  * Portions created by the Initial Developer are Copyright (C) 2008
-  * the Initial Developer. All Rights Reserved.
-  *
-  * Contributor(s):
-  *   Josh Aas <josh@mozilla.com>
-  *
-  * Alternatively, the contents of this file may be used under the terms of
-  * either of the GNU General Public License Version 2 or later (the "GPL"),
-  * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-  * in which case the provisions of the GPL or the LGPL are applicable instead
-  * of those above. If you wish to allow use of your version of this file only
-  * under the terms of either the GPL or the LGPL, and not to allow others to
-  * use your version of this file under the terms of the MPL, indicate your
-  * decision by deleting the provisions above and replace them with the notice
-  * and other provisions required by the GPL or the LGPL. If you do not delete
-  * the provisions above, a recipient may use your version of this file under
-  * the terms of any one of the MPL, the GPL or the LGPL.
-  *
-  * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsPluginUtilsOSX.h"
 
@@ -83,18 +50,18 @@ void NS_NPAPI_CocoaWindowFrame(void* aWindow, nsRect& outRect)
   NS_OBJC_END_TRY_ABORT_BLOCK;
 }
 
-PRBool NS_NPAPI_CocoaWindowIsMain(void* aWindow)
+bool NS_NPAPI_CocoaWindowIsMain(void* aWindow)
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK_RETURN;
 
   if (!aWindow)
-    return PR_TRUE;
+    return true;
 
   NSWindow* window = (NSWindow*)aWindow;
 
-  return (PRBool)[window isMainWindow];
+  return (bool)[window isMainWindow];
 
-  NS_OBJC_END_TRY_ABORT_BLOCK_RETURN(PR_TRUE);
+  NS_OBJC_END_TRY_ABORT_BLOCK_RETURN(true);
 }
 
 NPError NS_NPAPI_ShowCocoaContextMenu(void* menu, nsIWidget* widget, NPCocoaEvent* event)
@@ -157,18 +124,23 @@ NPBool NS_NPAPI_ConvertPointCocoa(void* inView,
                                   double sourceX, double sourceY, NPCoordinateSpace sourceSpace,
                                   double *destX, double *destY, NPCoordinateSpace destSpace)
 {
-  NS_ASSERTION(inView, "Must have a native view to convert coordinates.");
+  // Plugins don't always have a view/frame. It would be odd to ask for a point conversion
+  // without a view, so we'll warn about it, but it's technically OK.
+  if (!inView) {
+    NS_WARNING("Must have a native view to convert coordinates.");
+    return false;
+  }
 
   // Caller has to want a result.
   if (!destX && !destY)
-    return PR_FALSE;
+    return false;
 
   if (sourceSpace == destSpace) {
     if (destX)
       *destX = sourceX;
     if (destY)
       *destY = sourceY;
-    return PR_TRUE;
+    return true;
   }
 
   NSView* view = (NSView*)inView;
@@ -197,7 +169,7 @@ NPBool NS_NPAPI_ConvertPointCocoa(void* inView,
       screenPoint = sourcePoint;
       break;
     default:
-      return PR_FALSE;
+      return false;
   }
 
   // Convert from screen to dest space.
@@ -222,7 +194,7 @@ NPBool NS_NPAPI_ConvertPointCocoa(void* inView,
       destPoint.y = [[[NSScreen screens] objectAtIndex:0] frame].size.height - destPoint.y;
       break;
     default:
-      return PR_FALSE;
+      return false;
   }
 
   if (destX)
@@ -230,6 +202,6 @@ NPBool NS_NPAPI_ConvertPointCocoa(void* inView,
   if (destY)
     *destY = destPoint.y;
 
-  return PR_TRUE;
+  return true;
 }
 

@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * IBM Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2003
- * IBM Corporation. All Rights Reserved.
- *
- * Contributor(s):
- *   IBM Corporation
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Storage of the children and attributes of a DOM node; storage for
@@ -44,9 +11,12 @@
 #ifndef nsAttrAndChildArray_h___
 #define nsAttrAndChildArray_h___
 
+#include "mozilla/Attributes.h"
+
 #include "nscore.h"
 #include "nsAttrName.h"
 #include "nsAttrValue.h"
+#include "nsCaseTreatment.h"
 
 class nsINode;
 class nsIContent;
@@ -64,7 +34,7 @@ class nsMappedAttributeElement;
     ((1 << ATTRCHILD_ARRAY_ATTR_SLOTS_BITS) - 1)
 
 #define ATTRCHILD_ARRAY_MAX_CHILD_COUNT \
-    (~PRUint32(0) >> ATTRCHILD_ARRAY_ATTR_SLOTS_BITS)
+    (~uint32_t(0) >> ATTRCHILD_ARRAY_ATTR_SLOTS_BITS)
 
 #define ATTRCHILD_ARRAY_ATTR_SLOTS_COUNT_MASK \
     ((1 << ATTRCHILD_ARRAY_ATTR_SLOTS_BITS) - 1)
@@ -78,108 +48,143 @@ public:
   nsAttrAndChildArray();
   ~nsAttrAndChildArray();
 
-  PRUint32 ChildCount() const
+  uint32_t ChildCount() const
   {
     return mImpl ? (mImpl->mAttrAndChildCount >> ATTRCHILD_ARRAY_ATTR_SLOTS_BITS) : 0;
   }
-  nsIContent* ChildAt(PRUint32 aPos) const
+  nsIContent* ChildAt(uint32_t aPos) const
   {
     NS_ASSERTION(aPos < ChildCount(), "out-of-bounds access in nsAttrAndChildArray");
     return reinterpret_cast<nsIContent*>(mImpl->mBuffer[AttrSlotsSize() + aPos]);
   }
-  nsIContent* GetSafeChildAt(PRUint32 aPos) const;
-  nsIContent * const * GetChildArray(PRUint32* aChildCount) const;
+  nsIContent* GetSafeChildAt(uint32_t aPos) const;
+  nsIContent * const * GetChildArray(uint32_t* aChildCount) const;
   nsresult AppendChild(nsIContent* aChild)
   {
     return InsertChildAt(aChild, ChildCount());
   }
-  nsresult InsertChildAt(nsIContent* aChild, PRUint32 aPos);
-  void RemoveChildAt(PRUint32 aPos);
-  PRInt32 IndexOfChild(nsINode* aPossibleChild) const;
+  nsresult InsertChildAt(nsIContent* aChild, uint32_t aPos);
+  void RemoveChildAt(uint32_t aPos);
+  // Like RemoveChildAt but hands the reference to the child being
+  // removed back to the caller instead of just releasing it.
+  already_AddRefed<nsIContent> TakeChildAt(uint32_t aPos);
+  int32_t IndexOfChild(const nsINode* aPossibleChild) const;
 
-  PRUint32 AttrCount() const;
-  const nsAttrValue* GetAttr(nsIAtom* aLocalName, PRInt32 aNamespaceID = kNameSpaceID_None) const;
-  const nsAttrValue* AttrAt(PRUint32 aPos) const;
-  nsresult SetAttr(nsIAtom* aLocalName, const nsAString& aValue);
+  uint32_t AttrCount() const;
+  const nsAttrValue* GetAttr(nsIAtom* aLocalName, int32_t aNamespaceID = kNameSpaceID_None) const;
+  // Get an nsAttrValue by qualified name.  Can optionally do
+  // ASCII-case-insensitive name matching.
+  const nsAttrValue* GetAttr(const nsAString& aName,
+                             nsCaseTreatment aCaseSensitive) const;
+  const nsAttrValue* AttrAt(uint32_t aPos) const;
   nsresult SetAndTakeAttr(nsIAtom* aLocalName, nsAttrValue& aValue);
   nsresult SetAndTakeAttr(nsINodeInfo* aName, nsAttrValue& aValue);
 
   // Remove the attr at position aPos.  The value of the attr is placed in
   // aValue; any value that was already in aValue is destroyed.
-  nsresult RemoveAttrAt(PRUint32 aPos, nsAttrValue& aValue);
+  nsresult RemoveAttrAt(uint32_t aPos, nsAttrValue& aValue);
 
   // Returns attribute name at given position, *not* out-of-bounds safe
-  const nsAttrName* AttrNameAt(PRUint32 aPos) const;
+  const nsAttrName* AttrNameAt(uint32_t aPos) const;
 
   // Returns attribute name at given position or null if aPos is out-of-bounds
-  const nsAttrName* GetSafeAttrNameAt(PRUint32 aPos) const;
+  const nsAttrName* GetSafeAttrNameAt(uint32_t aPos) const;
 
   const nsAttrName* GetExistingAttrNameFromQName(const nsAString& aName) const;
-  PRInt32 IndexOfAttr(nsIAtom* aLocalName, PRInt32 aNamespaceID = kNameSpaceID_None) const;
+  int32_t IndexOfAttr(nsIAtom* aLocalName, int32_t aNamespaceID = kNameSpaceID_None) const;
 
   nsresult SetAndTakeMappedAttr(nsIAtom* aLocalName, nsAttrValue& aValue,
                                 nsMappedAttributeElement* aContent,
                                 nsHTMLStyleSheet* aSheet);
-  nsresult SetMappedAttrStyleSheet(nsHTMLStyleSheet* aSheet);
+  nsresult SetMappedAttrStyleSheet(nsHTMLStyleSheet* aSheet) {
+    if (!mImpl || !mImpl->mMappedAttrs) {
+      return NS_OK;
+    }
+    return DoSetMappedAttrStyleSheet(aSheet);
+  }
   void WalkMappedAttributeStyleRules(nsRuleWalker* aRuleWalker);
 
   void Compact();
 
+  bool CanFitMoreAttrs() const
+  {
+    return AttrSlotCount() < ATTRCHILD_ARRAY_MAX_ATTR_COUNT ||
+           !AttrSlotIsTaken(ATTRCHILD_ARRAY_MAX_ATTR_COUNT - 1);
+  }
+
+  size_t SizeOfExcludingThis(nsMallocSizeOfFun aMallocSizeOf) const;
+  bool HasMappedAttrs() const
+  {
+    return MappedAttrCount();
+  }
+
 private:
-  nsAttrAndChildArray(const nsAttrAndChildArray& aOther); // Not to be implemented
-  nsAttrAndChildArray& operator=(const nsAttrAndChildArray& aOther); // Not to be implemented
+  nsAttrAndChildArray(const nsAttrAndChildArray& aOther) MOZ_DELETE;
+  nsAttrAndChildArray& operator=(const nsAttrAndChildArray& aOther) MOZ_DELETE;
 
   void Clear();
 
-  PRUint32 NonMappedAttrCount() const;
-  PRUint32 MappedAttrCount() const;
+  uint32_t NonMappedAttrCount() const;
+  uint32_t MappedAttrCount() const;
 
-  nsresult GetModifiableMapped(nsMappedAttributeElement* aContent,
-                               nsHTMLStyleSheet* aSheet,
-                               PRBool aWillAddAttr,
-                               nsMappedAttributes** aModifiable);
+  // Returns a non-null zero-refcount object.
+  nsMappedAttributes*
+  GetModifiableMapped(nsMappedAttributeElement* aContent,
+                      nsHTMLStyleSheet* aSheet,
+                      bool aWillAddAttr);
   nsresult MakeMappedUnique(nsMappedAttributes* aAttributes);
 
-  PRUint32 AttrSlotsSize() const
+  uint32_t AttrSlotsSize() const
   {
     return AttrSlotCount() * ATTRSIZE;
   }
 
-  PRUint32 AttrSlotCount() const
+  uint32_t AttrSlotCount() const
   {
     return mImpl ? mImpl->mAttrAndChildCount & ATTRCHILD_ARRAY_ATTR_SLOTS_COUNT_MASK : 0;
   }
 
-  void SetChildCount(PRUint32 aCount)
+  bool AttrSlotIsTaken(uint32_t aSlot) const
+  {
+    NS_PRECONDITION(aSlot < AttrSlotCount(), "out-of-bounds");
+    return mImpl->mBuffer[aSlot * ATTRSIZE];
+  }
+
+  void SetChildCount(uint32_t aCount)
   {
     mImpl->mAttrAndChildCount = 
         (mImpl->mAttrAndChildCount & ATTRCHILD_ARRAY_ATTR_SLOTS_COUNT_MASK) |
         (aCount << ATTRCHILD_ARRAY_ATTR_SLOTS_BITS);
   }
 
-  void SetAttrSlotCount(PRUint32 aCount)
+  void SetAttrSlotCount(uint32_t aCount)
   {
     mImpl->mAttrAndChildCount =
         (mImpl->mAttrAndChildCount & ~ATTRCHILD_ARRAY_ATTR_SLOTS_COUNT_MASK) |
         aCount;
   }
 
-  void SetAttrSlotAndChildCount(PRUint32 aSlotCount, PRUint32 aChildCount)
+  void SetAttrSlotAndChildCount(uint32_t aSlotCount, uint32_t aChildCount)
   {
     mImpl->mAttrAndChildCount = aSlotCount |
       (aChildCount << ATTRCHILD_ARRAY_ATTR_SLOTS_BITS);
   }
 
-  PRBool GrowBy(PRUint32 aGrowSize);
-  PRBool AddAttrSlot();
+  bool GrowBy(uint32_t aGrowSize);
+  bool AddAttrSlot();
 
   /**
    * Set *aPos to aChild and update sibling pointers as needed.  aIndex is the
    * index at which aChild is actually being inserted.  aChildCount is the
    * number of kids we had before the insertion.
    */
-  inline void SetChildAtPos(void** aPos, nsIContent* aChild, PRUint32 aIndex,
-                            PRUint32 aChildCount);
+  inline void SetChildAtPos(void** aPos, nsIContent* aChild, uint32_t aIndex,
+                            uint32_t aChildCount);
+
+  /**
+   * Guts of SetMappedAttrStyleSheet for the rare case when we have mapped attrs
+   */
+  nsresult DoSetMappedAttrStyleSheet(nsHTMLStyleSheet* aSheet);
 
   struct InternalAttr
   {
@@ -188,8 +193,8 @@ private:
   };
 
   struct Impl {
-    PRUint32 mAttrAndChildCount;
-    PRUint32 mBufferSize;
+    uint32_t mAttrAndChildCount;
+    uint32_t mBufferSize;
     nsMappedAttributes* mMappedAttrs;
     void* mBuffer[1];
   };

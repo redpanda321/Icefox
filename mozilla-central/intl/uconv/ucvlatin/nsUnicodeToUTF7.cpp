@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsUnicodeToUTF7.h"
 #include <string.h>
@@ -55,9 +23,9 @@ nsBasicUTF7Encoder::nsBasicUTF7Encoder(char aLastChar, char aEscChar)
   Reset();
 }
 
-nsresult nsBasicUTF7Encoder::ShiftEncoding(PRInt32 aEncoding,
+nsresult nsBasicUTF7Encoder::ShiftEncoding(int32_t aEncoding,
                                           char * aDest, 
-                                          PRInt32 * aDestLength)
+                                          int32_t * aDestLength)
 {
   if (aEncoding == mEncoding) {
     *aDestLength = 0;
@@ -97,9 +65,9 @@ nsresult nsBasicUTF7Encoder::ShiftEncoding(PRInt32 aEncoding,
 
 nsresult nsBasicUTF7Encoder::EncodeDirect(
                             const PRUnichar * aSrc, 
-                            PRInt32 * aSrcLength, 
+                            int32_t * aSrcLength, 
                             char * aDest, 
-                            PRInt32 * aDestLength)
+                            int32_t * aDestLength)
 {
   nsresult res = NS_OK;
   const PRUnichar * src = aSrc;
@@ -143,9 +111,9 @@ nsresult nsBasicUTF7Encoder::EncodeDirect(
 
 nsresult nsBasicUTF7Encoder::EncodeBase64(
                              const PRUnichar * aSrc, 
-                             PRInt32 * aSrcLength, 
+                             int32_t * aSrcLength, 
                              char * aDest, 
-                             PRInt32 * aDestLength)
+                             int32_t * aDestLength)
 {
   nsresult res = NS_OK;
   const PRUnichar * src = aSrc;
@@ -153,7 +121,7 @@ nsresult nsBasicUTF7Encoder::EncodeBase64(
   char * dest = aDest;
   char * destEnd = aDest + *aDestLength;
   PRUnichar ch;
-  PRUint32 value;
+  uint32_t value;
 
   while (src < srcEnd) {
     ch = *src;
@@ -212,7 +180,7 @@ nsresult nsBasicUTF7Encoder::EncodeBase64(
   return res;
 }
 
-char nsBasicUTF7Encoder::ValueToChar(PRUint32 aValue) { 
+char nsBasicUTF7Encoder::ValueToChar(uint32_t aValue) { 
   if (aValue < 26) 
     return (char)('A'+aValue);
   else if (aValue < 26 + 26) 
@@ -227,10 +195,10 @@ char nsBasicUTF7Encoder::ValueToChar(PRUint32 aValue) {
     return -1;
 }
 
-PRBool nsBasicUTF7Encoder::DirectEncodable(PRUnichar aChar) {
+bool nsBasicUTF7Encoder::DirectEncodable(PRUnichar aChar) {
   // spec says: printable US-ASCII chars
-  if ((aChar >= 0x20) && (aChar <= 0x7e)) return PR_TRUE;
-  else return PR_FALSE;
+  if ((aChar >= 0x20) && (aChar <= 0x7e)) return true;
+  else return false;
 }
 
 //----------------------------------------------------------------------
@@ -238,18 +206,18 @@ PRBool nsBasicUTF7Encoder::DirectEncodable(PRUnichar aChar) {
 
 NS_IMETHODIMP nsBasicUTF7Encoder::ConvertNoBuffNoErr(
                                   const PRUnichar * aSrc, 
-                                  PRInt32 * aSrcLength, 
+                                  int32_t * aSrcLength, 
                                   char * aDest, 
-                                  PRInt32 * aDestLength)
+                                  int32_t * aDestLength)
 {
   nsresult res = NS_OK;
   const PRUnichar * src = aSrc;
   const PRUnichar * srcEnd = aSrc + *aSrcLength;
   char * dest = aDest;
   char * destEnd = aDest + *aDestLength;
-  PRInt32 bcr,bcw;
+  int32_t bcr,bcw;
   PRUnichar ch;
-  PRInt32 enc;
+  int32_t enc;
 
   while (src < srcEnd) {
     // find the encoding for the next char
@@ -284,7 +252,7 @@ NS_IMETHODIMP nsBasicUTF7Encoder::ConvertNoBuffNoErr(
 }
 
 NS_IMETHODIMP nsBasicUTF7Encoder::FinishNoBuff(char * aDest, 
-                                               PRInt32 * aDestLength)
+                                               int32_t * aDestLength)
 {
   return ShiftEncoding(ENC_DIRECT, aDest, aDestLength);
 }
@@ -306,25 +274,25 @@ nsUnicodeToUTF7::nsUnicodeToUTF7()
 }
 
 
-PRBool nsUnicodeToUTF7::DirectEncodable(PRUnichar aChar) {
-  if ((aChar >= 'A') && (aChar <= 'Z')) return PR_TRUE;
-  else if ((aChar >= 'a') && (aChar <= 'z')) return PR_TRUE;
-  else if ((aChar >= '0') && (aChar <= '9')) return PR_TRUE;
-  else if ((aChar >= 39) && (aChar <= 41)) return PR_TRUE;
-  else if ((aChar >= 44) && (aChar <= 47)) return PR_TRUE;
-  else if (aChar == 58) return PR_TRUE;
-  else if (aChar == 63) return PR_TRUE;
-  else if (aChar == ' ') return PR_TRUE;
-  else if (aChar == 9) return PR_TRUE;
-  else if (aChar == 13) return PR_TRUE;
-  else if (aChar == 10) return PR_TRUE;
-  else if (aChar == 60) return PR_TRUE;  // '<'
-  else if (aChar == 33) return PR_TRUE;  // '!'
-  else if (aChar == 34) return PR_TRUE;  // '"'
-  else if (aChar == 62) return PR_TRUE;  // '>'
-  else if (aChar == 61) return PR_TRUE;  // '='
-  else if (aChar == 59) return PR_TRUE;  // ';'
-  else if (aChar == 91) return PR_TRUE;  // '['
-  else if (aChar == 93) return PR_TRUE;  // ']'
-  else return PR_FALSE;
+bool nsUnicodeToUTF7::DirectEncodable(PRUnichar aChar) {
+  if ((aChar >= 'A') && (aChar <= 'Z')) return true;
+  else if ((aChar >= 'a') && (aChar <= 'z')) return true;
+  else if ((aChar >= '0') && (aChar <= '9')) return true;
+  else if ((aChar >= 39) && (aChar <= 41)) return true;
+  else if ((aChar >= 44) && (aChar <= 47)) return true;
+  else if (aChar == 58) return true;
+  else if (aChar == 63) return true;
+  else if (aChar == ' ') return true;
+  else if (aChar == 9) return true;
+  else if (aChar == 13) return true;
+  else if (aChar == 10) return true;
+  else if (aChar == 60) return true;  // '<'
+  else if (aChar == 33) return true;  // '!'
+  else if (aChar == 34) return true;  // '"'
+  else if (aChar == 62) return true;  // '>'
+  else if (aChar == 61) return true;  // '='
+  else if (aChar == 59) return true;  // ';'
+  else if (aChar == 91) return true;  // '['
+  else if (aChar == 93) return true;  // ']'
+  else return false;
 }

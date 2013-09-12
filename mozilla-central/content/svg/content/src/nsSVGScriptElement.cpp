@@ -1,41 +1,10 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set ts=2 sw=2 et tw=78: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SVG project.
- *
- * The Initial Developer of the Original Code is
- * Crocodile Clips Ltd..
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Alex Fritze <alex@croczilla.com> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "mozilla/Util.h"
 
 #include "nsSVGElement.h"
 #include "nsGkAtoms.h"
@@ -47,7 +16,10 @@
 #include "nsIURI.h"
 #include "nsNetUtil.h"
 #include "nsScriptElement.h"
-#include "nsIDOMText.h"
+#include "nsContentUtils.h"
+
+using namespace mozilla;
+using namespace mozilla::dom;
 
 typedef nsSVGElement nsSVGScriptElementBase;
 
@@ -59,9 +31,9 @@ class nsSVGScriptElement : public nsSVGScriptElementBase,
 protected:
   friend nsresult NS_NewSVGScriptElement(nsIContent **aResult,
                                          already_AddRefed<nsINodeInfo> aNodeInfo,
-                                         PRUint32 aFromParser);
+                                         FromParser aFromParser);
   nsSVGScriptElement(already_AddRefed<nsINodeInfo> aNodeInfo,
-                     PRUint32 aFromParser);
+                     FromParser aFromParser);
   
 public:
   // interfaces:
@@ -72,8 +44,8 @@ public:
 
   // xxx If xpcom allowed virtual inheritance we wouldn't need to
   // forward here :-(
-  NS_FORWARD_NSIDOMNODE(nsSVGScriptElementBase::)
-  NS_FORWARD_NSIDOMELEMENT(nsSVGScriptElementBase::)
+  NS_FORWARD_NSIDOMNODE_TO_NSINODE
+  NS_FORWARD_NSIDOMELEMENT_TO_GENERIC
   NS_FORWARD_NSIDOMSVGELEMENT(nsSVGScriptElementBase::)
 
   // nsIScriptElement
@@ -81,23 +53,27 @@ public:
   virtual void GetScriptText(nsAString& text);
   virtual void GetScriptCharset(nsAString& charset);
   virtual void FreezeUriAsyncDefer();
+  virtual CORSMode GetCORSMode() const;
   
   // nsScriptElement
-  virtual PRBool HasScriptContent();
-
-  // nsSVGElement specializations:
-  virtual void DidChangeString(PRUint8 aAttrEnum);
+  virtual bool HasScriptContent();
 
   // nsIContent specializations:
-  virtual nsresult DoneAddingChildren(PRBool aHaveNotified);
-  virtual PRBool IsDoneAddingChildren();
   virtual nsresult BindToTree(nsIDocument* aDocument, nsIContent* aParent,
                               nsIContent* aBindingParent,
-                              PRBool aCompileEventHandlers);
+                              bool aCompileEventHandlers);
+  virtual nsresult AfterSetAttr(int32_t aNamespaceID, nsIAtom* aName,
+                                const nsAttrValue* aValue, bool aNotify);
+  virtual bool ParseAttribute(int32_t aNamespaceID,
+                              nsIAtom* aAttribute,
+                              const nsAString& aValue,
+                              nsAttrValue& aResult);
 
   virtual nsresult Clone(nsINodeInfo *aNodeInfo, nsINode **aResult) const;
 
   virtual nsXPCClassInfo* GetClassInfo();
+
+  virtual nsIDOMNode* AsDOMNode() { return this; }
 protected:
   virtual StringAttributesInfo GetStringInfo();
 
@@ -108,7 +84,7 @@ protected:
 
 nsSVGElement::StringInfo nsSVGScriptElement::sStringInfo[1] =
 {
-  { &nsGkAtoms::href, kNameSpaceID_XLink }
+  { &nsGkAtoms::href, kNameSpaceID_XLink, false }
 };
 
 NS_IMPL_NS_NEW_SVG_ELEMENT_CHECK_PARSER(Script)
@@ -133,10 +109,10 @@ NS_INTERFACE_MAP_END_INHERITING(nsSVGScriptElementBase)
 // Implementation
 
 nsSVGScriptElement::nsSVGScriptElement(already_AddRefed<nsINodeInfo> aNodeInfo,
-                                       PRUint32 aFromParser)
+                                       FromParser aFromParser)
   : nsSVGScriptElementBase(aNodeInfo)
+  , nsScriptElement(aFromParser)
 {
-  mDoneAddingChildren = !aFromParser;
   AddMutationObserver(this);
 }
 
@@ -146,21 +122,19 @@ nsSVGScriptElement::nsSVGScriptElement(already_AddRefed<nsINodeInfo> aNodeInfo,
 nsresult
 nsSVGScriptElement::Clone(nsINodeInfo *aNodeInfo, nsINode **aResult) const
 {
-  *aResult = nsnull;
+  *aResult = nullptr;
 
   nsCOMPtr<nsINodeInfo> ni = aNodeInfo;
-  nsSVGScriptElement* it = new nsSVGScriptElement(ni.forget(), PR_FALSE);
-  if (!it) {
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
+  nsSVGScriptElement* it = new nsSVGScriptElement(ni.forget(), NOT_FROM_PARSER);
 
   nsCOMPtr<nsINode> kungFuDeathGrip = it;
-  nsresult rv = it->Init();
-  rv |= CopyInnerTo(it);
-  NS_ENSURE_SUCCESS(rv, rv);
+  nsresult rv1 = it->Init();
+  nsresult rv2 = const_cast<nsSVGScriptElement*>(this)->CopyInnerTo(it);
+  NS_ENSURE_SUCCESS(rv1, rv1);
+  NS_ENSURE_SUCCESS(rv2, rv2);
 
   // The clone should be marked evaluated if we are.
-  it->mIsEvaluated = mIsEvaluated;
+  it->mAlreadyStarted = mAlreadyStarted;
   it->mLineNumber = mLineNumber;
   it->mMalformed = mMalformed;
 
@@ -173,18 +147,9 @@ nsSVGScriptElement::Clone(nsINodeInfo *aNodeInfo, nsINode **aResult) const
 // nsIDOMSVGScriptElement methods
 
 /* attribute DOMString type; */
-NS_IMETHODIMP
-nsSVGScriptElement::GetType(nsAString & aType)
-{
-  GetAttr(kNameSpaceID_None, nsGkAtoms::type, aType);
-
-  return NS_OK;
-}
-NS_IMETHODIMP
-nsSVGScriptElement::SetType(const nsAString & aType)
-{
-  return SetAttr(kNameSpaceID_None, nsGkAtoms::type, aType, PR_TRUE); 
-}
+NS_IMPL_STRING_ATTR(nsSVGScriptElement, Type, type)
+/* attribute DOMString crossOrigin */
+NS_IMPL_STRING_ATTR(nsSVGScriptElement, CrossOrigin, crossorigin)
 
 //----------------------------------------------------------------------
 // nsIDOMSVGURIReference methods
@@ -208,7 +173,7 @@ nsSVGScriptElement::GetScriptType(nsAString& type)
 void
 nsSVGScriptElement::GetScriptText(nsAString& text)
 {
-  nsContentUtils::GetNodeTextContent(this, PR_FALSE, text);
+  nsContentUtils::GetNodeTextContent(this, false, text);
 }
 
 void
@@ -224,79 +189,48 @@ nsSVGScriptElement::FreezeUriAsyncDefer()
     return;
   }
 
-  // variation of this code in nsHTMLScriptElement - check if changes
-  // need to be transfered when modifying
-  nsAutoString src;
-  mStringAttributes[HREF].GetAnimValue(src, this);
-  // preserving bug 528444 here due to being unsure how to fix correctly
-  if (!src.IsEmpty()) {
+  if (mStringAttributes[HREF].IsExplicitlySet()) {
+    // variation of this code in nsHTMLScriptElement - check if changes
+    // need to be transfered when modifying
+    nsAutoString src;
+    mStringAttributes[HREF].GetAnimValue(src, this);
+
     nsCOMPtr<nsIURI> baseURI = GetBaseURI();
-    NS_NewURI(getter_AddRefs(mUri), src, nsnull, baseURI);
+    NS_NewURI(getter_AddRefs(mUri), src, nullptr, baseURI);
+    // At this point mUri will be null for invalid URLs.
+    mExternal = true;
   }
   
-  mFrozen = PR_TRUE;
+  mFrozen = true;
 }
 
 //----------------------------------------------------------------------
 // nsScriptElement methods
 
-PRBool
+bool
 nsSVGScriptElement::HasScriptContent()
 {
-  nsAutoString src;
-  mStringAttributes[HREF].GetAnimValue(src, this);
-  // preserving bug 528444 here due to being unsure how to fix correctly
-  return (mFrozen ? !!mUri : !src.IsEmpty()) ||
+  return (mFrozen ? mExternal : mStringAttributes[HREF].IsExplicitlySet()) ||
          nsContentUtils::HasNonEmptyTextContent(this);
 }
 
 //----------------------------------------------------------------------
 // nsSVGElement methods
 
-void
-nsSVGScriptElement::DidChangeString(PRUint8 aAttrEnum)
-{
-  nsSVGScriptElementBase::DidChangeString(aAttrEnum);
-
-  if (aAttrEnum == HREF) {
-    MaybeProcessScript();
-  }
-}
-
 nsSVGElement::StringAttributesInfo
 nsSVGScriptElement::GetStringInfo()
 {
   return StringAttributesInfo(mStringAttributes, sStringInfo,
-                              NS_ARRAY_LENGTH(sStringInfo));
+                              ArrayLength(sStringInfo));
 }
 
 //----------------------------------------------------------------------
 // nsIContent methods
 
 nsresult
-nsSVGScriptElement::DoneAddingChildren(PRBool aHaveNotified)
-{
-  mDoneAddingChildren = PR_TRUE;
-  nsresult rv = MaybeProcessScript();
-  if (!mIsEvaluated) {
-    // Need to thaw the script uri here to allow another script to cause
-    // execution later.
-    mFrozen = PR_FALSE;
-    mUri = nsnull;
-  }
-  return rv;
-}
-
-PRBool
-nsSVGScriptElement::IsDoneAddingChildren()
-{
-  return mDoneAddingChildren;
-}
-
-nsresult
 nsSVGScriptElement::BindToTree(nsIDocument* aDocument, nsIContent* aParent,
                                nsIContent* aBindingParent,
-                               PRBool aCompileEventHandlers)
+                               bool aCompileEventHandlers)
 {
   nsresult rv = nsSVGScriptElementBase::BindToTree(aDocument, aParent,
                                                    aBindingParent,
@@ -308,5 +242,38 @@ nsSVGScriptElement::BindToTree(nsIDocument* aDocument, nsIContent* aParent,
   }
 
   return NS_OK;
+}
+
+nsresult
+nsSVGScriptElement::AfterSetAttr(int32_t aNamespaceID, nsIAtom* aName,
+                                 const nsAttrValue* aValue, bool aNotify)
+{
+  if (aNamespaceID == kNameSpaceID_XLink && aName == nsGkAtoms::href) {
+    MaybeProcessScript();
+  }
+  return nsSVGScriptElementBase::AfterSetAttr(aNamespaceID, aName,
+                                              aValue, aNotify);
+}
+
+bool
+nsSVGScriptElement::ParseAttribute(int32_t aNamespaceID,
+                                   nsIAtom* aAttribute,
+                                   const nsAString& aValue,
+                                   nsAttrValue& aResult)
+{
+  if (aNamespaceID == kNameSpaceID_None &&
+      aAttribute == nsGkAtoms::crossorigin) {
+    ParseCORSValue(aValue, aResult);
+    return true;
+  }
+
+  return nsSVGScriptElementBase::ParseAttribute(aNamespaceID, aAttribute,
+                                                aValue, aResult);
+}
+
+CORSMode
+nsSVGScriptElement::GetCORSMode() const
+{
+  return AttrValueToCORSMode(GetParsedAttr(nsGkAtoms::crossorigin));
 }
 

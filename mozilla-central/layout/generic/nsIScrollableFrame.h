@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * interface that provides scroll APIs implemented by scrollable frames
@@ -45,10 +13,14 @@
 #include "nsISupports.h"
 #include "nsCoord.h"
 #include "nsPresContext.h"
-#include "nsIFrame.h" // to get nsIBox, which is a typedef
+#include "mozilla/gfx/Point.h"
+
+#define NS_DEFAULT_VERTICAL_SCROLL_DISTANCE   3
+#define NS_DEFAULT_HORIZONTAL_SCROLL_DISTANCE 5
 
 class nsBoxLayoutState;
 class nsIScrollPositionListener;
+class nsIFrame;
 
 /**
  * Interface for frames that are scrollable. This interface exposes
@@ -57,6 +29,7 @@ class nsIScrollPositionListener;
  */
 class nsIScrollableFrame : public nsQueryFrame {
 public:
+  typedef mozilla::gfx::Point Point;
 
   NS_DECL_QUERYFRAME_TARGET(nsIScrollableFrame)
 
@@ -80,7 +53,13 @@ public:
    * of the scrolled contents, in which case it will reflect the current
    * assumptions about scrollbar visibility.
    */
-  virtual PRUint32 GetScrollbarVisibility() const = 0;
+  virtual uint32_t GetScrollbarVisibility() const = 0;
+  /**
+   * Returns the directions in which scrolling is perceived to be allowed.
+   * A direction is perceived to be allowed if there is a visible scrollbar
+   * for that direction or if the scroll range is at least one device pixel.
+   */
+  uint32_t GetPerceivedScrollingDirections() const;
   /**
    * Return the actual sizes of all possible scrollbars. Returns 0 for scrollbar
    * positions that don't have a scrollbar or where the scrollbar is not visible.
@@ -100,7 +79,7 @@ public:
    * of the scrolled contents.
    */
   virtual nsMargin GetDesiredScrollbarSizes(nsPresContext* aPresContext,
-                                            nsIRenderingContext* aRC) = 0;
+                                            nsRenderingContext* aRC) = 0;
 
   /**
    * Get the area of the scrollport relative to the origin of this frame's
@@ -115,6 +94,10 @@ public:
    */
   virtual nsPoint GetScrollPosition() const = 0;
   /**
+   * As GetScrollPosition(), but uses the top-right as origin for RTL frames. 
+   */
+  virtual nsPoint GetLogicalScrollPosition() const = 0;
+  /**
    * Get the area that must contain the scroll position. Typically
    * (but not always, e.g. for RTL content) x and y will be 0, and
    * width or height will be nonzero if the content can be scrolled in
@@ -123,6 +106,11 @@ public:
    * device pixels.
    */
   virtual nsRect GetScrollRange() const = 0;
+  /**
+   * Get the size of the scroll port to use when clamping the scroll
+   * position.
+   */
+  virtual nsSize GetScrollPositionClampingScrollPortSize() const = 0;
 
   /**
    * Return how much we would try to scroll by in each direction if
@@ -136,18 +124,49 @@ public:
   virtual nsSize GetPageScrollAmount() const = 0;
 
   /**
-   * When a scroll operation is requested, we ask for either instant
-   * scrolling or smooth scrolling. SMOOTH will only be smooth if
-   * smooth scrolling is actually enabled. If an INSTANT request
-   * happens while a smooth scroll is already in progress, the smooth
-   * scroll is interrupted and we instantly scroll to the destination.
+   * When a scroll operation is requested, we ask for instant, smooth or normal
+   * scrolling. SMOOTH will only be smooth if smooth scrolling is actually
+   * enabled. INSTANT is always synchronous, NORMAL can be asynchronous.
+   * If an INSTANT request happens while a smooth or async scroll is already in
+   * progress, the async scroll is interrupted and we instantly scroll to the
+   * destination.
    */
-  enum ScrollMode { INSTANT, SMOOTH };
+  enum ScrollMode { INSTANT, SMOOTH, NORMAL };
   /**
    * Clamps aScrollPosition to GetScrollRange and sets the scroll position
    * to that value.
+   * @param aRange If non-null, specifies area which contains aScrollPosition
+   * and can be used for choosing a performance-optimized scroll position.
+   * Any point within this area can be chosen.
+   * The choosen point will be as close as possible to aScrollPosition.
    */
-  virtual void ScrollTo(nsPoint aScrollPosition, ScrollMode aMode) = 0;
+  virtual void ScrollTo(nsPoint aScrollPosition, ScrollMode aMode,
+                        const nsRect* aRange = nullptr) = 0;
+  /**
+   * Scrolls to a particular position in integer CSS pixels.
+   * Keeps the exact current horizontal or vertical position if the current
+   * position, rounded to CSS pixels, matches aScrollPosition. If
+   * aScrollPosition.x/y is different from the current CSS pixel position,
+   * makes sure we only move in the direction given by the difference.
+   * Ensures that GetScrollPositionCSSPixels (the scroll position after
+   * rounding to CSS pixels) will be exactly aScrollPosition.
+   * The scroll mode is INSTANT.
+   */
+  virtual void ScrollToCSSPixels(nsIntPoint aScrollPosition) = 0;
+  /**
+   * Scrolls to a particular position in float CSS pixels.
+   * This does not guarantee that GetScrollPositionCSSPixels equals
+   * aScrollPosition afterward. It tries to scroll as close to
+   * aScrollPosition as possible while scrolling by an integer
+   * number of layer pixels (so the operation is fast and looks clean).
+   * The scroll mode is INSTANT.
+   */
+  virtual void ScrollToCSSPixelsApproximate(const Point& aScrollPosition) = 0;
+  /**
+   * Returns the scroll position in integer CSS pixels, rounded to the nearest
+   * pixel.
+   */
+  virtual nsIntPoint GetScrollPositionCSSPixels() = 0;
   /**
    * When scrolling by a relative amount, we can choose various units.
    */
@@ -162,7 +181,7 @@ public:
    * values are in device pixels.
    */
   virtual void ScrollBy(nsIntPoint aDelta, ScrollUnit aUnit, ScrollMode aMode,
-                        nsIntPoint* aOverflow = nsnull) = 0;
+                        nsIntPoint* aOverflow = nullptr, nsIAtom *aOrigin = nullptr) = 0;
   /**
    * This tells the scroll frame to try scrolling to the scroll
    * position that was restored from the history. This must be called
@@ -189,7 +208,7 @@ public:
    * setting up a scrollbar mediator if you want to redirect scrollbar
    * input.
    */
-  virtual nsIBox* GetScrollbarBox(PRBool aVertical) = 0;
+  virtual nsIFrame* GetScrollbarBox(bool aVertical) = 0;
 
   /**
    * Internal method used by scrollbars to notify their scrolling
@@ -208,7 +227,12 @@ public:
    * This basically means that we should allocate resources in the
    * expectation that scrolling is going to happen.
    */
-  virtual PRBool IsScrollingActive() = 0;
+  virtual bool IsScrollingActive() = 0;
+  /**
+   * Call this when the layer(s) induced by active scrolling are being
+   * completely redrawn.
+   */
+  virtual void ResetScrollPositionForLayerPixelAlignment() = 0;
 };
 
 #endif

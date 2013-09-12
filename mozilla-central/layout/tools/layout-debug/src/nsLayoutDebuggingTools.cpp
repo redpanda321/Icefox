@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 // vim:cindent:tabstop=4:expandtab:shiftwidth=4:
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is layout debugging code.
- *
- * The Initial Developer of the Original Code is 
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   L. David Baron <dbaron@dbaron.org> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsLayoutDebuggingTools.h"
 
@@ -43,13 +10,11 @@
 #include "nsIDocShellTreeNode.h"
 #include "nsIDocShellTreeItem.h"
 #include "nsPIDOMWindow.h"
-#include "nsIDocumentViewer.h"
+#include "nsIContentViewer.h"
 
 #include "nsIServiceManager.h"
 #include "nsIAtom.h"
 #include "nsQuickSort.h"
-#include "nsIPrefBranch.h"
-#include "nsIPrefService.h"
 
 #include "nsIContent.h"
 #include "nsIDocument.h"
@@ -65,6 +30,7 @@ static NS_DEFINE_CID(kLayoutDebuggerCID, NS_LAYOUT_DEBUGGER_CID);
 
 #include "nsISelectionController.h"
 #include "mozilla/dom/Element.h"
+#include "mozilla/Preferences.h"
 
 using namespace mozilla;
 
@@ -72,8 +38,8 @@ static already_AddRefed<nsIContentViewer>
 doc_viewer(nsIDocShell *aDocShell)
 {
     if (!aDocShell)
-        return nsnull;
-    nsIContentViewer *result = nsnull;
+        return nullptr;
+    nsIContentViewer *result = nullptr;
     aDocShell->GetContentViewer(&result);
     return result;
 }
@@ -81,35 +47,20 @@ doc_viewer(nsIDocShell *aDocShell)
 static already_AddRefed<nsIPresShell>
 pres_shell(nsIDocShell *aDocShell)
 {
-    nsCOMPtr<nsIDocumentViewer> dv =
-        do_QueryInterface(nsCOMPtr<nsIContentViewer>(doc_viewer(aDocShell)));
-    if (!dv)
-        return nsnull;
-    nsIPresShell *result = nsnull;
-    dv->GetPresShell(&result);
-    return result;
+    nsCOMPtr<nsIContentViewer> cv = doc_viewer(aDocShell);
+    if (!cv)
+        return nullptr;
+    nsCOMPtr<nsIPresShell> result;
+    cv->GetPresShell(getter_AddRefs(result));
+    return result.forget();
 }
-
-#if 0 // not currently needed
-static already_AddRefed<nsPresContext>
-pres_context(nsIDocShell *aDocShell)
-{
-    nsCOMPtr<nsIDocumentViewer> dv =
-        do_QueryInterface(nsCOMPtr<nsIContentViewer>(doc_viewer(aDocShell)));
-    if (!dv)
-        return nsnull;
-    nsPresContext *result = nsnull;
-    dv->GetPresContext(result);
-    return result;
-}
-#endif
 
 static nsIViewManager*
 view_manager(nsIDocShell *aDocShell)
 {
     nsCOMPtr<nsIPresShell> shell(pres_shell(aDocShell));
     if (!shell)
-        return nsnull;
+        return nullptr;
     return shell->GetViewManager();
 }
 
@@ -119,25 +70,25 @@ document(nsIDocShell *aDocShell)
 {
     nsCOMPtr<nsIContentViewer> cv(doc_viewer(aDocShell));
     if (!cv)
-        return nsnull;
+        return nullptr;
     nsCOMPtr<nsIDOMDocument> domDoc;
     cv->GetDOMDocument(getter_AddRefs(domDoc));
     if (!domDoc)
-        return nsnull;
-    nsIDocument *result = nsnull;
+        return nullptr;
+    nsIDocument *result = nullptr;
     CallQueryInterface(domDoc, &result);
     return result;
 }
 #endif
 
 nsLayoutDebuggingTools::nsLayoutDebuggingTools()
-  : mPaintFlashing(PR_FALSE),
-    mPaintDumping(PR_FALSE),
-    mInvalidateDumping(PR_FALSE),
-    mEventDumping(PR_FALSE),
-    mMotionEventDumping(PR_FALSE),
-    mCrossingEventDumping(PR_FALSE),
-    mReflowCounts(PR_FALSE)
+  : mPaintFlashing(false),
+    mPaintDumping(false),
+    mInvalidateDumping(false),
+    mEventDumping(false),
+    mMotionEventDumping(false),
+    mCrossingEventDumping(false),
+    mReflowCounts(false)
 {
     NewURILoaded();
 }
@@ -151,9 +102,9 @@ NS_IMPL_ISUPPORTS1(nsLayoutDebuggingTools, nsILayoutDebuggingTools)
 NS_IMETHODIMP
 nsLayoutDebuggingTools::Init(nsIDOMWindow *aWin)
 {
-    mPrefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
-    if (!mPrefs)
+    if (!Preferences::GetService()) {
         return NS_ERROR_UNEXPECTED;
+    }
 
     {
         nsCOMPtr<nsPIDOMWindow> window = do_QueryInterface(aWin);
@@ -163,13 +114,22 @@ nsLayoutDebuggingTools::Init(nsIDOMWindow *aWin)
     }
     NS_ENSURE_TRUE(mDocShell, NS_ERROR_UNEXPECTED);
 
-    GetBoolPref("nglayout.debug.paint_flashing", &mPaintFlashing);
-    GetBoolPref("nglayout.debug.paint_dumping", &mPaintDumping);
-    GetBoolPref("nglayout.debug.invalidate_dumping", &mInvalidateDumping);
-    GetBoolPref("nglayout.debug.event_dumping", &mEventDumping);
-    GetBoolPref("nglayout.debug.motion_event_dumping", &mMotionEventDumping);
-    GetBoolPref("nglayout.debug.crossing_event_dumping", &mCrossingEventDumping);
-    GetBoolPref("layout.reflow.showframecounts", &mReflowCounts);
+    mPaintFlashing =
+        Preferences::GetBool("nglayout.debug.paint_flashing", mPaintFlashing);
+    mPaintDumping =
+        Preferences::GetBool("nglayout.debug.paint_dumping", mPaintDumping);
+    mInvalidateDumping =
+        Preferences::GetBool("nglayout.debug.invalidate_dumping", mInvalidateDumping);
+    mEventDumping =
+        Preferences::GetBool("nglayout.debug.event_dumping", mEventDumping);
+    mMotionEventDumping =
+        Preferences::GetBool("nglayout.debug.motion_event_dumping",
+                             mMotionEventDumping);
+    mCrossingEventDumping =
+        Preferences::GetBool("nglayout.debug.crossing_event_dumping",
+                             mCrossingEventDumping);
+    mReflowCounts =
+        Preferences::GetBool("layout.reflow.showframecounts", mReflowCounts);
 
     {
         nsCOMPtr<nsILayoutDebugger> ld = do_GetService(kLayoutDebuggerCID);
@@ -189,25 +149,25 @@ nsLayoutDebuggingTools::NewURILoaded()
     // Reset all the state that should be reset between pages.
 
     // XXX Some of these should instead be transferred between pages!
-    mEditorMode = PR_FALSE;
-    mVisualDebugging = PR_FALSE;
-    mVisualEventDebugging = PR_FALSE;
+    mEditorMode = false;
+    mVisualDebugging = false;
+    mVisualEventDebugging = false;
 
-    mReflowCounts = PR_FALSE;
+    mReflowCounts = false;
 
     ForceRefresh();
     return NS_OK;
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::GetVisualDebugging(PRBool *aVisualDebugging)
+nsLayoutDebuggingTools::GetVisualDebugging(bool *aVisualDebugging)
 {
     *aVisualDebugging = mVisualDebugging;
     return NS_OK;
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::SetVisualDebugging(PRBool aVisualDebugging)
+nsLayoutDebuggingTools::SetVisualDebugging(bool aVisualDebugging)
 {
     nsCOMPtr<nsILayoutDebugger> ld = do_GetService(kLayoutDebuggerCID);
     if (!ld)
@@ -219,14 +179,14 @@ nsLayoutDebuggingTools::SetVisualDebugging(PRBool aVisualDebugging)
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::GetVisualEventDebugging(PRBool *aVisualEventDebugging)
+nsLayoutDebuggingTools::GetVisualEventDebugging(bool *aVisualEventDebugging)
 {
     *aVisualEventDebugging = mVisualEventDebugging;
     return NS_OK;
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::SetVisualEventDebugging(PRBool aVisualEventDebugging)
+nsLayoutDebuggingTools::SetVisualEventDebugging(bool aVisualEventDebugging)
 {
     nsCOMPtr<nsILayoutDebugger> ld = do_GetService(kLayoutDebuggerCID);
     if (!ld)
@@ -238,98 +198,98 @@ nsLayoutDebuggingTools::SetVisualEventDebugging(PRBool aVisualEventDebugging)
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::GetPaintFlashing(PRBool *aPaintFlashing)
+nsLayoutDebuggingTools::GetPaintFlashing(bool *aPaintFlashing)
 {
     *aPaintFlashing = mPaintFlashing;
     return NS_OK;
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::SetPaintFlashing(PRBool aPaintFlashing)
+nsLayoutDebuggingTools::SetPaintFlashing(bool aPaintFlashing)
 {
     mPaintFlashing = aPaintFlashing;
     return SetBoolPrefAndRefresh("nglayout.debug.paint_flashing", mPaintFlashing);
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::GetPaintDumping(PRBool *aPaintDumping)
+nsLayoutDebuggingTools::GetPaintDumping(bool *aPaintDumping)
 {
     *aPaintDumping = mPaintDumping;
     return NS_OK;
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::SetPaintDumping(PRBool aPaintDumping)
+nsLayoutDebuggingTools::SetPaintDumping(bool aPaintDumping)
 {
     mPaintDumping = aPaintDumping;
     return SetBoolPrefAndRefresh("nglayout.debug.paint_dumping", mPaintDumping);
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::GetInvalidateDumping(PRBool *aInvalidateDumping)
+nsLayoutDebuggingTools::GetInvalidateDumping(bool *aInvalidateDumping)
 {
     *aInvalidateDumping = mInvalidateDumping;
     return NS_OK;
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::SetInvalidateDumping(PRBool aInvalidateDumping)
+nsLayoutDebuggingTools::SetInvalidateDumping(bool aInvalidateDumping)
 {
     mInvalidateDumping = aInvalidateDumping;
     return SetBoolPrefAndRefresh("nglayout.debug.invalidate_dumping", mInvalidateDumping);
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::GetEventDumping(PRBool *aEventDumping)
+nsLayoutDebuggingTools::GetEventDumping(bool *aEventDumping)
 {
     *aEventDumping = mEventDumping;
     return NS_OK;
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::SetEventDumping(PRBool aEventDumping)
+nsLayoutDebuggingTools::SetEventDumping(bool aEventDumping)
 {
     mEventDumping = aEventDumping;
     return SetBoolPrefAndRefresh("nglayout.debug.event_dumping", mEventDumping);
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::GetMotionEventDumping(PRBool *aMotionEventDumping)
+nsLayoutDebuggingTools::GetMotionEventDumping(bool *aMotionEventDumping)
 {
     *aMotionEventDumping = mMotionEventDumping;
     return NS_OK;
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::SetMotionEventDumping(PRBool aMotionEventDumping)
+nsLayoutDebuggingTools::SetMotionEventDumping(bool aMotionEventDumping)
 {
     mMotionEventDumping = aMotionEventDumping;
     return SetBoolPrefAndRefresh("nglayout.debug.motion_event_dumping", mMotionEventDumping);
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::GetCrossingEventDumping(PRBool *aCrossingEventDumping)
+nsLayoutDebuggingTools::GetCrossingEventDumping(bool *aCrossingEventDumping)
 {
     *aCrossingEventDumping = mCrossingEventDumping;
     return NS_OK;
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::SetCrossingEventDumping(PRBool aCrossingEventDumping)
+nsLayoutDebuggingTools::SetCrossingEventDumping(bool aCrossingEventDumping)
 {
     mCrossingEventDumping = aCrossingEventDumping;
     return SetBoolPrefAndRefresh("nglayout.debug.crossing_event_dumping", mCrossingEventDumping);
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::GetReflowCounts(PRBool* aShow)
+nsLayoutDebuggingTools::GetReflowCounts(bool* aShow)
 {
     *aShow = mReflowCounts;
     return NS_OK;
 }
 
 NS_IMETHODIMP
-nsLayoutDebuggingTools::SetReflowCounts(PRBool aShow)
+nsLayoutDebuggingTools::SetReflowCounts(bool aShow)
 {
     NS_ENSURE_TRUE(mDocShell, NS_ERROR_NOT_INITIALIZED);
     nsCOMPtr<nsIPresShell> shell(pres_shell(mDocShell)); 
@@ -347,11 +307,11 @@ nsLayoutDebuggingTools::SetReflowCounts(PRBool aShow)
     return NS_OK;
 }
 
-static void DumpAWebShell(nsIDocShellTreeItem* aShellItem, FILE* out, PRInt32 aIndent)
+static void DumpAWebShell(nsIDocShellTreeItem* aShellItem, FILE* out, int32_t aIndent)
 {
     nsXPIDLString name;
     nsCOMPtr<nsIDocShellTreeItem> parent;
-    PRInt32 i, n;
+    int32_t i, n;
 
     for (i = aIndent; --i >= 0; )
         fprintf(out, "  ");
@@ -392,7 +352,7 @@ void
 DumpContentRecur(nsIDocShell* aDocShell, FILE* out)
 {
 #ifdef DEBUG
-    if (nsnull != aDocShell) {
+    if (nullptr != aDocShell) {
         fprintf(out, "docshell=%p \n", static_cast<void*>(aDocShell));
         nsCOMPtr<nsIDocument> doc(document(aDocShell));
         if (doc) {
@@ -405,7 +365,7 @@ DumpContentRecur(nsIDocShell* aDocShell, FILE* out)
             fputs("no document\n", out);
         }
         // dump the frames of the sub documents
-        PRInt32 i, n;
+        int32_t i, n;
         nsCOMPtr<nsIDocShellTreeNode> docShellAsNode(do_QueryInterface(aDocShell));
         docShellAsNode->GetChildCount(&n);
         for (i = 0; i < n; ++i) {
@@ -445,7 +405,7 @@ DumpFramesRecur(nsIDocShell* aDocShell, FILE* out)
     }
 
     // dump the frames of the sub documents
-    PRInt32 i, n;
+    int32_t i, n;
     nsCOMPtr<nsIDocShellTreeNode> docShellAsNode(do_QueryInterface(aDocShell));
     docShellAsNode->GetChildCount(&n);
     for (i = 0; i < n; ++i) {
@@ -475,9 +435,8 @@ DumpViewsRecur(nsIDocShell* aDocShell, FILE* out)
     fprintf(out, "docshell=%p \n", static_cast<void*>(aDocShell));
     nsCOMPtr<nsIViewManager> vm(view_manager(aDocShell));
     if (vm) {
-        nsIView* root;
-        vm->GetRootView(root);
-        if (nsnull != root) {
+        nsIView* root = vm->GetRootView();
+        if (root) {
             root->List(out);
         }
     }
@@ -486,7 +445,7 @@ DumpViewsRecur(nsIDocShell* aDocShell, FILE* out)
     }
 
     // dump the views of the sub documents
-    PRInt32 i, n;
+    int32_t i, n;
     nsCOMPtr<nsIDocShellTreeNode> docShellAsNode(do_QueryInterface(aDocShell));
     docShellAsNode->GetChildCount(&n);
     for (i = 0; i < n; i++) {
@@ -568,37 +527,25 @@ void nsLayoutDebuggingTools::ForceRefresh()
     nsCOMPtr<nsIViewManager> vm(view_manager(mDocShell));
     if (!vm)
         return;
-    nsIView* root = nsnull;
-    vm->GetRootView(root);
+    nsIView* root = vm->GetRootView();
     if (root) {
-        vm->UpdateView(root, NS_VMREFRESH_IMMEDIATE);
+        vm->InvalidateView(root);
     }
 }
 
 nsresult
 nsLayoutDebuggingTools::SetBoolPrefAndRefresh(const char * aPrefName,
-                                              PRBool aNewVal)
+                                              bool aNewVal)
 {
     NS_ENSURE_TRUE(mDocShell, NS_ERROR_NOT_INITIALIZED);
-    NS_ENSURE_TRUE(mPrefs && aPrefName, NS_OK);
 
-    mPrefs->SetBoolPref(aPrefName, aNewVal);
-    nsCOMPtr<nsIPrefService> prefService = do_QueryInterface(mPrefs);
-    NS_ENSURE_STATE(prefService);
-    prefService->SavePrefFile(nsnull);
+    nsIPrefService* prefService = Preferences::GetService();
+    NS_ENSURE_TRUE(prefService && aPrefName, NS_OK);
+
+    Preferences::SetBool(aPrefName, aNewVal);
+    prefService->SavePrefFile(nullptr);
 
     ForceRefresh();
-
-    return NS_OK;
-}
-
-nsresult
-nsLayoutDebuggingTools::GetBoolPref(const char * aPrefName,
-                                    PRBool *aValue)
-{
-    NS_ENSURE_TRUE(mPrefs && aPrefName, NS_OK);
-
-    mPrefs->GetBoolPref(aPrefName, aValue);
 
     return NS_OK;
 }

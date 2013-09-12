@@ -211,6 +211,9 @@ class FilePath {
   // separator.
   FilePath StripTrailingSeparators() const;
 
+  // Calls open on given ifstream instance
+  void OpenInputStream(std::ifstream &stream) const;
+
   // Older Chromium code assumes that paths are always wstrings.
   // This function converts a wstring to a FilePath, and is useful to smooth
   // porting that old code to the FilePath API.
@@ -244,7 +247,7 @@ class FilePath {
 #endif  // OS_WIN
 
 // Implement hash function so that we can use FilePaths in hashsets and maps.
-#if defined(COMPILER_GCC)
+#if defined(COMPILER_GCC) && !defined(ANDROID)
 namespace __gnu_cxx {
 
 template<>

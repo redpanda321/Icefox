@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsXPCOM.h"
 #include "nsMemoryImpl.h"
@@ -44,52 +12,31 @@
 #include "nsIServiceManager.h"
 #include "nsISupportsArray.h"
 
-#include "prmem.h"
 #include "prcvar.h"
 #include "pratom.h"
 
 #include "nsAlgorithm.h"
-#include "nsAutoLock.h"
 #include "nsCOMPtr.h"
 #include "nsString.h"
 #include "mozilla/Services.h"
 
-#if defined(XP_WIN)
-#include <windows.h>
+#ifdef ANDROID
+#include <stdio.h>
+#define LOW_MEMORY_THRESHOLD_KB (512 * 1024)
 #endif
-
-#if (MOZ_PLATFORM_MAEMO == 5 || MOZ_PLATFORM_MAEMO == 4) && defined(__arm__)
-#include <fcntl.h>
-#include <unistd.h>
-static const char kHighMark[] = "/sys/kernel/high_watermark";
-#endif
-
-// Some platforms notify you when system memory is low, others do not.
-// In the case of those that do not, we want to post low memory
-// notifications from IsLowMemory().  For those that can notify us, that
-// code usually lives in toolkit.
-#ifdef WINCE
-#define NOTIFY_LOW_MEMORY
-#endif
-
-#ifdef WINCE_WINDOWS_MOBILE
-#include "aygshell.h"
-#endif
-
-#include "nsITimer.h"
 
 static nsMemoryImpl sGlobalMemory;
 
 NS_IMPL_QUERY_INTERFACE1(nsMemoryImpl, nsIMemory)
 
 NS_IMETHODIMP_(void*)
-nsMemoryImpl::Alloc(PRSize size)
+nsMemoryImpl::Alloc(size_t size)
 {
     return NS_Alloc(size);
 }
 
 NS_IMETHODIMP_(void*)
-nsMemoryImpl::Realloc(void* ptr, PRSize size)
+nsMemoryImpl::Realloc(void* ptr, size_t size)
 {
     return NS_Realloc(ptr, size);
 }
@@ -101,60 +48,46 @@ nsMemoryImpl::Free(void* ptr)
 }
 
 NS_IMETHODIMP
-nsMemoryImpl::HeapMinimize(PRBool aImmediate)
+nsMemoryImpl::HeapMinimize(bool aImmediate)
 {
     return FlushMemory(NS_LITERAL_STRING("heap-minimize").get(), aImmediate);
 }
 
-/* this magic number is something greater than 40mb
- * and after all, 40mb should be good enough for any web app
- * unless it's part of an office suite.
- */
-static const int kRequiredMemory = 0x3000000;
+NS_IMETHODIMP
+nsMemoryImpl::IsLowMemory(bool *result)
+{
+    NS_ERROR("IsLowMemory is deprecated.  See bug 592308.");
+    *result = false;
+    return NS_OK;
+}
 
 NS_IMETHODIMP
-nsMemoryImpl::IsLowMemory(PRBool *result)
+nsMemoryImpl::IsLowMemoryPlatform(bool *result)
 {
-#if defined(WINCE_WINDOWS_MOBILE)
-    MEMORYSTATUS stat;
-    GlobalMemoryStatus(&stat);
-    *result = (stat.dwMemoryLoad >= 98);
-#elif defined(WINCE)
-    // Bug 525323 - GlobalMemoryStatus kills perf on WinCE.
-    *result = PR_FALSE;
-#elif defined(XP_WIN)
-    MEMORYSTATUSEX stat;
-    stat.dwLength = sizeof stat;
-    GlobalMemoryStatusEx(&stat);
-    *result = (stat.ullAvailPageFile < kRequiredMemory) &&
-        ((float)stat.ullAvailPageFile / stat.ullTotalPageFile) < 0.1;
-#elif (MOZ_PLATFORM_MAEMO == 5 || MOZ_PLATFORM_MAEMO == 4) && defined(__arm__)
-    static int osso_highmark_fd = -1;
-    if (osso_highmark_fd == -1) {
-        osso_highmark_fd = open (kHighMark, O_RDONLY);
+#ifdef ANDROID
+    static int sLowMemory = -1; // initialize to unknown, lazily evaluate to 0 or 1
+    if (sLowMemory == -1) {
+        sLowMemory = 0; // assume "not low memory" in case file operations fail
+        *result = false;
 
-        if (osso_highmark_fd == -1) {
-            NS_ERROR("can't find the osso highmark file");    
-            *result = PR_FALSE;
+        // check if MemTotal from /proc/meminfo is less than LOW_MEMORY_THRESHOLD_KB
+        FILE* fd = fopen("/proc/meminfo", "r");
+        if (!fd) {
             return NS_OK;
         }
+        uint64_t mem = 0;
+        int rv = fscanf(fd, "MemTotal: %lu kB", &mem);
+        if (fclose(fd)) {
+            return NS_OK;
+        }
+        if (rv != 1) {
+            return NS_OK;
+        }
+        sLowMemory = (mem < LOW_MEMORY_THRESHOLD_KB) ? 1 : 0;
     }
-
-    // be kind, rewind.
-    lseek(osso_highmark_fd, 0L, SEEK_SET);
-
-    int c = 0;
-    read (osso_highmark_fd, &c, 1);
-
-    *result = (c == '1');
+    *result = (sLowMemory == 1);
 #else
-    *result = PR_FALSE;
-#endif
-
-#ifdef NOTIFY_LOW_MEMORY
-    if (*result) {
-        sGlobalMemory.FlushMemory(NS_LITERAL_STRING("low-memory").get(), PR_FALSE);
-    }
+    *result = false;
 #endif
     return NS_OK;
 }
@@ -167,7 +100,7 @@ nsMemoryImpl::Create(nsISupports* outer, const nsIID& aIID, void **aResult)
 }
 
 nsresult
-nsMemoryImpl::FlushMemory(const PRUnichar* aReason, PRBool aImmediate)
+nsMemoryImpl::FlushMemory(const PRUnichar* aReason, bool aImmediate)
 {
     nsresult rv = NS_OK;
 
@@ -181,7 +114,7 @@ nsMemoryImpl::FlushMemory(const PRUnichar* aReason, PRBool aImmediate)
         }
     }
 
-    PRInt32 lastVal = PR_AtomicSet(&sIsFlushing, 1);
+    int32_t lastVal = PR_ATOMIC_SET(&sIsFlushing, 1);
     if (lastVal)
         return NS_OK;
 
@@ -220,7 +153,7 @@ nsMemoryImpl::RunFlushers(const PRUnichar* aReason)
 
         if ( e ) {
           nsCOMPtr<nsIObserver> observer;
-          PRBool loop = PR_TRUE;
+          bool loop = true;
 
           while (NS_SUCCEEDED(e->HasMoreElements(&loop)) && loop) 
           {
@@ -233,17 +166,6 @@ nsMemoryImpl::RunFlushers(const PRUnichar* aReason)
           }
         }
     }
-
-    // Run built-in system flushers
-#ifdef WINCE_WINDOWS_MOBILE
-
-    // This function tries to free up memory for an application.
-    // If necessary, the shell closes down other applications by
-    // sending WM_CLOSE messages.  We ask for 4MB.
-
-    SHCloseApps(1024 * 1024 * 4);
-
-#endif
 
     sIsFlushing = 0;
     return NS_OK;
@@ -261,7 +183,7 @@ nsMemoryImpl::FlushEvent::Run()
     return NS_OK;
 }
 
-PRInt32
+int32_t
 nsMemoryImpl::sIsFlushing = 0;
 
 PRIntervalTime
@@ -271,31 +193,15 @@ nsMemoryImpl::FlushEvent
 nsMemoryImpl::sFlushEvent;
 
 XPCOM_API(void*)
-NS_Alloc(PRSize size)
+NS_Alloc(size_t size)
 {
-    if (size > PR_INT32_MAX)
-        return nsnull;
-
-    void* result = moz_malloc(size);
-    if (! result) {
-        // Request an asynchronous flush
-        sGlobalMemory.FlushMemory(NS_LITERAL_STRING("alloc-failure").get(), PR_FALSE);
-    }
-    return result;
+    return moz_xmalloc(size);
 }
 
 XPCOM_API(void*)
-NS_Realloc(void* ptr, PRSize size)
+NS_Realloc(void* ptr, size_t size)
 {
-    if (size > PR_INT32_MAX)
-        return nsnull;
-
-    void* result = moz_realloc(ptr, size);
-    if (! result && size != 0) {
-        // Request an asynchronous flush
-        sGlobalMemory.FlushMemory(NS_LITERAL_STRING("alloc-failure").get(), PR_FALSE);
-    }
-    return result;
+    return moz_xrealloc(ptr, size);
 }
 
 XPCOM_API(void)

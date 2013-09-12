@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Places test code.
- *
- * The Initial Developer of the Original Code is Mozilla Corp.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Margaret Leibovic <mleibovic@mozilla.com> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by devaring the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not devare
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  *  Test appropriate visibility of infoBoxExpanderWrapper and
@@ -50,6 +18,7 @@ gTests.push({
   desc: "Bug 430148 - Remove or hide the more/less button in details pane...",
   run: function() {
     var PO = gLibrary.PlacesOrganizer;
+    let ContentTree = gLibrary.ContentTree;
     var infoBoxExpanderWrapper = getAndCheckElmtById("infoBoxExpanderWrapper");
 
     // add a visit to browser history
@@ -89,7 +58,7 @@ gTests.push({
     checkAddInfoFieldsCollapsed(PO);
 
     // open history item
-    var view = PO._content.treeBoxObject.view;
+    var view = ContentTree.view.treeBoxObject.view;
     ok(view.rowCount > 0, "History item exists.");
     view.selection.select(0);
     ok(infoBoxExpanderWrapper.hidden,
@@ -126,7 +95,7 @@ gTests.push({
     checkAddInfoFieldsNotCollapsed(PO);
 
     // open first bookmark
-    var view = PO._content.treeBoxObject.view;
+    var view = ContentTree.view.treeBoxObject.view;
     ok(view.rowCount > 0, "Bookmark item exists.");
     view.selection.select(0);
     checkInfoBoxSelected(PO);
@@ -146,8 +115,7 @@ gTests.push({
 
     menuNode.containerOpen = false;
 
-    bhist.removeAllPages();
-    nextTest();
+    waitForClearHistory(nextTest);
   }
 });
 
@@ -215,35 +183,16 @@ function nextTest() {
   }
 }
 
-var ww = Cc["@mozilla.org/embedcomp/window-watcher;1"].
-         getService(Ci.nsIWindowWatcher);
-
-function windowObserver(aSubject, aTopic, aData) {
-  if (aTopic != "domwindowopened")
-    return;
-  ww.unregisterNotification(windowObserver);
-  gLibrary = aSubject.QueryInterface(Ci.nsIDOMWindow);
-  gLibrary.addEventListener("load", function onLoad(event) {
-    gLibrary.removeEventListener("load", onLoad, false);
-    executeSoon(function() {
-      gLibrary.PlacesOrganizer._places.focus();
-      waitForFocus(nextTest, gLibrary);
-    });
-  }, false);
-}
-
 function test() {
-  dump("Starting test browser_library_infoBox.js\n");
   waitForExplicitFinish();
   // Sanity checks.
   ok(PlacesUtils, "PlacesUtils is running in chrome context");
   ok(PlacesUIUtils, "PlacesUIUtils is running in chrome context");
 
   // Open Library.
-  ww.registerNotification(windowObserver);
-  ww.openWindow(null,
-                "chrome://browser/content/places/places.xul",
-                "",
-                "chrome,toolbar=yes,dialog=no,resizable",
-                null);
+  openLibrary(function (library) {
+    gLibrary = library;
+    gLibrary.PlacesOrganizer._places.focus();
+    nextTest(gLibrary);
+  });
 }

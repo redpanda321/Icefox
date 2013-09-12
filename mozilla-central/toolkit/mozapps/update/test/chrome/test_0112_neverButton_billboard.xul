@@ -11,8 +11,6 @@
 <window title="Update Wizard pages: update check and billboard (never button test)"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         onload="runTestDefault();">
-<script type="application/javascript" 
-        src="chrome://mochikit/content/MochiKit/packed.js"/>
 <script type="application/javascript"
         src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"/>
 <script type="application/javascript"
@@ -42,11 +40,10 @@ const TESTS = [ {
 } ];
 
 function runTest() {
-  debugDump("Entering runTest");
+  debugDump("entering");
 
   let url = URL_UPDATE + "?showBillboard=1&showNever=1" + getVersionParams();
   setUpdateURLOverride(url);
-  debugDump("Update URL: " + url);
 
   // add the never preference for this version to verify that checking for
   // updates clears the preference.

@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=383430
 -->
 <head>
   <title>Test for Bug 383430</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -26,7 +25,7 @@ req.mozBackgroundRequest = true;
 req.open("GET", window.location.href);
 req.send(null);
 
-ok(req.channel.loadGroup == null, "loadGroup is null");
+ok(SpecialPowers.wrap(req).channel.loadGroup == null, "loadGroup is null");
 </script>
 </pre>
 </body>

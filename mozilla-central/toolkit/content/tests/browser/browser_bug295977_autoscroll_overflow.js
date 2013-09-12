@@ -29,14 +29,14 @@ function test()
     }
 
     var elem = doc.getElementById(test.elem);
-    EventUtils.synthesizeMouse(elem, 50, 50, { button: 1 },
-                               gBrowser.contentWindow);
-    EventUtils.synthesizeMouse(elem, 100, 100,
-                               { type: "mousemove", clickCount: "0" },
-                               gBrowser.contentWindow);
-    // the autoscroll implementation uses a 20ms interval
-    // wait for 40ms to make sure it did autoscroll at least once
-    setTimeout(function () {
+    // Skip the first callback as it's the same callback that the browser
+    // uses to kick off the scrolling.
+    var skipFrames = 1;
+    var checkScroll = function () {
+      if (skipFrames--) {
+        window.mozRequestAnimationFrame(checkScroll);
+        return;
+      }
       EventUtils.synthesizeKey("VK_ESCAPE", {}, gBrowser.contentWindow);
       var scrollVert = test.expected & expectScrollVert;
       ok((scrollVert && elem.scrollTop > 0) ||
@@ -47,7 +47,25 @@ function test()
          (!scrollHori && elem.scrollLeft == 0),
          test.elem+' should'+(scrollHori ? '' : ' not')+' have scrolled horizontally');
       nextTest();
-    }, 40);
+    };
+    EventUtils.synthesizeMouse(elem, 50, 50, { button: 1 },
+                               gBrowser.contentWindow);
+
+    var iframe = gBrowser.contentDocument.getElementById("iframe");
+    var e = iframe.contentDocument.createEvent("pagetransition");
+    e.initPageTransitionEvent("pagehide", true, true, false);
+    iframe.contentDocument.dispatchEvent(e);
+    iframe.contentDocument.documentElement.dispatchEvent(e);
+
+    EventUtils.synthesizeMouse(elem, 100, 100,
+                               { type: "mousemove", clickCount: "0" },
+                               gBrowser.contentWindow);
+    /*
+     * if scrolling didn’t work, we wouldn’t do any redraws and thus time out.
+     * so request and force redraws to get the chance to check for scrolling at
+     * all.
+     */
+    window.mozRequestAnimationFrame(checkScroll);
   }
 
   waitForExplicitFinish();
@@ -62,8 +80,9 @@ function test()
     <select id="f" style="width: 100px; height: 100px;"><option>a</option><option>aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa</option><option>a</option>\
     <option>a</option><option>a</option><option>a</option><option>a</option><option>a</option><option>a</option><option>a</option>\
     <option>a</option><option>a</option><option>a</option><option>a</option><option>a</option><option>a</option><option>a</option></select>\
-    <div id="g" style="width: 99px; height: 99px; padding: 10px; border: 10px solid black; margin: 10px; overflow: auto;"><div style="width: 100px; height: 100px;"></div></div>\
+    <div id="g" style="width: 99px; height: 99px; padding: 10px; border: 10px solid black; margin: 10px; overflow: auto;"><div style="width: 100px; height: 100px; margin: 10px;"></div></div>\
     <div id="h" style="width: 100px; height: 100px; overflow: -moz-hidden-unscrollable;"><div style="width: 200px; height: 200px;"></div></div>\
+    <iframe id="iframe" style="display: none;"></iframe>\
     </body>';
   gBrowser.selectedBrowser.addEventListener("pageshow", onLoad, false);
   gBrowser.loadURI(dataUri);

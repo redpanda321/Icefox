@@ -7,18 +7,14 @@ const PR_RDONLY = 0x1;  // see prio.h
 
 const special_type = "application/x-our-special-type";
 
-var test_index = 0;
-var test_array = [
+[
   test_read_file,
   test_read_dir_1,
   test_read_dir_2,
   test_upload_file,
+  test_load_replace,
   do_test_finished
-];
-
-function run_next_test() {
-  test_array[test_index++]();
-}
+].forEach(add_test);
 
 function getFile(key) {
   var dirSvc = Components.classes["@mozilla.org/file/directory_service;1"]
@@ -122,7 +118,7 @@ FileStreamListener.prototype = {
 function test_read_file() {
   dump("*** test_read_file\n");
 
-  var file = getFile("XpcomLib");
+  var file = do_get_file("../unit/data/test_readline6.txt");
   var chan = new_file_channel(file);
 
   function on_read_complete(data) {
@@ -179,7 +175,7 @@ function test_read_dir_2() {
 function test_upload_file() {
   dump("*** test_upload_file\n");
 
-  var file = getFile("XpcomLib");  // file to upload
+  var file = do_get_file("../unit/data/test_readline6.txt"); // file to upload
   var dest = getFile("TmpD");      // file upload destination
   dest.append("junk.dat");
   dest.createUnique(dest.NORMAL_FILE_TYPE, 0600);
@@ -227,7 +223,28 @@ function test_upload_file() {
   chan.asyncOpen(new FileStreamListener(on_upload_complete), null);
 }
 
+function test_load_replace() {
+  // lnk files should resolve to their targets
+  const isWindows = ("@mozilla.org/windows-registry-key;1" in Cc);
+  if (isWindows) {
+    dump("*** test_load_replace\n");
+    file = do_get_file("data/system_root.lnk", false);
+    var chan = new_file_channel(file);
+
+    // The LOAD_REPLACE flag should be set
+    do_check_eq(chan.loadFlags & chan.LOAD_REPLACE, chan.LOAD_REPLACE);
+
+    // The original URI path should differ from the URI path
+    do_check_neq(chan.URI.path, chan.originalURI.path);
+
+    // The original URI path should be the same as the lnk file path
+    var ios = Cc["@mozilla.org/network/io-service;1"].
+              getService(Ci.nsIIOService);
+    do_check_eq(chan.originalURI.path, ios.newFileURI(file).path);
+  }
+  run_next_test();
+}
+
 function run_test() {
-  do_test_pending();
   run_next_test();
 }

@@ -1,57 +1,24 @@
 /* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 4 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Foundation code.
- *
- * The Initial Developer of the Original Code is Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Vladimir Vukicevic <vladimir@mozilla.com>
- *   Masayuki Nakano <masayuki@d-toybox.com>
- *   Behdad Esfahbod <behdad@gnome.org>
- *   Mats Palmgren <mats.palmgren@bredband.net>
- *   Karl Tomlinson <karlt+@karlt.net>, Mozilla Corporation
- *   Takuro Ashie <ashie@clear-code.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "gfxFT2FontBase.h"
 #include "gfxFT2Utils.h"
+#include "harfbuzz/hb.h"
+#include "mozilla/Likely.h"
+
+using namespace mozilla::gfx;
 
 gfxFT2FontBase::gfxFT2FontBase(cairo_scaled_font_t *aScaledFont,
                                gfxFontEntry *aFontEntry,
                                const gfxFontStyle *aFontStyle)
-    : gfxFont(aFontEntry, aFontStyle),
-      mScaledFont(aScaledFont),
+    : gfxFont(aFontEntry, aFontStyle, kAntialiasDefault, aScaledFont),
       mSpaceGlyph(0),
-      mHasMetrics(PR_FALSE)
+      mHasMetrics(false)
 {
     cairo_scaled_font_reference(mScaledFont);
+    ConstructFontOptions();
 }
 
 gfxFT2FontBase::~gfxFT2FontBase()
@@ -59,8 +26,8 @@ gfxFT2FontBase::~gfxFT2FontBase()
     cairo_scaled_font_destroy(mScaledFont);
 }
 
-PRUint32
-gfxFT2FontBase::GetGlyph(PRUint32 aCharCode)
+uint32_t
+gfxFT2FontBase::GetGlyph(uint32_t aCharCode)
 {
     // FcFreeTypeCharIndex needs to lock the FT_Face and can end up searching
     // through all the postscript glyph names in the font.  Therefore use a
@@ -79,10 +46,10 @@ gfxFT2FontBase::GetGlyph(PRUint32 aCharCode)
     // scripts with large character sets as used for East Asian languages.
 
     struct CmapCacheSlot {
-        PRUint32 mCharCode;
-        PRUint32 mGlyphIndex;
+        uint32_t mCharCode;
+        uint32_t mGlyphIndex;
     };
-    const PRUint32 kNumSlots = 256;
+    const uint32_t kNumSlots = 256;
     static cairo_user_data_key_t sCmapCacheKey;
 
     CmapCacheSlot *slots = static_cast<CmapCacheSlot*>
@@ -122,7 +89,7 @@ gfxFT2FontBase::GetGlyph(PRUint32 aCharCode)
 }
 
 void
-gfxFT2FontBase::GetGlyphExtents(PRUint32 aGlyph, cairo_text_extents_t* aExtents)
+gfxFT2FontBase::GetGlyphExtents(uint32_t aGlyph, cairo_text_extents_t* aExtents)
 {
     NS_PRECONDITION(aExtents != NULL, "aExtents must not be NULL");
 
@@ -144,14 +111,14 @@ gfxFT2FontBase::GetMetrics()
     if (mHasMetrics)
         return mMetrics;
 
-    if (NS_UNLIKELY(GetStyle()->size <= 0.0)) {
+    if (MOZ_UNLIKELY(GetStyle()->size <= 0.0)) {
         new(&mMetrics) gfxFont::Metrics(); // zero initialize
         mSpaceGlyph = 0;
     } else {
         gfxFT2LockedFace(this).GetMetrics(&mMetrics, &mSpaceGlyph);
     }
 
-    SanitizeMetrics(&mMetrics, PR_FALSE);
+    SanitizeMetrics(&mMetrics, false);
 
 #if 0
     //    printf("font name: %s %f\n", NS_ConvertUTF16toUTF8(GetName()).get(), GetStyle()->size);
@@ -165,18 +132,12 @@ gfxFT2FontBase::GetMetrics()
     fprintf (stderr, "    uOff: %f uSize: %f stOff: %f stSize: %f suOff: %f suSize: %f\n", mMetrics.underlineOffset, mMetrics.underlineSize, mMetrics.strikeoutOffset, mMetrics.strikeoutSize, mMetrics.superscriptOffset, mMetrics.subscriptOffset);
 #endif
 
-    mHasMetrics = PR_TRUE;
+    mHasMetrics = true;
     return mMetrics;
 }
 
-nsString
-gfxFT2FontBase::GetUniqueName()
-{
-    return GetName();
-}
-
 // Get the glyphID of a space
-PRUint32
+uint32_t
 gfxFT2FontBase::GetSpaceGlyph()
 {
     NS_ASSERTION(GetStyle()->size != 0,
@@ -185,7 +146,45 @@ gfxFT2FontBase::GetSpaceGlyph()
     return mSpaceGlyph;
 }
 
-PRBool
+hb_blob_t *
+gfxFT2FontBase::GetFontTable(uint32_t aTag)
+{
+    hb_blob_t *blob;
+    if (mFontEntry->GetExistingFontTable(aTag, &blob))
+        return blob;
+
+    FallibleTArray<uint8_t> buffer;
+    bool haveTable = gfxFT2LockedFace(this).GetFontTable(aTag, buffer);
+
+    // Cache even when there is no table to save having to open the FT_Face
+    // again.
+    return mFontEntry->ShareFontTableAndGetBlob(aTag,
+                                                haveTable ? &buffer : nullptr);
+}
+
+uint32_t
+gfxFT2FontBase::GetGlyph(uint32_t unicode, uint32_t variation_selector)
+{
+    if (variation_selector) {
+        uint32_t id =
+            gfxFT2LockedFace(this).GetUVSGlyph(unicode, variation_selector);
+        if (id)
+            return id;
+    }
+
+    return GetGlyph(unicode);
+}
+
+int32_t
+gfxFT2FontBase::GetGlyphWidth(gfxContext *aCtx, uint16_t aGID)
+{
+    cairo_text_extents_t extents;
+    GetGlyphExtents(aGID, &extents);
+    // convert to 16.16 fixed point
+    return NS_lround(0x10000 * extents.x_advance);
+}
+
+bool
 gfxFT2FontBase::SetupCairoFont(gfxContext *aContext)
 {
     cairo_t *cr = aContext->GetCairo();
@@ -201,7 +200,7 @@ gfxFT2FontBase::SetupCairoFont(gfxContext *aContext)
     if (cairo_scaled_font_status(cairoFont) != CAIRO_STATUS_SUCCESS) {
         // Don't cairo_set_scaled_font as that would propagate the error to
         // the cairo_t, precluding any further drawing.
-        return PR_FALSE;
+        return false;
     }
     // Thoughts on which font_options to set on the context:
     //
@@ -223,5 +222,27 @@ gfxFT2FontBase::SetupCairoFont(gfxContext *aContext)
     // already taken place.  We should really be measuring with a different
     // font for pdf and ps surfaces (bug 403513).
     cairo_set_scaled_font(cr, cairoFont);
-    return PR_TRUE;
+    return true;
+}
+
+void
+gfxFT2FontBase::ConstructFontOptions()
+{
+  NS_LossyConvertUTF16toASCII name(this->GetName());
+  mFontOptions.mName = name.get();
+
+  const gfxFontStyle* style = this->GetStyle();
+  if (style->style == NS_FONT_STYLE_ITALIC) {
+    if (style->weight == NS_FONT_WEIGHT_BOLD) {
+      mFontOptions.mStyle = FONT_STYLE_BOLD_ITALIC;
+    } else {
+      mFontOptions.mStyle = FONT_STYLE_ITALIC;
+    }
+  } else {
+    if (style->weight == NS_FONT_WEIGHT_BOLD) {
+      mFontOptions.mStyle = FONT_STYLE_BOLD;
+    } else {
+      mFontOptions.mStyle = FONT_STYLE_NORMAL;
+    }
+  }
 }

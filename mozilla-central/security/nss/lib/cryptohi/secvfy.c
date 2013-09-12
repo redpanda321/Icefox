@@ -1,43 +1,10 @@
 /*
  * Verification stuff.
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Vipul Gupta <vipul.gupta@sun.com>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-/* $Id: secvfy.c,v 1.24 2010/06/23 02:13:56 wtc%google.com Exp $ */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+/* $Id: secvfy.c,v 1.30 2012/06/25 21:48:39 rrelyea%redhat.com Exp $ */
 
 #include <stdio.h>
 #include "cryptohi.h"
@@ -136,7 +103,7 @@ struct VFYContextStr {
 	/* the digest in the decrypted RSA signature */
 	unsigned char rsadigest[HASH_LENGTH_MAX];
 	/* the full DSA signature... 40 bytes */
-	unsigned char dsasig[DSA_SIGNATURE_LEN];
+	unsigned char dsasig[DSA_MAX_SIGNATURE_LEN];
 	/* the full ECDSA signature */
 	unsigned char ecdsasig[2 * MAX_ECKEY_LEN];
     } u;
@@ -241,8 +208,14 @@ sec_DecodeSigAlg(const SECKEYPublicKey *key, SECOidTag sigAlg,
         *hashalg = SEC_OID_UNKNOWN; /* get it from the RSA signature */
 	break;
 
+      case SEC_OID_ANSIX962_ECDSA_SHA224_SIGNATURE:
+      case SEC_OID_PKCS1_SHA224_WITH_RSA_ENCRYPTION:
+      case SEC_OID_NIST_DSA_SIGNATURE_WITH_SHA224_DIGEST:
+	*hashalg = SEC_OID_SHA224;
+	break;
       case SEC_OID_ANSIX962_ECDSA_SHA256_SIGNATURE:
       case SEC_OID_PKCS1_SHA256_WITH_RSA_ENCRYPTION:
+      case SEC_OID_NIST_DSA_SIGNATURE_WITH_SHA256_DIGEST:
 	*hashalg = SEC_OID_SHA256;
 	break;
       case SEC_OID_ANSIX962_ECDSA_SHA384_SIGNATURE:
@@ -276,9 +249,7 @@ sec_DecodeSigAlg(const SECKEYPublicKey *key, SECOidTag sigAlg,
 	if (len < 28) { /* 28 bytes == 224 bits */
 	    *hashalg = SEC_OID_SHA1;
 	} else if (len < 32) { /* 32 bytes == 256 bits */
-	    /* SHA 224 not supported in NSS */
-	    PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
-	    return SECFailure;
+	    *hashalg = SEC_OID_SHA224;
 	} else if (len < 48) { /* 48 bytes == 384 bits */
 	    *hashalg = SEC_OID_SHA256;
 	} else if (len < 64) { /* 48 bytes == 512 bits */
@@ -298,11 +269,13 @@ sec_DecodeSigAlg(const SECKEYPublicKey *key, SECOidTag sigAlg,
 	    return SECFailure;
 	}
 	rv = SEC_QuickDERDecodeItem(arena, &oid, hashParameterTemplate, param);
-	if (rv != SECSuccess) {
-	    PORT_FreeArena(arena, PR_FALSE);
+	if (rv == SECSuccess) {
+            *hashalg = SECOID_FindOIDTag(&oid);
+        }
+        PORT_FreeArena(arena, PR_FALSE);
+        if (rv != SECSuccess) {
 	    return rv;
 	}
-	*hashalg = SECOID_FindOIDTag(&oid);
 	/* only accept hash algorithms */
 	if (HASH_GetHashTypeByOidTag(*hashalg) == HASH_AlgNULL) {
 	    /* error set by HASH_GetHashTypeByOidTag */
@@ -323,6 +296,7 @@ sec_DecodeSigAlg(const SECKEYPublicKey *key, SECOidTag sigAlg,
       case SEC_OID_PKCS1_SHA1_WITH_RSA_ENCRYPTION:
       case SEC_OID_ISO_SHA_WITH_RSA_SIGNATURE:
       case SEC_OID_ISO_SHA1_WITH_RSA_SIGNATURE:
+      case SEC_OID_PKCS1_SHA224_WITH_RSA_ENCRYPTION:
       case SEC_OID_PKCS1_SHA256_WITH_RSA_ENCRYPTION:
       case SEC_OID_PKCS1_SHA384_WITH_RSA_ENCRYPTION:
       case SEC_OID_PKCS1_SHA512_WITH_RSA_ENCRYPTION:
@@ -335,6 +309,8 @@ sec_DecodeSigAlg(const SECKEYPublicKey *key, SECOidTag sigAlg,
       /* what about normal DSA? */
       case SEC_OID_ANSIX9_DSA_SIGNATURE_WITH_SHA1_DIGEST:
       case SEC_OID_BOGUS_DSA_SIGNATURE_WITH_SHA1_DIGEST:
+      case SEC_OID_NIST_DSA_SIGNATURE_WITH_SHA224_DIGEST:
+      case SEC_OID_NIST_DSA_SIGNATURE_WITH_SHA256_DIGEST:
 	*encalg = SEC_OID_ANSIX9_DSA_SIGNATURE;
 	break;
       case SEC_OID_MISSI_DSS:
@@ -344,6 +320,7 @@ sec_DecodeSigAlg(const SECKEYPublicKey *key, SECOidTag sigAlg,
 	*encalg = SEC_OID_MISSI_DSS;
 	break;
       case SEC_OID_ANSIX962_ECDSA_SHA1_SIGNATURE:
+      case SEC_OID_ANSIX962_ECDSA_SHA224_SIGNATURE:
       case SEC_OID_ANSIX962_ECDSA_SHA256_SIGNATURE:
       case SEC_OID_ANSIX962_ECDSA_SHA384_SIGNATURE:
       case SEC_OID_ANSIX962_ECDSA_SHA512_SIGNATURE:

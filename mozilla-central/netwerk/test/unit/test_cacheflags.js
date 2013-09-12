@@ -1,4 +1,9 @@
-do_load_httpd_js();
+const Cc = Components.classes;
+const Ci = Components.interfaces;
+const Cu = Components.utils;
+const Cr = Components.results;
+
+Cu.import("resource://testing-common/httpd.js");
 
 var httpserver = null;
 
@@ -11,20 +16,49 @@ var longexpPath = "/longexp" + suffix;
 var nocachePath = "/nocache" + suffix;
 var nostorePath = "/nostore" + suffix;
 
-function make_channel(url, flags) {
+// We attach this to channel when we want to test Private Browsing mode
+function LoadContext(usePrivateBrowsing) {
+  this.usePrivateBrowsing = usePrivateBrowsing;
+}
+
+LoadContext.prototype = {
+  usePrivateBrowsing: false,
+  // don't bother defining rest of nsILoadContext fields: don't need 'em
+
+  QueryInterface: function(iid) {
+    if (iid.equals(Ci.nsILoadContext))
+      return this;
+    throw Cr.NS_ERROR_NO_INTERFACE;
+  },
+
+  getInterface: function(iid) {
+    if (iid.equals(Ci.nsILoadContext))
+      return this;
+    throw Cr.NS_ERROR_NO_INTERFACE;
+  }
+};
+
+PrivateBrowsingLoadContext = new LoadContext(true);
+
+function make_channel(url, flags, usePrivateBrowsing) {
   var ios = Cc["@mozilla.org/network/io-service;1"].
     getService(Ci.nsIIOService);
   var req = ios.newChannel(url, null, null);
   req.loadFlags = flags;
+  if (usePrivateBrowsing) {
+    req.notificationCallbacks = PrivateBrowsingLoadContext;    
+  }
   return req;
 }
 
-function Test(path, flags, expectSuccess, readFromCache, hitServer) {
+function Test(path, flags, expectSuccess, readFromCache, hitServer, 
+              usePrivateBrowsing /* defaults to false */) {
   this.path = path;
   this.flags = flags;
   this.expectSuccess = expectSuccess;
   this.readFromCache = readFromCache;
   this.hitServer = hitServer;
+  this.usePrivateBrowsing = usePrivateBrowsing;
 }
 
 Test.prototype = {
@@ -32,6 +66,7 @@ Test.prototype = {
   expectSuccess: true,
   readFromCache: false,
   hitServer: true,
+  usePrivateBrowsing: false,
   _buffer: "",
   _isFromCache: false,
 
@@ -44,7 +79,7 @@ Test.prototype = {
   },
 
   onStartRequest: function(request, context) {
-    var cachingChannel = request.QueryInterface(Ci.nsICachingChannel);
+    var cachingChannel = request.QueryInterface(Ci.nsICacheInfoChannel);
     this._isFromCache = request.isPending() && cachingChannel.isFromCache();
   },
 
@@ -68,7 +103,7 @@ Test.prototype = {
          "\n  " + this.readFromCache +
          "\n  " + this.hitServer + "\n");
     gHitServer = false;
-    var channel = make_channel(this.path, this.flags);
+    var channel = make_channel(this.path, this.flags, this.usePrivateBrowsing);
     channel.asyncOpen(this, null);
   }
 };
@@ -76,6 +111,12 @@ Test.prototype = {
 var gHitServer = false;
 
 var gTests = [
+
+  new Test(httpBase + shortexpPath, 0,
+           true,   // expect success
+           false,  // read from cache
+           true,   // hit server
+           true),  // USE PRIVATE BROWSING, so not cached for later requests
   new Test(httpBase + shortexpPath, 0,
            true,   // expect success
            false,  // read from cache
@@ -255,7 +296,7 @@ function longexp_handler(metadata, response) {
 }
 
 function run_test() {
-  httpserver = new nsHttpServer();
+  httpserver = new HttpServer();
   httpserver.registerPathHandler(shortexpPath, shortexp_handler);
   httpserver.registerPathHandler(longexpPath, longexp_handler);
   httpserver.registerPathHandler(nocachePath, nocache_handler);

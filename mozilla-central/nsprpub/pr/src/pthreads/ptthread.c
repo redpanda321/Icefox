@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape Portable Runtime (NSPR).
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 ** File:            ptthread.c
@@ -51,6 +19,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
+#include <dlfcn.h>
 
 #ifdef SYMBIAN
 /* In Open C sched_get_priority_min/max do not work properly, so we undefine
@@ -74,7 +43,7 @@ static struct _PT_Bookeeping
     PRCondVar *cv;              /* used to signal global things */
     PRInt32 system, user;       /* a count of the two different types */
     PRUintn this_many;          /* number of threads allowed for exit */
-    pthread_key_t key;          /* private private data key */
+    pthread_key_t key;          /* thread private data key */
     PRThread *first, *last;     /* list of threads we know about */
 #if defined(_PR_DCETHREADS) || defined(_POSIX_THREAD_PRIORITY_SCHEDULING)
     PRInt32 minPrio, maxPrio;   /* range of scheduling priorities */
@@ -102,42 +71,6 @@ static PRIntn pt_PriorityMap(PRThreadPriority pri)
 }
 #endif
 
-#if defined(GC_LEAK_DETECTOR) && (__GLIBC__ >= 2) && defined(__i386__) 
-
-#include <setjmp.h>
-
-typedef struct stack_frame stack_frame;
-
-struct stack_frame {
-    stack_frame* next;
-    void* pc;
-};
-
-static stack_frame* GetStackFrame()
-{
-    jmp_buf jb;
-    stack_frame* currentFrame;
-    setjmp(jb);
-    currentFrame = (stack_frame*)(jb[0].__jmpbuf[JB_BP]);
-    currentFrame = currentFrame->next;
-    return currentFrame;
-}
-
-static void* GetStackTop()
-{
-    stack_frame* frame;
-    frame = GetStackFrame();
-    while (frame != NULL)
-    {
-        ptrdiff_t pc = (ptrdiff_t)frame->pc;
-        if ((pc < 0x08000000) || (pc > 0x7fffffff) || (frame->next < frame))
-            return frame;
-        frame = frame->next;
-    }
-    return NULL;
-}
-#endif /* GC_LEAK_DETECTOR && (__GLIBC__ >= 2) && __i386__ */
-
 /*
 ** Initialize a stack for a native pthread thread
 */
@@ -154,13 +87,8 @@ static void _PR_InitializeStack(PRThreadStack *ts)
         ts->stackBottom = ts->allocBase + ts->stackSize;
         ts->stackTop = ts->allocBase;
 #else
-#ifdef GC_LEAK_DETECTOR
-        ts->stackTop    = GetStackTop();
-        ts->stackBottom = ts->stackTop - ts->stackSize;
-#else
         ts->stackTop    = ts->allocBase;
         ts->stackBottom = ts->allocBase - ts->stackSize;
-#endif
 #endif
     }
 }
@@ -821,8 +749,28 @@ PR_IMPLEMENT(PRStatus) PR_Sleep(PRIntervalTime ticks)
 
 static void _pt_thread_death(void *arg)
 {
+    void *thred;
+    int rv;
+
+    _PT_PTHREAD_GETSPECIFIC(pt_book.key, thred);
+    if (NULL == thred)
+    {
+        /*
+         * Have PR_GetCurrentThread return the expected value to the
+         * destructors.
+         */
+        rv = pthread_setspecific(pt_book.key, arg);
+        PR_ASSERT(0 == rv);
+    }
+
     /* PR_TRUE for: call destructors */ 
     _pt_thread_death_internal(arg, PR_TRUE);
+
+    if (NULL == thred)
+    {
+        rv = pthread_setspecific(pt_book.key, NULL);
+        PR_ASSERT(0 == rv);
+    }
 }
 
 static void _pt_thread_death_internal(void *arg, PRBool callDestructors)
@@ -847,6 +795,8 @@ static void _pt_thread_death_internal(void *arg, PRBool callDestructors)
     PR_Free(thred->privateData);
     if (NULL != thred->errorString)
         PR_Free(thred->errorString);
+    if (NULL != thred->name)
+        PR_Free(thred->name);
     PR_Free(thred->stack);
     if (NULL != thred->syspoll_list)
         PR_Free(thred->syspoll_list);
@@ -1025,6 +975,8 @@ void _PR_Fini(void)
         rv = pthread_setspecific(pt_book.key, NULL);
         PR_ASSERT(0 == rv);
     }
+    rv = pthread_key_delete(pt_book.key);
+    PR_ASSERT(0 == rv);
     /* TODO: free other resources used by NSPR */
     /* _pr_initialized = PR_FALSE; */
 }  /* _PR_Fini */
@@ -1664,6 +1616,88 @@ PR_IMPLEMENT(void*)PR_GetSP(PRThread *thred)
 }  /* PR_GetSP */
 
 #endif /* !defined(_PR_DCETHREADS) */
+
+PR_IMPLEMENT(PRStatus) PR_SetCurrentThreadName(const char *name)
+{
+    PRThread *thread;
+    size_t nameLen;
+    int result;
+
+    if (!name) {
+        PR_SetError(PR_INVALID_ARGUMENT_ERROR, 0);
+        return PR_FAILURE;
+    }
+
+    thread = PR_GetCurrentThread();
+    if (!thread)
+        return PR_FAILURE;
+
+    PR_Free(thread->name);
+    nameLen = strlen(name);
+    thread->name = (char *)PR_Malloc(nameLen + 1);
+    if (!thread->name)
+        return PR_FAILURE;
+    memcpy(thread->name, name, nameLen + 1);
+
+#if defined(OPENBSD) || defined(FREEBSD)
+    result = pthread_set_name_np(thread->id, name);
+#else /* not BSD */
+    /*
+     * On OSX, pthread_setname_np is only available in 10.6 or later, so test
+     * for it at runtime.  It also may not be available on all linux distros.
+     */
+#if defined(DARWIN)
+    int (*dynamic_pthread_setname_np)(const char*);
+#else
+    int (*dynamic_pthread_setname_np)(pthread_t, const char*);
+#endif
+
+    *(void**)(&dynamic_pthread_setname_np) =
+        dlsym(RTLD_DEFAULT, "pthread_setname_np");
+    if (!dynamic_pthread_setname_np)
+        return PR_SUCCESS;
+
+    /*
+     * The 15-character name length limit is an experimentally determined
+     * length of a null-terminated string that most linux distros and OS X
+     * accept as an argument to pthread_setname_np.  Otherwise the E2BIG
+     * error is returned by the function.
+     */
+#define SETNAME_LENGTH_CONSTRAINT 15
+#define SETNAME_FRAGMENT1_LENGTH (SETNAME_LENGTH_CONSTRAINT >> 1)
+#define SETNAME_FRAGMENT2_LENGTH \
+    (SETNAME_LENGTH_CONSTRAINT - SETNAME_FRAGMENT1_LENGTH - 1)
+    char name_dup[SETNAME_LENGTH_CONSTRAINT + 1];
+    if (nameLen > SETNAME_LENGTH_CONSTRAINT) {
+        memcpy(name_dup, name, SETNAME_FRAGMENT1_LENGTH);
+        name_dup[SETNAME_FRAGMENT1_LENGTH] = '~';
+        /* Note that this also copies the null terminator. */
+        memcpy(name_dup + SETNAME_FRAGMENT1_LENGTH + 1,
+               name + nameLen - SETNAME_FRAGMENT2_LENGTH,
+               SETNAME_FRAGMENT2_LENGTH + 1);
+        name = name_dup;
+    }
+
+#if defined(DARWIN)
+    result = dynamic_pthread_setname_np(name);
+#else
+    result = dynamic_pthread_setname_np(thread->id, name);
+#endif
+#endif /* not BSD */
+
+    if (result) {
+        PR_SetError(PR_UNKNOWN_ERROR, result);
+        return PR_FAILURE;
+    }
+    return PR_SUCCESS;
+}
+
+PR_IMPLEMENT(const char *) PR_GetThreadName(const PRThread *thread)
+{
+    if (!thread)
+        return NULL;
+    return thread->name;
+}
 
 #endif  /* defined(_PR_PTHREADS) || defined(_PR_DCETHREADS) */
 

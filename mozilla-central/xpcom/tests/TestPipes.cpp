@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "TestHarness.h"
 
@@ -52,10 +19,10 @@ using namespace mozilla;
 /** NS_NewPipe2 reimplemented, because it's not exported by XPCOM */
 nsresult TP_NewPipe2(nsIAsyncInputStream** input,
                      nsIAsyncOutputStream** output,
-                     PRBool nonBlockingInput,
-                     PRBool nonBlockingOutput,
-                     PRUint32 segmentSize,
-                     PRUint32 segmentCount,
+                     bool nonBlockingInput,
+                     bool nonBlockingOutput,
+                     uint32_t segmentSize,
+                     uint32_t segmentCount,
                      nsIMemory* segmentAlloc)
 {
   nsCOMPtr<nsIPipe> pipe = do_CreateInstance("@mozilla.org/pipe;1");
@@ -80,26 +47,26 @@ nsresult TP_NewPipe2(nsIAsyncInputStream** input,
 #define TP_DEFAULT_SEGMENT_SIZE  4096
 nsresult TP_NewPipe(nsIInputStream **pipeIn,
                     nsIOutputStream **pipeOut,
-                    PRUint32 segmentSize = 0,
-                    PRUint32 maxSize = 0,
-                    PRBool nonBlockingInput = PR_FALSE,
-                    PRBool nonBlockingOutput = PR_FALSE,
-                    nsIMemory *segmentAlloc = nsnull);
+                    uint32_t segmentSize = 0,
+                    uint32_t maxSize = 0,
+                    bool nonBlockingInput = false,
+                    bool nonBlockingOutput = false,
+                    nsIMemory *segmentAlloc = nullptr);
 nsresult TP_NewPipe(nsIInputStream **pipeIn,
                     nsIOutputStream **pipeOut,
-                    PRUint32 segmentSize,
-                    PRUint32 maxSize,
-                    PRBool nonBlockingInput,
-                    PRBool nonBlockingOutput,
+                    uint32_t segmentSize,
+                    uint32_t maxSize,
+                    bool nonBlockingInput,
+                    bool nonBlockingOutput,
                     nsIMemory *segmentAlloc)
 {
     if (segmentSize == 0)
         segmentSize = TP_DEFAULT_SEGMENT_SIZE;
 
-    // Handle maxSize of PR_UINT32_MAX as a special case
-    PRUint32 segmentCount;
-    if (maxSize == PR_UINT32_MAX)
-        segmentCount = PR_UINT32_MAX;
+    // Handle maxSize of UINT32_MAX as a special case
+    uint32_t segmentCount;
+    if (maxSize == UINT32_MAX)
+        segmentCount = UINT32_MAX;
     else
         segmentCount = maxSize / segmentSize;
 
@@ -119,15 +86,15 @@ nsresult TP_NewPipe(nsIInputStream **pipeIn,
 #define ITERATIONS      33333
 char kTestPattern[] = "My hovercraft is full of eels.\n";
 
-PRBool gTrace = PR_FALSE;
+bool gTrace = false;
 
 static nsresult
-WriteAll(nsIOutputStream *os, const char *buf, PRUint32 bufLen, PRUint32 *lenWritten)
+WriteAll(nsIOutputStream *os, const char *buf, uint32_t bufLen, uint32_t *lenWritten)
 {
     const char *p = buf;
     *lenWritten = 0;
     while (bufLen) {
-        PRUint32 n;
+        uint32_t n;
         nsresult rv = os->Write(p, bufLen, &n);
         if (NS_FAILED(rv)) return rv;
         p += n;
@@ -144,9 +111,9 @@ public:
     NS_IMETHOD Run() {
         nsresult rv;
         char buf[101];
-        PRUint32 count;
+        uint32_t count;
         PRIntervalTime start = PR_IntervalNow();
-        while (PR_TRUE) {
+        while (true) {
             rv = mIn->Read(buf, 100, &count);
             if (NS_FAILED(rv)) {
                 printf("read failed\n");
@@ -172,11 +139,11 @@ public:
     nsReceiver(nsIInputStream* in) : mIn(in), mCount(0) {
     }
 
-    PRUint32 GetBytesRead() { return mCount; }
+    uint32_t GetBytesRead() { return mCount; }
 
 protected:
     nsCOMPtr<nsIInputStream> mIn;
-    PRUint32            mCount;
+    uint32_t            mCount;
 };
 
 NS_IMPL_THREADSAFE_ISUPPORTS1(nsReceiver, nsIRunnable)
@@ -194,16 +161,16 @@ TestPipe(nsIInputStream* in, nsIOutputStream* out)
     rv = NS_NewThread(getter_AddRefs(thread), receiver);
     if (NS_FAILED(rv)) return rv;
 
-    PRUint32 total = 0;
+    uint32_t total = 0;
     PRIntervalTime start = PR_IntervalNow();
-    for (PRUint32 i = 0; i < ITERATIONS; i++) {
-        PRUint32 writeCount;
+    for (uint32_t i = 0; i < ITERATIONS; i++) {
+        uint32_t writeCount;
         char *buf = PR_smprintf("%d %s", i, kTestPattern);
-        PRUint32 len = strlen(buf);
+        uint32_t len = strlen(buf);
         rv = WriteAll(out, buf, len, &writeCount);
         if (gTrace) {
             printf("wrote: ");
-            for (PRUint32 j = 0; j < writeCount; j++) {
+            for (uint32_t j = 0; j < writeCount; j++) {
                 putc(buf[j], stdout);
             }
             printf("\n");
@@ -235,9 +202,9 @@ public:
     NS_IMETHOD Run() {
         nsresult rv;
         char buf[101];
-        PRUint32 count;
-        PRUint32 total = 0;
-        while (PR_TRUE) {
+        uint32_t count;
+        uint32_t total = 0;
+        while (true) {
             //if (gTrace)
             //    printf("calling Read\n");
             rv = mIn->Read(buf, 100, &count);
@@ -267,15 +234,15 @@ public:
         mMon = new Monitor("nsShortReader");
     }
 
-    void Received(PRUint32 count) {
+    void Received(uint32_t count) {
         MonitorAutoEnter mon(*mMon);
         mReceived += count;
         mon.Notify();
     }
 
-    PRUint32 WaitForReceipt(const PRUint32 aWriteCount) {
+    uint32_t WaitForReceipt(const uint32_t aWriteCount) {
         MonitorAutoEnter mon(*mMon);
-        PRUint32 result = mReceived;
+        uint32_t result = mReceived;
 
         while (result < aWriteCount) {
             mon.Wait();
@@ -290,7 +257,7 @@ public:
 
 protected:
     nsCOMPtr<nsIInputStream> mIn;
-    PRUint32                 mReceived;
+    uint32_t                 mReceived;
     Monitor*                 mMon;
 };
 
@@ -309,13 +276,13 @@ TestShortWrites(nsIInputStream* in, nsIOutputStream* out)
     rv = NS_NewThread(getter_AddRefs(thread), receiver);
     if (NS_FAILED(rv)) return rv;
 
-    PRUint32 total = 0;
-    for (PRUint32 i = 0; i < ITERATIONS; i++) {
-        PRUint32 writeCount;
+    uint32_t total = 0;
+    for (uint32_t i = 0; i < ITERATIONS; i++) {
+        uint32_t writeCount;
         char* buf = PR_smprintf("%d %s", i, kTestPattern);
-        PRUint32 len = strlen(buf);
+        uint32_t len = strlen(buf);
         len = len * rand() / RAND_MAX;
-        len = PR_MAX(1, len);
+        len = NS_MAX(1, len);
         rv = WriteAll(out, buf, len, &writeCount);
         if (NS_FAILED(rv)) return rv;
         NS_ASSERTION(writeCount == len, "didn't write enough");
@@ -329,7 +296,7 @@ TestShortWrites(nsIInputStream* in, nsIOutputStream* out)
         //printf("calling WaitForReceipt\n");
 
 #ifdef DEBUG
-        const PRUint32 received =
+        const uint32_t received =
 #endif
           receiver->WaitForReceipt(writeCount);
         NS_ASSERTION(received == writeCount, "received wrong amount");
@@ -353,8 +320,8 @@ public:
 
     NS_IMETHOD Run() {
         nsresult rv;
-        PRUint32 count;
-        while (PR_TRUE) {
+        uint32_t count;
+        while (true) {
             rv = mOut->WriteFrom(mIn, ~0U, &count);
             if (NS_FAILED(rv)) {
                 printf("Write failed\n");
@@ -382,7 +349,7 @@ public:
 protected:
     nsCOMPtr<nsIInputStream>      mIn;
     nsCOMPtr<nsIOutputStream>     mOut;
-    PRUint32                            mCount;
+    uint32_t                            mCount;
 };
 
 NS_IMPL_THREADSAFE_ISUPPORTS1(nsPump,
@@ -405,26 +372,26 @@ TestChainedPipes()
     if (NS_FAILED(rv)) return rv;
 
     nsCOMPtr<nsPump> pump = new nsPump(in1, out2);
-    if (pump == nsnull) return NS_ERROR_OUT_OF_MEMORY;
+    if (pump == nullptr) return NS_ERROR_OUT_OF_MEMORY;
 
     nsCOMPtr<nsIThread> thread;
     rv = NS_NewThread(getter_AddRefs(thread), pump);
     if (NS_FAILED(rv)) return rv;
 
     nsCOMPtr<nsReceiver> receiver = new nsReceiver(in2);
-    if (receiver == nsnull) return NS_ERROR_OUT_OF_MEMORY;
+    if (receiver == nullptr) return NS_ERROR_OUT_OF_MEMORY;
 
     nsCOMPtr<nsIThread> receiverThread;
     rv = NS_NewThread(getter_AddRefs(receiverThread), receiver);
     if (NS_FAILED(rv)) return rv;
 
-    PRUint32 total = 0;
-    for (PRUint32 i = 0; i < ITERATIONS; i++) {
-        PRUint32 writeCount;
+    uint32_t total = 0;
+    for (uint32_t i = 0; i < ITERATIONS; i++) {
+        uint32_t writeCount;
         char* buf = PR_smprintf("%d %s", i, kTestPattern);
-        PRUint32 len = strlen(buf);
+        uint32_t len = strlen(buf);
         len = len * rand() / RAND_MAX;
-        len = PR_MAX(1, len);
+        len = NS_MAX(1, len);
         rv = WriteAll(out1, buf, len, &writeCount);
         if (NS_FAILED(rv)) return rv;
         NS_ASSERTION(writeCount == len, "didn't write enough");
@@ -448,12 +415,12 @@ TestChainedPipes()
 ////////////////////////////////////////////////////////////////////////////////
 
 void
-RunTests(PRUint32 segSize, PRUint32 segCount)
+RunTests(uint32_t segSize, uint32_t segCount)
 {
     nsresult rv;
     nsCOMPtr<nsIInputStream> in;
     nsCOMPtr<nsIOutputStream> out;
-    PRUint32 bufSize = segSize * segCount;
+    uint32_t bufSize = segSize * segCount;
     printf("Testing New Pipes: segment size %d buffer size %d\n", segSize, bufSize);
 
     printf("Testing long writes...\n");
@@ -471,8 +438,8 @@ RunTests(PRUint32 segSize, PRUint32 segCount)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#if !defined(MOZ_ENABLE_LIBXUL) && defined(DEBUG)
-extern NS_COM void
+#if 0
+extern void
 TestSegmentedBuffer();
 #endif
 
@@ -486,12 +453,7 @@ main(int argc, char* argv[])
     if (NS_FAILED(rv)) return rv;
 
     if (argc > 1 && nsCRT::strcmp(argv[1], "-trace") == 0)
-        gTrace = PR_TRUE;
-
-#if !defined(MOZ_ENABLE_LIBXUL) && defined(DEBUG)
-    printf("Testing segmented buffer...\n");
-    TestSegmentedBuffer();
-#endif
+        gTrace = true;
 
     rv = TestChainedPipes();
     NS_ASSERTION(NS_SUCCEEDED(rv), "TestChainedPipes failed");

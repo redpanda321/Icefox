@@ -8,27 +8,27 @@
 
 namespace TestPerf {
 
-static nsIIOService *gIOService = nsnull;
+static nsIIOService *gIOService = nullptr;
 
 //-----------------------------------------------------------------------------
 
-static PRBool
+static bool
 load_sync_1(nsISupports *element, void *data)
 {
     nsCOMPtr<nsIInputStream> stream;
     nsCOMPtr<nsIURI> uri( do_QueryInterface(element) );
-    nsCAutoString spec;
+    nsAutoCString spec;
     nsresult rv;
 
     rv = NS_OpenURI(getter_AddRefs(stream), uri, gIOService);
     if (NS_FAILED(rv)) {
         uri->GetAsciiSpec(spec);
         fprintf(stderr, "*** failed opening %s [rv=%x]\n", spec.get(), rv);
-        return PR_TRUE;
+        return true;
     }
 
     char buf[4096];
-    PRUint32 bytesRead;
+    uint32_t bytesRead;
 
     while (1) {
         rv = stream->Read(buf, sizeof(buf), &bytesRead);
@@ -41,13 +41,13 @@ load_sync_1(nsISupports *element, void *data)
         }
     }
 
-    return PR_TRUE;
+    return true;
 }
 
 static nsresult
 load_sync(nsISupportsArray *urls)
 {
-    urls->EnumerateForwards(load_sync_1, nsnull);
+    urls->EnumerateForwards(load_sync_1, nullptr);
     return NS_OK;
 }
 
@@ -77,13 +77,13 @@ MyListener::OnStartRequest(nsIRequest *req, nsISupports *ctx)
 NS_IMETHODIMP
 MyListener::OnDataAvailable(nsIRequest *req, nsISupports *ctx,
                             nsIInputStream *stream,
-                            PRUint32 offset, PRUint32 count)
+                            uint64_t offset, uint32_t count)
 {
     nsresult rv;
     char buf[4096];
-    PRUint32 n, bytesRead;
+    uint32_t n, bytesRead;
     while (count) {
-        n = PR_MIN(count, sizeof(buf));
+        n = NS_MIN<uint32_t>(count, sizeof(buf));
         rv = stream->Read(buf, n, &bytesRead);
         if (NS_FAILED(rv))
             break;
@@ -98,7 +98,7 @@ NS_IMETHODIMP
 MyListener::OnStopRequest(nsIRequest *req, nsISupports *ctx, nsresult status)
 {
     if (NS_FAILED(status)) {
-        nsCAutoString spec;
+        nsAutoCString spec;
         req->GetName(spec);
         fprintf(stderr, "*** failed loading %s [reason=%x]\n", spec.get(), status);
     }
@@ -109,30 +109,30 @@ MyListener::OnStopRequest(nsIRequest *req, nsISupports *ctx, nsresult status)
     return NS_OK;
 }
 
-static PRBool
+static bool
 load_async_1(nsISupports *element, void *data)
 {
     nsCOMPtr<nsIURI> uri( do_QueryInterface(element) );
     if (!uri)
-        return PR_TRUE;
+        return true;
 
     MyListener *listener = new MyListener();
     if (!listener)
-        return PR_TRUE;
+        return true;
     NS_ADDREF(listener);
-    nsresult rv = NS_OpenURI(listener, nsnull, uri, gIOService);
+    nsresult rv = NS_OpenURI(listener, nullptr, uri, gIOService);
     NS_RELEASE(listener);
     if (NS_SUCCEEDED(rv))
         gRequestCount++;
     else 
         printf(">> NS_OpenURI failed [rv=%x]\n", rv);
-    return PR_TRUE;
+    return true;
 }
 
 static nsresult
 load_async(nsISupportsArray *urls)
 {
-    urls->EnumerateForwards(load_async_1, nsnull);
+    urls->EnumerateForwards(load_async_1, nullptr);
 
     PumpEvents();
     return NS_OK;
@@ -155,7 +155,7 @@ read_file(const char *fname, nsISupportsArray *urls)
     while (fgets(buf, sizeof(buf), fp)) {
         // remove trailing newline
         buf[strlen(buf) - 1] = 0;
-        rv = NS_NewURI(getter_AddRefs(uri), buf, nsnull, gIOService); 
+        rv = NS_NewURI(getter_AddRefs(uri), buf, nullptr, gIOService); 
         if (NS_FAILED(rv))
             printf("*** ignoring malformed uri: %s\n", buf);
         else {
@@ -189,7 +189,7 @@ main(int argc, char **argv)
         return -1;
 
     nsresult rv;
-    PRBool sync;
+    bool sync;
 
     if (argc < 3) {
         print_usage();
@@ -197,19 +197,19 @@ main(int argc, char **argv)
     }
 
     if (PL_strcasecmp(argv[1], "-sync") == 0)
-        sync = PR_TRUE;
+        sync = true;
     else if (PL_strcasecmp(argv[1], "-async") == 0)
-        sync = PR_FALSE;
+        sync = false;
     else {
         print_usage();
         return -1;
     }
 
     nsCOMPtr<nsIServiceManager> servMan;
-    NS_InitXPCOM2(getter_AddRefs(servMan), nsnull, nsnull);
+    NS_InitXPCOM2(getter_AddRefs(servMan), nullptr, nullptr);
     nsCOMPtr<nsIComponentRegistrar> registrar = do_QueryInterface(servMan);
     NS_ASSERTION(registrar, "Null nsIComponentRegistrar");
-    registrar->AutoRegister(nsnull);
+    registrar->AutoRegister(nullptr);
 
     // cache the io service
     {
@@ -227,7 +227,7 @@ main(int argc, char **argv)
         return -1;
     }
 
-    PRUint32 urlCount;
+    uint32_t urlCount;
     urls->Count(&urlCount);
 
     PRIntervalTime start = PR_IntervalNow();

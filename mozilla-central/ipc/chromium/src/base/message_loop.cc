@@ -19,7 +19,7 @@
 #if defined(OS_POSIX)
 #include "base/message_pump_libevent.h"
 #endif
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_BSD)
 #ifdef MOZ_WIDGET_GTK2
 #include "base/message_pump_glib.h"
 #endif
@@ -27,13 +27,11 @@
 #include "base/message_pump_qt.h"
 #endif
 #endif
-#ifdef MOZ_WIDGET_ANDROID
+#ifdef ANDROID
 #include "base/message_pump_android.h"
 #endif
 
-#ifdef CHROMIUM_MOZILLA_BUILD
 #include "MessagePump.h"
-#endif
 
 using base::Time;
 using base::TimeDelta;
@@ -92,20 +90,28 @@ MessageLoop::MessageLoop(Type type)
       nestable_tasks_allowed_(true),
       exception_restoration_(false),
       state_(NULL),
+      run_depth_base_(1),
+#ifdef OS_WIN
+      os_modal_loop_(false),
+#endif  // OS_WIN
       next_sequence_num_(0) {
   DCHECK(!current()) << "should only have one message loop per thread";
   lazy_tls_ptr.Pointer()->Set(this);
-
-#ifdef CHROMIUM_MOZILLA_BUILD
   if (type_ == TYPE_MOZILLA_UI) {
     pump_ = new mozilla::ipc::MessagePump();
     return;
   }
   if (type_ == TYPE_MOZILLA_CHILD) {
     pump_ = new mozilla::ipc::MessagePumpForChildProcess();
+    // There is a MessageLoop Run call from XRE_InitChildProcess
+    // and another one from MessagePumpForChildProcess. The one
+    // from MessagePumpForChildProcess becomes the base, so we need
+    // to set run_depth_base_ to 2 or we'll never be able to process
+    // Idle tasks.
+    run_depth_base_ = 2;
     return;
   }
-#endif
+
 #if defined(OS_WIN)
   // TODO(rvargas): Get rid of the OS guards.
   if (type_ == TYPE_DEFAULT) {
@@ -120,7 +126,7 @@ MessageLoop::MessageLoop(Type type)
   if (type_ == TYPE_UI) {
 #if defined(OS_MACOSX)
     pump_ = base::MessagePumpMac::Create();
-#elif defined(OS_LINUX)
+#elif defined(OS_LINUX) || defined(OS_BSD)
     pump_ = new base::MessagePumpForUI();
 #endif  // OS_LINUX
   } else if (type_ == TYPE_IO) {
@@ -191,9 +197,9 @@ void MessageLoop::RunHandler() {
 #if defined(OS_WIN)
   if (exception_restoration_) {
     LPTOP_LEVEL_EXCEPTION_FILTER current_filter = GetTopSEHFilter();
-    __try {
+    MOZ_SEH_TRY {
       RunInternal();
-    } __except(SEHFilter(current_filter)) {
+    } MOZ_SEH_EXCEPT(SEHFilter(current_filter)) {
     }
     return;
   }
@@ -206,16 +212,6 @@ void MessageLoop::RunHandler() {
 
 void MessageLoop::RunInternal() {
   DCHECK(this == current());
-
-  StartHistogrammer();
-
-#if defined(OS_WIN) && !defined(CHROMIUM_MOZILLA_BUILD)
-  if (state_->dispatcher) {
-    pump_win()->RunWithDispatcher(this, state_->dispatcher);
-    return;
-  }
-#endif
-
   pump_->Run(this);
 }
 
@@ -223,7 +219,7 @@ void MessageLoop::RunInternal() {
 // Wrapper functions for use in above message loop framework.
 
 bool MessageLoop::ProcessNextDelayedNonNestableTask() {
-  if (state_->run_depth != 1)
+  if (state_->run_depth > run_depth_base_)
     return false;
 
   if (deferred_non_nestable_work_queue_.empty())
@@ -267,6 +263,14 @@ void MessageLoop::PostNonNestableDelayedTask(
   PostTask_Helper(from_here, task, delay_ms, false);
 }
 
+void MessageLoop::PostIdleTask(
+    const tracked_objects::Location& from_here, Task* task) {
+  DCHECK(current() == this);
+  task->SetBirthPlace(from_here);
+  PendingTask pending_task(task, false);
+  deferred_non_nestable_work_queue_.push(pending_task);
+}
+
 // Possibly called on a background thread!
 void MessageLoop::PostTask_Helper(
     const tracked_objects::Location& from_here, Task* task, int delay_ms,
@@ -289,16 +293,7 @@ void MessageLoop::PostTask_Helper(
   scoped_refptr<base::MessagePump> pump;
   {
     AutoLock locked(incoming_queue_lock_);
-
-#ifdef CHROMIUM_MOZILLA_BUILD
     incoming_queue_.push(pending_task);
-#else
-    bool was_empty = incoming_queue_.empty();
-    incoming_queue_.push(pending_task);
-    if (!was_empty)
-      return;  // Someone else should have started the sub-pump.
-#endif
-
     pump = pump_;
   }
   // Since the incoming_queue_ may contain a task that destroys this message
@@ -315,11 +310,7 @@ void MessageLoop::SetNestableTasksAllowed(bool allowed) {
     if (!nestable_tasks_allowed_)
       return;
     // Start the native pump if we are not already pumping.
-#ifndef CHROMIUM_MOZILLA_BUILD
-    pump_->ScheduleWork();
-#else
     pump_->ScheduleWorkForNestedLoop();
-#endif
   }
 }
 
@@ -339,7 +330,6 @@ void MessageLoop::RunTask(Task* task) {
   // Execute the task and assume the worst: It is probably not reentrant.
   nestable_tasks_allowed_ = false;
 
-  HistogramEvent(kTaskRunEvent);
   task->Run();
   delete task;
 
@@ -347,7 +337,7 @@ void MessageLoop::RunTask(Task* task) {
 }
 
 bool MessageLoop::DeferOrRunPendingTask(const PendingTask& pending_task) {
-  if (pending_task.nestable || state_->run_depth == 1) {
+  if (pending_task.nestable || state_->run_depth <= run_depth_base_) {
     RunTask(pending_task.task);
     // Show that we ran a task (Note: a new one might arrive as a
     // consequence!).
@@ -532,65 +522,6 @@ bool MessageLoop::PendingTask::operator<(const PendingTask& other) const {
 }
 
 //------------------------------------------------------------------------------
-// Method and data for histogramming events and actions taken by each instance
-// on each thread.
-
-// static
-bool MessageLoop::enable_histogrammer_ = false;
-
-// static
-void MessageLoop::EnableHistogrammer(bool enable) {
-  enable_histogrammer_ = enable;
-}
-
-void MessageLoop::StartHistogrammer() {
-  if (enable_histogrammer_ && !message_histogram_.get()
-      && StatisticsRecorder::WasStarted()) {
-    DCHECK(!thread_name_.empty());
-    message_histogram_.reset(
-        new LinearHistogram(("MsgLoop:" + thread_name_).c_str(),
-                            kLeastNonZeroMessageId,
-                            kMaxMessageId,
-                            kNumberOfDistinctMessagesDisplayed));
-    message_histogram_->SetFlags(message_histogram_->kHexRangePrintingFlag);
-    message_histogram_->SetRangeDescriptions(event_descriptions_);
-  }
-}
-
-void MessageLoop::HistogramEvent(int event) {
-  if (message_histogram_.get())
-    message_histogram_->Add(event);
-}
-
-// Provide a macro that takes an expression (such as a constant, or macro
-// constant) and creates a pair to initalize an array of pairs.  In this case,
-// our pair consists of the expressions value, and the "stringized" version
-// of the expression (i.e., the exrpression put in quotes).  For example, if
-// we have:
-//    #define FOO 2
-//    #define BAR 5
-// then the following:
-//    VALUE_TO_NUMBER_AND_NAME(FOO + BAR)
-// will expand to:
-//   {7, "FOO + BAR"}
-// We use the resulting array as an argument to our histogram, which reads the
-// number as a bucket identifier, and proceeds to use the corresponding name
-// in the pair (i.e., the quoted string) when printing out a histogram.
-#define VALUE_TO_NUMBER_AND_NAME(name) {name, #name},
-
-// static
-const LinearHistogram::DescriptionPair MessageLoop::event_descriptions_[] = {
-  // Provide some pretty print capability in our histogram for our internal
-  // messages.
-
-  // A few events we handle (kindred to messages), and used to profile actions.
-  VALUE_TO_NUMBER_AND_NAME(kTaskRunEvent)
-  VALUE_TO_NUMBER_AND_NAME(kTimerEvent)
-
-  {-1, NULL}  // The list must be null terminated, per API to histogram.
-};
-
-//------------------------------------------------------------------------------
 // MessageLoopForUI
 
 #if defined(OS_WIN)
@@ -649,7 +580,6 @@ bool MessageLoopForIO::WatchFileDescriptor(int fd,
       delegate);
 }
 
-#if defined(CHROMIUM_MOZILLA_BUILD)
 bool
 MessageLoopForIO::CatchSignal(int sig,
                               SignalEvent* sigevent,
@@ -657,6 +587,5 @@ MessageLoopForIO::CatchSignal(int sig,
 {
   return pump_libevent()->CatchSignal(sig, sigevent, delegate);
 }
-#endif  // defined(CHROMIUM_MOZILLA_BUILD)
 
 #endif

@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set tw=80 expandtab softtabstop=2 ts=2 sw=2: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef nsGenericHTMLElement_h___
 #define nsGenericHTMLElement_h___
 
@@ -42,10 +10,11 @@
 #include "nsIDOMHTMLElement.h"
 #include "nsINameSpaceManager.h"  // for kNameSpaceID_None
 #include "nsIFormControl.h"
-#include "nsIDOMNSHTMLFrameElement.h"
-#include "nsFrameLoader.h"
 #include "nsGkAtoms.h"
 #include "nsContentCreatorFunctions.h"
+#include "mozilla/ErrorResult.h"
+#include "nsContentUtils.h"
+#include "nsIDOMHTMLMenuElement.h"
 
 class nsIDOMAttr;
 class nsIDOMEventListener;
@@ -54,6 +23,7 @@ class nsIFrame;
 class nsIStyleRule;
 class nsChildContentList;
 class nsDOMCSSDeclaration;
+class nsHTMLMenuElement;
 class nsIDOMCSSStyleDeclaration;
 class nsIURI;
 class nsIFormControlFrame;
@@ -64,6 +34,16 @@ class nsIEditor;
 struct nsRect;
 struct nsSize;
 class nsHTMLFormElement;
+class nsIDOMHTMLMenuElement;
+class nsIDOMHTMLCollection;
+class nsDOMSettableTokenList;
+class nsIDOMDOMStringMap;
+
+namespace mozilla {
+namespace dom{
+class HTMLPropertiesCollection;
+}
+}
 
 typedef nsMappedAttributeElement nsGenericHTMLElementBase;
 
@@ -78,15 +58,11 @@ public:
   {
     NS_ASSERTION(mNodeInfo->NamespaceID() == kNameSpaceID_XHTML,
                  "Unexpected namespace");
+    AddStatesSilently(NS_EVENT_STATE_LTR);
+    SetFlags(NODE_HAS_DIRECTION_LTR);
   }
 
-  /** Typesafe, non-refcounting cast from nsIContent.  Cheaper than QI. **/
-  static nsGenericHTMLElement* FromContent(nsIContent *aContent)
-  {
-    if (aContent->IsHTML())
-      return static_cast<nsGenericHTMLElement*>(aContent);
-    return nsnull;
-  }
+  NS_IMPL_FROMCONTENT(nsGenericHTMLElement, kNameSpaceID_XHTML)
 
   /**
    * Handle QI for the standard DOM interfaces (DOMNode, DOMElement,
@@ -99,118 +75,337 @@ public:
   nsresult DOMQueryInterface(nsIDOMHTMLElement *aElement, REFNSIID aIID,
                              void **aInstancePtr);
 
-  // From nsGenericElement
-  nsresult CopyInnerTo(nsGenericElement* aDest) const;
+  // From Element
+  nsresult CopyInnerTo(mozilla::dom::Element* aDest);
 
-  // Implementation for nsIDOMNode
-  NS_METHOD GetNodeName(nsAString& aNodeName);
+  void GetTitle(nsAString& aTitle) const
+  {
+    GetHTMLAttr(nsGkAtoms::title, aTitle);
+  }
+  void SetTitle(const nsAString& aTitle)
+  {
+    SetHTMLAttr(nsGkAtoms::title, aTitle);
+  }
+  void GetLang(nsAString& aLang) const
+  {
+    GetHTMLAttr(nsGkAtoms::lang, aLang);
+  }
+  void SetLang(const nsAString& aLang)
+  {
+    SetHTMLAttr(nsGkAtoms::lang, aLang);
+  }
+  void GetDir(nsAString& aDir) const
+  {
+    GetHTMLEnumAttr(nsGkAtoms::dir, aDir);
+  }
+  void SetDir(const nsAString& aDir, mozilla::ErrorResult& aError)
+  {
+    SetHTMLAttr(nsGkAtoms::dir, aDir, aError);
+  }
+  already_AddRefed<nsDOMStringMap> Dataset();
+  bool ItemScope() const
+  {
+    return GetBoolAttr(nsGkAtoms::itemscope);
+  }
+  void SetItemScope(bool aItemScope, mozilla::ErrorResult& aError)
+  {
+    SetHTMLBoolAttr(nsGkAtoms::itemscope, aItemScope, aError);
+  }
+  nsDOMSettableTokenList* ItemType()
+  {
+    return GetTokenList(nsGkAtoms::itemtype);
+  }
+  void GetItemId(nsAString& aItemId) const
+  {
+    GetHTMLURIAttr(nsGkAtoms::itemid, aItemId);
+  }
+  void SetItemId(const nsAString& aItemID, mozilla::ErrorResult& aError)
+  {
+    SetHTMLAttr(nsGkAtoms::itemid, aItemID, aError);
+  }
+  nsDOMSettableTokenList* ItemRef()
+  {
+    return GetTokenList(nsGkAtoms::itemref);
+  }
+  nsDOMSettableTokenList* ItemProp()
+  {
+    return GetTokenList(nsGkAtoms::itemprop);
+  }
+  mozilla::dom::HTMLPropertiesCollection* Properties();
+  JS::Value GetItemValue(JSContext* aCx, JSObject* aScope,
+                         mozilla::ErrorResult& aError);
+  JS::Value GetItemValue(JSContext* aCx, mozilla::ErrorResult& aError)
+  {
+    return GetItemValue(aCx, GetWrapperPreserveColor(), aError);
+  }
+  void SetItemValue(JSContext* aCx, JS::Value aValue,
+                    mozilla::ErrorResult& aError);
+  bool Hidden() const
+  {
+    return GetBoolAttr(nsGkAtoms::hidden);
+  }
+  void SetHidden(bool aHidden, mozilla::ErrorResult& aError)
+  {
+    SetHTMLBoolAttr(nsGkAtoms::hidden, aHidden, aError);
+  }
+  virtual void Click();
+  virtual int32_t TabIndexDefault()
+  {
+    return -1;
+  }
+  int32_t TabIndex()
+  {
+    return GetIntAttr(nsGkAtoms::tabindex, TabIndexDefault());
+  }
+  void SetTabIndex(int32_t aTabIndex, mozilla::ErrorResult& aError)
+  {
+    SetHTMLIntAttr(nsGkAtoms::tabindex, aTabIndex, aError);
+  }
+  virtual void Focus(mozilla::ErrorResult& aError);
+  void Blur(mozilla::ErrorResult& aError);
+  void GetAccessKey(nsAString& aAccessKey) const
+  {
+    GetHTMLAttr(nsGkAtoms::accesskey, aAccessKey);
+  }
+  void SetAccessKey(const nsAString& aAccessKey, mozilla::ErrorResult& aError)
+  {
+    SetHTMLAttr(nsGkAtoms::accesskey, aAccessKey, aError);
+  }
+  void GetAccessKeyLabel(nsAString& aAccessKeyLabel);
+  virtual bool Draggable() const
+  {
+    return AttrValueIs(kNameSpaceID_None, nsGkAtoms::draggable,
+                       nsGkAtoms::_true, eIgnoreCase);
+  }
+  void SetDraggable(bool aDraggable, mozilla::ErrorResult& aError)
+  {
+    SetHTMLAttr(nsGkAtoms::draggable,
+                aDraggable ? NS_LITERAL_STRING("true")
+                           : NS_LITERAL_STRING("false"),
+                aError);
+  }
+  void GetContentEditable(nsAString& aContentEditable) const
+  {
+    ContentEditableTristate value = GetContentEditableValue();
+    if (value == eTrue) {
+      aContentEditable.AssignLiteral("true");
+    } else if (value == eFalse) {
+      aContentEditable.AssignLiteral("false");
+    } else {
+      aContentEditable.AssignLiteral("inherit");
+    }
+  }
+  void SetContentEditable(const nsAString& aContentEditable,
+                          mozilla::ErrorResult& aError)
+  {
+    if (nsContentUtils::EqualsLiteralIgnoreASCIICase(aContentEditable, "inherit")) {
+      UnsetHTMLAttr(nsGkAtoms::contenteditable, aError);
+    } else if (nsContentUtils::EqualsLiteralIgnoreASCIICase(aContentEditable, "true")) {
+      SetHTMLAttr(nsGkAtoms::contenteditable, NS_LITERAL_STRING("true"), aError);
+    } else if (nsContentUtils::EqualsLiteralIgnoreASCIICase(aContentEditable, "false")) {
+      SetHTMLAttr(nsGkAtoms::contenteditable, NS_LITERAL_STRING("false"), aError);
+    } else {
+      aError.Throw(NS_ERROR_DOM_SYNTAX_ERR);
+    }
+  }
+  bool IsContentEditable()
+  {
+    for (nsIContent* node = this; node; node = node->GetParent()) {
+      nsGenericHTMLElement* element = FromContent(node);
+      if (element) {
+        ContentEditableTristate value = element->GetContentEditableValue();
+        if (value != eInherit) {
+          return value == eTrue;
+        }
+      }
+    }
+    return false;
+  }
+  nsHTMLMenuElement* GetContextMenu() const;
+  bool Spellcheck();
+  void SetSpellcheck(bool aSpellcheck, mozilla::ErrorResult& aError)
+  {
+    SetHTMLAttr(nsGkAtoms::spellcheck,
+                aSpellcheck ? NS_LITERAL_STRING("true")
+                            : NS_LITERAL_STRING("false"),
+                aError);
+  }
+  nsICSSDeclaration* GetStyle(mozilla::ErrorResult& aError)
+  {
+    nsresult rv;
+    nsICSSDeclaration* style = nsMappedAttributeElement::GetStyle(&rv);
+    if (NS_FAILED(rv)) {
+      aError.Throw(rv);
+    }
+    return style;
+  }
+#define EVENT(name_, id_, type_, struct_) /* nothing; handled by nsINode */
+// The using nsINode::Get/SetOn* are to avoid warnings about shadowing the XPCOM
+// getter and setter on nsINode.
+#define FORWARDED_EVENT(name_, id_, type_, struct_)                           \
+  using nsINode::GetOn##name_;                                                \
+  using nsINode::SetOn##name_;                                                \
+  mozilla::dom::EventHandlerNonNull* GetOn##name_();                          \
+  void SetOn##name_(mozilla::dom::EventHandlerNonNull* handler,               \
+                    mozilla::ErrorResult& error);
+#define ERROR_EVENT(name_, id_, type_, struct_)                               \
+  using nsINode::GetOn##name_;                                                \
+  using nsINode::SetOn##name_;                                                \
+  already_AddRefed<mozilla::dom::EventHandlerNonNull> GetOn##name_();         \
+  void SetOn##name_(mozilla::dom::EventHandlerNonNull* handler,               \
+                    mozilla::ErrorResult& error);
+#include "nsEventNameList.h"
+#undef ERROR_EVENT
+#undef FORWARDED_EVENT
+#undef EVENT
+  void GetClassName(nsAString& aClassName)
+  {
+    GetAttr(kNameSpaceID_None, nsGkAtoms::_class, aClassName);
+  }
+  void SetClassName(const nsAString& aClassName)
+  {
+    SetAttr(kNameSpaceID_None, nsGkAtoms::_class, aClassName, true);
+  }
+  virtual void GetInnerHTML(nsAString& aInnerHTML,
+                            mozilla::ErrorResult& aError);
+  virtual void SetInnerHTML(const nsAString& aInnerHTML,
+                            mozilla::ErrorResult& aError);
+  void GetOuterHTML(nsAString& aOuterHTML, mozilla::ErrorResult& aError);
+  void SetOuterHTML(const nsAString& aOuterHTML, mozilla::ErrorResult& aError);
+  void InsertAdjacentHTML(const nsAString& aPosition, const nsAString& aText,
+                          mozilla::ErrorResult& aError);
+  mozilla::dom::Element* GetOffsetParent()
+  {
+    nsRect rcFrame;
+    return GetOffsetRect(rcFrame);
+  }
+  int32_t OffsetTop()
+  {
+    nsRect rcFrame;
+    GetOffsetRect(rcFrame);
 
-  // Implementation for nsIDOMElement
-  NS_METHOD SetAttribute(const nsAString& aName,
-                         const nsAString& aValue);
-  NS_METHOD GetTagName(nsAString& aTagName);
-  NS_METHOD GetElementsByTagName(const nsAString& aTagname,
-                                 nsIDOMNodeList** aReturn);
+    return rcFrame.y;
+  }
+  int32_t OffsetLeft()
+  {
+    nsRect rcFrame;
+    GetOffsetRect(rcFrame);
+
+    return rcFrame.x;
+  }
+  int32_t OffsetWidth()
+  {
+    nsRect rcFrame;
+    GetOffsetRect(rcFrame);
+
+    return rcFrame.width;
+  }
+  int32_t OffsetHeight()
+  {
+    nsRect rcFrame;
+    GetOffsetRect(rcFrame);
+
+    return rcFrame.height;
+  }
 
   // nsIDOMHTMLElement methods. Note that these are non-virtual
   // methods, implementations are expected to forward calls to these
   // methods.
-  nsresult GetId(nsAString& aId);
-  nsresult SetId(const nsAString& aId);
-  nsresult GetTitle(nsAString& aTitle);
-  nsresult SetTitle(const nsAString& aTitle);
-  nsresult GetLang(nsAString& aLang);
-  nsresult SetLang(const nsAString& aLang);
-  nsresult GetDir(nsAString& aDir);
-  nsresult SetDir(const nsAString& aDir);
-  nsresult GetClassName(nsAString& aClassName);
-  nsresult SetClassName(const nsAString& aClassName);
+  NS_IMETHOD InsertAdjacentHTML(const nsAString& aPosition,
+                                const nsAString& aText);
+  NS_IMETHOD GetItemValue(nsIVariant** aValue);
+  NS_IMETHOD SetItemValue(nsIVariant* aValue);
+protected:
+  void GetProperties(nsISupports** aProperties);
+  void GetContextMenu(nsIDOMHTMLMenuElement** aContextMenu) const;
 
-  // nsIDOMNSHTMLElement methods. Note that these are non-virtual
-  // methods, implementations are expected to forward calls to these
-  // methods.
-  nsresult GetOffsetTop(PRInt32* aOffsetTop);
-  nsresult GetOffsetLeft(PRInt32* aOffsetLeft);
-  nsresult GetOffsetWidth(PRInt32* aOffsetWidth);
-  nsresult GetOffsetHeight(PRInt32* aOffsetHeight);
-  nsresult GetOffsetParent(nsIDOMElement** aOffsetParent);
-  virtual nsresult GetInnerHTML(nsAString& aInnerHTML);
-  virtual nsresult SetInnerHTML(const nsAString& aInnerHTML);
-  nsresult ScrollIntoView(PRBool aTop, PRUint8 optional_argc);
-  // Declare Focus(), Blur(), GetTabIndex(), SetTabIndex(), GetHidden(),
-  // SetHidden(), GetSpellcheck(), SetSpellcheck(), and GetDraggable() such that
-  // classes that inherit interfaces with those methods properly override them.
-  NS_IMETHOD Focus();
-  NS_IMETHOD Blur();
-  NS_IMETHOD GetTabIndex(PRInt32 *aTabIndex);
-  NS_IMETHOD SetTabIndex(PRInt32 aTabIndex);
-  NS_IMETHOD GetHidden(PRBool* aHidden);
-  NS_IMETHOD SetHidden(PRBool aHidden);
-  NS_IMETHOD GetSpellcheck(PRBool* aSpellcheck);
-  NS_IMETHOD SetSpellcheck(PRBool aSpellcheck);
-  NS_IMETHOD GetDraggable(PRBool* aDraggable);
-  NS_IMETHOD SetDraggable(PRBool aDraggable);
-  nsresult GetContentEditable(nsAString &aContentEditable);
-  nsresult GetIsContentEditable(PRBool* aContentEditable);
+  // These methods are used to implement element-specific behavior of Get/SetItemValue
+  // when an element has @itemprop but no @itemscope.
+  virtual void GetItemValueText(nsAString& text);
+  virtual void SetItemValueText(const nsAString& text);
+  nsDOMSettableTokenList* GetTokenList(nsIAtom* aAtom);
+  void GetTokenList(nsIAtom* aAtom, nsIVariant** aResult);
+  nsresult SetTokenList(nsIAtom* aAtom, nsIVariant* aValue);
+public:
   nsresult SetContentEditable(const nsAString &aContentEditable);
+  nsresult GetDataset(nsISupports** aDataset);
+  // Callback for destructor of of dataset to ensure to null out weak pointer.
+  nsresult ClearDataset();
 
+  /**
+   * Get width and height, using given image request if attributes are unset.
+   */
+  nsSize GetWidthHeightForImage(imgIRequest *aImageRequest);
+
+protected:
+  nsresult GetMarkup(bool aIncludeSelf, nsAString& aMarkup);
+
+public:
   // Implementation for nsIContent
   virtual nsresult BindToTree(nsIDocument* aDocument, nsIContent* aParent,
                               nsIContent* aBindingParent,
-                              PRBool aCompileEventHandlers);
-  virtual void UnbindFromTree(PRBool aDeep = PR_TRUE,
-                              PRBool aNullParent = PR_TRUE);
-  nsresult SetAttr(PRInt32 aNameSpaceID, nsIAtom* aName,
-                   const nsAString& aValue, PRBool aNotify)
+                              bool aCompileEventHandlers);
+  virtual void UnbindFromTree(bool aDeep = true,
+                              bool aNullParent = true);
+  nsresult SetAttr(int32_t aNameSpaceID, nsIAtom* aName,
+                   const nsAString& aValue, bool aNotify)
   {
-    return SetAttr(aNameSpaceID, aName, nsnull, aValue, aNotify);
+    return SetAttr(aNameSpaceID, aName, nullptr, aValue, aNotify);
   }
-  virtual nsresult SetAttr(PRInt32 aNameSpaceID, nsIAtom* aName,
+  virtual nsresult SetAttr(int32_t aNameSpaceID, nsIAtom* aName,
                            nsIAtom* aPrefix, const nsAString& aValue,
-                           PRBool aNotify);
-  virtual nsresult UnsetAttr(PRInt32 aNameSpaceID, nsIAtom* aName,
-                             PRBool aNotify);
-  virtual PRBool IsFocusable(PRInt32 *aTabIndex = nsnull, PRBool aWithMouse = PR_FALSE)
+                           bool aNotify);
+  virtual nsresult UnsetAttr(int32_t aNameSpaceID, nsIAtom* aName,
+                             bool aNotify);
+  virtual bool IsFocusable(int32_t *aTabIndex = nullptr, bool aWithMouse = false)
   {
-    PRBool isFocusable = PR_FALSE;
+    bool isFocusable = false;
     IsHTMLFocusable(aWithMouse, &isFocusable, aTabIndex);
     return isFocusable;
   }
   /**
-   * Returns PR_TRUE if a subclass is not allowed to override the value returned
+   * Returns true if a subclass is not allowed to override the value returned
    * in aIsFocusable.
    */
-  virtual PRBool IsHTMLFocusable(PRBool aWithMouse,
-                                 PRBool *aIsFocusable,
-                                 PRInt32 *aTabIndex);
-  virtual void PerformAccesskey(PRBool aKeyCausesActivation,
-                                PRBool aIsTrustedEvent);
+  virtual bool IsHTMLFocusable(bool aWithMouse,
+                                 bool *aIsFocusable,
+                                 int32_t *aTabIndex);
+  virtual void PerformAccesskey(bool aKeyCausesActivation,
+                                bool aIsTrustedEvent);
 
   /**
    * Check if an event for an anchor can be handled
-   * @return PR_TRUE if the event can be handled, PR_FALSE otherwise
+   * @return true if the event can be handled, false otherwise
    */
-  PRBool CheckHandleEventForAnchorsPreconditions(nsEventChainVisitor& aVisitor);
+  bool CheckHandleEventForAnchorsPreconditions(nsEventChainVisitor& aVisitor);
   nsresult PreHandleEventForAnchors(nsEventChainPreVisitor& aVisitor);
   nsresult PostHandleEventForAnchors(nsEventChainPostVisitor& aVisitor);
-  PRBool IsHTMLLink(nsIURI** aURI) const;
-
-  // As above, but makes sure to return a URI object that we can mutate with
-  // impunity without changing our current URI.  That is, if the URI is cached
-  // it clones it and returns the clone.
-  void GetHrefURIToMutate(nsIURI** aURI);
+  bool IsHTMLLink(nsIURI** aURI) const;
 
   // HTML element methods
   void Compact() { mAttrsAndChildren.Compact(); }
 
-  virtual void UpdateEditableState();
+  virtual void UpdateEditableState(bool aNotify);
 
-  virtual PRBool ParseAttribute(PRInt32 aNamespaceID,
+  virtual nsEventStates IntrinsicState() const;
+
+  // Helper for setting our editable flag and notifying
+  void DoSetEditableFlag(bool aEditable, bool aNotify) {
+    SetEditableFlag(aEditable);
+    UpdateState(aNotify);
+  }
+
+  virtual bool ParseAttribute(int32_t aNamespaceID,
+                              nsIAtom* aAttribute,
+                              const nsAString& aValue,
+                              nsAttrValue& aResult);
+
+  bool ParseBackgroundAttribute(int32_t aNamespaceID,
                                 nsIAtom* aAttribute,
                                 const nsAString& aValue,
                                 nsAttrValue& aResult);
 
-  NS_IMETHOD_(PRBool) IsAttributeMapped(const nsIAtom* aAttribute) const;
+  NS_IMETHOD_(bool) IsAttributeMapped(const nsIAtom* aAttribute) const;
   virtual nsMapRuleToAttributesFunc GetAttributeMappingFunction() const;
 
   /**
@@ -230,7 +425,7 @@ public:
    * @param aFlush whether to flush out frames so that they're up to date.
    * @return the primary frame as nsIFormControlFrame
    */
-  nsIFormControlFrame* GetFormControlFrame(PRBool aFlushFrames);
+  nsIFormControlFrame* GetFormControlFrame(bool aFlushFrames);
 
   //----------------------------------------
 
@@ -241,7 +436,7 @@ public:
    * @param aResult the resulting HTMLValue
    * @return whether the value was parsed
    */
-  static PRBool ParseAlignValue(const nsAString& aString,
+  static bool ParseAlignValue(const nsAString& aString,
                                 nsAttrValue& aResult);
 
   /**
@@ -251,7 +446,7 @@ public:
    * @param aResult the resulting HTMLValue
    * @return whether the value was parsed
    */
-  static PRBool ParseDivAlignValue(const nsAString& aString,
+  static bool ParseDivAlignValue(const nsAString& aString,
                                    nsAttrValue& aResult);
 
   /**
@@ -261,7 +456,7 @@ public:
    * @param aResult the resulting HTMLValue
    * @return whether the value was parsed
    */
-  static PRBool ParseTableHAlignValue(const nsAString& aString,
+  static bool ParseTableHAlignValue(const nsAString& aString,
                                       nsAttrValue& aResult);
 
   /**
@@ -271,7 +466,7 @@ public:
    * @param aResult the resulting HTMLValue
    * @return whether the value was parsed
    */
-  static PRBool ParseTableCellHAlignValue(const nsAString& aString,
+  static bool ParseTableCellHAlignValue(const nsAString& aString,
                                           nsAttrValue& aResult);
 
   /**
@@ -282,7 +477,7 @@ public:
    * @param aResult the resulting HTMLValue
    * @return whether the value was parsed
    */
-  static PRBool ParseTableVAlignValue(const nsAString& aString,
+  static bool ParseTableVAlignValue(const nsAString& aString,
                                       nsAttrValue& aResult);
 
   /**
@@ -293,7 +488,7 @@ public:
    * @param aResult the resulting HTMLValue
    * @return whether the value was parsed
    */
-  static PRBool ParseImageAttribute(nsIAtom* aAttribute,
+  static bool ParseImageAttribute(nsIAtom* aAttribute,
                                     const nsAString& aString,
                                     nsAttrValue& aResult);
   /**
@@ -303,7 +498,7 @@ public:
    * @param aResult the resulting HTMLValue
    * @return whether the value was parsed
    */
-  static PRBool ParseFrameborderValue(const nsAString& aString,
+  static bool ParseFrameborderValue(const nsAString& aString,
                                       nsAttrValue& aResult);
 
   /**
@@ -313,7 +508,7 @@ public:
    * @param aResult the resulting HTMLValue
    * @return whether the value was parsed
    */
-  static PRBool ParseScrollingValue(const nsAString& aString,
+  static bool ParseScrollingValue(const nsAString& aString,
                                     nsAttrValue& aResult);
 
   /*
@@ -331,6 +526,15 @@ public:
    */
   static void MapCommonAttributesInto(const nsMappedAttributes* aAttributes, 
                                       nsRuleData* aRuleData);
+
+  /**
+   * This method is used by embed elements because they should ignore the hidden
+   * attribute for the moment.
+   * TODO: This should be removed when bug 614825 will be fixed.
+   */
+  static void MapCommonAttributesExceptHiddenInto(const nsMappedAttributes* aAttributes,
+                                                  nsRuleData* aRuleData);
+
   static const MappedAttributeEntry sCommonAttributeMap[];
   static const MappedAttributeEntry sImageMarginSizeAttributeMap[];
   static const MappedAttributeEntry sImageBorderAttributeMap[];
@@ -447,20 +651,20 @@ public:
    * @param aState the history state object (out param)
    * @param aKey the key (out param)
    */
-  static nsresult GetLayoutHistoryAndKey(nsGenericHTMLElement* aContent,
-                                         PRBool aRead,
-                                         nsILayoutHistoryState** aState,
-                                         nsACString& aKey);
+  static already_AddRefed<nsILayoutHistoryState>
+  GetLayoutHistoryAndKey(nsGenericHTMLElement* aContent,
+                         bool aRead,
+                         nsACString& aKey);
   /**
    * Restore the state for a form control.  Ends up calling
    * nsIFormControl::RestoreState().
    *
    * @param aContent an nsGenericHTMLElement* pointing to the form control
    * @param aControl an nsIFormControl* pointing to the form control
-   * @return PR_FALSE if RestoreState() was not called, the return
+   * @return false if RestoreState() was not called, the return
    *         value of RestoreState() otherwise.
    */
-  static PRBool RestoreFormControlState(nsGenericHTMLElement* aContent,
+  static bool RestoreFormControlState(nsGenericHTMLElement* aContent,
                                         nsIFormControl* aControl);
 
   /**
@@ -479,7 +683,7 @@ public:
    *        current form that they're not descendants of.
    * @note This method should not be called if the element has a form attribute.
    */
-  nsHTMLFormElement* FindAncestorForm(nsHTMLFormElement* aCurrentForm = nsnull);
+  nsHTMLFormElement* FindAncestorForm(nsHTMLFormElement* aCurrentForm = nullptr);
 
   virtual void RecompileScriptEventListeners();
 
@@ -487,7 +691,7 @@ public:
    * See if the document being tested has nav-quirks mode enabled.
    * @param doc the document
    */
-  static PRBool InNavQuirksMode(nsIDocument* aDoc);
+  static bool InNavQuirksMode(nsIDocument* aDoc);
 
   /**
    * Locate an nsIEditor rooted at this content node, if there is one.
@@ -506,21 +710,45 @@ public:
    * @param aBaseAttr  name of base attribute.
    * @param aResult    result value [out]
    */
-  NS_HIDDEN_(nsresult) GetURIAttr(nsIAtom* aAttr, nsIAtom* aBaseAttr, nsAString& aResult);
+  NS_HIDDEN_(void) GetURIAttr(nsIAtom* aAttr, nsIAtom* aBaseAttr, nsAString& aResult) const;
+
+  /**
+   * Gets the absolute URI values of an attribute, by resolving any relative
+   * URIs in the attribute against the baseuri of the element. If a substring
+   * isn't a relative URI, the substring is returned as is. Only works for
+   * attributes in null namespace.
+   */
+  bool GetURIAttr(nsIAtom* aAttr, nsIAtom* aBaseAttr, nsIURI** aURI) const;
+
+  /**
+   * Returns the current disabled state of the element.
+   */
+  virtual bool IsDisabled() const {
+    return false;
+  }
+
+  bool IsHidden() const
+  {
+    return HasAttr(kNameSpaceID_None, nsGkAtoms::hidden);
+  }
+
+  virtual bool IsLabelable() const;
+
+  static bool PrefEnabled();
 
 protected:
   /**
    * Add/remove this element to the documents name cache
    */
   void AddToNameTable(nsIAtom* aName) {
-    NS_ASSERTION(HasFlag(NODE_HAS_NAME), "Node lacking NODE_HAS_NAME flag");
+    NS_ASSERTION(HasName(), "Node doesn't have name?");
     nsIDocument* doc = GetCurrentDoc();
     if (doc && !IsInAnonymousSubtree()) {
       doc->AddToNameTable(this, aName);
     }
   }
   void RemoveFromNameTable() {
-    if (HasFlag(NODE_HAS_NAME)) {
+    if (HasName()) {
       nsIDocument* doc = GetCurrentDoc();
       if (doc) {
         doc->RemoveFromNameTable(this, GetParsedAttr(nsGkAtoms::name)->
@@ -536,19 +764,31 @@ protected:
   void RegAccessKey()
   {
     if (HasFlag(NODE_HAS_ACCESSKEY)) {
-      RegUnRegAccessKey(PR_TRUE);
+      RegUnRegAccessKey(true);
     }
   }
 
   void UnregAccessKey()
   {
     if (HasFlag(NODE_HAS_ACCESSKEY)) {
-      RegUnRegAccessKey(PR_FALSE);
+      RegUnRegAccessKey(false);
     }
   }
 
 private:
-  void RegUnRegAccessKey(PRBool aDoReg);
+  /**
+   * Fire mutation events for changes caused by parsing directly into a
+   * context node.
+   *
+   * @param aDoc the document of the node
+   * @param aDest the destination node that got stuff appended to it
+   * @param aOldChildCount the number of children the node had before parsing
+   */
+  void FireMutationEventsForDirectParsing(nsIDocument* aDoc,
+                                          nsIContent* aDest,
+                                          int32_t aOldChildCount);
+
+  void RegUnRegAccessKey(bool aDoReg);
 
 protected:
   /**
@@ -556,29 +796,60 @@ protected:
    * @param aName the attribute
    * @return whether the name is an event handler name
    */
-  PRBool IsEventName(nsIAtom* aName);
+  bool IsEventName(nsIAtom* aName);
 
-  virtual nsresult AfterSetAttr(PRInt32 aNamespaceID, nsIAtom* aName,
-                                const nsAString* aValue, PRBool aNotify);
+  virtual nsresult BeforeSetAttr(int32_t aNamespaceID, nsIAtom* aName,
+                                 const nsAttrValueOrString* aValue,
+                                 bool aNotify);
 
-  virtual nsresult
-    GetEventListenerManagerForAttr(nsIEventListenerManager** aManager,
-                                   nsISupports** aTarget,
-                                   PRBool* aDefer);
+  virtual nsresult AfterSetAttr(int32_t aNamespaceID, nsIAtom* aName,
+                                const nsAttrValue* aValue, bool aNotify);
+
+  virtual nsEventListenerManager*
+    GetEventListenerManagerForAttr(nsIAtom* aAttrName, bool* aDefer);
 
   virtual const nsAttrName* InternalGetExistingAttrNameFromQName(const nsAString& aStr) const;
 
-  /**
-   * Helper method for NS_IMPL_STRING_ATTR macro.
-   * Gets the value of an attribute, returns empty string if
-   * attribute isn't set. Only works for attributes in null namespace.
-   *
-   * @param aAttr    name of attribute.
-   * @param aDefault default-value to return if attribute isn't set.
-   * @param aResult  result value [out]
-   * @result always NS_OK
-   */
-  NS_HIDDEN_(nsresult) GetAttrHelper(nsIAtom* aAttr, nsAString& aValue);
+  void GetHTMLAttr(nsIAtom* aName, nsAString& aResult) const
+  {
+    GetAttr(kNameSpaceID_None, aName, aResult);
+  }
+  void GetHTMLEnumAttr(nsIAtom* aName, nsAString& aResult) const
+  {
+    GetEnumAttr(aName, nullptr, aResult);
+  }
+  void GetHTMLURIAttr(nsIAtom* aName, nsAString& aResult) const
+  {
+    GetURIAttr(aName, nullptr, aResult);
+  }
+
+  void SetHTMLAttr(nsIAtom* aName, const nsAString& aValue)
+  {
+    SetAttr(kNameSpaceID_None, aName, aValue, true);
+  }
+  void SetHTMLAttr(nsIAtom* aName, const nsAString& aValue, mozilla::ErrorResult& aError)
+  {
+    aError = SetAttr(kNameSpaceID_None, aName, aValue, true);
+  }
+  void UnsetHTMLAttr(nsIAtom* aName, mozilla::ErrorResult& aError)
+  {
+    aError = UnsetAttr(kNameSpaceID_None, aName, true);
+  }
+  void SetHTMLBoolAttr(nsIAtom* aName, bool aValue, mozilla::ErrorResult& aError)
+  {
+    if (aValue) {
+      SetHTMLAttr(aName, EmptyString(), aError);
+    } else {
+      UnsetHTMLAttr(aName, aError);
+    }
+  }
+  void SetHTMLIntAttr(nsIAtom* aName, int32_t aValue, mozilla::ErrorResult& aError)
+  {
+    nsAutoString value;
+    value.AppendInt(aValue);
+
+    SetHTMLAttr(aName, value, aError);
+  }
 
   /**
    * Helper method for NS_IMPL_STRING_ATTR macro.
@@ -592,19 +863,6 @@ protected:
   NS_HIDDEN_(nsresult) SetAttrHelper(nsIAtom* aAttr, const nsAString& aValue);
 
   /**
-   * Helper method for NS_IMPL_STRING_ATTR_DEFAULT_VALUE macro.
-   * Gets the value of an attribute, returns specified default value if the
-   * attribute isn't set. Only works for attributes in null namespace.
-   *
-   * @param aAttr    name of attribute.
-   * @param aDefault default-value to return if attribute isn't set.
-   * @param aResult  result value [out]
-   */
-  NS_HIDDEN_(nsresult) GetStringAttrWithDefault(nsIAtom* aAttr,
-                                                const char* aDefault,
-                                                nsAString& aResult);
-
-  /**
    * Helper method for NS_IMPL_BOOL_ATTR macro.
    * Gets value of boolean attribute. Only works for attributes in null
    * namespace.
@@ -612,7 +870,10 @@ protected:
    * @param aAttr    name of attribute.
    * @param aValue   Boolean value of attribute.
    */
-  NS_HIDDEN_(nsresult) GetBoolAttr(nsIAtom* aAttr, PRBool* aValue) const;
+  NS_HIDDEN_(bool) GetBoolAttr(nsIAtom* aAttr) const
+  {
+    return HasAttr(kNameSpaceID_None, aAttr);
+  }
 
   /**
    * Helper method for NS_IMPL_BOOL_ATTR macro.
@@ -622,7 +883,7 @@ protected:
    * @param aAttr    name of attribute.
    * @param aValue   Boolean value of attribute.
    */
-  NS_HIDDEN_(nsresult) SetBoolAttr(nsIAtom* aAttr, PRBool aValue);
+  NS_HIDDEN_(nsresult) SetBoolAttr(nsIAtom* aAttr, bool aValue);
 
   /**
    * Helper method for NS_IMPL_INT_ATTR macro.
@@ -632,9 +893,8 @@ protected:
    *
    * @param aAttr    name of attribute.
    * @param aDefault default-value to return if attribute isn't set.
-   * @param aResult  result value [out]
    */
-  NS_HIDDEN_(nsresult) GetIntAttr(nsIAtom* aAttr, PRInt32 aDefault, PRInt32* aValue);
+  NS_HIDDEN_(int32_t) GetIntAttr(nsIAtom* aAttr, int32_t aDefault) const;
 
   /**
    * Helper method for NS_IMPL_INT_ATTR macro.
@@ -644,41 +904,39 @@ protected:
    * @param aAttr    name of attribute.
    * @param aValue   Integer value of attribute.
    */
-  NS_HIDDEN_(nsresult) SetIntAttr(nsIAtom* aAttr, PRInt32 aValue);
+  NS_HIDDEN_(nsresult) SetIntAttr(nsIAtom* aAttr, int32_t aValue);
 
   /**
-   * Helper method for NS_IMPL_FLOAT_ATTR macro.
-   * Gets the float-value of an attribute, returns specified default value
-   * if the attribute isn't set or isn't set to a float. Only works for
+   * Helper method for NS_IMPL_UINT_ATTR macro.
+   * Gets the unsigned integer-value of an attribute, returns specified default
+   * value if the attribute isn't set or isn't set to an integer. Only works for
    * attributes in null namespace.
    *
    * @param aAttr    name of attribute.
    * @param aDefault default-value to return if attribute isn't set.
    * @param aResult  result value [out]
    */
-  NS_HIDDEN_(nsresult) GetFloatAttr(nsIAtom* aAttr, float aDefault, float* aValue);
+  NS_HIDDEN_(nsresult) GetUnsignedIntAttr(nsIAtom* aAttr, uint32_t aDefault,
+                                          uint32_t* aValue);
 
   /**
-   * Helper method for NS_IMPL_FLOAT_ATTR macro.
-   * Sets value of attribute to specified float. Only works for attributes
+   * Helper method for NS_IMPL_UINT_ATTR macro.
+   * Sets value of attribute to specified unsigned integer. Only works for
+   * attributes in null namespace.
+   *
+   * @param aAttr    name of attribute.
+   * @param aValue   Integer value of attribute.
+   */
+  NS_HIDDEN_(nsresult) SetUnsignedIntAttr(nsIAtom* aAttr, uint32_t aValue);
+
+  /**
+   * Sets value of attribute to specified double. Only works for attributes
    * in null namespace.
    *
    * @param aAttr    name of attribute.
-   * @param aValue   Float value of attribute.
+   * @param aValue   Double value of attribute.
    */
-  NS_HIDDEN_(nsresult) SetFloatAttr(nsIAtom* aAttr, float aValue);
-
-  /**
-   * Helper for GetURIAttr and GetHrefURIForAnchors which returns an
-   * nsIURI in the out param.
-   *
-   * @param aCloneIfCached if true, clone the URI before returning if
-   * it's cached.
-   *
-   * @return PR_TRUE if we had the attr, PR_FALSE otherwise.
-   */
-  NS_HIDDEN_(PRBool) GetURIAttr(nsIAtom* aAttr, nsIAtom* aBaseAttr,
-                                PRBool aCloneIfCached, nsIURI** aURI) const;
+  NS_HIDDEN_(nsresult) SetDoubleAttr(nsIAtom* aAttr, double aValue);
 
   /**
    * This method works like GetURIAttr, except that it supports multiple
@@ -703,9 +961,9 @@ protected:
    * @param aDefault  the default value if the attribute is missing or invalid.
    * @param aResult   string corresponding to the value [out].
    */
-  NS_HIDDEN_(nsresult) GetEnumAttr(nsIAtom* aAttr,
-                                   const char* aDefault,
-                                   nsAString& aResult);
+  NS_HIDDEN_(void) GetEnumAttr(nsIAtom* aAttr,
+                               const char* aDefault,
+                               nsAString& aResult) const;
 
   /**
    * Locates the nsIEditor associated with this node.  In general this is
@@ -719,17 +977,16 @@ protected:
 
   /**
    * Get the frame's offset information for offsetTop/Left/Width/Height.
+   * Returns the parent the offset is relative to.
    * @note This method flushes pending notifications (Flush_Layout).
    * @param aRect the offset information [OUT]
-   * @param aOffsetParent the parent the offset is relative to (offsetParent)
-   *        [OUT]
    */
-  virtual void GetOffsetRect(nsRect& aRect, nsIContent** aOffsetParent);
+  virtual mozilla::dom::Element* GetOffsetRect(nsRect& aRect);
 
   /**
    * Returns true if this is the current document's body element
    */
-  PRBool IsCurrentBodyElement();
+  bool IsCurrentBodyElement();
 
   /**
    * Ensures all editors associated with a subtree are synced, for purposes of
@@ -752,12 +1009,12 @@ protected:
   NS_HIDDEN_(ContentEditableTristate) GetContentEditableValue() const
   {
     static const nsIContent::AttrValuesArray values[] =
-      { &nsGkAtoms::_false, &nsGkAtoms::_true, &nsGkAtoms::_empty, nsnull };
+      { &nsGkAtoms::_false, &nsGkAtoms::_true, &nsGkAtoms::_empty, nullptr };
 
-    if (!HasFlag(NODE_MAY_HAVE_CONTENT_EDITABLE_ATTR))
+    if (!MayHaveContentEditableAttr())
       return eInherit;
 
-    PRInt32 value = FindAttrValueIn(kNameSpaceID_None,
+    int32_t value = FindAttrValueIn(kNameSpaceID_None,
                                     nsGkAtoms::contenteditable, values,
                                     eIgnoreCase);
 
@@ -767,7 +1024,6 @@ protected:
   // Used by A, AREA, LINK, and STYLE.
   already_AddRefed<nsIURI> GetHrefURIForAnchors() const;
 
-private:
   /**
    * Returns whether this element is an editable root. There are two types of
    * editable roots:
@@ -778,13 +1034,38 @@ private:
    * Note that this doesn't return input and textarea elements that haven't been
    * made editable through contentEditable or designMode.
    */
-  PRBool IsEditableRoot() const;
+  bool IsEditableRoot() const;
 
-  void ChangeEditableState(PRInt32 aChange);
+private:
+  void ChangeEditableState(int32_t aChange);
 };
 
+class nsHTMLFieldSetElement;
 
-//----------------------------------------------------------------------
+#define FORM_ELEMENT_FLAG_BIT(n_) NODE_FLAG_BIT(ELEMENT_TYPE_SPECIFIC_BITS_OFFSET + (n_))
+
+// Form element specific bits
+enum {
+  // If this flag is set on an nsGenericHTMLFormElement, that means that we have
+  // added ourselves to our mForm.  It's possible to have a non-null mForm, but
+  // not have this flag set.  That happens when the form is set via the content
+  // sink.
+  ADDED_TO_FORM =                         FORM_ELEMENT_FLAG_BIT(0),
+
+  // If this flag is set on an nsGenericHTMLFormElement, that means that its form
+  // is in the process of being unbound from the tree, and this form element
+  // hasn't re-found its form in nsGenericHTMLFormElement::UnbindFromTree yet.
+  MAYBE_ORPHAN_FORM_ELEMENT =             FORM_ELEMENT_FLAG_BIT(1)
+};
+
+// NOTE: I don't think it's possible to have the above two flags set at the
+// same time, so if it becomes an issue we can probably merge them into the
+// same bit.  --bz
+
+// Make sure we have enough space for those bits
+PR_STATIC_ASSERT(ELEMENT_TYPE_SPECIFIC_BITS_OFFSET + 1 < 32);
+
+#undef FORM_ELEMENT_FLAG_BIT
 
 /**
  * A helper class for form elements that can contain children
@@ -798,13 +1079,17 @@ public:
 
   NS_IMETHOD QueryInterface(REFNSIID aIID, void** aInstancePtr);
 
-  virtual PRBool IsNodeOfType(PRUint32 aFlags) const;
+  virtual bool IsNodeOfType(uint32_t aFlags) const;
   virtual void SaveSubtreeState();
 
   // nsIFormControl
   virtual mozilla::dom::Element* GetFormElement();
+  nsHTMLFormElement* GetForm() const
+  {
+    return mForm;
+  }
   virtual void SetForm(nsIDOMHTMLFormElement* aForm);
-  virtual void ClearForm(PRBool aRemoveFromForm, PRBool aNotify);
+  virtual void ClearForm(bool aRemoveFromForm);
 
   nsresult GetForm(nsIDOMHTMLFormElement** aForm);
 
@@ -812,60 +1097,70 @@ public:
   {
     return NS_OK;
   }
-  
-  virtual PRBool RestoreState(nsPresState* aState)
+
+  virtual bool RestoreState(nsPresState* aState)
   {
-    return PR_FALSE;
+    return false;
   }
-  virtual PRBool AllowDrop()
+  virtual bool AllowDrop()
   {
-    return PR_TRUE;
+    return true;
   }
-  
-  virtual PRBool IsSubmitControl() const;
-
-          PRBool IsTextControl(PRBool aExcludePassword) const;
-
-          PRBool IsSingleLineTextControl(PRBool aExcludePassword) const;
-
-          PRBool IsLabelableControl() const;
-
-          PRBool IsSubmittableControl() const;
 
   // nsIContent
   virtual nsresult BindToTree(nsIDocument* aDocument, nsIContent* aParent,
                               nsIContent* aBindingParent,
-                              PRBool aCompileEventHandlers);
-  virtual void UnbindFromTree(PRBool aDeep = PR_TRUE,
-                              PRBool aNullParent = PR_TRUE);
-  virtual PRUint32 GetDesiredIMEState();
-  virtual PRInt32 IntrinsicState() const;
+                              bool aCompileEventHandlers);
+  virtual void UnbindFromTree(bool aDeep = true,
+                              bool aNullParent = true);
+  virtual IMEState GetDesiredIMEState();
+  virtual nsEventStates IntrinsicState() const;
 
   virtual nsresult PreHandleEvent(nsEventChainPreVisitor& aVisitor);
+
+  virtual bool IsDisabled() const;
+
+  /**
+   * This callback is called by a fieldest on all its elements whenever its
+   * disabled attribute is changed so the element knows its disabled state
+   * might have changed.
+   *
+   * @note Classes redefining this method should not do any content
+   * state updates themselves but should just make sure to call into
+   * nsGenericHTMLFormElement::FieldSetDisabledChanged.
+   */
+  virtual void FieldSetDisabledChanged(bool aNotify);
+
+  void FieldSetFirstLegendChanged(bool aNotify) {
+    UpdateFieldSet(aNotify);
+  }
+
+  /**
+   * This callback is called by a fieldset on all it's elements when it's being
+   * destroyed. When called, the elements should check that aFieldset is there
+   * first parent fieldset and null mFieldset in that case only.
+   *
+   * @param aFieldSet The fieldset being removed.
+   */
+  void ForgetFieldSet(nsIContent* aFieldset);
 
   /**
    * Returns if the control can be disabled.
    */
-  PRBool CanBeDisabled() const;
+  bool CanBeDisabled() const;
+
+  virtual bool IsHTMLFocusable(bool aWithMouse, bool* aIsFocusable,
+                                 int32_t* aTabIndex);
+
+  virtual bool IsLabelable() const;
 
 protected:
-  virtual nsresult BeforeSetAttr(PRInt32 aNameSpaceID, nsIAtom* aName,
-                                 const nsAString* aValue, PRBool aNotify);
+  virtual nsresult BeforeSetAttr(int32_t aNameSpaceID, nsIAtom* aName,
+                                 const nsAttrValueOrString* aValue,
+                                 bool aNotify);
 
-  virtual nsresult AfterSetAttr(PRInt32 aNameSpaceID, nsIAtom* aName,
-                                const nsAString* aValue, PRBool aNotify);
-
-  /**
-   * Returns if the element should react on autofocus attribute.
-   */
-  virtual PRBool AcceptAutofocus() const
-  {
-    return PR_FALSE;
-  }
-
-  void UpdateEditableFormControlState();
-
-  PRBool IsSingleLineTextControlInternal(PRBool aExcludePassword, PRInt32 mType) const;
+  virtual nsresult AfterSetAttr(int32_t aNameSpaceID, nsIAtom* aName,
+                                const nsAttrValue* aValue, bool aNotify);
 
   /**
    * This method will update the form owner, using @form or looking to a parent.
@@ -876,9 +1171,14 @@ protected:
    * with the id in @form. Otherwise, it *must* be null.
    *
    * @note Callers of UpdateFormOwner have to be sure the element is in a
-   * document (GetCurrentDoc() != nsnull).
+   * document (GetCurrentDoc() != nullptr).
    */
   void UpdateFormOwner(bool aBindToTree, Element* aFormIdElement);
+
+  /**
+   * This method will update mFieldset and set it to the first fieldset parent.
+   */
+  void UpdateFieldSet(bool aNotify);
 
   /**
    * Add a form id observer which will observe when the element with the id in
@@ -898,8 +1198,11 @@ protected:
    * It will be called each time the element associated with the id in @form
    * changes.
    */
-  static PRBool FormIdUpdated(Element* aOldElement, Element* aNewElement,
+  static bool FormIdUpdated(Element* aOldElement, Element* aNewElement,
                               void* aData);
+
+  // Returns true if the event should not be handled from PreHandleEvent
+  virtual bool IsElementDisabledForEvents(uint32_t aMessage, nsIFrame* aFrame);
 
   // The focusability state of this form control.  eUnfocusable means that it
   // shouldn't be focused at all, eInactiveWindow means it's in an inactive
@@ -916,147 +1219,30 @@ protected:
 
   /** The form that contains this control */
   nsHTMLFormElement* mForm;
-};
 
-// If this flag is set on an nsGenericHTMLFormElement, that means that we have
-// added ourselves to our mForm.  It's possible to have a non-null mForm, but
-// not have this flag set.  That happens when the form is set via the content
-// sink.
-#define ADDED_TO_FORM (1 << ELEMENT_TYPE_SPECIFIC_BITS_OFFSET)
-
-// If this flag is set on an nsGenericHTMLFormElement, that means that its form
-// is in the process of being unbound from the tree, and this form element
-// hasn't re-found its form in nsGenericHTMLFormElement::UnbindFromTree yet.
-#define MAYBE_ORPHAN_FORM_ELEMENT (1 << (ELEMENT_TYPE_SPECIFIC_BITS_OFFSET+1))
-
-// NOTE: I don't think it's possible to have the above two flags set at the
-// same time, so if it becomes an issue we can probably merge them into the
-// same bit.  --bz
-
-// Make sure we have enough space for those bits
-PR_STATIC_ASSERT(ELEMENT_TYPE_SPECIFIC_BITS_OFFSET + 1 < 32);
-
-//----------------------------------------------------------------------
-
-/**
- * A helper class for frame elements
- */
-
-class nsGenericHTMLFrameElement : public nsGenericHTMLElement,
-                                  public nsIDOMNSHTMLFrameElement,
-                                  public nsIFrameLoaderOwner
-{
-public:
-  nsGenericHTMLFrameElement(already_AddRefed<nsINodeInfo> aNodeInfo,
-                            PRUint32 aFromParser)
-    : nsGenericHTMLElement(aNodeInfo)
-  {
-    mNetworkCreated = aFromParser == NS_FROM_PARSER_NETWORK;
-  }
-  virtual ~nsGenericHTMLFrameElement();
-
-  // nsISupports
-  NS_IMETHOD QueryInterface(REFNSIID aIID, void** aInstancePtr);
-
-  // nsIDOMNSHTMLFrameElement
-  NS_DECL_NSIDOMNSHTMLFRAMEELEMENT
-
-  // nsIFrameLoaderOwner
-  NS_DECL_NSIFRAMELOADEROWNER
-
-  // nsIContent
-  virtual PRBool IsHTMLFocusable(PRBool aWithMouse, PRBool *aIsFocusable, PRInt32 *aTabIndex);
-  virtual nsresult BindToTree(nsIDocument* aDocument, nsIContent* aParent,
-                              nsIContent* aBindingParent,
-                              PRBool aCompileEventHandlers);
-  virtual void UnbindFromTree(PRBool aDeep = PR_TRUE,
-                              PRBool aNullParent = PR_TRUE);
-  nsresult SetAttr(PRInt32 aNameSpaceID, nsIAtom* aName,
-                   const nsAString& aValue, PRBool aNotify)
-  {
-    return SetAttr(aNameSpaceID, aName, nsnull, aValue, aNotify);
-  }
-  virtual nsresult SetAttr(PRInt32 aNameSpaceID, nsIAtom* aName,
-                           nsIAtom* aPrefix, const nsAString& aValue,
-                           PRBool aNotify);
-  virtual void DestroyContent();
-
-  nsresult CopyInnerTo(nsGenericElement* aDest) const;
-
-  // nsIDOMNSHTMLElement 
-  NS_IMETHOD GetTabIndex(PRInt32 *aTabIndex);
-  NS_IMETHOD SetTabIndex(PRInt32 aTabIndex);
-
-  NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED_NO_UNLINK(nsGenericHTMLFrameElement,
-                                                     nsGenericHTMLElement)
-
-protected:
-  // This doesn't really ensure a frame loade in all cases, only when
-  // it makes sense.
-  nsresult EnsureFrameLoader();
-  nsresult LoadSrc();
-  nsresult GetContentDocument(nsIDOMDocument** aContentDocument);
-
-  nsRefPtr<nsFrameLoader> mFrameLoader;
-  // True when the element is created by the parser
-  // using NS_FROM_PARSER_NETWORK flag.
-  // If the element is modified, it may lose the flag.
-  PRPackedBool            mNetworkCreated;
+  /* This is a pointer to our closest fieldset parent if any */
+  nsHTMLFieldSetElement* mFieldSet;
 };
 
 //----------------------------------------------------------------------
 
 /**
- * A macro to implement the NS_NewHTMLXXXElement() functions.
+ * This macro is similar to NS_IMPL_STRING_ATTR except that the getter method
+ * falls back to an alternative method if the content attribute isn't set.
  */
-#define NS_IMPL_NS_NEW_HTML_ELEMENT(_elementName)                            \
-nsGenericHTMLElement*                                                        \
-NS_NewHTML##_elementName##Element(already_AddRefed<nsINodeInfo> aNodeInfo,   \
-                                  PRUint32 aFromParser)                      \
-{                                                                            \
-  return new nsHTML##_elementName##Element(aNodeInfo);                       \
-}
-
-#define NS_IMPL_NS_NEW_HTML_ELEMENT_CHECK_PARSER(_elementName)               \
-nsGenericHTMLElement*                                                        \
-NS_NewHTML##_elementName##Element(already_AddRefed<nsINodeInfo> aNodeInfo,   \
-                                  PRUint32 aFromParser)                      \
-{                                                                            \
-  return new nsHTML##_elementName##Element(aNodeInfo, aFromParser);          \
-}
-
-/**
- * A macro to implement the getter and setter for a given string
- * valued content property. The method uses the generic GetAttr and
- * SetAttr methods.
- */
-#define NS_IMPL_STRING_ATTR(_class, _method, _atom)                  \
-  NS_IMETHODIMP                                                      \
-  _class::Get##_method(nsAString& aValue)                            \
-  {                                                                  \
-    return GetAttrHelper(nsGkAtoms::_atom, aValue);                \
-  }                                                                  \
-  NS_IMETHODIMP                                                      \
-  _class::Set##_method(const nsAString& aValue)                      \
-  {                                                                  \
-    return SetAttrHelper(nsGkAtoms::_atom, aValue);                \
-  }
-
-/**
- * A macro to implement the getter and setter for a given string
- * valued content property with a default value.
- * The method uses the generic GetAttr and SetAttr methods.
- */
-#define NS_IMPL_STRING_ATTR_DEFAULT_VALUE(_class, _method, _atom, _default) \
-  NS_IMETHODIMP                                                      \
-  _class::Get##_method(nsAString& aValue)                            \
-  {                                                                  \
-    return GetStringAttrWithDefault(nsGkAtoms::_atom, _default, aValue);\
-  }                                                                  \
-  NS_IMETHODIMP                                                      \
-  _class::Set##_method(const nsAString& aValue)                      \
-  {                                                                  \
-    return SetAttrHelper(nsGkAtoms::_atom, aValue);                \
+#define NS_IMPL_STRING_ATTR_WITH_FALLBACK(_class, _method, _atom, _fallback) \
+  NS_IMETHODIMP                                                              \
+  _class::Get##_method(nsAString& aValue)                                    \
+  {                                                                          \
+    if (!GetAttr(kNameSpaceID_None, nsGkAtoms::_atom, aValue)) {             \
+      _fallback(aValue);                                                     \
+    }                                                                        \
+    return NS_OK;                                                            \
+  }                                                                          \
+  NS_IMETHODIMP                                                              \
+  _class::Set##_method(const nsAString& aValue)                              \
+  {                                                                          \
+    return SetAttrHelper(nsGkAtoms::_atom, aValue);                          \
   }
 
 /**
@@ -1066,12 +1252,13 @@ NS_NewHTML##_elementName##Element(already_AddRefed<nsINodeInfo> aNodeInfo,   \
  */
 #define NS_IMPL_BOOL_ATTR(_class, _method, _atom)                     \
   NS_IMETHODIMP                                                       \
-  _class::Get##_method(PRBool* aValue)                                \
+  _class::Get##_method(bool* aValue)                                \
   {                                                                   \
-    return GetBoolAttr(nsGkAtoms::_atom, aValue);                   \
+    *aValue = GetBoolAttr(nsGkAtoms::_atom);                          \
+    return NS_OK;                                                     \
   }                                                                   \
   NS_IMETHODIMP                                                       \
-  _class::Set##_method(PRBool aValue)                                 \
+  _class::Set##_method(bool aValue)                                 \
   {                                                                   \
     return SetBoolAttr(nsGkAtoms::_atom, aValue);                   \
   }
@@ -1082,38 +1269,63 @@ NS_NewHTML##_elementName##Element(already_AddRefed<nsINodeInfo> aNodeInfo,   \
  * SetAttr methods.
  */
 #define NS_IMPL_INT_ATTR(_class, _method, _atom)                    \
-  NS_IMPL_INT_ATTR_DEFAULT_VALUE(_class, _method, _atom, -1)
+  NS_IMPL_INT_ATTR_DEFAULT_VALUE(_class, _method, _atom, 0)
 
 #define NS_IMPL_INT_ATTR_DEFAULT_VALUE(_class, _method, _atom, _default)  \
   NS_IMETHODIMP                                                           \
-  _class::Get##_method(PRInt32* aValue)                                   \
+  _class::Get##_method(int32_t* aValue)                                   \
   {                                                                       \
-    return GetIntAttr(nsGkAtoms::_atom, _default, aValue);              \
+    *aValue = GetIntAttr(nsGkAtoms::_atom, _default);                     \
+    return NS_OK;                                                         \
   }                                                                       \
   NS_IMETHODIMP                                                           \
-  _class::Set##_method(PRInt32 aValue)                                    \
+  _class::Set##_method(int32_t aValue)                                    \
   {                                                                       \
-    return SetIntAttr(nsGkAtoms::_atom, aValue);                        \
+    return SetIntAttr(nsGkAtoms::_atom, aValue);                          \
   }
 
 /**
- * A macro to implement the getter and setter for a given float
- * valued content property. The method uses the generic GetAttr and
- * SetAttr methods.
+ * A macro to implement the getter and setter for a given unsigned integer
+ * valued content property. The method uses GetUnsignedIntAttr and
+ * SetUnsignedIntAttr methods.
  */
-#define NS_IMPL_FLOAT_ATTR(_class, _method, _atom)                    \
-  NS_IMPL_FLOAT_ATTR_DEFAULT_VALUE(_class, _method, _atom, 0.0)
+#define NS_IMPL_UINT_ATTR(_class, _method, _atom)                         \
+  NS_IMPL_UINT_ATTR_DEFAULT_VALUE(_class, _method, _atom, 0)
 
-#define NS_IMPL_FLOAT_ATTR_DEFAULT_VALUE(_class, _method, _atom, _default)  \
-  NS_IMETHODIMP                                                             \
-  _class::Get##_method(float* aValue)                                   \
-  {                                                                         \
-    return GetFloatAttr(nsGkAtoms::_atom, _default, aValue);                \
-  }                                                                         \
-  NS_IMETHODIMP                                                             \
-  _class::Set##_method(float aValue)                                    \
-  {                                                                         \
-    return SetFloatAttr(nsGkAtoms::_atom, aValue);                          \
+#define NS_IMPL_UINT_ATTR_DEFAULT_VALUE(_class, _method, _atom, _default) \
+  NS_IMETHODIMP                                                           \
+  _class::Get##_method(uint32_t* aValue)                                  \
+  {                                                                       \
+    return GetUnsignedIntAttr(nsGkAtoms::_atom, _default, aValue);        \
+  }                                                                       \
+  NS_IMETHODIMP                                                           \
+  _class::Set##_method(uint32_t aValue)                                   \
+  {                                                                       \
+    return SetUnsignedIntAttr(nsGkAtoms::_atom, aValue);                  \
+  }
+
+/**
+ * A macro to implement the getter and setter for a given unsigned integer
+ * valued content property. The method uses GetUnsignedIntAttr and
+ * SetUnsignedIntAttr methods. This macro is similar to NS_IMPL_UINT_ATTR except
+ * that it throws an exception if the set value is null.
+ */
+#define NS_IMPL_UINT_ATTR_NON_ZERO(_class, _method, _atom)                \
+  NS_IMPL_UINT_ATTR_NON_ZERO_DEFAULT_VALUE(_class, _method, _atom, 1)
+
+#define NS_IMPL_UINT_ATTR_NON_ZERO_DEFAULT_VALUE(_class, _method, _atom, _default) \
+  NS_IMETHODIMP                                                           \
+  _class::Get##_method(uint32_t* aValue)                                  \
+  {                                                                       \
+    return GetUnsignedIntAttr(nsGkAtoms::_atom, _default, aValue);        \
+  }                                                                       \
+  NS_IMETHODIMP                                                           \
+  _class::Set##_method(uint32_t aValue)                                   \
+  {                                                                       \
+    if (aValue == 0) {                                                    \
+      return NS_ERROR_DOM_INDEX_SIZE_ERR;                                 \
+    }                                                                     \
+    return SetUnsignedIntAttr(nsGkAtoms::_atom, aValue);                  \
   }
 
 /**
@@ -1127,7 +1339,8 @@ NS_NewHTML##_elementName##Element(already_AddRefed<nsINodeInfo> aNodeInfo,   \
   NS_IMETHODIMP                                                     \
   _class::Get##_method(nsAString& aValue)                           \
   {                                                                 \
-    return GetURIAttr(nsGkAtoms::_atom, nsnull, aValue);          \
+    GetURIAttr(nsGkAtoms::_atom, nullptr, aValue);                  \
+    return NS_OK;                                                   \
   }                                                                 \
   NS_IMETHODIMP                                                     \
   _class::Set##_method(const nsAString& aValue)                     \
@@ -1139,12 +1352,34 @@ NS_NewHTML##_elementName##Element(already_AddRefed<nsINodeInfo> aNodeInfo,   \
   NS_IMETHODIMP                                                              \
   _class::Get##_method(nsAString& aValue)                                    \
   {                                                                          \
-    return GetURIAttr(nsGkAtoms::_atom, nsGkAtoms::_base_atom, aValue);  \
+    GetURIAttr(nsGkAtoms::_atom, nsGkAtoms::_base_atom, aValue);             \
+    return NS_OK;                                                            \
   }                                                                          \
   NS_IMETHODIMP                                                              \
   _class::Set##_method(const nsAString& aValue)                              \
   {                                                                          \
     return SetAttrHelper(nsGkAtoms::_atom, aValue);                        \
+  }
+
+/**
+ * A macro to implement getter and setter for action and form action content
+ * attributes. It's very similar to NS_IMPL_URI_ATTR excepted that if the
+ * content attribute is the empty string, the empty string is returned.
+ */
+#define NS_IMPL_ACTION_ATTR(_class, _method, _atom)                 \
+  NS_IMETHODIMP                                                     \
+  _class::Get##_method(nsAString& aValue)                           \
+  {                                                                 \
+    GetAttr(kNameSpaceID_None, nsGkAtoms::_atom, aValue);           \
+    if (!aValue.IsEmpty()) {                                        \
+      GetURIAttr(nsGkAtoms::_atom, nullptr, aValue);                 \
+    }                                                               \
+    return NS_OK;                                                   \
+  }                                                                 \
+  NS_IMETHODIMP                                                     \
+  _class::Set##_method(const nsAString& aValue)                     \
+  {                                                                 \
+    return SetAttrHelper(nsGkAtoms::_atom, aValue);                 \
   }
 
 /**
@@ -1159,12 +1394,13 @@ NS_NewHTML##_elementName##Element(already_AddRefed<nsINodeInfo> aNodeInfo,   \
 
 #define NS_IMPL_NON_NEGATIVE_INT_ATTR_DEFAULT_VALUE(_class, _method, _atom, _default)  \
   NS_IMETHODIMP                                                           \
-  _class::Get##_method(PRInt32* aValue)                                   \
+  _class::Get##_method(int32_t* aValue)                                   \
   {                                                                       \
-    return GetIntAttr(nsGkAtoms::_atom, _default, aValue);                \
+    *aValue = GetIntAttr(nsGkAtoms::_atom, _default);                     \
+    return NS_OK;                                                         \
   }                                                                       \
   NS_IMETHODIMP                                                           \
-  _class::Set##_method(PRInt32 aValue)                                    \
+  _class::Set##_method(int32_t aValue)                                    \
   {                                                                       \
     if (aValue < 0) {                                                     \
       return NS_ERROR_DOM_INDEX_SIZE_ERR;                                 \
@@ -1181,37 +1417,13 @@ NS_NewHTML##_elementName##Element(already_AddRefed<nsINodeInfo> aNodeInfo,   \
   NS_IMETHODIMP                                                           \
   _class::Get##_method(nsAString& aValue)                                 \
   {                                                                       \
-    return GetEnumAttr(nsGkAtoms::_atom, _default, aValue);               \
+    GetEnumAttr(nsGkAtoms::_atom, _default, aValue);                      \
+    return NS_OK;                                                         \
   }                                                                       \
   NS_IMETHODIMP                                                           \
   _class::Set##_method(const nsAString& aValue)                           \
   {                                                                       \
     return SetAttrHelper(nsGkAtoms::_atom, aValue);                       \
-  }
-
-/**
- * A macro to implement the getter and setter for a given content
- * property that needs to set a positive integer. The method uses
- * the generic GetAttr and SetAttr methods. This macro is much like
- * the NS_IMPL_NON_NEGATIVE_INT_ATTR macro except the exception is
- * thrown also when the value is equal to 0.
- */
-#define NS_IMPL_POSITIVE_INT_ATTR(_class, _method, _atom)                 \
-  NS_IMPL_POSITIVE_INT_ATTR_DEFAULT_VALUE(_class, _method, _atom, 1)
-
-#define NS_IMPL_POSITIVE_INT_ATTR_DEFAULT_VALUE(_class, _method, _atom, _default)  \
-  NS_IMETHODIMP                                                           \
-  _class::Get##_method(PRInt32* aValue)                                   \
-  {                                                                       \
-    return GetIntAttr(nsGkAtoms::_atom, _default, aValue);                \
-  }                                                                       \
-  NS_IMETHODIMP                                                           \
-  _class::Set##_method(PRInt32 aValue)                                    \
-  {                                                                       \
-    if (aValue <= 0) {                                                    \
-      return NS_ERROR_DOM_INDEX_SIZE_ERR;                                 \
-    }                                                                     \
-    return SetIntAttr(nsGkAtoms::_atom, aValue);                          \
   }
 
 /**
@@ -1260,7 +1472,7 @@ NS_NewHTML##_elementName##Element(already_AddRefed<nsINodeInfo> aNodeInfo,   \
       aIID.Equals(NS_GET_IID(nsXPCClassInfo))) {             \
     foundInterface = _getter ();                             \
     if (!foundInterface) {                                   \
-      *aInstancePtr = nsnull;                                \
+      *aInstancePtr = nullptr;                                \
       return NS_ERROR_OUT_OF_MEMORY;                         \
     }                                                        \
   } else
@@ -1315,6 +1527,18 @@ NS_NewHTML##_elementName##Element(already_AddRefed<nsINodeInfo> aNodeInfo,   \
     NS_INTERFACE_TABLE_ENTRY(_class, _i6)                                     \
   NS_OFFSET_AND_INTERFACE_TABLE_END
 
+#define NS_HTML_CONTENT_INTERFACE_TABLE7(_class, _i1, _i2, _i3, _i4, _i5,     \
+                                         _i6, _i7)                            \
+  NS_HTML_CONTENT_INTERFACE_TABLE_BEGIN(_class)                               \
+    NS_INTERFACE_TABLE_ENTRY(_class, _i1)                                     \
+    NS_INTERFACE_TABLE_ENTRY(_class, _i2)                                     \
+    NS_INTERFACE_TABLE_ENTRY(_class, _i3)                                     \
+    NS_INTERFACE_TABLE_ENTRY(_class, _i4)                                     \
+    NS_INTERFACE_TABLE_ENTRY(_class, _i5)                                     \
+    NS_INTERFACE_TABLE_ENTRY(_class, _i6)                                     \
+    NS_INTERFACE_TABLE_ENTRY(_class, _i7)                                     \
+  NS_OFFSET_AND_INTERFACE_TABLE_END
+
 #define NS_HTML_CONTENT_INTERFACE_TABLE8(_class, _i1, _i2, _i3, _i4, _i5,     \
                                          _i6, _i7, _i8)                       \
   NS_HTML_CONTENT_INTERFACE_TABLE_BEGIN(_class)                               \
@@ -1357,27 +1581,342 @@ NS_NewHTML##_elementName##Element(already_AddRefed<nsINodeInfo> aNodeInfo,   \
     NS_INTERFACE_TABLE_ENTRY(_class, _i10)                                    \
   NS_OFFSET_AND_INTERFACE_TABLE_END
 
+#define NS_FORWARD_NSIDOMHTMLELEMENT_TO_GENERIC                                \
+  NS_IMETHOD GetId(nsAString& aId) MOZ_FINAL {                                 \
+    mozilla::dom::Element::GetId(aId);                                         \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD SetId(const nsAString& aId) MOZ_FINAL {                           \
+    mozilla::dom::Element::SetId(aId);                                         \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD GetTitle(nsAString& aTitle) MOZ_FINAL {                           \
+    nsGenericHTMLElement::GetTitle(aTitle);                                    \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD SetTitle(const nsAString& aTitle) MOZ_FINAL {                     \
+    nsGenericHTMLElement::SetTitle(aTitle);                                    \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD GetLang(nsAString& aLang) MOZ_FINAL {                             \
+    nsGenericHTMLElement::GetLang(aLang);                                      \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD SetLang(const nsAString& aLang) MOZ_FINAL {                       \
+    nsGenericHTMLElement::SetLang(aLang);                                      \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD GetDir(nsAString& aDir) MOZ_FINAL {                               \
+    nsGenericHTMLElement::GetDir(aDir);                                        \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD SetDir(const nsAString& aDir) MOZ_FINAL {                         \
+    mozilla::ErrorResult rv;                                                   \
+    nsGenericHTMLElement::SetDir(aDir, rv);                                    \
+    return rv.ErrorCode();                                                     \
+  }                                                                            \
+  NS_IMETHOD GetClassName(nsAString& aClassName) MOZ_FINAL {                   \
+    nsGenericHTMLElement::GetClassName(aClassName);                            \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD SetClassName(const nsAString& aClassName) MOZ_FINAL {             \
+    nsGenericHTMLElement::SetClassName(aClassName);                            \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD GetDataset(nsISupports** aDataset) MOZ_FINAL {                    \
+    return nsGenericHTMLElement::GetDataset(aDataset);                         \
+  }                                                                            \
+  NS_IMETHOD GetHidden(bool* aHidden) MOZ_FINAL {                              \
+    *aHidden = nsGenericHTMLElement::Hidden();                                 \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD SetHidden(bool aHidden) MOZ_FINAL {                               \
+    mozilla::ErrorResult rv;                                                   \
+    nsGenericHTMLElement::SetHidden(aHidden, rv);                              \
+    return rv.ErrorCode();                                                     \
+  }                                                                            \
+  NS_IMETHOD DOMBlur() MOZ_FINAL {                                             \
+    mozilla::ErrorResult rv;                                                   \
+    nsGenericHTMLElement::Blur(rv);                                            \
+    return rv.ErrorCode();                                                     \
+  }                                                                            \
+  NS_IMETHOD GetItemScope(bool* aItemScope) MOZ_FINAL {                        \
+    *aItemScope = nsGenericHTMLElement::ItemScope();                           \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD SetItemScope(bool aItemScope) MOZ_FINAL {                         \
+    mozilla::ErrorResult rv;                                                   \
+    nsGenericHTMLElement::SetItemScope(aItemScope, rv);                        \
+    return rv.ErrorCode();                                                     \
+  }                                                                            \
+  NS_IMETHOD GetItemType(nsIVariant** aType) MOZ_FINAL {                       \
+    GetTokenList(nsGkAtoms::itemtype, aType);                                  \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD SetItemType(nsIVariant* aType) MOZ_FINAL {                        \
+    return nsGenericHTMLElement::SetTokenList(nsGkAtoms::itemtype, aType);     \
+  }                                                                            \
+  NS_IMETHOD GetItemId(nsAString& aId) MOZ_FINAL {                             \
+    nsGenericHTMLElement::GetItemId(aId);                                      \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD SetItemId(const nsAString& aId) MOZ_FINAL {                       \
+    mozilla::ErrorResult rv;                                                   \
+    nsGenericHTMLElement::SetItemId(aId, rv);                                  \
+    return rv.ErrorCode();                                                     \
+  }                                                                            \
+  NS_IMETHOD GetProperties(nsISupports** aReturn)                              \
+      MOZ_FINAL {                                                              \
+    nsGenericHTMLElement::GetProperties(aReturn);                              \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD GetItemValue(nsIVariant** aValue) MOZ_FINAL {                     \
+    return nsGenericHTMLElement::GetItemValue(aValue);                         \
+  }                                                                            \
+  NS_IMETHOD SetItemValue(nsIVariant* aValue) MOZ_FINAL {                      \
+    return nsGenericHTMLElement::SetItemValue(aValue);                         \
+  }                                                                            \
+  NS_IMETHOD GetItemRef(nsIVariant** aRef) MOZ_FINAL {                         \
+    GetTokenList(nsGkAtoms::itemref, aRef);                                    \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD SetItemRef(nsIVariant* aRef) MOZ_FINAL {                          \
+    return nsGenericHTMLElement::SetTokenList(nsGkAtoms::itemref, aRef);       \
+  }                                                                            \
+  NS_IMETHOD GetItemProp(nsIVariant** aProp) MOZ_FINAL {                       \
+    GetTokenList(nsGkAtoms::itemprop, aProp);                                  \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD SetItemProp(nsIVariant* aProp) MOZ_FINAL {                        \
+    return nsGenericHTMLElement::SetTokenList(nsGkAtoms::itemprop, aProp);     \
+  }                                                                            \
+  NS_IMETHOD GetAccessKey(nsAString& aAccessKey) MOZ_FINAL {                   \
+    nsGenericHTMLElement::GetAccessKey(aAccessKey);                            \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD SetAccessKey(const nsAString& aAccessKey) MOZ_FINAL {             \
+    mozilla::ErrorResult rv;                                                   \
+    nsGenericHTMLElement::SetAccessKey(aAccessKey, rv);                        \
+    return rv.ErrorCode();                                                     \
+  }                                                                            \
+  NS_IMETHOD GetAccessKeyLabel(nsAString& aAccessKeyLabel) MOZ_FINAL {         \
+    nsGenericHTMLElement::GetAccessKeyLabel(aAccessKeyLabel);                  \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD SetDraggable(bool aDraggable) MOZ_FINAL {                         \
+    mozilla::ErrorResult rv;                                                   \
+    nsGenericHTMLElement::SetDraggable(aDraggable, rv);                        \
+    return rv.ErrorCode();                                                     \
+  }                                                                            \
+  NS_IMETHOD GetContentEditable(nsAString& aContentEditable) MOZ_FINAL {       \
+    nsGenericHTMLElement::GetContentEditable(aContentEditable);                \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD SetContentEditable(const nsAString& aContentEditable) MOZ_FINAL { \
+    mozilla::ErrorResult rv;                                                   \
+    nsGenericHTMLElement::SetContentEditable(aContentEditable, rv);            \
+    return rv.ErrorCode();                                                     \
+  }                                                                            \
+  NS_IMETHOD GetIsContentEditable(bool* aIsContentEditable) MOZ_FINAL {        \
+    *aIsContentEditable = nsGenericHTMLElement::IsContentEditable();           \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD GetContextMenu(nsIDOMHTMLMenuElement** aContextMenu) MOZ_FINAL {  \
+    nsGenericHTMLElement::GetContextMenu(aContextMenu);                        \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD GetSpellcheck(bool* aSpellcheck) MOZ_FINAL {                      \
+    *aSpellcheck = nsGenericHTMLElement::Spellcheck();                         \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD SetSpellcheck(bool aSpellcheck) MOZ_FINAL {                       \
+    mozilla::ErrorResult rv;                                                   \
+    nsGenericHTMLElement::SetSpellcheck(aSpellcheck, rv);                      \
+    return rv.ErrorCode();                                                     \
+  }                                                                            \
+  NS_IMETHOD GetOuterHTML(nsAString& aOuterHTML) MOZ_FINAL {                   \
+    mozilla::ErrorResult rv;                                                   \
+    nsGenericHTMLElement::GetOuterHTML(aOuterHTML, rv);                        \
+    return rv.ErrorCode();                                                     \
+  }                                                                            \
+  NS_IMETHOD SetOuterHTML(const nsAString& aOuterHTML) MOZ_FINAL {             \
+    mozilla::ErrorResult rv;                                                   \
+    nsGenericHTMLElement::SetOuterHTML(aOuterHTML, rv);                        \
+    return rv.ErrorCode();                                                     \
+  }                                                                            \
+  NS_IMETHOD InsertAdjacentHTML(const nsAString& position,                     \
+                                const nsAString& text) MOZ_FINAL {             \
+    return nsGenericHTMLElement::InsertAdjacentHTML(position, text);           \
+  }                                                                            \
+  NS_IMETHOD ScrollIntoView(bool top, uint8_t _argc) MOZ_FINAL {               \
+    if (!_argc) {                                                              \
+      top = true;                                                              \
+    }                                                                          \
+    mozilla::dom::Element::ScrollIntoView(top);                                \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD GetOffsetParent(nsIDOMElement** aOffsetParent) MOZ_FINAL {        \
+    mozilla::dom::Element* offsetParent =                                      \
+      nsGenericHTMLElement::GetOffsetParent();                                 \
+    if (!offsetParent) {                                                       \
+      *aOffsetParent = nullptr;                                                \
+      return NS_OK;                                                            \
+    }                                                                          \
+    return CallQueryInterface(offsetParent, aOffsetParent);                    \
+  }                                                                            \
+  NS_IMETHOD GetOffsetTop(int32_t* aOffsetTop) MOZ_FINAL {                     \
+    *aOffsetTop = nsGenericHTMLElement::OffsetTop();                           \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD GetOffsetLeft(int32_t* aOffsetLeft) MOZ_FINAL {                   \
+    *aOffsetLeft = nsGenericHTMLElement::OffsetLeft();                         \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD GetOffsetWidth(int32_t* aOffsetWidth) MOZ_FINAL {                 \
+    *aOffsetWidth = nsGenericHTMLElement::OffsetWidth();                       \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD GetOffsetHeight(int32_t* aOffsetHeight) MOZ_FINAL {               \
+    *aOffsetHeight = nsGenericHTMLElement::OffsetHeight();                     \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD DOMClick() MOZ_FINAL {                                            \
+    Click();                                                                   \
+    return NS_OK;                                                              \
+  }                                                                            \
+  NS_IMETHOD GetTabIndex(int32_t* aTabIndex) MOZ_FINAL {                       \
+    *aTabIndex = TabIndex();                                                   \
+    return NS_OK;                                                              \
+  }                                                                            \
+  using nsGenericHTMLElement::SetTabIndex;                                     \
+  NS_IMETHOD SetTabIndex(int32_t aTabIndex) MOZ_FINAL {                        \
+    mozilla::ErrorResult rv;                                                   \
+    nsGenericHTMLElement::SetTabIndex(aTabIndex, rv);                          \
+    return rv.ErrorCode();                                                     \
+  }                                                                            \
+  using nsGenericHTMLElement::Focus;                                           \
+  NS_IMETHOD Focus() MOZ_FINAL {                                               \
+    mozilla::ErrorResult rv;                                                   \
+    Focus(rv);                                                                 \
+    return rv.ErrorCode();                                                     \
+  }                                                                            \
+  NS_IMETHOD GetDraggable(bool* aDraggable) MOZ_FINAL {                        \
+    *aDraggable = Draggable();                                                 \
+    return NS_OK;                                                              \
+  }                                                                            \
+  using nsGenericHTMLElement::GetInnerHTML;                                    \
+  NS_IMETHOD GetInnerHTML(nsAString& aInnerHTML) MOZ_FINAL {                   \
+    mozilla::ErrorResult rv;                                                   \
+    GetInnerHTML(aInnerHTML, rv);                                              \
+    return rv.ErrorCode();                                                     \
+  }                                                                            \
+  using nsGenericHTMLElement::SetInnerHTML;                                    \
+  NS_IMETHOD SetInnerHTML(const nsAString& aInnerHTML) MOZ_FINAL {             \
+    mozilla::ErrorResult rv;                                                   \
+    SetInnerHTML(aInnerHTML, rv);                                              \
+    return rv.ErrorCode();                                                     \
+  }
 
-// Element class factory methods
-
+/**
+ * A macro to declare the NS_NewHTMLXXXElement() functions.
+ */
 #define NS_DECLARE_NS_NEW_HTML_ELEMENT(_elementName)                       \
+class nsHTML##_elementName##Element;                                       \
+namespace mozilla {                                                        \
+namespace dom {                                                            \
+class HTML##_elementName##Element;                                         \
+}                                                                          \
+}                                                                          \
 nsGenericHTMLElement*                                                      \
 NS_NewHTML##_elementName##Element(already_AddRefed<nsINodeInfo> aNodeInfo, \
-                                  PRUint32 aFromParser = 0);
+                                  mozilla::dom::FromParser aFromParser = mozilla::dom::NOT_FROM_PARSER);
 
 #define NS_DECLARE_NS_NEW_HTML_ELEMENT_AS_SHARED(_elementName)             \
 inline nsGenericHTMLElement*                                               \
 NS_NewHTML##_elementName##Element(already_AddRefed<nsINodeInfo> aNodeInfo, \
-                                  PRUint32 aFromParser = 0)                \
+                                  mozilla::dom::FromParser aFromParser = mozilla::dom::NOT_FROM_PARSER) \
 {                                                                          \
   return NS_NewHTMLSharedElement(aNodeInfo, aFromParser);                  \
+}
+
+namespace mozilla {
+namespace dom {
+
+// A helper struct to automatically detect whether HTMLFooElement is implemented
+// as nsHTMLFooElement or as mozilla::dom::HTMLFooElement by using SFINAE to
+// look for the InNavQuirksMode function (which lives on nsGenericHTMLElement)
+// on both types and using whichever one the substitution succeeds with.
+
+struct NewHTMLElementHelper
+{
+  template<typename V, V> struct SFINAE;
+  typedef bool (*InNavQuirksMode)(nsIDocument*);
+
+  template<typename T, typename U>
+  static nsGenericHTMLElement*
+  Create(already_AddRefed<nsINodeInfo> aNodeInfo,
+         SFINAE<InNavQuirksMode, T::InNavQuirksMode>* dummy=nullptr)
+  {
+    return new T(aNodeInfo);
+  }
+  template<typename T, typename U>
+  static nsGenericHTMLElement*
+  Create(already_AddRefed<nsINodeInfo> aNodeInfo,
+         SFINAE<InNavQuirksMode, U::InNavQuirksMode>* dummy=nullptr)
+  {
+    return new U(aNodeInfo);
+  }
+
+  template<typename T, typename U>
+  static nsGenericHTMLElement*
+  Create(already_AddRefed<nsINodeInfo> aNodeInfo,
+         mozilla::dom::FromParser aFromParser,
+         SFINAE<InNavQuirksMode, U::InNavQuirksMode>* dummy=nullptr)
+  {
+    return new U(aNodeInfo, aFromParser);
+  }
+  template<typename T, typename U>
+  static nsGenericHTMLElement*
+  Create(already_AddRefed<nsINodeInfo> aNodeInfo,
+         mozilla::dom::FromParser aFromParser,
+         SFINAE<InNavQuirksMode, T::InNavQuirksMode>* dummy=nullptr)
+  {
+    return new T(aNodeInfo, aFromParser);
+  }
+};
+
+}
+}
+
+/**
+ * A macro to implement the NS_NewHTMLXXXElement() functions.
+ */
+#define NS_IMPL_NS_NEW_HTML_ELEMENT(_elementName)                            \
+nsGenericHTMLElement*                                                        \
+NS_NewHTML##_elementName##Element(already_AddRefed<nsINodeInfo> aNodeInfo,   \
+                                  mozilla::dom::FromParser aFromParser)      \
+{                                                                            \
+  return mozilla::dom::NewHTMLElementHelper::                                \
+    Create<nsHTML##_elementName##Element,                                    \
+           mozilla::dom::HTML##_elementName##Element>(aNodeInfo);            \
+}
+
+#define NS_IMPL_NS_NEW_HTML_ELEMENT_CHECK_PARSER(_elementName)               \
+nsGenericHTMLElement*                                                        \
+NS_NewHTML##_elementName##Element(already_AddRefed<nsINodeInfo> aNodeInfo,   \
+                                  mozilla::dom::FromParser aFromParser)      \
+{                                                                            \
+  return mozilla::dom::NewHTMLElementHelper::                                \
+    Create<nsHTML##_elementName##Element,                                    \
+           mozilla::dom::HTML##_elementName##Element>(aNodeInfo,             \
+                                                      aFromParser);          \
 }
 
 // Here, we expand 'NS_DECLARE_NS_NEW_HTML_ELEMENT()' by hand.
 // (Calling the macro directly (with no args) produces compiler warnings.)
 nsGenericHTMLElement*
 NS_NewHTMLElement(already_AddRefed<nsINodeInfo> aNodeInfo,
-                  PRUint32 aFromParser = 0);
+                  mozilla::dom::FromParser aFromParser = mozilla::dom::NOT_FROM_PARSER);
 
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Shared)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(SharedList)
@@ -1393,6 +1932,7 @@ NS_DECLARE_NS_NEW_HTML_ELEMENT(Body)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Button)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Canvas)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Mod)
+NS_DECLARE_NS_NEW_HTML_ELEMENT(DataList)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Div)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(FieldSet)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Font)
@@ -1411,13 +1951,17 @@ NS_DECLARE_NS_NEW_HTML_ELEMENT(Label)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Legend)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Link)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Map)
+NS_DECLARE_NS_NEW_HTML_ELEMENT(Menu)
+NS_DECLARE_NS_NEW_HTML_ELEMENT(MenuItem)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Meta)
+NS_DECLARE_NS_NEW_HTML_ELEMENT(Meter)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Object)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(OptGroup)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Option)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Output)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Paragraph)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Pre)
+NS_DECLARE_NS_NEW_HTML_ELEMENT(Progress)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Script)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Select)
 #if defined(MOZ_MEDIA)
@@ -1440,5 +1984,17 @@ NS_DECLARE_NS_NEW_HTML_ELEMENT(Unknown)
 #if defined(MOZ_MEDIA)
 NS_DECLARE_NS_NEW_HTML_ELEMENT(Video)
 #endif
+
+inline nsISupports*
+ToSupports(nsGenericHTMLElement* aHTMLElement)
+{
+  return aHTMLElement;
+}
+
+inline nsISupports*
+ToCanonicalSupports(nsGenericHTMLElement* aHTMLElement)
+{
+  return aHTMLElement;
+}
 
 #endif /* nsGenericHTMLElement_h___ */

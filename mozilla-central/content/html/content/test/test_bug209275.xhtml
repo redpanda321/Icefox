@@ -9,7 +9,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=209275
 -->
 <head>
   <title>Test for Bug 209275</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 
@@ -153,13 +152,13 @@ function run() {
   // Because link coloring is asynchronous, we wait until it is updated (or we
   // timeout and fail anyway).
   while (getColor($('colorlink')) != visitedColor) {
-    setTimeout(continueTest, 10);
+    setTimeout(continueTest, 0);
     yield;
   }
   is(getColor($('colorlink')), visitedColor,
      "Wrong link color after base change.");
   while (getFill($('ellipselink')) != visitedFill) {
-    setTimeout(continueTest, 10);
+    setTimeout(continueTest, 0);
     yield;
   }
   is(getFill($('ellipselink')), visitedFill,

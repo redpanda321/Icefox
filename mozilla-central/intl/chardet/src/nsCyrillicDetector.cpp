@@ -1,40 +1,7 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "nscore.h"
 #include "nsCyrillicProb.h"
 #include <stdio.h>
@@ -50,16 +17,16 @@
 NS_IMPL_ISUPPORTS1(nsCyrXPCOMDetector, nsICharsetDetector)
 NS_IMPL_ISUPPORTS1(nsCyrXPCOMStringDetector, nsIStringCharsetDetector)
 
-void nsCyrillicDetector::HandleData(const char* aBuf, PRUint32 aLen)
+void nsCyrillicDetector::HandleData(const char* aBuf, uint32_t aLen)
 {
-   PRUint8 cls;
+   uint8_t cls;
    const char* b;
-   PRUint32 i;
+   uint32_t i;
    if(mDone) 
       return;
    for(i=0, b=aBuf;i<aLen;i++,b++)
    {
-     for(PRUintn j=0;j<mItems;j++)
+     for(unsigned j=0;j<mItems;j++)
      {
         if( 0x80 & *b)
            cls = mCyrillicClass[j][(*b) & 0x7F];
@@ -78,9 +45,9 @@ void nsCyrillicDetector::HandleData(const char* aBuf, PRUint32 aLen)
 #define THRESHOLD_RATIO 1.5f
 void nsCyrillicDetector::DataEnd()
 {
-   PRUint32 max=0;
-   PRUint8  maxIdx=0;
-   PRUint8 j;
+   uint32_t max=0;
+   uint8_t  maxIdx=0;
+   uint8_t j;
    if(mDone) 
       return;
    for(j=0;j<mItems;j++) {
@@ -99,16 +66,16 @@ void nsCyrillicDetector::DataEnd()
       printf("Charset %s->\t%d\n", mCharsets[j], mProb[j]);
 #endif
    this->Report(mCharsets[maxIdx]);
-   mDone = PR_TRUE;
+   mDone = true;
 }
 
 //---------------------------------------------------------------------
-nsCyrXPCOMDetector:: nsCyrXPCOMDetector(PRUint8 aItems, 
-                      const PRUint8 ** aCyrillicClass, 
+nsCyrXPCOMDetector:: nsCyrXPCOMDetector(uint8_t aItems, 
+                      const uint8_t ** aCyrillicClass, 
                       const char **aCharsets)
 	     : nsCyrillicDetector(aItems, aCyrillicClass, aCharsets)
 {
-    mObserver = nsnull;
+    mObserver = nullptr;
 }
 
 //---------------------------------------------------------------------
@@ -120,8 +87,8 @@ nsCyrXPCOMDetector::~nsCyrXPCOMDetector()
 NS_IMETHODIMP nsCyrXPCOMDetector::Init(
   nsICharsetDetectionObserver* aObserver)
 {
-  NS_ASSERTION(mObserver == nsnull , "Init twice");
-  if(nsnull == aObserver)
+  NS_ASSERTION(mObserver == nullptr , "Init twice");
+  if(nullptr == aObserver)
      return NS_ERROR_ILLEGAL_VALUE;
 
   mObserver = aObserver;
@@ -130,22 +97,22 @@ NS_IMETHODIMP nsCyrXPCOMDetector::Init(
 
 //----------------------------------------------------------
 NS_IMETHODIMP nsCyrXPCOMDetector::DoIt(
-  const char* aBuf, PRUint32 aLen, PRBool* oDontFeedMe)
+  const char* aBuf, uint32_t aLen, bool* oDontFeedMe)
 {
-  NS_ASSERTION(mObserver != nsnull , "have not init yet");
+  NS_ASSERTION(mObserver != nullptr , "have not init yet");
 
-  if((nsnull == aBuf) || (nsnull == oDontFeedMe))
+  if((nullptr == aBuf) || (nullptr == oDontFeedMe))
      return NS_ERROR_ILLEGAL_VALUE;
 
   this->HandleData(aBuf, aLen);
-  *oDontFeedMe = PR_FALSE;
+  *oDontFeedMe = false;
   return NS_OK;
 }
 
 //----------------------------------------------------------
 NS_IMETHODIMP nsCyrXPCOMDetector::Done()
 {
-  NS_ASSERTION(mObserver != nsnull , "have not init yet");
+  NS_ASSERTION(mObserver != nullptr , "have not init yet");
   this->DataEnd();
   return NS_OK;
 }
@@ -153,13 +120,13 @@ NS_IMETHODIMP nsCyrXPCOMDetector::Done()
 //----------------------------------------------------------
 void nsCyrXPCOMDetector::Report(const char* aCharset)
 {
-  NS_ASSERTION(mObserver != nsnull , "have not init yet");
+  NS_ASSERTION(mObserver != nullptr , "have not init yet");
   mObserver->Notify(aCharset, eBestAnswer);
 }
 
 //---------------------------------------------------------------------
-nsCyrXPCOMStringDetector:: nsCyrXPCOMStringDetector(PRUint8 aItems, 
-                      const PRUint8 ** aCyrillicClass, 
+nsCyrXPCOMStringDetector:: nsCyrXPCOMStringDetector(uint8_t aItems, 
+                      const uint8_t ** aCyrillicClass, 
                       const char **aCharsets)
 	     : nsCyrillicDetector(aItems, aCyrillicClass, aCharsets)
 {
@@ -177,11 +144,11 @@ void nsCyrXPCOMStringDetector::Report(const char *aCharset)
 }
 
 //---------------------------------------------------------------------
-NS_IMETHODIMP nsCyrXPCOMStringDetector::DoIt(const char* aBuf, PRUint32 aLen, 
+NS_IMETHODIMP nsCyrXPCOMStringDetector::DoIt(const char* aBuf, uint32_t aLen, 
                      const char** oCharset, nsDetectionConfident &oConf)
 {
-   mResult = nsnull;
-   mDone = PR_FALSE;
+   mResult = nullptr;
+   mDone = false;
    this->HandleData(aBuf, aLen); 
    this->DataEnd();
    *oCharset=mResult;

@@ -1,51 +1,25 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef __selectionstate_h__
 #define __selectionstate_h__
 
 #include "nsCOMPtr.h"
-#include "nsTArray.h"
 #include "nsIDOMNode.h"
-#include "nsIDOMRange.h"
-#include "nsCycleCollectionParticipant.h"
+#include "nsINode.h"
+#include "nsTArray.h"
+#include "nscore.h"
 
+class nsCycleCollectionTraversalCallback;
 class nsIDOMCharacterData;
+class nsIDOMRange;
 class nsISelection;
+class nsRange;
+namespace mozilla {
+class Selection;
+}
 
 /***************************************************************************
  * class for recording selection info.  stores selection as collection of
@@ -59,13 +33,15 @@ struct nsRangeStore
   nsRangeStore();
   ~nsRangeStore();
   nsresult StoreRange(nsIDOMRange *aRange);
-  nsresult GetRange(nsCOMPtr<nsIDOMRange> *outRange);
+  nsresult GetRange(nsRange** outRange);
+
+  NS_INLINE_DECL_REFCOUNTING(nsRangeStore)
         
   nsCOMPtr<nsIDOMNode> startNode;
-  PRInt32              startOffset;
+  int32_t              startOffset;
   nsCOMPtr<nsIDOMNode> endNode;
-  PRInt32              endOffset;
-  // DEBUG:   static PRInt32 n;
+  int32_t              endOffset;
+  // DEBUG:   static int32_t n;
 };
 
 class nsSelectionState
@@ -78,14 +54,14 @@ class nsSelectionState
     void DoTraverse(nsCycleCollectionTraversalCallback &cb);
     void DoUnlink() { MakeEmpty(); }
   
-    nsresult SaveSelection(nsISelection *aSel);
+    void     SaveSelection(mozilla::Selection *aSel);
     nsresult RestoreSelection(nsISelection *aSel);
-    PRBool   IsCollapsed();
-    PRBool   IsEqual(nsSelectionState *aSelState);
+    bool     IsCollapsed();
+    bool     IsEqual(nsSelectionState *aSelState);
     void     MakeEmpty();
-    PRBool   IsEmpty();
+    bool     IsEmpty();
   protected:    
-    nsTArray<nsRangeStore> mArray;
+    nsTArray<nsRefPtr<nsRangeStore> > mArray;
     
     friend class nsRangeUpdater;
 };
@@ -107,30 +83,30 @@ class nsRangeUpdater
     // if you move a node, that corresponds to deleting it and reinserting it.
     // DOM Range gravity will promote the selection out of the node on deletion,
     // which is not what you want if you know you are reinserting it.
-    nsresult SelAdjCreateNode(nsIDOMNode *aParent, PRInt32 aPosition);
-    nsresult SelAdjInsertNode(nsIDOMNode *aParent, PRInt32 aPosition);
-    nsresult SelAdjDeleteNode(nsIDOMNode *aNode);
-    nsresult SelAdjSplitNode(nsIDOMNode *aOldRightNode, PRInt32 aOffset, nsIDOMNode *aNewLeftNode);
+    nsresult SelAdjCreateNode(nsIDOMNode *aParent, int32_t aPosition);
+    nsresult SelAdjInsertNode(nsIDOMNode *aParent, int32_t aPosition);
+    void     SelAdjDeleteNode(nsIDOMNode *aNode);
+    nsresult SelAdjSplitNode(nsIDOMNode *aOldRightNode, int32_t aOffset, nsIDOMNode *aNewLeftNode);
     nsresult SelAdjJoinNodes(nsIDOMNode *aLeftNode, 
                              nsIDOMNode *aRightNode, 
                              nsIDOMNode *aParent, 
-                             PRInt32 aOffset,
-                             PRInt32 aOldLeftNodeLength);
-    nsresult SelAdjInsertText(nsIDOMCharacterData *aTextNode, PRInt32 aOffset, const nsAString &aString);
-    nsresult SelAdjDeleteText(nsIDOMCharacterData *aTextNode, PRInt32 aOffset, PRInt32 aLength);
+                             int32_t aOffset,
+                             int32_t aOldLeftNodeLength);
+    nsresult SelAdjInsertText(nsIDOMCharacterData *aTextNode, int32_t aOffset, const nsAString &aString);
+    nsresult SelAdjDeleteText(nsIDOMCharacterData *aTextNode, int32_t aOffset, int32_t aLength);
     // the following gravity routines need will/did sandwiches, because the other gravity
     // routines will be called inside of these sandwiches, but should be ignored.
     nsresult WillReplaceContainer();
     nsresult DidReplaceContainer(nsIDOMNode *aOriginalNode, nsIDOMNode *aNewNode);
     nsresult WillRemoveContainer();
-    nsresult DidRemoveContainer(nsIDOMNode *aNode, nsIDOMNode *aParent, PRInt32 aOffset, PRUint32 aNodeOrigLen);
+    nsresult DidRemoveContainer(nsIDOMNode *aNode, nsIDOMNode *aParent, int32_t aOffset, uint32_t aNodeOrigLen);
     nsresult WillInsertContainer();
     nsresult DidInsertContainer();
     nsresult WillMoveNode();
-    nsresult DidMoveNode(nsIDOMNode *aOldParent, PRInt32 aOldOffset, nsIDOMNode *aNewParent, PRInt32 aNewOffset);
+    nsresult DidMoveNode(nsIDOMNode *aOldParent, int32_t aOldOffset, nsIDOMNode *aNewParent, int32_t aNewOffset);
   protected:    
-    nsTArray<nsRangeStore*> mArray;
-    PRBool mLock;
+    nsTArray<nsRefPtr<nsRangeStore> > mArray;
+    bool mLock;
 };
 
 
@@ -144,26 +120,27 @@ class NS_STACK_CLASS nsAutoTrackDOMPoint
   private:
     nsRangeUpdater &mRU;
     nsCOMPtr<nsIDOMNode> *mNode;
-    PRInt32 *mOffset;
-    nsRangeStore mRangeItem;
+    int32_t *mOffset;
+    nsRefPtr<nsRangeStore> mRangeItem;
   public:
-    nsAutoTrackDOMPoint(nsRangeUpdater &aRangeUpdater, nsCOMPtr<nsIDOMNode> *aNode, PRInt32 *aOffset) :
+    nsAutoTrackDOMPoint(nsRangeUpdater &aRangeUpdater, nsCOMPtr<nsIDOMNode> *aNode, int32_t *aOffset) :
     mRU(aRangeUpdater)
     ,mNode(aNode)
     ,mOffset(aOffset)
     {
-      mRangeItem.startNode = *mNode;
-      mRangeItem.endNode = *mNode;
-      mRangeItem.startOffset = *mOffset;
-      mRangeItem.endOffset = *mOffset;
-      mRU.RegisterRangeItem(&mRangeItem);
+      mRangeItem = new nsRangeStore();
+      mRangeItem->startNode = *mNode;
+      mRangeItem->endNode = *mNode;
+      mRangeItem->startOffset = *mOffset;
+      mRangeItem->endOffset = *mOffset;
+      mRU.RegisterRangeItem(mRangeItem);
     }
     
     ~nsAutoTrackDOMPoint()
     {
-      mRU.DropRangeItem(&mRangeItem);
-      *mNode  = mRangeItem.startNode;
-      *mOffset = mRangeItem.startOffset;
+      mRU.DropRangeItem(mRangeItem);
+      *mNode  = mRangeItem->startNode;
+      *mOffset = mRangeItem->startOffset;
     }
 };
 
@@ -208,20 +185,20 @@ class NS_STACK_CLASS nsAutoRemoveContainerSelNotify
     nsRangeUpdater &mRU;
     nsIDOMNode *mNode;
     nsIDOMNode *mParent;
-    PRInt32    mOffset;
-    PRUint32   mNodeOrigLen;
+    int32_t    mOffset;
+    uint32_t   mNodeOrigLen;
 
   public:
-    nsAutoRemoveContainerSelNotify(nsRangeUpdater &aRangeUpdater, 
-                                   nsIDOMNode *aNode, 
-                                   nsIDOMNode *aParent, 
-                                   PRInt32 aOffset, 
-                                   PRUint32 aNodeOrigLen) :
-    mRU(aRangeUpdater)
-    ,mNode(aNode)
-    ,mParent(aParent)
-    ,mOffset(aOffset)
-    ,mNodeOrigLen(aNodeOrigLen)
+    nsAutoRemoveContainerSelNotify(nsRangeUpdater& aRangeUpdater,
+                                   nsINode* aNode,
+                                   nsINode* aParent,
+                                   int32_t aOffset,
+                                   uint32_t aNodeOrigLen)
+      : mRU(aRangeUpdater)
+      , mNode(aNode->AsDOMNode())
+      , mParent(aParent->AsDOMNode())
+      , mOffset(aOffset)
+      , mNodeOrigLen(aNodeOrigLen)
     {
       mRU.WillRemoveContainer();
     }
@@ -267,15 +244,15 @@ class NS_STACK_CLASS nsAutoMoveNodeSelNotify
     nsRangeUpdater &mRU;
     nsIDOMNode *mOldParent;
     nsIDOMNode *mNewParent;
-    PRInt32    mOldOffset;
-    PRInt32    mNewOffset;
+    int32_t    mOldOffset;
+    int32_t    mNewOffset;
 
   public:
     nsAutoMoveNodeSelNotify(nsRangeUpdater &aRangeUpdater, 
                             nsIDOMNode *aOldParent, 
-                            PRInt32 aOldOffset, 
+                            int32_t aOldOffset, 
                             nsIDOMNode *aNewParent, 
-                            PRInt32 aNewOffset) :
+                            int32_t aNewOffset) :
     mRU(aRangeUpdater)
     ,mOldParent(aOldParent)
     ,mNewParent(aNewParent)

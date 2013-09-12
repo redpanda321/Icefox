@@ -1,50 +1,20 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /* vim:set ts=4 sw=4 sts=4 et cin: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@netscape.com> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsHttp.h"
-#include "nsAutoLock.h"
 #include "pldhash.h"
+#include "mozilla/Mutex.h"
+#include "mozilla/HashFunctions.h"
 #include "nsCRT.h"
 #include "prbit.h"
 
+using namespace mozilla;
+
 #if defined(PR_LOGGING)
-PRLogModuleInfo *gHttpLog = nsnull;
+PRLogModuleInfo *gHttpLog = nullptr;
 #endif
 
 // define storage for all atoms
@@ -60,6 +30,8 @@ enum {
 };
 #undef HTTP_ATOM
 
+using namespace mozilla;
+
 // we keep a linked list of atoms allocated on the heap for easy clean up when
 // the atom table is destroyed.  The structure and value string are allocated
 // as one contiguous block.
@@ -70,8 +42,8 @@ struct HttpHeapAtom {
 };
 
 static struct PLDHashTable  sAtomTable = {0};
-static struct HttpHeapAtom *sHeapAtoms = nsnull;
-static PRLock              *sLock = nsnull;
+static struct HttpHeapAtom *sHeapAtoms = nullptr;
+static Mutex               *sLock = nullptr;
 
 HttpHeapAtom *
 NewHeapAtom(const char *value) {
@@ -80,7 +52,7 @@ NewHeapAtom(const char *value) {
     HttpHeapAtom *a =
         reinterpret_cast<HttpHeapAtom *>(malloc(sizeof(*a) + len));
     if (!a)
-        return nsnull;
+        return nullptr;
     memcpy(a->value, value, len + 1);
 
     // add this heap atom to the list of all heap atoms
@@ -96,11 +68,11 @@ StringHash(PLDHashTable *table, const void *key)
 {
     PLDHashNumber h = 0;
     for (const char *s = reinterpret_cast<const char*>(key); *s; ++s)
-        h = PR_ROTATE_LEFT32(h, 4) ^ nsCRT::ToLower(*s);
+        h = AddToHash(h, nsCRT::ToLower(*s));
     return h;
 }
 
-static PRBool
+static bool
 StringCompare(PLDHashTable *table, const PLDHashEntryHdr *entry,
               const void *testKey)
 {
@@ -119,7 +91,7 @@ static const PLDHashTableOps ops = {
     PL_DHashMoveEntryStub,
     PL_DHashClearEntryStub,
     PL_DHashFinalizeStub,
-    nsnull
+    nullptr
 };
 
 // We put the atoms in a hash table for speedy lookup.. see ResolveAtom.
@@ -129,17 +101,15 @@ nsHttp::CreateAtomTable()
     NS_ASSERTION(!sAtomTable.ops, "atom table already initialized");
 
     if (!sLock) {
-        sLock = PR_NewLock();
-        if (!sLock)
-            return NS_ERROR_OUT_OF_MEMORY;
+        sLock = new Mutex("nsHttp.sLock");
     }
 
     // The capacity for this table is initialized to a value greater than the
     // number of known atoms (NUM_HTTP_ATOMS) because we expect to encounter a
     // few random headers right off the bat.
-    if (!PL_DHashTableInit(&sAtomTable, &ops, nsnull, sizeof(PLDHashEntryStub),
+    if (!PL_DHashTableInit(&sAtomTable, &ops, nullptr, sizeof(PLDHashEntryStub),
                            NUM_HTTP_ATOMS + 10)) {
-        sAtomTable.ops = nsnull;
+        sAtomTable.ops = nullptr;
         return NS_ERROR_OUT_OF_MEMORY;
     }
 
@@ -148,7 +118,7 @@ nsHttp::CreateAtomTable()
 #define HTTP_ATOM(_name, _value) nsHttp::_name._val,
 #include "nsHttpAtomList.h"
 #undef HTTP_ATOM
-        nsnull
+        nullptr
     };
 
     for (int i = 0; atoms[i]; ++i) {
@@ -169,7 +139,7 @@ nsHttp::DestroyAtomTable()
 {
     if (sAtomTable.ops) {
         PL_DHashTableFinish(&sAtomTable);
-        sAtomTable.ops = nsnull;
+        sAtomTable.ops = nullptr;
     }
 
     while (sHeapAtoms) {
@@ -179,21 +149,27 @@ nsHttp::DestroyAtomTable()
     }
 
     if (sLock) {
-        PR_DestroyLock(sLock);
-        sLock = nsnull;
+        delete sLock;
+        sLock = nullptr;
     }
+}
+
+Mutex *
+nsHttp::GetLock()
+{
+    return sLock;
 }
 
 // this function may be called from multiple threads
 nsHttpAtom
 nsHttp::ResolveAtom(const char *str)
 {
-    nsHttpAtom atom = { nsnull };
+    nsHttpAtom atom = { nullptr };
 
     if (!str || !sAtomTable.ops)
         return atom;
 
-    nsAutoLock lock(sLock);
+    MutexAutoLock lock(*sLock);
 
     PLDHashEntryStub *stub = reinterpret_cast<PLDHashEntryStub *>
                                              (PL_DHashTableOperate(&sAtomTable, str, PL_DHASH_ADD));
@@ -250,32 +226,32 @@ static const char kValidTokenMap[128] = {
     1, 1, 1, 1, 1, 1, 1, 1, // 112
     1, 1, 1, 0, 1, 0, 1, 0  // 120
 };
-PRBool
+bool
 nsHttp::IsValidToken(const char *start, const char *end)
 {
     if (start == end)
-        return PR_FALSE;
+        return false;
 
     for (; start != end; ++start) {
         const unsigned char idx = *start;
         if (idx > 127 || !kValidTokenMap[idx])
-            return PR_FALSE;
+            return false;
     }
 
-    return PR_TRUE;
+    return true;
 }
 
 const char *
 nsHttp::FindToken(const char *input, const char *token, const char *seps)
 {
     if (!input)
-        return nsnull;
+        return nullptr;
 
     int inputLen = strlen(input);
     int tokenLen = strlen(token);
 
     if (inputLen < tokenLen)
-        return nsnull;
+        return nullptr;
 
     const char *inputTop = input;
     const char *inputEnd = input + inputLen - tokenLen;
@@ -289,24 +265,60 @@ nsHttp::FindToken(const char *input, const char *token, const char *seps)
         }
     }
 
-    return nsnull;
+    return nullptr;
 }
 
-PRBool
-nsHttp::ParseInt64(const char *input, const char **next, PRInt64 *r)
+bool
+nsHttp::ParseInt64(const char *input, const char **next, int64_t *r)
 {
     const char *start = input;
     *r = 0;
     while (*input >= '0' && *input <= '9') {
-        PRInt64 next = 10 * (*r) + (*input - '0');
+        int64_t next = 10 * (*r) + (*input - '0');
         if (next < *r) // overflow?
-            return PR_FALSE;
+            return false;
         *r = next;
         ++input;
     }
     if (input == start) // nothing parsed?
-        return PR_FALSE;
+        return false;
     if (next)
         *next = input;
-    return PR_TRUE;
+    return true;
 }
+
+bool
+nsHttp::IsPermanentRedirect(uint32_t httpStatus)
+{
+  return httpStatus == 301 || httpStatus == 308;
+}
+
+bool
+nsHttp::ShouldRewriteRedirectToGET(uint32_t httpStatus, nsHttpAtom method)
+{
+  // for 301 and 302, only rewrite POST
+  if (httpStatus == 301 || httpStatus == 302)
+    return method == nsHttp::Post;
+
+  // rewrite for 303 unless it was HEAD
+  if (httpStatus == 303)
+    return method != nsHttp::Head;
+
+  // otherwise, such as for 307, do not rewrite
+  return false;
+}
+
+bool
+nsHttp::IsSafeMethod(nsHttpAtom method)
+{
+  // This code will need to be extended for new safe methods, otherwise
+  // they'll default to "not safe".
+  return method == nsHttp::Get ||
+         method == nsHttp::Head ||
+         method == nsHttp::Options ||
+         method == nsHttp::Propfind ||
+         method == nsHttp::Report ||
+         method == nsHttp::Search ||
+         method == nsHttp::Trace;
+}
+

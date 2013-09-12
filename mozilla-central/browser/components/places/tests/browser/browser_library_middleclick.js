@@ -1,46 +1,11 @@
 /* vim:set ts=2 sw=2 sts=2 et: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Places test code.
- *
- * The Initial Developer of the Original Code is Mozilla Corp.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Marco Bonardo <mak77@bonardo.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
  /**
  * Tests middle-clicking items in the Library.
  */
-
-const Cc = Components.classes;
-const Ci = Components.interfaces;
 
 const ENABLE_HISTORY_PREF = "places.history.enabled";
 
@@ -67,7 +32,8 @@ var gTabsListener = {
        "Tab has been opened in current browser window");
   },
 
-  onLocationChange: function(aBrowser, aWebProgress, aRequest, aLocationURI) {
+  onLocationChange: function(aBrowser, aWebProgress, aRequest, aLocationURI,
+                             aFlags) {
     var spec = aLocationURI.spec;
     ok(true, spec);
     // When a new tab is opened, location is first set to "about:blank", so
@@ -87,13 +53,17 @@ var gTabsListener = {
 
       // Reset arrays.
       this._loadedURIs.length = 0;
-      // Close all tabs.
-      while (gBrowser.tabs.length > 1)
-        gBrowser.removeCurrentTab();
+
       this._openTabsCount = 0;
 
-      // Test finished.  This will move to the next one.
-      waitForFocus(gCurrentTest.finish, gBrowser.ownerDocument.defaultView);
+      executeSoon(function () {
+        // Close all tabs.
+        while (gBrowser.tabs.length > 1)
+          gBrowser.removeCurrentTab();
+
+        // Test finished.  This will move to the next one.
+        waitForFocus(gCurrentTest.finish, gBrowser.ownerDocument.defaultView);
+      });
     }
   }
 }
@@ -118,7 +88,7 @@ gTests.push({
     isnot(gLibrary.PlacesOrganizer._places.selectedNode, null,
           "We correctly have selection in the Library left pane");
     // Get our bookmark in the right pane.
-    var bookmarkNode = gLibrary.PlacesOrganizer._content.view.nodeForTreeIndex(0);
+    var bookmarkNode = gLibrary.ContentTree.view.view.nodeForTreeIndex(0);
     is(bookmarkNode.uri, this.URIs[0], "Found bookmark in the right pane");
   },
 
@@ -160,7 +130,7 @@ gTests.push({
     isnot(gLibrary.PlacesOrganizer._places.selectedNode, null,
           "We correctly have selection in the Library left pane");
     // Get our bookmark in the right pane.
-    var folderNode = gLibrary.PlacesOrganizer._content.view.nodeForTreeIndex(0);
+    var folderNode = gLibrary.ContentTree.view.view.nodeForTreeIndex(0);
     is(folderNode.title, "Folder", "Found folder in the right pane");
   },
 
@@ -217,7 +187,7 @@ gTests.push({
     isnot(gLibrary.PlacesOrganizer._places.selectedNode, null,
           "We correctly have selection in the Library left pane");
     // Get our bookmark in the right pane.
-    var folderNode = gLibrary.PlacesOrganizer._content.view.nodeForTreeIndex(0);
+    var folderNode = gLibrary.ContentTree.view.view.nodeForTreeIndex(0);
     is(folderNode.title, "Query", "Found query in the right pane");
   },
 
@@ -249,28 +219,12 @@ function test() {
   // Temporary disable history, so we won't record pages navigation.
   gPrefService.setBoolPref(ENABLE_HISTORY_PREF, false);
 
-  // Window watcher for Library window.
-  var ww = Cc["@mozilla.org/embedcomp/window-watcher;1"].
-           getService(Ci.nsIWindowWatcher);
-  function windowObserver(aSubject, aTopic, aData) {
-    if (aTopic != "domwindowopened")
-      return;
-    ww.unregisterNotification(windowObserver);
-    gLibrary = aSubject.QueryInterface(Ci.nsIDOMWindow);
-    gLibrary.addEventListener("load", function onLoad(event) {
-      gLibrary.removeEventListener("load", onLoad, false);
-      // Kick off tests.
-      setTimeout(runNextTest, 0);
-    }, false);
-  }
-
   // Open Library window.
-  ww.registerNotification(windowObserver);
-  ww.openWindow(null,
-                "chrome://browser/content/places/places.xul",
-                "",
-                "chrome,toolbar=yes,dialog=no,resizable",
-                null); 
+  openLibrary(function (library) {
+    gLibrary = library;
+    // Kick off tests.
+    runNextTest();
+  });
 }
 
 function runNextTest() {
@@ -289,7 +243,7 @@ function runNextTest() {
     // Middle click on first node in the content tree of the Library.
     gLibrary.focus();
     waitForFocus(function() {
-      mouseEventOnCell(gLibrary.PlacesOrganizer._content, 0, 0, { button: 1 });
+      mouseEventOnCell(gLibrary.ContentTree.view, 0, 0, { button: 1 });
     }, gLibrary);
   }
   else {

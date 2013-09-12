@@ -1,40 +1,8 @@
 /* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /* vim: set shiftwidth=4 tabstop=4 autoindent cindent noexpandtab: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla SMIL Test Code.
- *
- * The Initial Developer of the Original Code is the Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Daniel Holbert <dholbert@mozilla.com> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* testcase data for paced-mode animations of CSS properties */
 
@@ -91,6 +59,47 @@ var _pacedTestLists =
             comp1:   "url(\"" + document.URL + "#gradC\") rgb(0, 0, 0)"
           },
           "need support for URI-based paints"),
+  ],
+  lengthNoUnits : [
+    new AnimTestcasePaced("2; 0; 4",
+                          { comp0:   "2px",
+                            comp1_6: "1px",
+                            comp1_3: "0px",
+                            comp2_3: "2px",
+                            comp1:   "4px"
+                          }),
+    new AnimTestcasePaced("10; 12; 8",
+                          { comp0:   "10px",
+                            comp1_6: "11px",
+                            comp1_3: "12px",
+                            comp2_3: "10px",
+                            comp1:    "8px"
+                          }),
+  ],
+  lengthNoUnitsSVG : [
+    new AnimTestcasePaced("2; 0; 4",
+                          { comp0:   "2",
+                            comp1_6: "1",
+                            comp1_3: "0",
+                            comp2_3: "2",
+                            comp1:   "4"
+                          }),
+    new AnimTestcasePaced("10; 12; 8",
+                          { comp0:   "10",
+                            comp1_6: "11",
+                            comp1_3: "12",
+                            comp2_3: "10",
+                            comp1:   "8"
+                          }),
+  ],
+  lengthPx : [
+    new AnimTestcasePaced("0px; 2px; 6px",
+                          { comp0:   "0px",
+                            comp1_6: "1px",
+                            comp1_3: "2px",
+                            comp2_3: "4px",
+                            comp1:   "6px"
+                          }),
   ],
   lengthPx : [
     new AnimTestcasePaced("0px; 2px; 6px",
@@ -223,7 +232,8 @@ var gPacedBundles =
                      [].concat(_pacedTestLists.color,
                                _pacedTestLists.paintServer)),
   new TestcaseBundle(gPropList.font_size,
-                     [].concat(_pacedTestLists.lengthPx, [
+                     [].concat(_pacedTestLists.lengthNoUnits,
+                               _pacedTestLists.lengthPx, [
     new AnimTestcasePaced("20%; 24%; 16%",
                           { comp0:   "10px",
                             comp1_6: "11px",
@@ -280,11 +290,13 @@ var gPacedBundles =
                           }),
   ])),
   new TestcaseBundle(gPropList.stroke_dashoffset,
-                     [].concat(_pacedTestLists.lengthPx,
+                     [].concat(_pacedTestLists.lengthNoUnitsSVG,
+                               _pacedTestLists.lengthPx,
                                _pacedTestLists.lengthPctSVG,
                                _pacedTestLists.lengthPxPctSVG)),
   new TestcaseBundle(gPropList.stroke_width,
-                     [].concat(_pacedTestLists.lengthPx,
+                     [].concat(_pacedTestLists.lengthNoUnitsSVG,
+                               _pacedTestLists.lengthPx,
                                _pacedTestLists.lengthPctSVG,
                                _pacedTestLists.lengthPxPctSVG)),
   // XXXdholbert TODO: test 'stroke-dasharray' once we support animating it

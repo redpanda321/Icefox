@@ -1,43 +1,9 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /* vim:expandtab:shiftwidth=4:tabstop=4:
  */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: NPL 1.1/GPL 2.0/LGPL 2.1
- *
- *
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- *
- * The Original Code is Novell code.
- *
- * The Initial Developer of the Original Code is Novell, Inc.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Original Author: Robert O'Callahan (rocallahan@novell.com)
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the NPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the NPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
  
 #include "nsNetworkManagerListener.h"
 
@@ -45,27 +11,24 @@
 #include "nsServiceManagerUtils.h"
 #include "nsIObserverService.h"
 #include "nsStringAPI.h"
-#include "nsIPrefBranch2.h"
-#include "nsIPrefService.h"
+#include "nsCRT.h"
 
 // Define NetworkManager API constants. This avoids a dependency on
 // NetworkManager-devel.
 #define NM_DBUS_SERVICE                 "org.freedesktop.NetworkManager"
 #define NM_DBUS_PATH                            "/org/freedesktop/NetworkManager"
 #define NM_DBUS_INTERFACE                       "org.freedesktop.NetworkManager"
-#define NM_DBUS_SIGNAL_STATE_CHANGE             "StateChange"
-typedef enum NMState
-{
-        NM_STATE_UNKNOWN = 0,
-        NM_STATE_ASLEEP,
-        NM_STATE_CONNECTING,
-        NM_STATE_CONNECTED,
-        NM_STATE_DISCONNECTED
-} NMState;
+#define NM_DBUS_SIGNAL_STATE_CHANGE             "StateChange" /* Deprecated in 0.7.x */
+#define NM_DBUS_SIGNAL_STATE_CHANGED            "StateChanged"
+
+#define NM_STATE_CONNECTED_OLD    3 /* Before NM 0.9.0 */
+#define NM_STATE_CONNECTED_LOCAL  50
+#define NM_STATE_CONNECTED_SITE   60
+#define NM_STATE_CONNECTED_GLOBAL 70
 
 nsNetworkManagerListener::nsNetworkManagerListener() :
-    mLinkUp(PR_TRUE), mNetworkManagerActive(PR_FALSE),
-    mOK(PR_TRUE), mManageIOService(PR_TRUE)
+    mLinkUp(true), mNetworkManagerActive(false),
+    mOK(true), mManageIOService(true)
 {
 }
 
@@ -78,14 +41,24 @@ nsNetworkManagerListener::~nsNetworkManagerListener() {
 NS_IMPL_ISUPPORTS1(nsNetworkManagerListener, nsINetworkLinkService)
 
 nsresult
-nsNetworkManagerListener::GetIsLinkUp(PRBool* aIsUp) {
+nsNetworkManagerListener::GetIsLinkUp(bool* aIsUp) {
   *aIsUp = mLinkUp;
   return NS_OK;
 }
 
 nsresult
-nsNetworkManagerListener::GetLinkStatusKnown(PRBool* aKnown) {
+nsNetworkManagerListener::GetLinkStatusKnown(bool* aKnown) {
   *aKnown = mNetworkManagerActive;
+  return NS_OK;
+}
+
+nsresult
+nsNetworkManagerListener::GetLinkType(uint32_t *aLinkType)
+{
+  NS_ENSURE_ARG_POINTER(aLinkType);
+
+  // XXX This function has not yet been implemented for this platform
+  *aLinkType = nsINetworkLinkService::LINK_TYPE_UNKNOWN;
   return NS_OK;
 }
 
@@ -96,7 +69,7 @@ nsNetworkManagerListener::Init() {
     return NS_ERROR_OUT_OF_MEMORY;
   nsresult rv = mDBUS->AddClient(this);
   if (NS_FAILED(rv)) {
-    mDBUS = nsnull;
+    mDBUS = nullptr;
     return rv;
   }
   if (!mOK)
@@ -134,13 +107,13 @@ nsNetworkManagerListener::RegisterWithConnection(DBusConnection* connection) {
     dbus_message_new_method_call(NM_DBUS_SERVICE, NM_DBUS_PATH,
                                  NM_DBUS_INTERFACE, "state");
   if (!msg) {
-    mOK = PR_FALSE;
+    mOK = false;
     return;
   }
   
   DBusPendingCall* reply = mDBUS->SendWithReply(this, msg);
   if (!reply) {
-    mOK = PR_FALSE;
+    mOK = false;
     return;
   }
 
@@ -169,43 +142,39 @@ nsNetworkManagerListener::NotifyNetworkStatusObservers() {
 
 void
 nsNetworkManagerListener::UnregisterWithConnection(DBusConnection* connection) {
-  mNetworkManagerActive = PR_FALSE;
+  mNetworkManagerActive = false;
   NotifyNetworkStatusObservers();
 }
 
-PRBool
+bool
 nsNetworkManagerListener::HandleMessage(DBusMessage* message) {
   if (dbus_message_is_signal(message, NM_DBUS_INTERFACE,
-                             NM_DBUS_SIGNAL_STATE_CHANGE)) {
+                             NM_DBUS_SIGNAL_STATE_CHANGE) ||
+      dbus_message_is_signal(message, NM_DBUS_INTERFACE,
+                             NM_DBUS_SIGNAL_STATE_CHANGED)) {
     UpdateNetworkStatus(message);
-    return PR_TRUE;
+    return true;
   }
-  return PR_FALSE;
+  return false;
 }
 
 void
 nsNetworkManagerListener::UpdateNetworkStatus(DBusMessage* msg) {
-  PRInt32 result;
+  int32_t result;
   if (!dbus_message_get_args(msg, NULL, DBUS_TYPE_UINT32, &result,
                              DBUS_TYPE_INVALID))
     return;
 
-  // Don't update status if disabled by pref
-  nsCOMPtr<nsIPrefBranch2> prefs =
-    do_GetService(NS_PREFSERVICE_CONTRACTID);
-  if (prefs) {
-    PRBool ignore = PR_FALSE;
-    prefs->GetBoolPref("toolkit.networkmanager.disable", &ignore);
-    if (ignore)
-      return;
-  }
-
-  mNetworkManagerActive = PR_TRUE;
+  mNetworkManagerActive = true;
   
-  PRBool wasUp = mLinkUp;
-  mLinkUp = result == NM_STATE_CONNECTED;
+  bool wasUp = mLinkUp;
+  mLinkUp = result == NM_STATE_CONNECTED_OLD ||
+            result == NM_STATE_CONNECTED_LOCAL ||
+            result == NM_STATE_CONNECTED_SITE ||
+            result == NM_STATE_CONNECTED_GLOBAL;
   if (wasUp == mLinkUp)
     return;
 
   NotifyNetworkStatusObservers();
 }
+

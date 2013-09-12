@@ -1,39 +1,7 @@
 /* -*- Mode: IDL; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is Mozilla Foundation
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Mounir Lamouri <mounir.lamouri@mozilla.com> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsIConstraintValidation.h"
 
@@ -41,11 +9,16 @@
 #include "nsGenericHTMLElement.h"
 #include "nsHTMLFormElement.h"
 #include "nsDOMValidityState.h"
+#include "nsIFormControl.h"
+#include "nsContentUtils.h"
 
+const uint16_t nsIConstraintValidation::sContentSpecifiedMaxLengthMessage = 256;
 
 nsIConstraintValidation::nsIConstraintValidation()
   : mValidityBitField(0)
-  , mValidity(nsnull)
+  , mValidity(nullptr)
+  // By default, all elements are subjects to constraint validation.
+  , mBarredFromConstraintValidation(false)
 {
 }
 
@@ -74,8 +47,23 @@ nsIConstraintValidation::GetValidationMessage(nsAString& aValidationMessage)
   aValidationMessage.Truncate();
 
   if (IsCandidateForConstraintValidation() && !IsValid()) {
-    if (GetValidityState(VALIDITY_STATE_CUSTOM_ERROR)) {
+    nsCOMPtr<nsIContent> content = do_QueryInterface(this);
+    NS_ASSERTION(content, "This class should be inherited by HTML elements only!");
+
+    nsAutoString authorMessage;
+    content->GetAttr(kNameSpaceID_None, nsGkAtoms::x_moz_errormessage,
+                     authorMessage);
+
+    if (!authorMessage.IsEmpty()) {
+      aValidationMessage.Assign(authorMessage);
+      if (aValidationMessage.Length() > sContentSpecifiedMaxLengthMessage) {
+        aValidationMessage.Truncate(sContentSpecifiedMaxLengthMessage);
+      }
+    } else if (GetValidityState(VALIDITY_STATE_CUSTOM_ERROR)) {
       aValidationMessage.Assign(mCustomValidity);
+      if (aValidationMessage.Length() > sContentSpecifiedMaxLengthMessage) {
+        aValidationMessage.Truncate(sContentSpecifiedMaxLengthMessage);
+      }
     } else if (GetValidityState(VALIDITY_STATE_TOO_LONG)) {
       GetValidationMessage(aValidationMessage, VALIDITY_STATE_TOO_LONG);
     } else if (GetValidityState(VALIDITY_STATE_VALUE_MISSING)) {
@@ -84,10 +72,14 @@ nsIConstraintValidation::GetValidationMessage(nsAString& aValidationMessage)
       GetValidationMessage(aValidationMessage, VALIDITY_STATE_TYPE_MISMATCH);
     } else if (GetValidityState(VALIDITY_STATE_PATTERN_MISMATCH)) {
       GetValidationMessage(aValidationMessage, VALIDITY_STATE_PATTERN_MISMATCH);
+    } else if (GetValidityState(VALIDITY_STATE_RANGE_OVERFLOW)) {
+      GetValidationMessage(aValidationMessage, VALIDITY_STATE_RANGE_OVERFLOW);
+    } else if (GetValidityState(VALIDITY_STATE_RANGE_UNDERFLOW)) {
+      GetValidationMessage(aValidationMessage, VALIDITY_STATE_RANGE_UNDERFLOW);
+    } else if (GetValidityState(VALIDITY_STATE_STEP_MISMATCH)) {
+      GetValidationMessage(aValidationMessage, VALIDITY_STATE_STEP_MISMATCH);
     } else {
-      // TODO: The other messages have not been written
-      // because related constraint validation are not implemented yet.
-      // We should not be here.
+      // There should not be other validity states.
       return NS_ERROR_UNEXPECTED;
     }
   } else {
@@ -98,21 +90,46 @@ nsIConstraintValidation::GetValidationMessage(nsAString& aValidationMessage)
 }
 
 nsresult
-nsIConstraintValidation::CheckValidity(PRBool* aValidity)
+nsIConstraintValidation::CheckValidity(bool* aValidity)
 {
   if (!IsCandidateForConstraintValidation() || IsValid()) {
-    *aValidity = PR_TRUE;
+    *aValidity = true;
     return NS_OK;
   }
 
-  *aValidity = PR_FALSE;
+  *aValidity = false;
 
   nsCOMPtr<nsIContent> content = do_QueryInterface(this);
   NS_ASSERTION(content, "This class should be inherited by HTML elements only!");
 
-  return nsContentUtils::DispatchTrustedEvent(content->GetOwnerDoc(), content,
+  return nsContentUtils::DispatchTrustedEvent(content->OwnerDoc(), content,
                                               NS_LITERAL_STRING("invalid"),
-                                              PR_FALSE, PR_TRUE);
+                                              false, true);
+}
+
+void
+nsIConstraintValidation::SetValidityState(ValidityStateType aState,
+                                          bool aValue)
+{
+  bool previousValidity = IsValid();
+
+  if (aValue) {
+    mValidityBitField |= aState;
+  } else {
+    mValidityBitField &= ~aState;
+  }
+
+  // Inform the form element if our validity has changed.
+  if (previousValidity != IsValid() && IsCandidateForConstraintValidation()) {
+    nsCOMPtr<nsIFormControl> formCtrl = do_QueryInterface(this);
+    NS_ASSERTION(formCtrl, "This interface should be used by form elements!");
+
+    nsHTMLFormElement* form =
+      static_cast<nsHTMLFormElement*>(formCtrl->GetFormElement());
+    if (form) {
+      form->UpdateValidity(IsValid());
+    }
+  }
 }
 
 void
@@ -122,28 +139,27 @@ nsIConstraintValidation::SetCustomValidity(const nsAString& aError)
   SetValidityState(VALIDITY_STATE_CUSTOM_ERROR, !mCustomValidity.IsEmpty());
 }
 
-PRBool
-nsIConstraintValidation::IsCandidateForConstraintValidation() const
+void
+nsIConstraintValidation::SetBarredFromConstraintValidation(bool aBarred)
 {
-  /**
-   * An element is never candidate for constraint validation if:
-   * - it is disabled ;
-   * - TODO: or it's ancestor is a datalist element (bug 555840).
-   * We are doing these checks here to prevent writing them in every
-   * |IsBarredFromConstraintValidation| function.
-   */
+  bool previousBarred = mBarredFromConstraintValidation;
 
-  nsCOMPtr<nsIContent> content =
-    do_QueryInterface(const_cast<nsIConstraintValidation*>(this));
-  NS_ASSERTION(content, "This class should be inherited by HTML elements only!");
+  mBarredFromConstraintValidation = aBarred;
 
-  // For the moment, all elements that are not barred from constraint validation
-  // accept the disabled attribute and elements that are always barred from
-  // constraint validation do not accept it (objects, fieldset, output).
-  // If one of these elements change and become not always barred from
-  // constraint validation or another element appear with constraint validation
-  // support and can't be disabled, this code will have to be changed.
-  return !content->HasAttr(kNameSpaceID_None, nsGkAtoms::disabled) &&
-         !IsBarredFromConstraintValidation();
+  // Inform the form element if our status regarding constraint validation
+  // is going to change.
+  if (!IsValid() && previousBarred != mBarredFromConstraintValidation) {
+    nsCOMPtr<nsIFormControl> formCtrl = do_QueryInterface(this);
+    NS_ASSERTION(formCtrl, "This interface should be used by form elements!");
+
+    nsHTMLFormElement* form =
+      static_cast<nsHTMLFormElement*>(formCtrl->GetFormElement());
+    if (form) {
+      // If the element is going to be barred from constraint validation,
+      // we can inform the form that we are now valid.
+      // Otherwise, we are now invalid.
+      form->UpdateValidity(aBarred);
+    }
+  }
 }
 

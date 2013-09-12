@@ -12,7 +12,7 @@
         <link>http://localhost:4444/creator1.html</link>
       </author>
     </authors>
-    <status id="4">Public</status>
+    <status id="8">Preliminarily Reviewed</status>
     <compatible_applications>
       <application>
         <appID>xpcshell@tests.mozilla.org</appID>
@@ -49,11 +49,14 @@
         <link>http://localhost:4444/developer2.html</link>
       </author>
     </authors>
-    <summary>Test Summary 2</summary>
-    <description>Test Description 2</description>
-    <developer_comments>Test Developer Comments 2</developer_comments>
+    <summary>&lt;h1&gt;Test Summary 2&lt;/h1&gt;&lt;p&gt;paragraph&lt;/p&gt;</summary>
+    <description>Test Description 2&lt;br&gt;newline</description>
+    <developer_comments>Test Developer
+                        Comments 2</developer_comments>
     <eula>Test EULA 2</eula>
-    <icon>http://localhost:4444/icon2.png</icon>
+    <icon size="64">http://localhost:4444/icon2-64.png</icon>
+    <icon size="48">http://localhost:4444/icon2-48.png</icon>
+    <icon size="32">http://localhost:4444/icon2-32.png</icon>
     <status id="4">Public</status>
     <compatible_applications>
       <application>
@@ -78,10 +81,10 @@
     <!-- Test that learnmore is used as the add-on's homepageURL
          if there is no homepage defined -->
     <learnmore>http://localhost:4444/learnmore2.html</learnmore>
+    <homepage/>
     <support>http://localhost:4444/support2.html</support>
     <contribution_data>
       <link>http://localhost:4444/contribution2.html</link>
-      <suggested_amount currency="USD">$11.11</suggested_amount>
       <meet_developers>http://localhost:4444/meetDevelopers2.html</meet_developers>
     </contribution_data>
     <reviews num="NaN">http://localhost:4444/review2.html</reviews>
@@ -128,11 +131,11 @@
       </author>
     </authors>
     <summary>   Test Summary 3   </summary>
-    <description>   Test Description 3   </description>
+    <description>   Test Description 3&lt;br&gt;&lt;ul&gt;&lt;li&gt;List item 1&lt;li&gt;List item 2&lt;/ul&gt;   </description>
     <developer_comments>   Test Developer Comments 3   </developer_comments>
     <eula>   Test EULA 3   </eula>
-    <icon>   http://localhost:4444/icon3.png   </icon>
-    <status id="   4   ">Public</status>
+    <icon size="32">   http://localhost:4444/icon3.png   </icon>
+    <status id="   8   ">Preliminarily Reviewed</status>
     <!-- Test that an incompatible + compatible application list passes -->
     <compatible_applications>
       <application>
@@ -675,6 +678,96 @@
       </application>
     </compatible_applications>
     <install>http://localhost:4444/addons/test_AddonRepository_2.xpi</install>
+  </addon>
+
+  <!-- Passes because the add-on has the right payment info -->
+  <addon>
+    <name>PASS</name>
+    <type id="1">Extension</type>
+    <guid>purchase1@tests.mozilla.org</guid>
+    <version>2.0</version>
+    <authors>
+      <author>
+        <name>Test Creator - Last Passing</name>
+        <link>http://localhost:4444/creatorLastPassing.html</link>
+      </author>
+    </authors>
+    <status id="4">Public</status>
+    <all_compatible_os>
+      <os>ALL</os>
+    </all_compatible_os>
+    <compatible_applications>
+      <application>
+        <appID>xpcshell@tests.mozilla.org</appID>
+        <min_version>1</min_version>
+        <max_version>1</max_version>
+      </application>
+    </compatible_applications>
+    <rating>5</rating>
+    <payment_data>
+      <link>http://localhost:4444/purchaseURL1</link>
+      <amount amount="5">$5</amount>
+    </payment_data>
+  </addon>
+
+  <!-- Passes because the add-on has the right payment info -->
+  <addon>
+    <name>PASS</name>
+    <type id="1">Extension</type>
+    <guid>purchase2@tests.mozilla.org</guid>
+    <version>2.0</version>
+    <authors>
+      <author>
+        <name>Test Creator - Last Passing</name>
+        <link>http://localhost:4444/creatorLastPassing.html</link>
+      </author>
+    </authors>
+    <status id="4">Public</status>
+    <all_compatible_os>
+      <os>XPCShell</os>
+    </all_compatible_os>
+    <compatible_applications>
+      <application>
+        <appID>xpcshell@tests.mozilla.org</appID>
+        <min_version>1</min_version>
+        <max_version>1</max_version>
+      </application>
+    </compatible_applications>
+    <rating>5</rating>
+    <payment_data>
+      <link>http://localhost:4444/purchaseURL2</link>
+      <amount amount="10.0">$10</amount>
+    </payment_data>
+  </addon>
+
+  <!-- Fails because the add-on doesn't match the platform -->
+  <addon>
+    <name>FAIL</name>
+    <type id="1">Extension</type>
+    <guid>purchase3@tests.mozilla.org</guid>
+    <version>2.0</version>
+    <authors>
+      <author>
+        <name>Test Creator - Last Passing</name>
+        <link>http://localhost:4444/creatorLastPassing.html</link>
+      </author>
+    </authors>
+    <status id="4">Public</status>
+    <all_compatible_os>
+      <os>FOO</os>
+    </all_compatible_os>
+    <compatible_applications>
+      <application>
+        <appID>xpcshell@tests.mozilla.org</appID>
+        <min_version>1</min_version>
+        <max_version>1</max_version>
+      </application>
+    </compatible_applications>
+    <rating>5</rating>
+    <payment_data>
+      <link>http://localhost:4444/purchaseURL3</link>
+      <amount amount="10">$10</amount>
+    </payment_data>
   </addon>
 
   <!-- Passes because the Addon that has a matching XPI URL

@@ -1,73 +1,51 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Alexander Surkov <surkov.alexander@gmail.com> (original author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "AccGroupInfo.h"
 
-AccGroupInfo::AccGroupInfo(nsAccessible* aItem, PRUint32 aRole) :
-  mPosInSet(0), mSetSize(0), mParent(nsnull)
+#include "Role.h"
+#include "States.h"
+
+using namespace mozilla::a11y;
+
+AccGroupInfo::AccGroupInfo(Accessible* aItem, role aRole) :
+  mPosInSet(0), mSetSize(0), mParent(nullptr)
 {
   MOZ_COUNT_CTOR(AccGroupInfo);
-  nsAccessible* parent = aItem->GetParent();
+  Accessible* parent = aItem->Parent();
   if (!parent)
     return;
 
-  PRInt32 indexInParent = aItem->GetIndexInParent();
-  PRInt32 level = nsAccUtils::GetARIAOrDefaultLevel(aItem);
+  int32_t indexInParent = aItem->IndexInParent();
+  uint32_t siblingCount = parent->ChildCount();
+  if (indexInParent == -1 ||
+      indexInParent >= static_cast<int32_t>(siblingCount)) {
+    NS_ERROR("Wrong index in parent! Tree invalidation problem.");
+    return;
+  }
+
+  int32_t level = nsAccUtils::GetARIAOrDefaultLevel(aItem);
 
   // Compute position in set.
   mPosInSet = 1;
-  for (PRInt32 idx = indexInParent - 1; idx >=0 ; idx--) {
-    nsAccessible* sibling = parent->GetChildAt(idx);
-    PRUint32 siblingRole = nsAccUtils::Role(sibling);
+  for (int32_t idx = indexInParent - 1; idx >= 0 ; idx--) {
+    Accessible* sibling = parent->GetChildAt(idx);
+    roles::Role siblingRole = sibling->Role();
 
     // If the sibling is separator then the group is ended.
-    if (siblingRole == nsIAccessibleRole::ROLE_SEPARATOR)
+    if (siblingRole == roles::SEPARATOR)
       break;
 
     // If sibling is not visible and hasn't the same base role.
-    if (BaseRole(siblingRole) != aRole ||
-        nsAccUtils::State(sibling) & nsIAccessibleStates::STATE_INVISIBLE)
+    if (BaseRole(siblingRole) != aRole || sibling->State() & states::INVISIBLE)
       continue;
 
     // Check if it's hierarchical flatten structure, i.e. if the sibling
     // level is lesser than this one then group is ended, if the sibling level
     // is greater than this one then the group is split by some child elements
     // (group will be continued).
-    PRInt32 siblingLevel = nsAccUtils::GetARIAOrDefaultLevel(sibling);
+    int32_t siblingLevel = nsAccUtils::GetARIAOrDefaultLevel(sibling);
     if (siblingLevel < level) {
       mParent = sibling;
       break;
@@ -92,23 +70,21 @@ AccGroupInfo::AccGroupInfo(nsAccessible* aItem, PRUint32 aRole) :
   // Compute set size.
   mSetSize = mPosInSet;
 
-  PRInt32 siblingCount = parent->GetChildCount();
-  for (PRInt32 idx = indexInParent + 1; idx < siblingCount; idx++) {
-    nsAccessible* sibling = parent->GetChildAt(idx);
+  for (uint32_t idx = indexInParent + 1; idx < siblingCount; idx++) {
+    Accessible* sibling = parent->GetChildAt(idx);
 
-    PRUint32 siblingRole = nsAccUtils::Role(sibling);
+    roles::Role siblingRole = sibling->Role();
 
     // If the sibling is separator then the group is ended.
-    if (siblingRole == nsIAccessibleRole::ROLE_SEPARATOR)
+    if (siblingRole == roles::SEPARATOR)
       break;
 
     // If sibling is visible and has the same base role
-    if (BaseRole(siblingRole) != aRole ||
-        nsAccUtils::State(sibling) & nsIAccessibleStates::STATE_INVISIBLE)
+    if (BaseRole(siblingRole) != aRole || sibling->State() & states::INVISIBLE)
       continue;
 
     // and check if it's hierarchical flatten structure.
-    PRInt32 siblingLevel = nsAccUtils::GetARIAOrDefaultLevel(sibling);
+    int32_t siblingLevel = nsAccUtils::GetARIAOrDefaultLevel(sibling);
     if (siblingLevel < level)
       break;
 
@@ -130,41 +106,60 @@ AccGroupInfo::AccGroupInfo(nsAccessible* aItem, PRUint32 aRole) :
   if (mParent)
     return;
 
-  // Compute parent.
-  PRUint32 parentRole = nsAccUtils::Role(parent);
-
-  // In the case of ARIA row in treegrid, return treegrid since ARIA
-  // groups aren't used to organize levels in ARIA treegrids.
-  if (aRole == nsIAccessibleRole::ROLE_ROW &&
-      parentRole == nsIAccessibleRole::ROLE_TREE_TABLE) {
+  roles::Role parentRole = parent->Role();
+  if (IsConceptualParent(aRole, parentRole))
     mParent = parent;
+
+  // In the case of ARIA tree (not ARIA treegrid) a tree can be arranged by
+  // using ARIA groups to organize levels. In this case the parent of the tree
+  // item will be a group and the previous treeitem of that should be the tree
+  // item parent.
+  if (parentRole != roles::GROUPING || aRole != roles::OUTLINEITEM)
     return;
-  }
 
-  // In the case of ARIA tree, a tree can be arranged by using ARIA groups
-  // to organize levels. In this case the parent of the tree item will be
-  // a group and the previous treeitem of that should be the tree item
-  // parent. Or, if the parent is something other than a tree we will
-  // return that.
-
-  if (parentRole != nsIAccessibleRole::ROLE_GROUPING) {
-    mParent = parent;
+  Accessible* parentPrevSibling = parent->PrevSibling();
+  if (!parentPrevSibling)
     return;
-  }
 
-  nsAccessible* parentPrevSibling = parent->GetSiblingAtOffset(-1);
-  PRUint32 parentPrevSiblingRole = nsAccUtils::Role(parentPrevSibling);
-  if (parentPrevSiblingRole == nsIAccessibleRole::ROLE_TEXT_LEAF) {
+  roles::Role parentPrevSiblingRole = parentPrevSibling->Role();
+  if (parentPrevSiblingRole == roles::TEXT_LEAF) {
     // XXX Sometimes an empty text accessible is in the hierarchy here,
     // although the text does not appear to be rendered, GetRenderedText()
     // says that it is so we need to skip past it to find the true
     // previous sibling.
-    parentPrevSibling = parentPrevSibling->GetSiblingAtOffset(-1);
-    parentPrevSiblingRole = nsAccUtils::Role(parentPrevSibling);
+    parentPrevSibling = parentPrevSibling->PrevSibling();
+    if (parentPrevSibling)
+      parentPrevSiblingRole = parentPrevSibling->Role();
   }
 
   // Previous sibling of parent group is a tree item, this is the
   // conceptual tree item parent.
-  if (parentPrevSiblingRole == nsIAccessibleRole::ROLE_OUTLINEITEM)
+  if (parentPrevSiblingRole == roles::OUTLINEITEM)
     mParent = parentPrevSibling;
+}
+
+bool
+AccGroupInfo::IsConceptualParent(role aRole, role aParentRole)
+{
+  if (aParentRole == roles::OUTLINE && aRole == roles::OUTLINEITEM)
+    return true;
+  if ((aParentRole == roles::TABLE || aParentRole == roles::TREE_TABLE) &&
+      aRole == roles::ROW)
+    return true;
+  if (aParentRole == roles::ROW &&
+      (aRole == roles::CELL || aRole == roles::GRID_CELL))
+    return true;
+  if (aParentRole == roles::LIST && aRole == roles::LISTITEM)
+    return true;
+  if (aParentRole == roles::COMBOBOX_LIST && aRole == roles::COMBOBOX_OPTION)
+    return true;
+  if (aParentRole == roles::LISTBOX && aRole == roles::OPTION)
+    return true;
+  if (aParentRole == roles::PAGETABLIST && aRole == roles::PAGETAB)
+    return true;
+  if ((aParentRole == roles::POPUP_MENU || aParentRole == roles::MENUPOPUP) &&
+      aRole == roles::MENUITEM)
+    return true;
+
+  return false;
 }

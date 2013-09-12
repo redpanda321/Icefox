@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=300992
 -->
 <head>
   <title>Test for Bug 300992</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
 </head>
@@ -35,10 +34,10 @@ document.addEventListener('readystatechange', function(event) {
 window.addEventListener('readystatechange', function(event) {
   ok(false, 'window listener', 'readystatechange event should not bubble to window');
 }, false);
-setTimeout(function() {
+addLoadEvent(function() {
   is(i, states.length, 'readystatechange event count');
   SimpleTest.finish();
-}, 1000);
+});
 
 </script>
 </pre>

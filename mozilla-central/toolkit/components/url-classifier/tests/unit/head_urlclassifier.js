@@ -1,18 +1,26 @@
+//* -*- Mode: Javascript; tab-width: 8; indent-tabs-mode: nil; js-indent-level: 2 -*- *
 function dumpn(s) {
   dump(s + "\n");
 }
 
 const NS_APP_USER_PROFILE_50_DIR = "ProfD";
 const NS_APP_USER_PROFILE_LOCAL_50_DIR = "ProfLD";
-const Ci = Components.interfaces;
+
 const Cc = Components.classes;
+const Ci = Components.interfaces;
+const Cu = Components.utils;
 const Cr = Components.results;
+
+Cu.import("resource://testing-common/httpd.js");
 
 do_get_profile();
 
 var dirSvc = Cc["@mozilla.org/file/directory_service;1"].getService(Ci.nsIProperties);
 
 var iosvc = Cc["@mozilla.org/network/io-service;1"].getService(Ci.nsIIOService);
+
+var secMan = Cc["@mozilla.org/scriptsecuritymanager;1"]
+               .getService(Ci.nsIScriptSecurityManager);
 
 // Disable hashcompleter noise for tests
 var prefBranch = Cc["@mozilla.org/preferences-service;1"].
@@ -23,14 +31,26 @@ prefBranch.setIntPref("urlclassifier.gethashnoise", 0);
 prefBranch.setBoolPref("browser.safebrowsing.malware.enabled", true);
 prefBranch.setBoolPref("browser.safebrowsing.enabled", true);
 
-function cleanUp() {
+function delFile(name) {
   try {
     // Delete a previously created sqlite file
     var file = dirSvc.get('ProfLD', Ci.nsIFile);
-    file.append("urlclassifier3.sqlite");
+    file.append(name);
     if (file.exists())
       file.remove(false);
-  } catch (e) {}
+  } catch(e) {
+  }
+}
+
+function cleanUp() {
+  delFile("urlclassifier3.sqlite");
+  delFile("safebrowsing/classifier.hashkey");
+  delFile("safebrowsing/test-phish-simple.sbstore");
+  delFile("safebrowsing/test-malware-simple.sbstore");
+  delFile("safebrowsing/test-phish-simple.cache");
+  delFile("safebrowsing/test-malware-simple.cache");
+  delFile("safebrowsing/test-phish-simple.pset");
+  delFile("safebrowsing/test-malware-simple.pset");
 }
 
 var dbservice = Cc["@mozilla.org/url-classifier/dbservice;1"].getService(Ci.nsIUrlClassifierDBService);
@@ -180,7 +200,8 @@ checkUrls: function(urls, expected, cb)
   var doLookup = function() {
     if (urls.length > 0) {
       var fragment = urls.shift();
-      dbservice.lookup("http://" + fragment,
+      var principal = secMan.getNoAppCodebasePrincipal(iosvc.newURI("http://" + fragment, null, null));
+      dbservice.lookup(principal,
                        function(arg) {
                          do_check_eq(expected, arg);
                          doLookup();
@@ -275,9 +296,10 @@ function runNextTest()
 
   dbservice.resetDatabase();
   dbservice.setHashCompleter('test-phish-simple', null);
-  dumpn("running " + gTests[gNextTest]);
 
-  gTests[gNextTest++]();
+  let test = gTests[gNextTest++];
+  dump("running " + test.name + "\n");
+  test();
 }
 
 function runTests(tests)
@@ -286,10 +308,13 @@ function runTests(tests)
   runNextTest();
 }
 
+var timerArray = [];
+
 function Timer(delay, cb) {
   this.cb = cb;
   var timer = Cc["@mozilla.org/timer;1"].createInstance(Ci.nsITimer);
   timer.initWithCallback(this, delay, timer.TYPE_ONE_SHOT);
+  timerArray.push(timer);
 }
 
 Timer.prototype = {
@@ -303,5 +328,34 @@ notify: function(timer) {
     this.cb();
   }
 }
+
+// LFSRgenerator is a 32-bit linear feedback shift register random number
+// generator. It is highly predictable and is not intended to be used for
+// cryptography but rather to allow easier debugging than a test that uses
+// Math.random().
+function LFSRgenerator(seed) {
+  // Force |seed| to be a number.
+  seed = +seed;
+  // LFSR generators do not work with a value of 0.
+  if (seed == 0)
+    seed = 1;
+
+  this._value = seed;
+}
+LFSRgenerator.prototype = {
+  // nextNum returns a random unsigned integer of in the range [0,2^|bits|].
+  nextNum: function(bits) {
+    if (!bits)
+      bits = 32;
+
+    let val = this._value;
+    // Taps are 32, 22, 2 and 1.
+    let bit = ((val >>> 0) ^ (val >>> 10) ^ (val >>> 30) ^ (val >>> 31)) & 1;
+    val = (val >>> 1) | (bit << 31);
+    this._value = val;
+
+    return (val >>> (32 - bits));
+  },
+};
 
 cleanUp();

@@ -502,6 +502,7 @@ int HashMgr::load_tables(const char * tpath, const char * key)
         al = decode_flags(&flags, ap + 1, dict);
         if (al == -1) {
             HUNSPELL_WARNING(stderr, "Can't allocate memory.\n");
+            delete dict;
             return 6;
         }
         flag_qsort(flags, 0, al);
@@ -545,7 +546,6 @@ int HashMgr::hash(const char * word) const
 int HashMgr::decode_flags(unsigned short ** result, char * flags, FileMgr * af) {
     int len;
     if (*flags == '\0') {
-        HUNSPELL_WARNING(stderr, "error: line %d: bad flagvector\n", af->getlinenum());
         *result = NULL;
         return 0;
     }

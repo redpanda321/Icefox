@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla IPC.
- *
- * The Initial Developer of the Original Code is
- *   Ben Turner <bent.mozilla@gmail.com>.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "MessagePump.h"
 
@@ -46,6 +14,10 @@
 
 #include "base/logging.h"
 #include "base/scoped_nsautorelease_pool.h"
+
+#ifdef MOZ_WIDGET_ANDROID
+#include "AndroidBridge.h"
+#endif
 
 using mozilla::ipc::DoWorkRunnable;
 using mozilla::ipc::MessagePump;
@@ -85,7 +57,7 @@ DoWorkRunnable::Notify(nsITimer* aTimer)
 }
 
 MessagePump::MessagePump()
-: mThread(nsnull)
+: mThread(nullptr)
 {
   mDoWorkEvent = new DoWorkRunnable(this);
 }
@@ -107,13 +79,21 @@ MessagePump::Run(MessagePump::Delegate* aDelegate)
   for (;;) {
     autoReleasePool.Recycle();
 
-    bool did_work = NS_ProcessNextEvent(mThread, PR_FALSE) ? true : false;
+    bool did_work = NS_ProcessNextEvent(mThread, false) ? true : false;
     if (!keep_running_)
       break;
 
-    did_work |= aDelegate->DoWork();
-    if (!keep_running_)
-      break;
+    // NB: it is crucial *not* to directly call |aDelegate->DoWork()|
+    // here.  To ensure that MessageLoop tasks and XPCOM events have
+    // equal priority, we sensitively rely on processing exactly one
+    // Task per DoWorkRunnable XPCOM event.
+
+#ifdef MOZ_WIDGET_ANDROID
+    // This processes messages in the Android Looper. Note that we only
+    // get here if the normal Gecko event loop has been awoken above.
+    // Bug 750713
+    did_work |= AndroidBridge::Bridge()->PumpMessageLoop();
+#endif
 
     did_work |= aDelegate->DoDelayedWork(&delayed_work_time_);
 
@@ -130,8 +110,11 @@ MessagePump::Run(MessagePump::Delegate* aDelegate)
     if (!keep_running_)
       break;
 
+    if (did_work)
+      continue;
+
     // This will either sleep or process an event.
-    NS_ProcessNextEvent(mThread, PR_TRUE);
+    NS_ProcessNextEvent(mThread, true);
   }
 
   mDelayedWorkTimer->Cancel();
@@ -183,7 +166,7 @@ MessagePump::ScheduleDelayedWork(const base::Time& aDelayedTime)
   delayed_work_time_ = aDelayedTime;
 
   base::TimeDelta delay = aDelayedTime - base::Time::Now();
-  PRUint32 delayMS = PRUint32(delay.InMilliseconds());
+  uint32_t delayMS = uint32_t(delay.InMilliseconds());
   mDelayedWorkTimer->InitWithCallback(mDoWorkEvent, delayMS,
                                       nsITimer::TYPE_ONE_SHOT);
 }
@@ -199,7 +182,7 @@ MessagePump::DoDelayedWork(base::MessagePump::Delegate* aDelegate)
 
 #ifdef DEBUG
 namespace {
-MessagePump::Delegate* gFirstDelegate = nsnull;
+MessagePump::Delegate* gFirstDelegate = nullptr;
 }
 #endif
 
@@ -208,7 +191,7 @@ MessagePumpForChildProcess::Run(MessagePump::Delegate* aDelegate)
 {
   if (mFirstRun) {
 #ifdef DEBUG
-    NS_ASSERTION(aDelegate && gFirstDelegate == nsnull, "Huh?!");
+    NS_ASSERTION(aDelegate && gFirstDelegate == nullptr, "Huh?!");
     gFirstDelegate = aDelegate;
 #endif
     mFirstRun = false;
@@ -217,7 +200,7 @@ MessagePumpForChildProcess::Run(MessagePump::Delegate* aDelegate)
     }
 #ifdef DEBUG
     NS_ASSERTION(aDelegate && aDelegate == gFirstDelegate, "Huh?!");
-    gFirstDelegate = nsnull;
+    gFirstDelegate = nullptr;
 #endif
     return;
   }
@@ -225,6 +208,25 @@ MessagePumpForChildProcess::Run(MessagePump::Delegate* aDelegate)
 #ifdef DEBUG
   NS_ASSERTION(aDelegate && aDelegate == gFirstDelegate, "Huh?!");
 #endif
+
+  // We can get to this point in startup with Tasks in our loop's
+  // incoming_queue_ or pending_queue_, but without a matching
+  // DoWorkRunnable().  In MessagePump::Run() above, we sensitively
+  // depend on *not* directly calling delegate->DoWork(), because that
+  // prioritizes Tasks above XPCOM events.  However, from this point
+  // forward, any Task posted to our loop is guaranteed to have a
+  // DoWorkRunnable enqueued for it.
+  //
+  // So we just flush the pending work here and move on.
+  MessageLoop* loop = MessageLoop::current();
+  bool nestableTasksAllowed = loop->NestableTasksAllowed();
+  loop->SetNestableTasksAllowed(true);
+
+  while (aDelegate->DoWork());
+
+  loop->SetNestableTasksAllowed(nestableTasksAllowed);
+
+
   // Really run.
   mozilla::ipc::MessagePump::Run(aDelegate);
 }

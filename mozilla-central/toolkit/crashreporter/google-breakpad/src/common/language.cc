@@ -39,6 +39,7 @@ namespace google_breakpad {
 // C++ language-specific operations.
 class CPPLanguage: public Language {
  public:
+  CPPLanguage() {}
   string MakeQualifiedName(const string &parent_name,
                            const string &name) const {
     if (parent_name.empty())
@@ -48,7 +49,7 @@ class CPPLanguage: public Language {
   }
 };
 
-const CPPLanguage CPPLanguageSingleton;
+CPPLanguage CPPLanguageSingleton;
 
 // Java language-specific operations.
 class JavaLanguage: public Language {

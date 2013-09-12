@@ -33,23 +33,23 @@ var chunk4Urls = [
   "a.com/b",
   "b.com/c",
   ];
-var chunk4 = chunk3Urls.join("\n");
+var chunk4 = chunk4Urls.join("\n");
 
 var chunk5Urls = [
   "d.com/e",
   "f.com/g",
   ];
-var chunk5 = chunk3Urls.join("\n");
+var chunk5 = chunk5Urls.join("\n");
 
 var chunk6Urls = [
   "h.com/i",
   "j.com/k",
   ];
-var chunk6 = chunk3Urls.join("\n");
+var chunk6 = chunk6Urls.join("\n");
 
 // we are going to add chunks 1, 2, 4, 5, and 6 to phish-simple, and
 // chunk 2 to malware-simple.  Then we'll remove the urls in chunk3
-// from phish-simple, then expire chunk 1 and chunks 4-5 from
+// from phish-simple, then expire chunk 1 and chunks 4-6 from
 // phish-simple.
 var phishExpected = {};
 var phishUnexpected = {};
@@ -95,7 +95,8 @@ function checkNoHost()
   // Looking up a no-host uri such as a data: uri should throw an exception.
   var exception;
   try {
-    dbservice.lookup("data:text/html,<b>test</b>");
+    var principal = secMan.getNoAppCodebasePrincipal(iosvc.newURI("data:text/html,<b>test</b>", null, null));
+    dbservice.lookup(principal);
 
     exception = false;
   } catch(e) {
@@ -184,18 +185,22 @@ function malwareExists(result) {
 function checkState()
 {
   numExpecting = 0;
+
   for (var key in phishExpected) {
-    dbservice.lookup("http://" + key, phishExists, true);
+    var principal = secMan.getNoAppCodebasePrincipal(iosvc.newURI("http://" + key, null, null));
+    dbservice.lookup(principal, phishExists, true);
     numExpecting++;
   }
 
   for (var key in phishUnexpected) {
-    dbservice.lookup("http://" + key, phishDoesntExist, true);
+    var principal = secMan.getNoAppCodebasePrincipal(iosvc.newURI("http://" + key, null, null));
+    dbservice.lookup(principal, phishDoesntExist, true);
     numExpecting++;
   }
 
   for (var key in malwareExpected) {
-    dbservice.lookup("http://" + key, malwareExists, true);
+    var principal = secMan.getNoAppCodebasePrincipal(iosvc.newURI("http://" + key, null, null));
+    dbservice.lookup(principal, malwareExists, true);
     numExpecting++;
   }
 }

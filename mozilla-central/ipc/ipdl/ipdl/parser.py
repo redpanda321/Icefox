@@ -1,34 +1,6 @@
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# Contributor(s):
-#   Chris Jones <jones.chris.g@gmail.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either of the GNU General Public License Version 2 or later (the "GPL"),
-# or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import os, sys
 from ply import lex, yacc
@@ -60,7 +32,7 @@ def _error(loc, fmt, *args):
     raise ParseError(loc, fmt, *args)
 
 class Parser:
-    # when we reach an |include protocol "foo.ipdl";| statement, we need to
+    # when we reach an |include [protocol] foo;| statement, we need to
     # save the current parser state and create a new one.  this "stack" is
     # where that state is saved
     #
@@ -69,14 +41,16 @@ class Parser:
     parseStack = [ ]
     parsed = { }
 
-    def __init__(self, debug=0):
+    def __init__(self, type, name, debug=0):
+        assert type and name
+        self.type = type
         self.debug = debug
         self.filename = None
         self.includedirs = None
         self.loc = None         # not always up to date
         self.lexer = None
         self.parser = None
-        self.tu = TranslationUnit()
+        self.tu = TranslationUnit(type, name)
         self.direction = None
         self.errout = None
 
@@ -147,6 +121,7 @@ reserved = set((
         'bridges',
         'call',
         'child',
+        'compress',
         '__delete__',
         'delete',                       # reserve 'delete' to prevent its use
         'goto',
@@ -155,6 +130,7 @@ reserved = set((
         'manages',
         'namespace',
         'nullable',
+        'opens',
         'or',
         'parent',
         'protocol',
@@ -209,11 +185,12 @@ def t_error(t):
 def p_TranslationUnit(p):
     """TranslationUnit : Preamble NamespacedStuff"""
     tu = Parser.current.tu
+    tu.loc = Loc(tu.filename)
     for stmt in p[1]:
         if isinstance(stmt, CxxInclude):
             tu.addCxxInclude(stmt)
-        elif isinstance(stmt, ProtocolInclude):
-            tu.addProtocolInclude(stmt)
+        elif isinstance(stmt, Include):
+            tu.addInclude(stmt)
         elif isinstance(stmt, UsingStmt):
             tu.addUsingStmt(stmt)
         else:
@@ -231,6 +208,21 @@ def p_TranslationUnit(p):
         else:
             assert(0)
 
+    # The "canonical" namespace of the tu, what it's considered to be
+    # in for the purposes of C++: |#include "foo/bar/TU.h"|
+    if tu.protocol:
+        assert tu.filetype == 'protocol'
+        tu.namespaces = tu.protocol.namespaces
+        tu.name = tu.protocol.name
+    else:
+        assert tu.filetype == 'header'
+        # There's not really a canonical "thing" in headers.  So
+        # somewhat arbitrarily use the namespace of the last
+        # interesting thing that was declared.
+        for thing in reversed(tu.structsAndUnions):
+            tu.namespaces = thing.namespaces
+            break
+
     p[0] = tu
 
 ##--------------------
@@ -246,7 +238,7 @@ def p_Preamble(p):
 
 def p_PreambleStmt(p):
     """PreambleStmt : CxxIncludeStmt
-                    | ProtocolIncludeStmt
+                    | IncludeStmt
                     | UsingStmt"""
     p[0] = p[1]
 
@@ -254,23 +246,26 @@ def p_CxxIncludeStmt(p):
     """CxxIncludeStmt : INCLUDE STRING"""
     p[0] = CxxInclude(locFromTok(p, 1), p[2])
 
-def p_ProtocolIncludeStmt(p):
-    """ProtocolIncludeStmt : INCLUDE PROTOCOL ID
-                           | INCLUDE PROTOCOL STRING"""
+def p_IncludeStmt(p):
+    """IncludeStmt : INCLUDE PROTOCOL ID
+                   | INCLUDE ID"""
     loc = locFromTok(p, 1)
-    
-    if 0 <= p[3].rfind('.ipdl'):
-        _error(loc, "`include protocol \"P.ipdl\"' syntax is obsolete.  Use `include protocol P' instead.")
-    
+ 
     Parser.current.loc = loc
-    inc = ProtocolInclude(loc, p[3])
+    if 4 == len(p):
+        id = p[3]
+        type = 'protocol'
+    else:
+        id = p[2]
+        type = 'header'
+    inc = Include(loc, type, id)
 
     path = Parser.current.resolveIncludePath(inc.file)
     if path is None:
-        raise ParseError(loc, "can't locate protocol include file `%s'"% (
+        raise ParseError(loc, "can't locate include file `%s'"% (
                 inc.file))
     
-    inc.tu = Parser().parse(open(path).read(), path, Parser.current.includedirs, Parser.current.errout)
+    inc.tu = Parser(type, id).parse(open(path).read(), path, Parser.current.includedirs, Parser.current.errout)
     p[0] = inc
 
 def p_UsingStmt(p):
@@ -301,8 +296,12 @@ def p_NamespaceThing(p):
         p[0] = p[4]
 
 def p_StructDecl(p):
-    """StructDecl : STRUCT ID '{' StructFields  '}' ';'"""
-    p[0] = StructDecl(locFromTok(p, 1), p[2], p[4])
+    """StructDecl : STRUCT ID '{' StructFields '}' ';'
+                  | STRUCT ID '{' '}' ';'"""
+    if 7 == len(p):
+        p[0] = StructDecl(locFromTok(p, 1), p[2], p[4])
+    else:
+        p[0] = StructDecl(locFromTok(p, 1), p[2], [ ])
 
 def p_StructFields(p):
     """StructFields : StructFields StructField ';'
@@ -338,12 +337,16 @@ def p_ProtocolDefn(p):
     protocol.sendSemantics = p[1]
     p[0] = protocol
 
+    if Parser.current.type == 'header':
+        _error(protocol.loc, 'can\'t define a protocol in a header.  Do it in a protocol spec instead.')
+
+
 def p_ProtocolBody(p):
     """ProtocolBody : SpawnsStmtsOpt"""
     p[0] = p[1]
 
 ##--------------------
-## spawns/bridges stmts
+## spawns/bridges/opens stmts
 
 def p_SpawnsStmtsOpt(p):
     """SpawnsStmtsOpt : SpawnsStmt SpawnsStmtsOpt
@@ -370,7 +373,7 @@ def p_AsOpt(p):
 
 def p_BridgesStmtsOpt(p):
     """BridgesStmtsOpt : BridgesStmt BridgesStmtsOpt
-                       | ManagersStmtOpt"""
+                       | OpensStmtsOpt"""
     if 2 == len(p):
         p[0] = p[1]
     else:
@@ -380,6 +383,20 @@ def p_BridgesStmtsOpt(p):
 def p_BridgesStmt(p):
     """BridgesStmt : BRIDGES ID ',' ID ';'"""
     p[0] = BridgesStmt(locFromTok(p, 1), p[2], p[4])
+
+def p_OpensStmtsOpt(p):
+    """OpensStmtsOpt : OpensStmt OpensStmtsOpt
+                     | ManagersStmtOpt"""
+    if 2 == len(p):
+        p[0] = p[1]
+    else:
+        p[2].opensStmts.insert(0, p[1])
+        p[0] = p[2]
+
+def p_OpensStmt(p):
+    """OpensStmt : PARENT OPENS ID ';'
+                 | CHILD OPENS ID ';'"""
+    p[0] = OpensStmt(locFromTok(p, 1), p[1], p[3])
 
 ##--------------------
 ## manager/manages stmts
@@ -468,13 +485,15 @@ def p_MessageDecl(p):
     p[0] = msg
 
 def p_MessageBody(p):
-    """MessageBody : MessageId MessageInParams MessageOutParams"""
+    """MessageBody : MessageId MessageInParams MessageOutParams OptionalMessageCompress"""
     # FIXME/cjones: need better loc info: use one of the quals
     loc, name = p[1]
     msg = MessageDecl(loc)
     msg.name = name
     msg.addInParams(p[2])
     msg.addOutParams(p[3])
+    msg.compress = p[4]
+
     p[0] = msg
 
 def p_MessageId(p):
@@ -500,6 +519,14 @@ def p_MessageOutParams(p):
         p[0] = [ ]
     else:
         p[0] = p[3]
+
+def p_OptionalMessageCompress(p):
+    """OptionalMessageCompress : COMPRESS
+                               | """
+    if 1 == len(p):
+        p[0] = ''
+    else:
+        p[0] = 'compress'
 
 ##--------------------
 ## State machine

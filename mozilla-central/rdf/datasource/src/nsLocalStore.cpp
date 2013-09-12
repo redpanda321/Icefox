@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /* vim: set cindent tabstop=4 expandtab shiftwidth=4: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Pierre Phaneuf <pp@ludusdesign.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 
@@ -103,28 +70,28 @@ public:
 
     NS_IMETHOD GetSource(nsIRDFResource* aProperty,
                          nsIRDFNode* aTarget,
-                         PRBool aTruthValue,
+                         bool aTruthValue,
                          nsIRDFResource** aSource) {
         return mInner->GetSource(aProperty, aTarget, aTruthValue, aSource);
     }
 
     NS_IMETHOD GetSources(nsIRDFResource* aProperty,
                           nsIRDFNode* aTarget,
-                          PRBool aTruthValue,
+                          bool aTruthValue,
                           nsISimpleEnumerator** aSources) {
         return mInner->GetSources(aProperty, aTarget, aTruthValue, aSources);
     }
 
     NS_IMETHOD GetTarget(nsIRDFResource* aSource,
                          nsIRDFResource* aProperty,
-                         PRBool aTruthValue,
+                         bool aTruthValue,
                          nsIRDFNode** aTarget) {
         return mInner->GetTarget(aSource, aProperty, aTruthValue, aTarget);
     }
 
     NS_IMETHOD GetTargets(nsIRDFResource* aSource,
                           nsIRDFResource* aProperty,
-                          PRBool aTruthValue,
+                          bool aTruthValue,
                           nsISimpleEnumerator** aTargets) {
         return mInner->GetTargets(aSource, aProperty, aTruthValue, aTargets);
     }
@@ -132,7 +99,7 @@ public:
     NS_IMETHOD Assert(nsIRDFResource* aSource, 
                       nsIRDFResource* aProperty, 
                       nsIRDFNode* aTarget,
-                      PRBool aTruthValue) {
+                      bool aTruthValue) {
         return mInner->Assert(aSource, aProperty, aTarget, aTruthValue);
     }
 
@@ -159,8 +126,8 @@ public:
     NS_IMETHOD HasAssertion(nsIRDFResource* aSource,
                             nsIRDFResource* aProperty,
                             nsIRDFNode* aTarget,
-                            PRBool aTruthValue,
-                            PRBool* hasAssertion) {
+                            bool aTruthValue,
+                            bool* hasAssertion) {
         return mInner->HasAssertion(aSource, aProperty, aTarget, aTruthValue, hasAssertion);
     }
 
@@ -172,11 +139,11 @@ public:
         return NS_ERROR_NOT_IMPLEMENTED;
     }
 
-    NS_IMETHOD HasArcIn(nsIRDFNode *aNode, nsIRDFResource *aArc, PRBool *_retval) {
+    NS_IMETHOD HasArcIn(nsIRDFNode *aNode, nsIRDFResource *aArc, bool *_retval) {
         return mInner->HasArcIn(aNode, aArc, _retval);
     }
 
-    NS_IMETHOD HasArcOut(nsIRDFResource *aSource, nsIRDFResource *aArc, PRBool *_retval) {
+    NS_IMETHOD HasArcOut(nsIRDFResource *aSource, nsIRDFResource *aArc, bool *_retval) {
         return mInner->HasArcOut(aSource, aArc, _retval);
     }
 
@@ -200,7 +167,7 @@ public:
     NS_IMETHOD IsCommandEnabled(nsISupportsArray/*<nsIRDFResource>*/* aSources,
                                 nsIRDFResource*   aCommand,
                                 nsISupportsArray/*<nsIRDFResource>*/* aArguments,
-                                PRBool* aResult);
+                                bool* aResult);
 
     NS_IMETHOD DoCommand(nsISupportsArray/*<nsIRDFResource>*/* aSources,
                          nsIRDFResource*   aCommand,
@@ -214,11 +181,11 @@ public:
         return mInner->EndUpdateBatch();
     }
 
-    NS_IMETHOD GetLoaded(PRBool* _result);
+    NS_IMETHOD GetLoaded(bool* _result);
     NS_IMETHOD Init(const char *uri);
     NS_IMETHOD Flush();
     NS_IMETHOD FlushTo(const char *aURI);
-    NS_IMETHOD Refresh(PRBool sync);
+    NS_IMETHOD Refresh(bool sync);
 
     // nsIObserver
     NS_DECL_NSIOBSERVER
@@ -241,11 +208,11 @@ LocalStoreImpl::~LocalStoreImpl(void)
 nsresult
 NS_NewLocalStore(nsISupports* aOuter, REFNSIID aIID, void** aResult)
 {
-    NS_PRECONDITION(aOuter == nsnull, "no aggregation");
+    NS_PRECONDITION(aOuter == nullptr, "no aggregation");
     if (aOuter)
         return NS_ERROR_NO_AGGREGATION;
 
-    NS_PRECONDITION(aResult != nsnull, "null ptr");
+    NS_PRECONDITION(aResult != nullptr, "null ptr");
     if (! aResult)
         return NS_ERROR_NULL_POINTER;
 
@@ -267,8 +234,8 @@ NS_NewLocalStore(nsISupports* aOuter, REFNSIID aIID, void** aResult)
 }
 
 NS_IMPL_CYCLE_COLLECTION_1(LocalStoreImpl, mInner)
-NS_IMPL_CYCLE_COLLECTING_ADDREF_AMBIGUOUS(LocalStoreImpl, nsILocalStore)
-NS_IMPL_CYCLE_COLLECTING_RELEASE_AMBIGUOUS(LocalStoreImpl, nsILocalStore)
+NS_IMPL_CYCLE_COLLECTING_ADDREF(LocalStoreImpl)
+NS_IMPL_CYCLE_COLLECTING_RELEASE(LocalStoreImpl)
 
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(LocalStoreImpl)
     NS_INTERFACE_MAP_ENTRY(nsILocalStore)
@@ -284,10 +251,10 @@ NS_INTERFACE_MAP_END
 // nsIRDFDataSource interface
 
 NS_IMETHODIMP
-LocalStoreImpl::GetLoaded(PRBool* _result)
+LocalStoreImpl::GetLoaded(bool* _result)
 {
 	nsCOMPtr<nsIRDFRemoteDataSource> remote = do_QueryInterface(mInner);
-    NS_ASSERTION(remote != nsnull, "not an nsIRDFRemoteDataSource");
+    NS_ASSERTION(remote != nullptr, "not an nsIRDFRemoteDataSource");
 	if (! remote)
         return NS_ERROR_UNEXPECTED;
 
@@ -309,7 +276,7 @@ LocalStoreImpl::Flush()
     // assertion until we sort out the ordering of how we write
     // everything to the localstore, flush it, and disconnect it when
     // we're getting profile-change notifications.
-    NS_WARN_IF_FALSE(remote != nsnull, "not an nsIRDFRemoteDataSource");
+    NS_WARN_IF_FALSE(remote != nullptr, "not an nsIRDFRemoteDataSource");
 	if (! remote)
         return NS_ERROR_UNEXPECTED;
 
@@ -324,10 +291,10 @@ LocalStoreImpl::FlushTo(const char *aURI)
 }
 
 NS_IMETHODIMP
-LocalStoreImpl::Refresh(PRBool sync)
+LocalStoreImpl::Refresh(bool sync)
 {
 	nsCOMPtr<nsIRDFRemoteDataSource> remote = do_QueryInterface(mInner);
-    NS_ASSERTION(remote != nsnull, "not an nsIRDFRemoteDataSource");
+    NS_ASSERTION(remote != nullptr, "not an nsIRDFRemoteDataSource");
 	if (! remote)
         return NS_ERROR_UNEXPECTED;
 
@@ -346,15 +313,15 @@ LocalStoreImpl::Init()
     mRDFService = do_GetService(NS_RDF_CONTRACTID "/rdf-service;1", &rv);
     if (NS_FAILED(rv)) return rv;
 
-    mRDFService->RegisterDataSource(this, PR_FALSE);
+    mRDFService->RegisterDataSource(this, false);
 
     // Register as an observer of profile changes
     nsCOMPtr<nsIObserverService> obs =
         do_GetService("@mozilla.org/observer-service;1");
 
     if (obs) {
-        obs->AddObserver(this, "profile-before-change", PR_TRUE);
-        obs->AddObserver(this, "profile-do-change", PR_TRUE);
+        obs->AddObserver(this, "profile-before-change", true);
+        obs->AddObserver(this, "profile-do-change", true);
     }
 
     return NS_OK;
@@ -379,7 +346,7 @@ LocalStoreImpl::CreateLocalStore(nsIFile* aFile)
         "  <!-- Empty -->\n" \
         "</RDF:RDF>\n";
 
-    PRUint32 count;
+    uint32_t count;
     rv = outStream->Write(defaultRDF, sizeof(defaultRDF)-1, &count);
     if (NS_FAILED(rv)) return rv;
 
@@ -389,7 +356,7 @@ LocalStoreImpl::CreateLocalStore(nsIFile* aFile)
     // Okay, now see if the file exists _for real_. If it's still
     // not there, it could be that the profile service gave us
     // back a read-only directory. Whatever.
-    PRBool fileExistsFlag = PR_FALSE;
+    bool fileExistsFlag = false;
     aFile->Exists(&fileExistsFlag);
     if (!fileExistsFlag)
         return NS_ERROR_UNEXPECTED;
@@ -409,7 +376,7 @@ LocalStoreImpl::LoadData()
     rv = NS_GetSpecialDirectory(NS_APP_LOCALSTORE_50_FILE, getter_AddRefs(aFile));
     if (NS_FAILED(rv)) return rv;
 
-    PRBool fileExistsFlag = PR_FALSE;
+    bool fileExistsFlag = false;
     (void)aFile->Exists(&fileExistsFlag);
     if (!fileExistsFlag) {
         // if file doesn't exist, create it
@@ -427,7 +394,7 @@ LocalStoreImpl::LoadData()
     rv = NS_NewFileURI(getter_AddRefs(aURI), aFile);
     if (NS_FAILED(rv)) return rv;
 
-    nsCAutoString spec;
+    nsAutoCString spec;
     rv = aURI->GetSpec(spec);
     if (NS_FAILED(rv)) return rv;
 
@@ -435,15 +402,15 @@ LocalStoreImpl::LoadData()
     if (NS_FAILED(rv)) return rv;
 
     // Read the datasource synchronously.
-    rv = remote->Refresh(PR_TRUE);
+    rv = remote->Refresh(true);
     
     if (NS_FAILED(rv)) {
         // Load failed, delete and recreate a fresh localstore
-        aFile->Remove(PR_TRUE);
+        aFile->Remove(true);
         rv = CreateLocalStore(aFile);
         if (NS_FAILED(rv)) return rv;
         
-        rv = remote->Refresh(PR_TRUE);
+        rv = remote->Refresh(true);
     }
 
     return rv;
@@ -453,7 +420,7 @@ LocalStoreImpl::LoadData()
 NS_IMETHODIMP
 LocalStoreImpl::GetURI(char* *aURI)
 {
-    NS_PRECONDITION(aURI != nsnull, "null ptr");
+    NS_PRECONDITION(aURI != nullptr, "null ptr");
     if (! aURI)
         return NS_ERROR_NULL_POINTER;
 
@@ -476,9 +443,9 @@ NS_IMETHODIMP
 LocalStoreImpl::IsCommandEnabled(nsISupportsArray/*<nsIRDFResource>*/* aSources,
                                  nsIRDFResource*   aCommand,
                                  nsISupportsArray/*<nsIRDFResource>*/* aArguments,
-                                 PRBool* aResult)
+                                 bool* aResult)
 {
-    *aResult = PR_TRUE;
+    *aResult = true;
     return NS_OK;
 }
 
@@ -512,7 +479,7 @@ LocalStoreImpl::Observe(nsISupports *aSubject, const char *aTopic, const PRUnich
             nsCOMPtr<nsIFile> aFile;
             rv = NS_GetSpecialDirectory(NS_APP_LOCALSTORE_50_FILE, getter_AddRefs(aFile));
             if (NS_SUCCEEDED(rv))
-                rv = aFile->Remove(PR_FALSE);
+                rv = aFile->Remove(false);
         }
     }
     else if (!nsCRT::strcmp(aTopic, "profile-do-change")) {

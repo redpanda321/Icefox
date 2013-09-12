@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode:nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2008
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsAlertsIconListener.h"
 #include "imgIContainer.h"
@@ -43,10 +11,23 @@
 #include "nsIImageToPixbuf.h"
 #include "nsIStringBundle.h"
 #include "nsIObserverService.h"
+#include "nsCRT.h"
 
+#include <dlfcn.h>
 #include <gdk/gdk.h>
 
-static PRBool gHasActions = PR_FALSE;
+static bool gHasActions = false;
+static bool gHasCaps = false;
+
+void* nsAlertsIconListener::libNotifyHandle = nullptr;
+bool nsAlertsIconListener::libNotifyNotAvail = false;
+nsAlertsIconListener::notify_is_initted_t nsAlertsIconListener::notify_is_initted = nullptr;
+nsAlertsIconListener::notify_init_t nsAlertsIconListener::notify_init = nullptr;
+nsAlertsIconListener::notify_get_server_caps_t nsAlertsIconListener::notify_get_server_caps = nullptr;
+nsAlertsIconListener::notify_notification_new_t nsAlertsIconListener::notify_notification_new = nullptr;
+nsAlertsIconListener::notify_notification_show_t nsAlertsIconListener::notify_notification_show = nullptr;
+nsAlertsIconListener::notify_notification_set_icon_from_pixbuf_t nsAlertsIconListener::notify_notification_set_icon_from_pixbuf = nullptr;
+nsAlertsIconListener::notify_notification_add_action_t nsAlertsIconListener::notify_notification_add_action = nullptr;
 
 static void notify_action_cb(NotifyNotification *notification,
                              gchar *action, gpointer user_data)
@@ -70,99 +51,62 @@ static void notify_closed_marshal(GClosure* closure,
   NS_RELEASE(alert);
 }
 
-NS_IMPL_ISUPPORTS3(nsAlertsIconListener, imgIContainerObserver, imgIDecoderObserver, nsIObserver)
+NS_IMPL_ISUPPORTS3(nsAlertsIconListener, imgINotificationObserver,
+                   nsIObserver, nsISupportsWeakReference)
 
 nsAlertsIconListener::nsAlertsIconListener()
-: mLoadedFrame(PR_FALSE),
-  mHasQuit(PR_FALSE),
+: mLoadedFrame(false),
   mNotification(NULL)
 {
-  MOZ_COUNT_CTOR(nsAlertsIconListener);
+  if (!libNotifyHandle && !libNotifyNotAvail) {
+    libNotifyHandle = dlopen("libnotify.so.4", RTLD_LAZY);
+    if (!libNotifyHandle) {
+      libNotifyHandle = dlopen("libnotify.so.1", RTLD_LAZY);
+      if (!libNotifyHandle) {
+        libNotifyNotAvail = true;
+        return;
+      }
+    }
 
-  nsCOMPtr<nsIObserverService> obsServ =
-      do_GetService("@mozilla.org/observer-service;1");
-  obsServ->AddObserver(this, "quit-application", PR_FALSE);
+    notify_is_initted = (notify_is_initted_t)dlsym(libNotifyHandle, "notify_is_initted");
+    notify_init = (notify_init_t)dlsym(libNotifyHandle, "notify_init");
+    notify_get_server_caps = (notify_get_server_caps_t)dlsym(libNotifyHandle, "notify_get_server_caps");
+    notify_notification_new = (notify_notification_new_t)dlsym(libNotifyHandle, "notify_notification_new");
+    notify_notification_show = (notify_notification_show_t)dlsym(libNotifyHandle, "notify_notification_show");
+    notify_notification_set_icon_from_pixbuf = (notify_notification_set_icon_from_pixbuf_t)dlsym(libNotifyHandle, "notify_notification_set_icon_from_pixbuf");
+    notify_notification_add_action = (notify_notification_add_action_t)dlsym(libNotifyHandle, "notify_notification_add_action");
+    if (!notify_is_initted || !notify_init || !notify_get_server_caps || !notify_notification_new || !notify_notification_show || !notify_notification_set_icon_from_pixbuf || !notify_notification_add_action) {
+      dlclose(libNotifyHandle);
+      libNotifyHandle = nullptr;
+    }
+  }
 }
 
 nsAlertsIconListener::~nsAlertsIconListener()
 {
-  MOZ_COUNT_DTOR(nsAlertsIconListener);
-
   if (mIconRequest)
     mIconRequest->CancelAndForgetObserver(NS_BINDING_ABORTED);
+  // Don't dlclose libnotify as it uses atexit().
+}
 
-  if (!mHasQuit) {
-    nsCOMPtr<nsIObserverService> obsServ =
-        do_GetService("@mozilla.org/observer-service;1");
-    obsServ->RemoveObserver(this, "quit-application");
+NS_IMETHODIMP
+nsAlertsIconListener::Notify(imgIRequest *aRequest, int32_t aType, const nsIntRect* aData)
+{
+  if (aType == imgINotificationObserver::LOAD_COMPLETE) {
+    return OnStopRequest(aRequest);
   }
-}
 
-NS_IMETHODIMP
-nsAlertsIconListener::OnStartRequest(imgIRequest* aRequest)
-{
+  if (aType == imgINotificationObserver::FRAME_COMPLETE) {
+    return OnStopFrame(aRequest);
+  }
+
   return NS_OK;
 }
 
-NS_IMETHODIMP
-nsAlertsIconListener::OnStartDecode(imgIRequest* aRequest)
+nsresult
+nsAlertsIconListener::OnStopRequest(imgIRequest* aRequest)
 {
-  return NS_OK;
-}
-
-
-NS_IMETHODIMP
-nsAlertsIconListener::OnStartContainer(imgIRequest* aRequest,
-                                       imgIContainer* aContainer)
-{
-  return NS_OK;
-}
-
-
-NS_IMETHODIMP
-nsAlertsIconListener::OnStartFrame(imgIRequest* aRequest,
-                                   PRUint32 aFrame)
-{
-  return NS_OK;
-}
-
-
-NS_IMETHODIMP
-nsAlertsIconListener::OnDataAvailable(imgIRequest* aRequest,
-                                      PRBool aCurrentFrame,
-                                      const nsIntRect* aRect)
-{
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-nsAlertsIconListener::OnStopContainer(imgIRequest* aRequest,
-                                      imgIContainer* aContainer)
-{
-  return NS_OK;
-}
-
-
-NS_IMETHODIMP
-nsAlertsIconListener::OnStopDecode(imgIRequest* aRequest,
-                                   nsresult status,
-                                   const PRUnichar* statusArg)
-{
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-nsAlertsIconListener::FrameChanged(imgIContainer* aContainer,
-                                   const nsIntRect* aDirtyRect)
-{
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-nsAlertsIconListener::OnStopRequest(imgIRequest* aRequest,
-                                    PRBool aIsLastPart)
-{
-  PRUint32 imgStatus = imgIRequest::STATUS_ERROR;
+  uint32_t imgStatus = imgIRequest::STATUS_ERROR;
   nsresult rv = aRequest->GetImageStatus(&imgStatus);
   NS_ENSURE_SUCCESS(rv, rv);
   if (imgStatus == imgIRequest::STATUS_ERROR && !mLoadedFrame) {
@@ -172,20 +116,13 @@ nsAlertsIconListener::OnStopRequest(imgIRequest* aRequest,
 
   if (mIconRequest) {
     mIconRequest->Cancel(NS_BINDING_ABORTED);
-    mIconRequest = nsnull;
+    mIconRequest = nullptr;
   }
   return NS_OK;
 }
 
-NS_IMETHODIMP
-nsAlertsIconListener::OnDiscard(imgIRequest *aRequest)
-{
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-nsAlertsIconListener::OnStopFrame(imgIRequest* aRequest,
-                                  PRUint32 aFrame)
+nsresult
+nsAlertsIconListener::OnStopFrame(imgIRequest* aRequest)
 {
   if (aRequest != mIconRequest)
     return NS_ERROR_FAILURE;
@@ -209,16 +146,15 @@ nsAlertsIconListener::OnStopFrame(imgIRequest* aRequest,
 
   g_object_unref(imagePixbuf);
 
-  mLoadedFrame = PR_TRUE;
+  mLoadedFrame = true;
   return NS_OK;
 }
 
 nsresult
 nsAlertsIconListener::ShowAlert(GdkPixbuf* aPixbuf)
 {
-  mNotification = notify_notification_new(mAlertTitle.get(),
-                                          mAlertText.get(),
-                                          NULL, NULL);
+  mNotification = notify_notification_new(mAlertTitle.get(), mAlertText.get(), NULL, NULL);
+
   if (!mNotification)
     return NS_ERROR_OUT_OF_MEMORY;
 
@@ -252,7 +188,7 @@ nsAlertsIconListener::StartRequest(const nsAString & aImageUrl)
   if (mIconRequest) {
     // Another icon request is already in flight.  Kill it.
     mIconRequest->Cancel(NS_BINDING_ABORTED);
-    mIconRequest = nsnull;
+    mIconRequest = nullptr;
   }
 
   nsCOMPtr<nsIURI> imageUri;
@@ -264,9 +200,9 @@ nsAlertsIconListener::StartRequest(const nsAString & aImageUrl)
   if (!il)
     return ShowAlert(NULL);
 
-  return il->LoadImage(imageUri, nsnull, nsnull, nsnull, this,
-                       nsnull, nsIRequest::LOAD_NORMAL, nsnull, nsnull,
-                       nsnull, getter_AddRefs(mIconRequest));
+  return il->LoadImageXPCOM(imageUri, nullptr, nullptr, nullptr, nullptr, this,
+			    nullptr, nsIRequest::LOAD_NORMAL, nullptr, nullptr,
+			    getter_AddRefs(mIconRequest));
 }
 
 void
@@ -296,7 +232,6 @@ nsAlertsIconListener::Observe(nsISupports *aSubject, const char *aTopic,
     g_signal_handler_disconnect(mNotification, mClosureHandler);
     g_object_unref(mNotification);
     mNotification = NULL;
-    mHasQuit = PR_TRUE;
     Release(); // equivalent to NS_RELEASE(this)
   }
   return NS_OK;
@@ -306,16 +241,19 @@ nsresult
 nsAlertsIconListener::InitAlertAsync(const nsAString & aImageUrl,
                                      const nsAString & aAlertTitle, 
                                      const nsAString & aAlertText,
-                                     PRBool aAlertTextClickable,
+                                     bool aAlertTextClickable,
                                      const nsAString & aAlertCookie,
                                      nsIObserver * aAlertListener)
 {
+  if (!libNotifyHandle)
+    return NS_ERROR_FAILURE;
+
   if (!notify_is_initted()) {
     // Give the name of this application to libnotify
     nsCOMPtr<nsIStringBundleService> bundleService = 
       do_GetService(NS_STRINGBUNDLE_CONTRACTID);
 
-    nsCAutoString appShortName;
+    nsAutoCString appShortName;
     if (bundleService) {
       nsCOMPtr<nsIStringBundle> bundle;
       bundleService->CreateBundle("chrome://branding/locale/brand.properties",
@@ -339,9 +277,10 @@ nsAlertsIconListener::InitAlertAsync(const nsAString & aImageUrl,
 
     GList *server_caps = notify_get_server_caps();
     if (server_caps) {
+      gHasCaps = true;
       for (GList* cap = server_caps; cap != NULL; cap = cap->next) {
         if (!strcmp((char*) cap->data, "actions")) {
-          gHasActions = PR_TRUE;
+          gHasActions = true;
           break;
         }
       }
@@ -350,8 +289,19 @@ nsAlertsIconListener::InitAlertAsync(const nsAString & aImageUrl,
     }
   }
 
+  if (!gHasCaps) {
+    // if notify_get_server_caps() failed above we need to assume
+    // there is no notification-server to display anything
+    return NS_ERROR_FAILURE;
+  }
+
   if (!gHasActions && aAlertTextClickable)
     return NS_ERROR_FAILURE; // No good, fallback to XUL
+
+  nsCOMPtr<nsIObserverService> obsServ =
+      do_GetService("@mozilla.org/observer-service;1");
+  if (obsServ)
+    obsServ->AddObserver(this, "quit-application", true);
 
   // Workaround for a libnotify bug - blank titles aren't dealt with
   // properly so we use a space

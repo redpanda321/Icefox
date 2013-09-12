@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla SMIL module.
- *
- * The Initial Developer of the Original Code is Brian Birtles.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Brian Birtles <birtles@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsSMILTimeValueSpec.h"
 #include "nsSMILInterval.h"
@@ -43,12 +11,11 @@
 #include "nsSMILInstanceTime.h"
 #include "nsSMILParserUtils.h"
 #include "nsISMILAnimationElement.h"
-#include "nsContentUtils.h"
-#include "nsIEventListenerManager.h"
-#include "nsIDOMEventGroup.h"
+#include "nsEventListenerManager.h"
 #include "nsGUIEvent.h"
 #include "nsIDOMTimeEvent.h"
 #include "nsString.h"
+#include <limits>
 
 using namespace mozilla::dom;
 
@@ -77,7 +44,7 @@ nsSMILTimeValueSpec::EventListener::HandleEvent(nsIDOMEvent* aEvent)
 #pragma warning(disable:4355)
 #endif
 nsSMILTimeValueSpec::nsSMILTimeValueSpec(nsSMILTimedElement& aOwner,
-                                         PRBool aIsBegin)
+                                         bool aIsBegin)
   : mOwner(&aOwner),
     mIsBegin(aIsBegin),
     mReferencedElement(this)
@@ -92,7 +59,7 @@ nsSMILTimeValueSpec::~nsSMILTimeValueSpec()
   UnregisterFromReferencedElement(mReferencedElement.get());
   if (mEventListener) {
     mEventListener->Disconnect();
-    mEventListener = nsnull;
+    mEventListener = nullptr;
   }
 }
 
@@ -160,12 +127,12 @@ nsSMILTimeValueSpec::ResolveReferences(nsIContent* aContextNode)
     NS_ABORT_IF_FALSE(doc, "We are in the document but current doc is null");
     mReferencedElement.ResetWithElement(doc->GetRootElement());
   } else {
-    NS_ABORT_IF_FALSE(PR_FALSE, "Syncbase or repeat spec without ID");
+    NS_ABORT_IF_FALSE(false, "Syncbase or repeat spec without ID");
   }
   UpdateReferencedElement(oldReferencedElement, mReferencedElement.get());
 }
 
-PRBool
+bool
 nsSMILTimeValueSpec::IsEventBased() const
 {
   return mParams.mType == nsSMILTimeValueSpecParams::EVENT ||
@@ -183,8 +150,9 @@ nsSMILTimeValueSpec::HandleNewInterval(nsSMILInterval& aInterval,
     ConvertBetweenTimeContainers(baseInstance.Time(), aSrcContainer);
 
   // Apply offset
-  if (newTime.IsResolved()) {
-    newTime.SetMillis(newTime.GetMillis() + mParams.mOffset.GetMillis());
+  if (!ApplyOffset(newTime)) {
+    NS_WARNING("New time overflows nsSMILTime, ignoring");
+    return;
   }
 
   // Create the instance time and register it with the interval
@@ -208,7 +176,7 @@ nsSMILTimeValueSpec::HandleChangedInstanceTime(
     const nsSMILInstanceTime& aBaseTime,
     const nsSMILTimeContainer* aSrcContainer,
     nsSMILInstanceTime& aInstanceTimeToUpdate,
-    PRBool aObjectChanged)
+    bool aObjectChanged)
 {
   // If the instance time is fixed (e.g. because it's being used as the begin
   // time of an active or postactive interval) we just ignore the change.
@@ -219,9 +187,9 @@ nsSMILTimeValueSpec::HandleChangedInstanceTime(
     ConvertBetweenTimeContainers(aBaseTime.Time(), aSrcContainer);
 
   // Apply offset
-  if (updatedTime.IsResolved()) {
-    updatedTime.SetMillis(updatedTime.GetMillis() +
-                          mParams.mOffset.GetMillis());
+  if (!ApplyOffset(updatedTime)) {
+    NS_WARNING("Updated time overflows nsSMILTime, ignoring");
+    return;
   }
 
   // The timed element that owns the instance time does the updating so it can
@@ -238,7 +206,7 @@ nsSMILTimeValueSpec::HandleDeletedInstanceTime(
   mOwner->RemoveInstanceTime(&aInstanceTime, mIsBegin);
 }
 
-PRBool
+bool
 nsSMILTimeValueSpec::DependsOnBegin() const
 {
   return mParams.mSyncBegin;
@@ -312,13 +280,35 @@ nsSMILTimedElement*
 nsSMILTimeValueSpec::GetTimedElement(Element* aElement)
 {
   if (!aElement)
-    return nsnull;
+    return nullptr;
 
   nsCOMPtr<nsISMILAnimationElement> animElement = do_QueryInterface(aElement);
   if (!animElement)
-    return nsnull;
+    return nullptr;
 
   return &animElement->TimedElement();
+}
+
+// Indicates whether we're allowed to register an event-listener
+// when scripting is disabled.
+bool
+nsSMILTimeValueSpec::IsWhitelistedEvent()
+{
+  // The category of (SMIL-specific) "repeat(n)" events are allowed.
+  if (mParams.mType == nsSMILTimeValueSpecParams::REPEAT) {
+    return true;
+  }
+
+  // A specific list of other SMIL-related events are allowed, too.
+  if (mParams.mType == nsSMILTimeValueSpecParams::EVENT &&
+      (mParams.mEventSymbol == nsGkAtoms::repeat ||
+       mParams.mEventSymbol == nsGkAtoms::repeatEvent ||
+       mParams.mEventSymbol == nsGkAtoms::beginEvent ||
+       mParams.mEventSymbol == nsGkAtoms::endEvent)) {
+    return true;
+  }
+
+  return false;
 }
 
 void
@@ -333,21 +323,23 @@ nsSMILTimeValueSpec::RegisterEventListener(Element* aTarget)
   if (!aTarget)
     return;
 
+  // When script is disabled, only allow registration for whitelisted events.
+  if (!aTarget->GetOwnerDocument()->IsScriptEnabled() &&
+      !IsWhitelistedEvent()) {
+    return;
+  }
+
   if (!mEventListener) {
     mEventListener = new EventListener(this);
   }
 
-  nsCOMPtr<nsIDOMEventGroup> sysGroup;
-  nsIEventListenerManager* elm =
-    GetEventListenerManager(aTarget, getter_AddRefs(sysGroup));
+  nsEventListenerManager* elm = GetEventListenerManager(aTarget);
   if (!elm)
     return;
-  
+
   elm->AddEventListenerByType(mEventListener,
                               nsDependentAtomString(mParams.mEventSymbol),
-                              NS_EVENT_FLAG_BUBBLE |
-                              NS_PRIV_EVENT_UNTRUSTED_PERMITTED,
-                              sysGroup);
+                              AllEventsAtSystemGroupBubble());
 }
 
 void
@@ -356,52 +348,37 @@ nsSMILTimeValueSpec::UnregisterEventListener(Element* aTarget)
   if (!aTarget || !mEventListener)
     return;
 
-  nsCOMPtr<nsIDOMEventGroup> sysGroup;
-  nsIEventListenerManager* elm =
-    GetEventListenerManager(aTarget, getter_AddRefs(sysGroup));
+  nsEventListenerManager* elm = GetEventListenerManager(aTarget);
   if (!elm)
     return;
 
   elm->RemoveEventListenerByType(mEventListener,
                                  nsDependentAtomString(mParams.mEventSymbol),
-                                 NS_EVENT_FLAG_BUBBLE |
-                                 NS_PRIV_EVENT_UNTRUSTED_PERMITTED,
-                                 sysGroup);
+                                 AllEventsAtSystemGroupBubble());
 }
 
-nsIEventListenerManager*
-nsSMILTimeValueSpec::GetEventListenerManager(Element* aTarget,
-                                             nsIDOMEventGroup** aSystemGroup)
+nsEventListenerManager*
+nsSMILTimeValueSpec::GetEventListenerManager(Element* aTarget)
 {
   NS_ABORT_IF_FALSE(aTarget, "null target; can't get EventListenerManager");
-  NS_ABORT_IF_FALSE(aSystemGroup && !*aSystemGroup,
-      "Bad out param for system group");
 
-  nsCOMPtr<nsPIDOMEventTarget> piTarget;
+  nsCOMPtr<nsIDOMEventTarget> target;
 
   if (mParams.mType == nsSMILTimeValueSpecParams::ACCESSKEY) {
     nsIDocument* doc = aTarget->GetCurrentDoc();
     if (!doc)
-      return nsnull;
+      return nullptr;
     nsPIDOMWindow* win = doc->GetWindow();
     if (!win)
-      return nsnull;
-    piTarget = do_QueryInterface(win);
+      return nullptr;
+    target = do_QueryInterface(win);
   } else {
-    piTarget = aTarget;
+    target = aTarget;
   }
-  if (!piTarget)
-    return nsnull;
+  if (!target)
+    return nullptr;
 
-  nsIEventListenerManager* elm = piTarget->GetListenerManager(PR_TRUE);
-  if (!elm)
-    return nsnull;
-
-  aTarget->GetSystemEventGroup(aSystemGroup);
-  if (!*aSystemGroup)
-    return nsnull;
-
-  return elm;
+  return target->GetListenerManager(true);
 }
 
 void
@@ -423,14 +400,18 @@ nsSMILTimeValueSpec::HandleEvent(nsIDOMEvent* aEvent)
     return;
 
   nsSMILTime currentTime = container->GetCurrentTime();
-  nsSMILTimeValue newTime(currentTime + mParams.mOffset.GetMillis());
+  nsSMILTimeValue newTime(currentTime);
+  if (!ApplyOffset(newTime)) {
+    NS_WARNING("New time generated from event overflows nsSMILTime, ignoring");
+    return;
+  }
 
   nsRefPtr<nsSMILInstanceTime> newInstance =
     new nsSMILInstanceTime(newTime, nsSMILInstanceTime::SOURCE_EVENT);
   mOwner->AddInstanceTime(newInstance, mIsBegin);
 }
 
-PRBool
+bool
 nsSMILTimeValueSpec::CheckEventDetail(nsIDOMEvent *aEvent)
 {
   switch (mParams.mType)
@@ -443,44 +424,44 @@ nsSMILTimeValueSpec::CheckEventDetail(nsIDOMEvent *aEvent)
 
   default:
     // nothing to check
-    return PR_TRUE;
+    return true;
   }
 }
 
-PRBool
+bool
 nsSMILTimeValueSpec::CheckRepeatEventDetail(nsIDOMEvent *aEvent)
 {
   nsCOMPtr<nsIDOMTimeEvent> timeEvent = do_QueryInterface(aEvent);
   if (!timeEvent) {
     NS_WARNING("Received a repeat event that was not a DOMTimeEvent");
-    return PR_FALSE;
+    return false;
   }
 
-  PRInt32 detail;
+  int32_t detail;
   timeEvent->GetDetail(&detail);
-  return detail > 0 && (PRUint32)detail == mParams.mRepeatIterationOrAccessKey;
+  return detail > 0 && (uint32_t)detail == mParams.mRepeatIterationOrAccessKey;
 }
 
-PRBool
+bool
 nsSMILTimeValueSpec::CheckAccessKeyEventDetail(nsIDOMEvent *aEvent)
 {
   nsCOMPtr<nsIDOMKeyEvent> keyEvent = do_QueryInterface(aEvent);
   if (!keyEvent) {
     NS_WARNING("Received an accesskey event that was not a DOMKeyEvent");
-    return PR_FALSE;
+    return false;
   }
 
   // Ignore the key event if any modifier keys are pressed UNLESS we're matching
   // on the charCode in which case we ignore the state of the shift and alt keys
   // since they might be needed to generate the character in question.
-  PRBool isCtrl;
-  PRBool isMeta;
+  bool isCtrl;
+  bool isMeta;
   keyEvent->GetCtrlKey(&isCtrl);
   keyEvent->GetMetaKey(&isMeta);
   if (isCtrl || isMeta)
-    return PR_FALSE;
+    return false;
 
-  PRUint32 code;
+  uint32_t code;
   keyEvent->GetCharCode(&code);
   if (code)
     return code == mParams.mRepeatIterationOrAccessKey;
@@ -489,12 +470,12 @@ nsSMILTimeValueSpec::CheckAccessKeyEventDetail(nsIDOMEvent *aEvent)
   // does not produce a charCode.
   // In this case we can safely bail out if either alt or shift is pressed since
   // they won't already be incorporated into the keyCode unlike the charCode.
-  PRBool isAlt;
-  PRBool isShift;
+  bool isAlt;
+  bool isShift;
   keyEvent->GetAltKey(&isAlt);
   keyEvent->GetShiftKey(&isShift);
   if (isAlt || isShift)
-    return PR_FALSE;
+    return false;
 
   keyEvent->GetKeyCode(&code);
   switch (code)
@@ -514,7 +495,7 @@ nsSMILTimeValueSpec::CheckAccessKeyEventDetail(nsIDOMEvent *aEvent)
     return mParams.mRepeatIterationOrAccessKey == 0x7F;
 
   default:
-    return PR_FALSE;
+    return false;
   }
 }
 
@@ -525,7 +506,7 @@ nsSMILTimeValueSpec::ConvertBetweenTimeContainers(
 {
   // If the source time is either indefinite or unresolved the result is going
   // to be the same
-  if (!aSrcTime.IsResolved())
+  if (!aSrcTime.IsDefinite())
     return aSrcTime;
 
   // Convert from source time container to our parent time container
@@ -546,8 +527,26 @@ nsSMILTimeValueSpec::ConvertBetweenTimeContainers(
     // time. Just return the indefinite time.
     return docTime;
 
-   NS_ABORT_IF_FALSE(docTime.IsResolved(),
-       "ContainerToParentTime gave us an unresolved time");
+  NS_ABORT_IF_FALSE(docTime.IsDefinite(),
+    "ContainerToParentTime gave us an unresolved or indefinite time");
 
   return dstContainer->ParentToContainerTime(docTime.GetMillis());
+}
+
+bool
+nsSMILTimeValueSpec::ApplyOffset(nsSMILTimeValue& aTime) const
+{
+  // indefinite + offset = indefinite. Likewise for unresolved times.
+  if (!aTime.IsDefinite()) {
+    return true;
+  }
+
+  double resultAsDouble =
+    (double)aTime.GetMillis() + mParams.mOffset.GetMillis();
+  if (resultAsDouble > std::numeric_limits<nsSMILTime>::max() ||
+      resultAsDouble < std::numeric_limits<nsSMILTime>::min()) {
+    return false;
+  }
+  aTime.SetMillis(aTime.GetMillis() + mParams.mOffset.GetMillis());
+  return true;
 }

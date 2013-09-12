@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=548463
 -->
 <head>
   <title>Test for Bug 548463</title>
-  <script type="application/javascript" src="/MochiKit/packed.js"></script>
   <script type="application/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css"/>
 </head>
@@ -48,7 +47,7 @@ function testAdoptFromDOMNodeRemoved(nodeToAppend, nodeRemoved, nodeToAdopt)
     thrown = true;
   }
 
-  ok(thrown, "adoptNode while appending should throw");
+  ok(!thrown, "adoptNode while appending should not throw");
 }
 
 var frag = document.createDocumentFragment();
@@ -76,7 +75,7 @@ catch (e) {
   thrown = true;
 }
 
-ok(thrown, "adoptNode while adopting should throw");
+ok(!thrown, "adoptNode while adopting should not throw");
 
 </script>
 </pre>

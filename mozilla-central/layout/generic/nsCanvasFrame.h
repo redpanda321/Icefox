@@ -1,56 +1,22 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* rendering object that goes directly inside the document's scrollbars */
 
 #ifndef nsCanvasFrame_h___
 #define nsCanvasFrame_h___
 
-
-#include "nsHTMLContainerFrame.h"
-#include "nsStyleContext.h"
-#include "nsIRenderingContext.h"
-#include "nsGUIEvent.h"
-#include "nsGkAtoms.h"
+#include "mozilla/Attributes.h"
+#include "nsContainerFrame.h"
 #include "nsIScrollPositionListener.h"
 #include "nsDisplayList.h"
-#include "nsAbsoluteContainingBlock.h"
+#include "nsGkAtoms.h"
 
 class nsPresContext;
+class nsRenderingContext;
+class nsEvent;
 
 /**
  * Root frame class.
@@ -59,15 +25,14 @@ class nsPresContext;
  * It only supports having a single child frame which must be an area
  * frame
  */
-class nsCanvasFrame : public nsHTMLContainerFrame, 
+class nsCanvasFrame : public nsContainerFrame,
                       public nsIScrollPositionListener
 {
 public:
   nsCanvasFrame(nsStyleContext* aContext)
-  : nsHTMLContainerFrame(aContext),
-    mDoPaintFocus(PR_FALSE),
-    mAddedScrollPositionListener(PR_FALSE),
-    mAbsoluteContainer(nsGkAtoms::absoluteList) {}
+  : nsContainerFrame(aContext),
+    mDoPaintFocus(false),
+    mAddedScrollPositionListener(false) {}
 
   NS_DECL_QUERYFRAME_TARGET(nsCanvasFrame)
   NS_DECL_QUERYFRAME
@@ -76,42 +41,38 @@ public:
 
   virtual void DestroyFrom(nsIFrame* aDestructRoot);
 
-  NS_IMETHOD SetInitialChildList(nsIAtom*        aListName,
-                                 nsFrameList&    aChildList);
-  NS_IMETHOD AppendFrames(nsIAtom*        aListName,
-                          nsFrameList&    aFrameList);
-  NS_IMETHOD InsertFrames(nsIAtom*        aListName,
+  NS_IMETHOD SetInitialChildList(ChildListID     aListID,
+                                 nsFrameList&    aChildList) MOZ_OVERRIDE;
+  NS_IMETHOD AppendFrames(ChildListID     aListID,
+                          nsFrameList&    aFrameList) MOZ_OVERRIDE;
+  NS_IMETHOD InsertFrames(ChildListID     aListID,
                           nsIFrame*       aPrevFrame,
-                          nsFrameList&    aFrameList);
-  NS_IMETHOD RemoveFrame(nsIAtom*        aListName,
-                         nsIFrame*       aOldFrame);
+                          nsFrameList&    aFrameList) MOZ_OVERRIDE;
+  NS_IMETHOD RemoveFrame(ChildListID     aListID,
+                         nsIFrame*       aOldFrame) MOZ_OVERRIDE;
 
-  virtual nsIAtom* GetAdditionalChildListName(PRInt32 aIndex) const;
-  virtual nsFrameList GetChildList(nsIAtom* aListName) const;
-
-  virtual nscoord GetMinWidth(nsIRenderingContext *aRenderingContext);
-  virtual nscoord GetPrefWidth(nsIRenderingContext *aRenderingContext);
+  virtual nscoord GetMinWidth(nsRenderingContext *aRenderingContext) MOZ_OVERRIDE;
+  virtual nscoord GetPrefWidth(nsRenderingContext *aRenderingContext) MOZ_OVERRIDE;
   NS_IMETHOD Reflow(nsPresContext*          aPresContext,
                     nsHTMLReflowMetrics&     aDesiredSize,
                     const nsHTMLReflowState& aReflowState,
-                    nsReflowStatus&          aStatus);
-  virtual PRBool IsContainingBlock() const { return PR_TRUE; }
-  virtual PRBool IsFrameOfType(PRUint32 aFlags) const
+                    nsReflowStatus&          aStatus) MOZ_OVERRIDE;
+  virtual bool IsFrameOfType(uint32_t aFlags) const
   {
-    return nsHTMLContainerFrame::IsFrameOfType(aFlags &
+    return nsContainerFrame::IsFrameOfType(aFlags &
              ~(nsIFrame::eCanContainOverflowContainers));
   }
 
   /** SetHasFocus tells the CanvasFrame to draw with focus ring
-   *  @param aHasFocus PR_TRUE to show focus ring, PR_FALSE to hide it
+   *  @param aHasFocus true to show focus ring, false to hide it
    */
-  NS_IMETHOD SetHasFocus(PRBool aHasFocus);
+  NS_IMETHOD SetHasFocus(bool aHasFocus);
 
   NS_IMETHOD BuildDisplayList(nsDisplayListBuilder*   aBuilder,
                               const nsRect&           aDirtyRect,
-                              const nsDisplayListSet& aLists);
+                              const nsDisplayListSet& aLists) MOZ_OVERRIDE;
 
-  void PaintFocus(nsIRenderingContext& aRenderingContext, nsPoint aPt);
+  void PaintFocus(nsRenderingContext& aRenderingContext, nsPoint aPt);
 
   // nsIScrollPositionListener
   virtual void ScrollPositionWillChange(nscoord aX, nscoord aY);
@@ -122,17 +83,17 @@ public:
    *
    * @see nsGkAtoms::canvasFrame
    */
-  virtual nsIAtom* GetType() const;
+  virtual nsIAtom* GetType() const MOZ_OVERRIDE;
 
   virtual nsresult StealFrame(nsPresContext* aPresContext,
                               nsIFrame*      aChild,
-                              PRBool         aForceNormal)
+                              bool           aForceNormal) MOZ_OVERRIDE
   {
     NS_ASSERTION(!aForceNormal, "No-one should be passing this in here");
 
     // nsCanvasFrame keeps overflow container continuations of its child
     // frame in main child list
-    nsresult rv = nsContainerFrame::StealFrame(aPresContext, aChild, PR_TRUE);
+    nsresult rv = nsContainerFrame::StealFrame(aPresContext, aChild, true);
     if (NS_FAILED(rv)) {
       rv = nsContainerFrame::StealFrame(aPresContext, aChild);
     }
@@ -140,21 +101,19 @@ public:
   }
 
 #ifdef DEBUG
-  NS_IMETHOD GetFrameName(nsAString& aResult) const;
+  NS_IMETHOD GetFrameName(nsAString& aResult) const MOZ_OVERRIDE;
 #endif
-  NS_IMETHOD GetContentForEvent(nsPresContext* aPresContext,
-                                nsEvent* aEvent,
-                                nsIContent** aContent);
+  NS_IMETHOD GetContentForEvent(nsEvent* aEvent,
+                                nsIContent** aContent) MOZ_OVERRIDE;
 
   nsRect CanvasArea() const;
 
 protected:
-  virtual PRIntn GetSkipSides() const;
+  virtual int GetSkipSides() const;
 
   // Data members
-  PRPackedBool              mDoPaintFocus;
-  PRPackedBool              mAddedScrollPositionListener;
-  nsAbsoluteContainingBlock mAbsoluteContainer;
+  bool                      mDoPaintFocus;
+  bool                      mAddedScrollPositionListener;
 };
 
 /**
@@ -163,55 +122,89 @@ protected:
  * We can also paint an "extra background color" behind the normal
  * background.
  */
-class nsDisplayCanvasBackground : public nsDisplayBackground {
+class nsDisplayCanvasBackgroundColor : public nsDisplayItem {
 public:
-  nsDisplayCanvasBackground(nsDisplayListBuilder* aBuilder, nsIFrame *aFrame)
-    : nsDisplayBackground(aBuilder, aFrame)
+  nsDisplayCanvasBackgroundColor(nsDisplayListBuilder* aBuilder, nsIFrame *aFrame)
+    : nsDisplayItem(aBuilder, aFrame)
+    , mColor(NS_RGBA(0,0,0,0))
   {
-    mExtraBackgroundColor = NS_RGBA(0,0,0,0);
   }
 
-  virtual PRBool ComputeVisibility(nsDisplayListBuilder* aBuilder,
-                                   nsRegion* aVisibleRegion)
+  virtual bool ComputeVisibility(nsDisplayListBuilder* aBuilder,
+                                 nsRegion* aVisibleRegion,
+                                 const nsRect& aAllowVisibleRegionExpansion) MOZ_OVERRIDE
   {
-    return NS_GET_A(mExtraBackgroundColor) > 0 ||
-           nsDisplayBackground::ComputeVisibility(aBuilder, aVisibleRegion);
+    return NS_GET_A(mColor) > 0;
   }
-  virtual PRBool IsOpaque(nsDisplayListBuilder* aBuilder)
+  virtual nsRegion GetOpaqueRegion(nsDisplayListBuilder* aBuilder,
+                                   bool* aSnap) MOZ_OVERRIDE
   {
-    return NS_GET_A(mExtraBackgroundColor) == 255 ||
-           nsDisplayBackground::IsOpaque(aBuilder);
+    if (NS_GET_A(mColor) == 255) {
+      return nsRegion(GetBounds(aBuilder, aSnap));
+    }
+    return nsRegion();
   }
-  virtual PRBool IsUniform(nsDisplayListBuilder* aBuilder, nscolor* aColor)
+  virtual bool IsUniform(nsDisplayListBuilder* aBuilder, nscolor* aColor) MOZ_OVERRIDE
   {
-    nscolor background;
-    if (!nsDisplayBackground::IsUniform(aBuilder, &background))
-      return PR_FALSE;
-    NS_ASSERTION(background == NS_RGBA(0,0,0,0),
-                 "The nsDisplayBackground for a canvas frame doesn't paint "
-                 "its background color normally");
-    *aColor = mExtraBackgroundColor;
-    return PR_TRUE;
+    *aColor = mColor;
+    return true;
   }
-  virtual nsRect GetBounds(nsDisplayListBuilder* aBuilder)
+  virtual nsRect GetBounds(nsDisplayListBuilder* aBuilder, bool* aSnap) MOZ_OVERRIDE
   {
     nsCanvasFrame* frame = static_cast<nsCanvasFrame*>(mFrame);
+    *aSnap = true;
     return frame->CanvasArea() + ToReferenceFrame();
+  }
+  virtual void HitTest(nsDisplayListBuilder* aBuilder, const nsRect& aRect,
+                       HitTestState* aState, nsTArray<nsIFrame*> *aOutFrames) MOZ_OVERRIDE
+  {
+    // We need to override so we don't consider border-radius.
+    aOutFrames->AppendElement(mFrame);
+  }
+  virtual void NotifyRenderingChanged() MOZ_OVERRIDE
+  {
+    mFrame->Properties().Delete(nsIFrame::CachedBackgroundImage());
   }
 
   virtual void Paint(nsDisplayListBuilder* aBuilder,
-                     nsIRenderingContext* aCtx);
+                     nsRenderingContext* aCtx) MOZ_OVERRIDE;
 
   void SetExtraBackgroundColor(nscolor aColor)
   {
-    mExtraBackgroundColor = aColor;
+    mColor = aColor;
   }
 
-  NS_DISPLAY_DECL_NAME("CanvasBackground", TYPE_CANVAS_BACKGROUND)
+  NS_DISPLAY_DECL_NAME("CanvasBackgroundColor", TYPE_CANVAS_BACKGROUND_COLOR)
 
 private:
-  nscolor mExtraBackgroundColor;
+  nscolor mColor;
 };
 
+class nsDisplayCanvasBackgroundImage : public nsDisplayBackgroundImage {
+public:
+  nsDisplayCanvasBackgroundImage(nsDisplayListBuilder* aBuilder, nsIFrame* aFrame,
+                                 uint32_t aLayer, bool aIsThemed, const nsStyleBackground* aBg)
+    : nsDisplayBackgroundImage(aBuilder, aFrame, aLayer, aIsThemed, aBg)
+  {}
+
+  virtual void Paint(nsDisplayListBuilder* aBuilder, nsRenderingContext* aCtx) MOZ_OVERRIDE;
+
+  virtual bool ShouldFixToViewport(nsDisplayListBuilder* aBuilder) MOZ_OVERRIDE
+  {
+    // Put background-attachment:fixed canvas background images in their own
+    // compositing layer. Since we know their background painting area can't
+    // change (unless the viewport size itself changes), async scrolling
+    // will work well.
+    return mBackgroundStyle->mLayers[mLayer].mAttachment == NS_STYLE_BG_ATTACHMENT_FIXED &&
+           !mBackgroundStyle->mLayers[mLayer].mImage.IsEmpty();
+  }
+ 
+  // We still need to paint a background color as well as an image for this item, 
+  // so we can't support this yet.
+  virtual bool SupportsOptimizingToImage() MOZ_OVERRIDE { return false; }
+  
+  
+  NS_DISPLAY_DECL_NAME("CanvasBackgroundImage", TYPE_CANVAS_BACKGROUND_IMAGE)
+};
 
 #endif /* nsCanvasFrame_h___ */

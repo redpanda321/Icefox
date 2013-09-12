@@ -6,6 +6,7 @@
 
 #include <math.h>
 
+#include "base/message_loop.h"
 #include "base/histogram.h"
 #include "base/win_util.h"
 
@@ -100,7 +101,7 @@ void MessagePumpForUI::ScheduleWork() {
 
   // In order to wake up any cross-process COM calls which may currently be
   // pending on the main thread, we also have to post a UI message.
-  PostMessage(message_hwnd_, WM_NULL, NULL, 0);
+  PostMessage(message_hwnd_, WM_NULL, 0, 0);
 }
 
 void MessagePumpForUI::ScheduleDelayedWork(const Time& delayed_work_time) {
@@ -380,10 +381,17 @@ bool MessagePumpForUI::ProcessPumpReplacementMessage() {
   // that the re-post of kMsgHaveWork may be asynchronous to this thread!!
 
   MSG msg;
-  bool have_message = (0 != PeekMessage(&msg, NULL, 0, 0, PM_REMOVE));
-
-  if (have_message && msg.message == WM_NULL)
+  bool have_message = false;
+  if (MessageLoop::current()->os_modal_loop()) {
+    // We only peek out WM_PAINT and WM_TIMER here for reasons mentioned above.
+    have_message = PeekMessage(&msg, NULL, WM_PAINT, WM_PAINT, PM_REMOVE) ||
+                   PeekMessage(&msg, NULL, WM_TIMER, WM_TIMER, PM_REMOVE);
+  } else {
     have_message = (0 != PeekMessage(&msg, NULL, 0, 0, PM_REMOVE));
+
+    if (have_message && msg.message == WM_NULL)
+      have_message = (0 != PeekMessage(&msg, NULL, 0, 0, PM_REMOVE));
+  }
 
   DCHECK(!have_message || kMsgHaveWork != msg.message ||
          msg.hwnd != message_hwnd_);
@@ -408,7 +416,7 @@ bool MessagePumpForUI::ProcessPumpReplacementMessage() {
 // MessagePumpForIO public:
 
 MessagePumpForIO::MessagePumpForIO() {
-  port_.Set(CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, NULL, 1));
+  port_.Set(CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 1));
   DCHECK(port_.IsValid());
 }
 
@@ -522,7 +530,7 @@ bool MessagePumpForIO::WaitForIOCompletion(DWORD timeout, IOHandler* filter) {
 // Asks the OS for another IO completion result.
 bool MessagePumpForIO::GetIOItem(DWORD timeout, IOItem* item) {
   memset(item, 0, sizeof(*item));
-  ULONG_PTR key = NULL;
+  ULONG_PTR key = 0;
   OVERLAPPED* overlapped = NULL;
   if (!GetQueuedCompletionStatus(port_.Get(), &item->bytes_transfered, &key,
                                  &overlapped, timeout)) {

@@ -1,4 +1,8 @@
 <?xml version="1.0"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 <?xml-stylesheet href="chrome://global/skin" type="text/css"?>
 <window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         width="800" height="800" orient="vertical" onload="initRemoteFrameScript();">
@@ -61,8 +65,7 @@
     function randomClick() {
        // First focus the remote frame, then dispatch click. This way remote frame gets focus before
        // mouse event.
-       document.getElementById('page').QueryInterface(Components.interfaces.nsIFrameLoaderOwner)
-                                      .frameLoader.activateRemoteFrame();
+       document.getElementById('page').focus();
        var frameLoader = document.getElementById('page').QueryInterface(Components.interfaces.nsIFrameLoaderOwner).frameLoader;
        var x = parseInt(Math.random() * 100);
        var y = parseInt(Math.random() * 100);
@@ -73,8 +76,7 @@
     function keyPress() {
        // First focus the remote frame, then dispatch click. This way remote frame gets focus before
        // mouse event.
-       document.getElementById('page').QueryInterface(Components.interfaces.nsIFrameLoaderOwner)
-                                      .frameLoader.activateRemoteFrame();
+       document.getElementById('page').focus();
        var frameLoader = document.getElementById('page').QueryInterface(Components.interfaces.nsIFrameLoaderOwner).frameLoader;
 
        var keyCode = Components.interfaces.nsIDOMKeyEvent.DOM_VK_A;
@@ -92,8 +94,49 @@
     }
 
     function initRemoteFrameScript() {
-      // 1. Test that loading a script works
+      // 1. Test that loading a script works, and that accessing process level mm and
+      //     global mm works.
+      var ppm = Components.classes["@mozilla.org/parentprocessmessagemanager;1"]
+                          .getService(Components.interfaces.nsIMessageBroadcaster);
+      var gm = Components.classes["@mozilla.org/globalmessagemanager;1"]
+                         .getService(Components.interfaces.nsIMessageBroadcaster);
+      var cpm = Components.classes["@mozilla.org/childprocessmessagemanager;1"]
+                            .getService(Components.interfaces.nsISyncMessageSender);
+
+      if (ppm.childCount != 2) {
+        alert("Should have two child processes!");
+      }
+      var childprocessmm = ppm.getChildAt(1); // 0 is the in-process child process mm
+      
+      childprocessmm.addMessageListener("ppm-sync",
+        function(m) {
+          if (m.target != childprocessmm) alert("Wrong target!");
+          document.getElementById("messageLog").value += "[SYNC1 PPM]"; 
+        }
+      );
+      
+      ppm.addMessageListener("ppm-sync",
+        function(m) {
+          // Check that global process message manager gets the per-process mm as target.
+          if (m.target != childprocessmm) alert("Wrong target!");
+          document.getElementById("messageLog").value += "[SYNC2 PPM]"; 
+        }
+      );
+      childprocessmm.addMessageListener("ppm-async",
+        function(m) {
+          if (m.target != childprocessmm) alert("Wrong target!");
+          document.getElementById("messageLog").value += "[ASYNC1 PPM]"; 
+        }
+      );
+      ppm.addMessageListener("ppm-async",
+        function(m) {
+          // Check that global process message manager gets the per-process mm as target.
+          if (m.target != childprocessmm) alert("Wrong target!");
+          document.getElementById("messageLog").value += "[ASYNC2 PPM]"; 
+        }
+      );
       messageManager.loadFrameScript("chrome://global/content/remote-test-ipc.js", true);
+      ppm.sendAsyncMessage("cpm-async");
 
       // 2. Test that adding message listener works, and that receiving a sync message works.
       messageManager.addMessageListener("linkclick",
@@ -117,7 +160,7 @@
           receiveMessage: function(m) {
             var s = (m.json.message == "linkclick-received") &amp;&amp;
                     (this.foobarObjectVar) ? "PASS" : "FAIL";
-            messageManager.sendAsyncMessage("chrome-message", { ok : s } );
+            messageManager.broadcastAsyncMessage("chrome-message", { ok : s } );
           }
         }
         );
@@ -153,7 +196,7 @@
     function messageSpeed() {
       speedTestCount = 0;
       messageManager.addMessageListener("speed-test", speedHandler);
-      messageManager.sendAsyncMessage("speed-test-start");
+      messageManager.broadcastAsyncMessage("speed-test-start");
     }
 
     function speedHandler() {
@@ -173,7 +216,7 @@
       if (++addRemoveTestCount == 1) {
         alert("Expected echo message");
         messageManager.removeMessageListener("async-echo", echoListener);
-        messageManager.sendAsyncMessage("async-echo");
+        messageManager.broadcastAsyncMessage("async-echo");
         return;
       }
       alert("Unexpected echo message");
@@ -182,7 +225,7 @@
     function listenerAddRemove() {
       addRemoveTestCount = 0;
       messageManager.addMessageListener("async-echo", echoListener);
-      messageManager.sendAsyncMessage("async-echo");
+      messageManager.broadcastAsyncMessage("async-echo");
     }
 
     var MozAfterPaintCount = 0;
@@ -242,8 +285,10 @@
   </toolbar>
   <toolbar><label value="Load a script (URL) to content process:"/>
     <textbox flex="1" id="script"/><button
-      label="send" oncommand="document.getElementById('page').QueryInterface(Components.interfaces.nsIFrameLoaderOwner).frameLoader.
-                              messageManager.loadFrameScript(this.previousSibling.value, false);"/>
+      label="send" oncommand="document.getElementById('page')
+                                      .QueryInterface(Components.interfaces.nsIFrameLoaderOwner)
+                                      .frameLoader.messageManager
+                                      .loadFrameScript(this.previousSibling.value, false);"/>
   </toolbar>
   <toolbar>
     <label value="Eval script in chrome context"/>
@@ -254,7 +299,6 @@
                oncommand="document.getElementById('page').QueryInterface(Components.interfaces.nsIFrameLoaderOwner).frameLoader.delayRemoteDialogs = this.checked;"/>
   </toolbar>
 
-  <browser type="content" src="http://www.google.com/" flex="1" id="page" remote="true"
-           onfocus="this.QueryInterface(Components.interfaces.nsIFrameLoaderOwner).frameLoader.activateRemoteFrame();"/>
+  <browser type="content" src="http://www.google.com/" flex="1" id="page" remote="true"/>
   <label id="messageLog" value="" crop="center"/>
 </window>

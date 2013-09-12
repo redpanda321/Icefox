@@ -1,8 +1,11 @@
 Cu.import("resource://services-sync/util.js");
-Cu.import("resource://services-sync/service.js");
-Cu.import("resource://services-sync/base_records/crypto.js");
-Cu.import("resource://services-sync/base_records/keys.js");
+Cu.import("resource://services-sync/record.js");
 Cu.import("resource://services-sync/resource.js");
+Cu.import("resource://testing-common/services/sync/fakeservices.js");
+Cu.import("resource://testing-common/services/sync/utils.js");
+
+Svc.DefaultPrefs.set("registerEngines", "");
+Cu.import("resource://services-sync/service.js");
 
 function FakeCollection() {
   this.deleted = false;
@@ -12,183 +15,215 @@ FakeCollection.prototype = {
     let self = this;
     return function(request, response) {
       let body = "";
+      self.timestamp = new_timestamp();
+      let timestamp = "" + self.timestamp;
       if (request.method == "DELETE") {
-          body = JSON.stringify(Date.now() / 1000);
+          body = timestamp;
           self.deleted = true;
       }
+      response.setHeader("X-Weave-Timestamp", timestamp);
       response.setStatusLine(request.httpVersion, 200, "OK");
       response.bodyOutputStream.write(body, body.length);
     };
   }
 };
 
-function serviceUnavailable(request, response) {
-  let body = "Service Unavailable";
-  response.setStatusLine(request.httpVersion, 503, "Service Unavailable");
-  response.bodyOutputStream.write(body, body.length);
-}
-
-function createAndUploadKeypair() {
-  let keys = PubKeys.createKeypair(ID.get("WeaveCryptoID"),
-                                   PubKeys.defaultKeyUri,
-                                   PrivKeys.defaultKeyUri);
-  PubKeys.uploadKeypair(keys);
-}
-
-function createAndUploadSymKey(url) {
-  let symkey = Svc.Crypto.generateRandomKey();
-  let pubkey = PubKeys.getDefaultKey();
-  let meta = new CryptoMeta(url);
-  meta.addUnwrappedKey(pubkey, symkey);
-  let res = new Resource(meta.uri);
-  res.put(meta);
-  CryptoMetas.set(url, meta);
-}
-
 function setUpTestFixtures() {
   let cryptoService = new FakeCryptoService();
 
-  Weave.Service.clusterURL = "http://localhost:8080/";
-  Weave.Service.username = "johndoe";
-  Weave.Service.passphrase = "secret";
+  Service.serverURL = TEST_SERVER_URL;
+  Service.clusterURL = TEST_CLUSTER_URL;
 
-  createAndUploadKeypair();
-  createAndUploadSymKey("http://localhost:8080/1.0/johndoe/storage/crypto/steam");
-  createAndUploadSymKey("http://localhost:8080/1.0/johndoe/storage/crypto/petrol");
-  createAndUploadSymKey("http://localhost:8080/1.0/johndoe/storage/crypto/diesel");
+  setBasicCredentials("johndoe", null, "aabcdeabcdeabcdeabcdeabcde");
 }
 
-function test_withCollectionList_failOnCrypto() {
-  _("Weave.Service.wipeServer() deletes collections given as argument and aborts if a collection delete fails.");
+
+function run_test() {
+  initTestLogging("Trace");
+  run_next_test();
+}
+
+add_test(function test_wipeServer_list_success() {
+  _("Service.wipeServer() deletes collections given as argument.");
 
   let steam_coll = new FakeCollection();
-  let petrol_coll = new FakeCollection();
   let diesel_coll = new FakeCollection();
-  let crypto_steam = new ServerWBO('steam');
-  let crypto_diesel = new ServerWBO('diesel');
 
   let server = httpd_setup({
-    "/1.0/johndoe/storage/keys/pubkey": (new ServerWBO('pubkey')).handler(),
-    "/1.0/johndoe/storage/keys/privkey": (new ServerWBO('privkey')).handler(),
-    "/1.0/johndoe/storage/steam": steam_coll.handler(),
-    "/1.0/johndoe/storage/petrol": petrol_coll.handler(),
-    "/1.0/johndoe/storage/diesel": diesel_coll.handler(),
-    "/1.0/johndoe/storage/crypto/steam": crypto_steam.handler(),
-    "/1.0/johndoe/storage/crypto/petrol": serviceUnavailable,
-    "/1.0/johndoe/storage/crypto/diesel": crypto_diesel.handler()
+    "/1.1/johndoe/storage/steam": steam_coll.handler(),
+    "/1.1/johndoe/storage/diesel": diesel_coll.handler(),
+    "/1.1/johndoe/storage/petrol": httpd_handler(404, "Not Found")
   });
-  do_test_pending();
 
   try {
     setUpTestFixtures();
+    new SyncTestingInfrastructure("johndoe", "irrelevant", "irrelevant");
 
     _("Confirm initial environment.");
     do_check_false(steam_coll.deleted);
-    do_check_false(petrol_coll.deleted);
     do_check_false(diesel_coll.deleted);
 
-    do_check_true(crypto_steam.payload != undefined);
-    do_check_true(crypto_diesel.payload != undefined);
+    _("wipeServer() will happily ignore the non-existent collection and use the timestamp of the last DELETE that was successful.");
+    let timestamp = Service.wipeServer(["steam", "diesel", "petrol"]);
+    do_check_eq(timestamp, diesel_coll.timestamp);
 
-    do_check_true(CryptoMetas.contains("http://localhost:8080/1.0/johndoe/storage/crypto/steam"));
-    do_check_true(CryptoMetas.contains("http://localhost:8080/1.0/johndoe/storage/crypto/petrol"));
-    do_check_true(CryptoMetas.contains("http://localhost:8080/1.0/johndoe/storage/crypto/diesel"));
-
-    _("wipeServer() will happily ignore the non-existent collection, delete the 'steam' collection and abort after an receiving an error on the 'petrol' collection's symkey.");
-    let error;
-    try {
-      Weave.Service.wipeServer(["non-existent", "steam", "petrol", "diesel"]);
-    } catch(ex) {
-      error = ex;
-    }
-    _("wipeServer() threw this exception: " + error);
-    do_check_true(error != undefined);
-
-    _("wipeServer stopped deleting after encountering an error with the 'petrol' collection's symkey, thus only 'steam' and 'petrol' have been deleted.");
+    _("wipeServer stopped deleting after encountering an error with the 'petrol' collection, thus only 'steam' has been deleted.");
     do_check_true(steam_coll.deleted);
-    do_check_true(petrol_coll.deleted);
-    do_check_false(diesel_coll.deleted);
-
-    do_check_true(crypto_steam.payload == undefined);
-    do_check_true(crypto_diesel.payload != undefined);
-
-    do_check_false(CryptoMetas.contains("http://localhost:8080/1.0/johndoe/storage/crypto/steam"));
-    do_check_false(CryptoMetas.contains("http://localhost:8080/1.0/johndoe/storage/crypto/petrol"));
-    do_check_true(CryptoMetas.contains("http://localhost:8080/1.0/johndoe/storage/crypto/diesel"));
+    do_check_true(diesel_coll.deleted);
 
   } finally {
-    server.stop(do_test_finished);
+    server.stop(run_next_test);
     Svc.Prefs.resetBranch("");
-    CryptoMetas.clearCache();
   }
-}
+});
 
-function test_withCollectionList_failOnCollection() {
-  _("Weave.Service.wipeServer() deletes collections given as argument.");
+add_test(function test_wipeServer_list_503() {
+  _("Service.wipeServer() deletes collections given as argument.");
 
   let steam_coll = new FakeCollection();
   let diesel_coll = new FakeCollection();
-  let crypto_steam = new ServerWBO('steam');
-  let crypto_petrol = new ServerWBO('petrol');
-  let crypto_diesel = new ServerWBO('diesel');
 
   let server = httpd_setup({
-    "/1.0/johndoe/storage/keys/pubkey": (new ServerWBO('pubkey')).handler(),
-    "/1.0/johndoe/storage/keys/privkey": (new ServerWBO('privkey')).handler(),
-    "/1.0/johndoe/storage/steam": steam_coll.handler(),
-    "/1.0/johndoe/storage/petrol": serviceUnavailable,
-    "/1.0/johndoe/storage/diesel": diesel_coll.handler(),
-    "/1.0/johndoe/storage/crypto/steam": crypto_steam.handler(),
-    "/1.0/johndoe/storage/crypto/petrol": crypto_petrol.handler(),
-    "/1.0/johndoe/storage/crypto/diesel": crypto_diesel.handler()
+    "/1.1/johndoe/storage/steam": steam_coll.handler(),
+    "/1.1/johndoe/storage/petrol": httpd_handler(503, "Service Unavailable"),
+    "/1.1/johndoe/storage/diesel": diesel_coll.handler()
   });
-  do_test_pending();
 
   try {
     setUpTestFixtures();
+    new SyncTestingInfrastructure("johndoe", "irrelevant", "irrelevant");
 
     _("Confirm initial environment.");
     do_check_false(steam_coll.deleted);
     do_check_false(diesel_coll.deleted);
-
-    do_check_true(crypto_steam.payload != undefined);
-    do_check_true(crypto_petrol.payload != undefined);
-    do_check_true(crypto_diesel.payload != undefined);
-
-    do_check_true(CryptoMetas.contains("http://localhost:8080/1.0/johndoe/storage/crypto/steam"));
-    do_check_true(CryptoMetas.contains("http://localhost:8080/1.0/johndoe/storage/crypto/petrol"));
-    do_check_true(CryptoMetas.contains("http://localhost:8080/1.0/johndoe/storage/crypto/diesel"));
 
     _("wipeServer() will happily ignore the non-existent collection, delete the 'steam' collection and abort after an receiving an error on the 'petrol' collection.");
     let error;
     try {
-      Weave.Service.wipeServer(["non-existent", "steam", "petrol", "diesel"]);
+      Service.wipeServer(["non-existent", "steam", "petrol", "diesel"]);
+      do_throw("Should have thrown!");
     } catch(ex) {
       error = ex;
     }
     _("wipeServer() threw this exception: " + error);
-    do_check_true(error != undefined);
+    do_check_eq(error.status, 503);
 
     _("wipeServer stopped deleting after encountering an error with the 'petrol' collection, thus only 'steam' has been deleted.");
     do_check_true(steam_coll.deleted);
     do_check_false(diesel_coll.deleted);
 
-    do_check_true(crypto_steam.payload == undefined);
-    do_check_true(crypto_petrol.payload != undefined);
-    do_check_true(crypto_diesel.payload != undefined);
-
-    do_check_false(CryptoMetas.contains("http://localhost:8080/1.0/johndoe/storage/crypto/steam"));
-    do_check_true(CryptoMetas.contains("http://localhost:8080/1.0/johndoe/storage/crypto/petrol"));
-    do_check_true(CryptoMetas.contains("http://localhost:8080/1.0/johndoe/storage/crypto/diesel"));
-
   } finally {
-    server.stop(do_test_finished);
+    server.stop(run_next_test);
     Svc.Prefs.resetBranch("");
-    CryptoMetas.clearCache();
   }
-}
+});
 
-function run_test() {
-  test_withCollectionList_failOnCollection();
-  test_withCollectionList_failOnCrypto();
-}
+add_test(function test_wipeServer_all_success() {
+  _("Service.wipeServer() deletes all the things.");
+
+  /**
+   * Handle the bulk DELETE request sent by wipeServer.
+   */
+  let deleted = false;
+  let serverTimestamp;
+  function storageHandler(request, response) {
+    do_check_eq("DELETE", request.method);
+    do_check_true(request.hasHeader("X-Confirm-Delete"));
+    deleted = true;
+    serverTimestamp = return_timestamp(request, response);
+  }
+
+  let server = httpd_setup({
+    "/1.1/johndoe/storage": storageHandler
+  });
+  setUpTestFixtures();
+
+  _("Try deletion.");
+  new SyncTestingInfrastructure("johndoe", "irrelevant", "irrelevant");
+  let returnedTimestamp = Service.wipeServer();
+  do_check_true(deleted);
+  do_check_eq(returnedTimestamp, serverTimestamp);
+
+  server.stop(run_next_test);
+  Svc.Prefs.resetBranch("");
+});
+
+add_test(function test_wipeServer_all_404() {
+  _("Service.wipeServer() accepts a 404.");
+
+  /**
+   * Handle the bulk DELETE request sent by wipeServer. Returns a 404.
+   */
+  let deleted = false;
+  let serverTimestamp;
+  function storageHandler(request, response) {
+    do_check_eq("DELETE", request.method);
+    do_check_true(request.hasHeader("X-Confirm-Delete"));
+    deleted = true;
+    serverTimestamp = new_timestamp();
+    response.setHeader("X-Weave-Timestamp", "" + serverTimestamp);
+    response.setStatusLine(request.httpVersion, 404, "Not Found");
+  }
+
+  let server = httpd_setup({
+    "/1.1/johndoe/storage": storageHandler
+  });
+  setUpTestFixtures();
+
+  _("Try deletion.");
+  new SyncTestingInfrastructure("johndoe", "irrelevant", "irrelevant");
+  let returnedTimestamp = Service.wipeServer();
+  do_check_true(deleted);
+  do_check_eq(returnedTimestamp, serverTimestamp);
+
+  server.stop(run_next_test);
+  Svc.Prefs.resetBranch("");
+});
+
+add_test(function test_wipeServer_all_503() {
+  _("Service.wipeServer() throws if it encounters a non-200/404 response.");
+
+  /**
+   * Handle the bulk DELETE request sent by wipeServer. Returns a 503.
+   */
+  function storageHandler(request, response) {
+    do_check_eq("DELETE", request.method);
+    do_check_true(request.hasHeader("X-Confirm-Delete"));
+    response.setStatusLine(request.httpVersion, 503, "Service Unavailable");
+  }
+
+  let server = httpd_setup({
+    "/1.1/johndoe/storage": storageHandler
+  });
+  setUpTestFixtures();
+
+  _("Try deletion.");
+  let error;
+  try {
+    new SyncTestingInfrastructure("johndoe", "irrelevant", "irrelevant");
+    Service.wipeServer();
+    do_throw("Should have thrown!");
+  } catch (ex) {
+    error = ex;
+  }
+  do_check_eq(error.status, 503);
+
+  server.stop(run_next_test);
+  Svc.Prefs.resetBranch("");
+});
+
+add_test(function test_wipeServer_all_connectionRefused() {
+  _("Service.wipeServer() throws if it encounters a network problem.");
+  setUpTestFixtures();
+
+  _("Try deletion.");
+  try {
+    Service.wipeServer();
+    do_throw("Should have thrown!");
+  } catch (ex) {
+    do_check_eq(ex.result, Cr.NS_ERROR_CONNECTION_REFUSED);
+  }
+
+  run_next_test();
+  Svc.Prefs.resetBranch("");
+});

@@ -1,40 +1,7 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Jungshik Shin <jshin@mailaps.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "nsISO2022KRToUnicode.h"
 #include "nsUCSupport.h"
 #include "nsICharsetConverterManager.h"
@@ -42,7 +9,7 @@
 
 static NS_DEFINE_CID(kCharsetConverterManagerCID, NS_ICHARSETCONVERTERMANAGER_CID);
 
-NS_IMETHODIMP nsISO2022KRToUnicode::Convert(const char * aSrc, PRInt32 * aSrcLen, PRUnichar * aDest, PRInt32 * aDestLen)
+NS_IMETHODIMP nsISO2022KRToUnicode::Convert(const char * aSrc, int32_t * aSrcLen, PRUnichar * aDest, int32_t * aDestLen)
 {
   const unsigned char* srcEnd = (unsigned char*)aSrc + *aSrcLen;
   const unsigned char* src =(unsigned char*) aSrc;
@@ -71,14 +38,14 @@ NS_IMETHODIMP nsISO2022KRToUnicode::Convert(const char * aSrc, PRInt32 * aSrcLen
           mRunLength = 0;
         } 
         else if(*src & 0x80) {
-          *dest++ = 0xFFFD;
-          if(dest >= destEnd)
+          if (CHECK_OVERRUN(dest, destEnd, 1))
             goto error1;
+          *dest++ = 0xFFFD;
         } 
         else {
-          *dest++ = (PRUnichar) *src;
-          if(dest >= destEnd)
+          if (CHECK_OVERRUN(dest, destEnd, 1))
             goto error1;
+          *dest++ = (PRUnichar) *src;
         }
         break;
           
@@ -87,7 +54,7 @@ NS_IMETHODIMP nsISO2022KRToUnicode::Convert(const char * aSrc, PRInt32 * aSrcLen
           mState = mState_ESC_24;
         } 
         else  {
-          if((dest+2) >= destEnd)
+          if (CHECK_OVERRUN(dest, destEnd, 2))
             goto error1;
           *dest++ = (PRUnichar) 0x1b;
           *dest++ = (0x80 & *src) ? 0xFFFD : (PRUnichar) *src;
@@ -100,7 +67,7 @@ NS_IMETHODIMP nsISO2022KRToUnicode::Convert(const char * aSrc, PRInt32 * aSrcLen
           mState = mState_ESC_24_29;
         } 
         else  {
-          if((dest+3) >= destEnd)
+          if (CHECK_OVERRUN(dest, destEnd, 3))
             goto error1;
           *dest++ = (PRUnichar) 0x1b;
           *dest++ = (PRUnichar) '$';
@@ -116,7 +83,7 @@ NS_IMETHODIMP nsISO2022KRToUnicode::Convert(const char * aSrc, PRInt32 * aSrcLen
           mRunLength = 0;
         } 
         else  {
-          if((dest+4) >= destEnd)
+          if (CHECK_OVERRUN(dest, destEnd, 4))
             goto error1;
           *dest++ = (PRUnichar) 0x1b;
           *dest++ = (PRUnichar) '$';
@@ -127,36 +94,36 @@ NS_IMETHODIMP nsISO2022KRToUnicode::Convert(const char * aSrc, PRInt32 * aSrcLen
         break;
 
       case mState_KSX1001_1992:
-        if (0x20 < (PRUint8) *src  && (PRUint8) *src < 0x7f) {
-          mData = (PRUint8) *src;
+        if (0x20 < (uint8_t) *src  && (uint8_t) *src < 0x7f) {
+          mData = (uint8_t) *src;
           mState = mState_KSX1001_1992_2ndbyte;
         } 
         else if (0x0f == *src) { // Shift-In (SI)
           mState = mState_ASCII;
           if (mRunLength == 0) {
-            if(dest+1 >= destEnd)
+            if (CHECK_OVERRUN(dest, destEnd, 1))
               goto error1;
             *dest++ = 0xFFFD;
           }
           mRunLength = 0;
         } 
-        else if ((PRUint8) *src == 0x20 || (PRUint8) *src == 0x09) {
+        else if ((uint8_t) *src == 0x20 || (uint8_t) *src == 0x09) {
           // Allow space and tab between SO and SI (i.e. in Hangul segment)
+          if (CHECK_OVERRUN(dest, destEnd, 1))
+            goto error1;
           mState = mState_KSX1001_1992;
           *dest++ = (PRUnichar) *src;
           ++mRunLength;
-          if(dest >= destEnd)
-          goto error1;
         } 
         else {         // Everything else is invalid.
+          if (CHECK_OVERRUN(dest, destEnd, 1))
+            goto error1;
           *dest++ = 0xFFFD;
-          if(dest >= destEnd)
-             goto error1;
         }
         break;
 
       case mState_KSX1001_1992_2ndbyte:
-        if ( 0x20 < (PRUint8) *src && (PRUint8) *src < 0x7f  ) {
+        if ( 0x20 < (uint8_t) *src && (uint8_t) *src < 0x7f  ) {
           if (!mEUCKRDecoder) {
             // creating a delegate converter (EUC-KR)
             nsresult rv;
@@ -171,9 +138,11 @@ NS_IMETHODIMP nsISO2022KRToUnicode::Convert(const char * aSrc, PRInt32 * aSrcLen
            *dest++ = 0xFFFD;
           } 
           else {              
+            if (CHECK_OVERRUN(dest, destEnd, 1))
+              goto error1;
             unsigned char ksx[2];
             PRUnichar uni;
-            PRInt32 ksxLen = 2, uniLen = 1;
+            int32_t ksxLen = 2, uniLen = 1;
             // mData is the original 1st byte.
             // *src is the present 2nd byte.
             // Put 2 bytes (one character) to ksx[] with EUC-KR encoding.
@@ -184,8 +153,6 @@ NS_IMETHODIMP nsISO2022KRToUnicode::Convert(const char * aSrc, PRInt32 * aSrcLen
             *dest++ = uni;
             ++mRunLength;
           }
-          if(dest >= destEnd)
-            goto error1;
           mState = mState_KSX1001_1992;
         } 
         else {        // Invalid 
@@ -195,17 +162,17 @@ NS_IMETHODIMP nsISO2022KRToUnicode::Convert(const char * aSrc, PRInt32 * aSrcLen
           else {
             mState = mState_KSX1001_1992;
           }
+          if (CHECK_OVERRUN(dest, destEnd, 1))
+            goto error1;
           *dest++ = 0xFFFD;
-          if(dest >= destEnd)
-           goto error1;
         }
         break;
 
       case mState_ERROR:
         mState = mLastLegalState;
-        *dest++ = 0xFFFD;
-        if(dest >= destEnd)
+        if (CHECK_OVERRUN(dest, destEnd, 1))
           goto error1;
+        *dest++ = 0xFFFD;
         break;
 
     } // switch

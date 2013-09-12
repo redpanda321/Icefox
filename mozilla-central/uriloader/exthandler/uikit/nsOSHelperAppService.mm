@@ -67,9 +67,9 @@ nsOSHelperAppService::nsOSHelperAppService() : nsExternalHelperAppService()
 nsOSHelperAppService::~nsOSHelperAppService()
 {}
 
-nsresult nsOSHelperAppService::OSProtocolHandlerExists(const char * aProtocolScheme, PRBool * aHandlerExists)
+nsresult nsOSHelperAppService::OSProtocolHandlerExists(const char * aProtocolScheme, bool * aHandlerExists)
 {
-  *aHandlerExists = PR_FALSE;
+  *aHandlerExists = false;
   return NS_OK;
 }
 
@@ -91,17 +91,17 @@ NS_IMETHODIMP nsOSHelperAppService::GetFromTypeAndExtension(const nsACString& aT
 already_AddRefed<nsIMIMEInfo>
 nsOSHelperAppService::GetMIMEInfoFromOS(const nsACString& aMIMEType,
                                         const nsACString& aFileExt,
-                                        PRBool * aFound)
+                                        bool * aFound)
 {
-  *aFound = PR_FALSE;
-  return nsnull;
+  *aFound = false;
+  return nullptr;
 }
 
 NS_IMETHODIMP
 nsOSHelperAppService::GetProtocolHandlerInfoFromOS(const nsACString &aScheme,
-                                                   PRBool *found,
+                                                   bool *found,
                                                    nsIHandlerInfo **_retval)
 {
-  *found = PR_FALSE;
+  *found = false;
   return NS_OK;
 }

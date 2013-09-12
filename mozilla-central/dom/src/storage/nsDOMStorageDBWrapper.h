@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Honza Bambas <honzab@firemni.cz>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsDOMStorageDB_h___
 #define nsDOMStorageDB_h___
@@ -86,8 +53,13 @@ class nsSessionStorageEntry;
 class nsDOMStorageDBWrapper
 {
 public:
-  nsDOMStorageDBWrapper() {}
-  ~nsDOMStorageDBWrapper() {}
+  nsDOMStorageDBWrapper();
+  ~nsDOMStorageDBWrapper();
+
+  /**
+   * Close the connections, finalizing all the cached statements.
+   */
+  void Close();
 
   nsresult
   Init();
@@ -96,7 +68,7 @@ public:
    * Retrieve a list of all the keys associated with a particular domain.
    */
   nsresult
-  GetAllKeys(nsDOMStorage* aStorage,
+  GetAllKeys(DOMStorageImpl* aStorage,
              nsTHashtable<nsSessionStorageEntry>* aKeys);
 
   /**
@@ -105,46 +77,41 @@ public:
    * @throws NS_ERROR_DOM_NOT_FOUND_ERR if key not found
    */
   nsresult
-  GetKeyValue(nsDOMStorage* aStorage,
+  GetKeyValue(DOMStorageImpl* aStorage,
               const nsAString& aKey,
               nsAString& aValue,
-              PRBool* aSecure);
+              bool* aSecure);
 
   /**
    * Set the value and secure flag for a key in storage.
    */
   nsresult
-  SetKey(nsDOMStorage* aStorage,
+  SetKey(DOMStorageImpl* aStorage,
          const nsAString& aKey,
          const nsAString& aValue,
-         PRBool aSecure,
-         PRInt32 aQuota,
-         PRBool aExcludeOfflineFromUsage,
-         PRInt32* aNewUsage);
+         bool aSecure);
 
   /**
    * Set the secure flag for a key in storage. Does nothing if the key was
    * not found.
    */
   nsresult
-  SetSecure(nsDOMStorage* aStorage,
+  SetSecure(DOMStorageImpl* aStorage,
             const nsAString& aKey,
-            const PRBool aSecure);
+            const bool aSecure);
 
   /**
    * Removes a key from storage.
    */
   nsresult
-  RemoveKey(nsDOMStorage* aStorage,
-            const nsAString& aKey,
-            PRBool aExcludeOfflineFromUsage,
-            PRInt32 aKeyUsage);
+  RemoveKey(DOMStorageImpl* aStorage,
+            const nsAString& aKey);
 
   /**
     * Remove all keys belonging to this storage.
     */
   nsresult
-  ClearStorage(nsDOMStorage* aStorage);
+  ClearStorage(DOMStorageImpl* aStorage);
 
   /**
    * Drop session-only storage for a specific host and all it's subdomains
@@ -162,15 +129,7 @@ public:
    * Removes all keys added by a given domain.
    */
   nsresult
-  RemoveOwner(const nsACString& aOwner, PRBool aIncludeSubDomains);
-
-  /**
-   * Removes keys owned by domains that either match or don't match the
-   * list.
-   */
-  nsresult
-  RemoveOwners(const nsTArray<nsString>& aOwners,
-               PRBool aIncludeSubDomains, PRBool aMatch);
+  RemoveOwner(const nsACString& aOwner);
 
   /**
    * Removes all keys from storage. Used when clearing storage.
@@ -179,47 +138,103 @@ public:
   RemoveAll();
 
   /**
-    * Returns usage for a storage using its GetQuotaDomainDBKey() as a key.
+   * Removes all keys from storage for a specific app.
+   * If aOnlyBrowserElement is true, it will remove only keys with the
+   * browserElement flag set.
+   * aAppId has to be a valid app id. It can't be NO_APP_ID or UNKNOWN_APP_ID.
+   */
+  nsresult
+  RemoveAllForApp(uint32_t aAppId, bool aOnlyBrowserElement);
+
+  /**
+    * Returns usage for a storage using its GetQuotaDBKey() as a key.
     */
   nsresult
-  GetUsage(nsDOMStorage* aStorage, PRBool aExcludeOfflineFromUsage, PRInt32 *aUsage);
+  GetUsage(DOMStorageImpl* aStorage, int32_t *aUsage);
 
   /**
     * Returns usage of the domain and optionaly by any subdomain.
     */
   nsresult
-  GetUsage(const nsACString& aDomain, PRBool aIncludeSubDomains, PRInt32 *aUsage);
+  GetUsage(const nsACString& aDomain, int32_t *aUsage, bool aPrivate);
+
+  /**
+   * Marks the storage as "cached" after the DOMStorageImpl object has loaded
+   * all items to its memory copy of the entries - IsScopeDirty returns false
+   * after call of this method for this storage.
+   *
+   * When a key is changed or deleted in the storage, the storage scope is
+   * marked as "dirty" again and makes the DOMStorageImpl object recache its
+   * keys on next access, because IsScopeDirty returns true again.
+   */
+  void
+  MarkScopeCached(DOMStorageImpl* aStorage);
+
+  /**
+   * Test whether the storage for the scope (i.e. origin or host) has been
+   * changed since the last MarkScopeCached call.
+   */
+  bool
+  IsScopeDirty(DOMStorageImpl* aStorage);
 
   /**
     * Turns "http://foo.bar.com:80" to "moc.rab.oof.:http:80",
     * i.e. reverses the host, appends a dot, appends the schema
     * and a port number.
     */
-  static nsresult CreateOriginScopeDBKey(nsIURI* aUri, nsACString& aKey);
+  static nsresult CreateScopeDBKey(nsIPrincipal* aPrincipal, nsACString& aKey);
 
   /**
     * Turns "http://foo.bar.com" to "moc.rab.oof.",
     * i.e. reverses the host and appends a dot.
     */
-  static nsresult CreateDomainScopeDBKey(nsIURI* aUri, nsACString& aKey);
-  static nsresult CreateDomainScopeDBKey(const nsACString& aAsciiDomain, nsACString& aKey);
+  static nsresult CreateReversedDomain(nsIURI* aUri, nsACString& aKey);
+  static nsresult CreateReversedDomain(const nsACString& aAsciiDomain, nsACString& aKey);
 
   /**
     * Turns "foo.bar.com" to "moc.rab.",
     * i.e. extracts eTLD+1 from the host, reverses the result
     * and appends a dot.
     */
-  static nsresult CreateQuotaDomainDBKey(const nsACString& aAsciiDomain,
-                                         PRBool aIncludeSubDomains, PRBool aETLDplus1Only,
-                                         nsACString& aKey);
+  static nsresult CreateQuotaDBKey(nsIPrincipal* aPrincipal,
+                                   nsACString& aKey);
 
-  static nsresult GetDomainFromScopeKey(const nsACString& aScope,
-                                         nsACString& aDomain);
+  /**
+    * Turns "foo.bar.com" to "moc.rab.",
+    * i.e. extracts eTLD+1 from the host, reverses the result
+    * and appends a dot.
+    */
+  static nsresult CreateQuotaDBKey(const nsACString& aDomain,
+                                   nsACString& aKey)
+  {
+    return CreateReversedDomain(aDomain, aKey);
+  }
+
+  /**
+   * Ensures the temp table flush timer is running. This is called when we add
+   * data that will need to be flushed.
+   */
+  void EnsureTempTableFlushTimer();
+
+  /**
+   * Called by the timer or on shutdown/profile change to flush all temporary
+   * tables that are too long in memory to disk.
+   * Set force to flush even a table doesn't meet the age limits.  Used during
+   * shutdown.
+   */
+  nsresult FlushAndDeleteTemporaryTables(bool force);
+
+  /**
+   * Stops the temp table flush timer.
+   */
+  void StopTempTableFlushTimer();
 
 protected:
   nsDOMStoragePersistentDB mPersistentDB;
   nsDOMStorageMemoryDB mSessionOnlyDB;
   nsDOMStorageMemoryDB mPrivateBrowsingDB;
+
+  nsCOMPtr<nsITimer> mTempTableFlushTimer;
 };
 
 #endif /* nsDOMStorageDB_h___ */

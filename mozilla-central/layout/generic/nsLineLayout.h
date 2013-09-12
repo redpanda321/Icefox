@@ -1,42 +1,9 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  * vim:cindent:ts=2:et:sw=2:
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Steve Clark <buster@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK *****
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  * This Original Code has been modified by IBM Corporation. Modifications made by IBM 
  * described herein are Copyright (c) International Business Machines Corporation, 2000.
  * Modifications to Mozilla code or documentation identified per MPL Section 3.3
@@ -72,20 +39,21 @@ public:
   ~nsLineLayout();
 
   void Init(nsBlockReflowState* aState, nscoord aMinLineHeight,
-            PRInt32 aLineNumber) {
+            int32_t aLineNumber) {
     mBlockRS = aState;
     mMinLineHeight = aMinLineHeight;
     mLineNumber = aLineNumber;
   }
 
-  PRInt32 GetLineNumber() const {
+  int32_t GetLineNumber() const {
     return mLineNumber;
   }
 
   void BeginLineReflow(nscoord aX, nscoord aY,
                        nscoord aWidth, nscoord aHeight,
-                       PRBool aImpactedByFloats,
-                       PRBool aIsTopOfPage);
+                       bool aImpactedByFloats,
+                       bool aIsTopOfPage,
+                       uint8_t aDirection);
 
   void EndLineReflow();
 
@@ -103,23 +71,24 @@ public:
   nsresult BeginSpan(nsIFrame* aFrame,
                      const nsHTMLReflowState* aSpanReflowState,
                      nscoord aLeftEdge,
-                     nscoord aRightEdge);
+                     nscoord aRightEdge,
+                     nscoord* aBaseline);
 
   // Returns the width of the span
   nscoord EndSpan(nsIFrame* aFrame);
 
-  PRInt32 GetCurrentSpanCount() const;
+  int32_t GetCurrentSpanCount() const;
 
-  void SplitLineTo(PRInt32 aNewCount);
+  void SplitLineTo(int32_t aNewCount);
 
-  PRBool IsZeroHeight();
+  bool IsZeroHeight();
 
-  // Reflows the frame and returns the reflow status. aPushedFrame is PR_TRUE
+  // Reflows the frame and returns the reflow status. aPushedFrame is true
   // if the frame is pushed to the next line because it doesn't fit
   nsresult ReflowFrame(nsIFrame* aFrame,
                        nsReflowStatus& aReflowStatus,
                        nsHTMLReflowMetrics* aMetrics,
-                       PRBool& aPushedFrame);
+                       bool& aPushedFrame);
 
   nsresult AddBulletFrame(nsIFrame* aFrame,
                           const nsHTMLReflowMetrics& aMetrics);
@@ -130,59 +99,20 @@ public:
 
   void VerticalAlignLine();
 
-  PRBool TrimTrailingWhiteSpace();
+  bool TrimTrailingWhiteSpace();
 
-  void HorizontalAlignFrames(nsRect& aLineBounds, PRBool aAllowJustify);
+  void HorizontalAlignFrames(nsRect& aLineBounds, bool aIsLastLine);
 
   /**
    * Handle all the relative positioning in the line, compute the
    * combined area (== overflow area) for the line, and handle view
    * sizing/positioning and the setting of the overflow rect.
    */
-  void RelativePositionFrames(nsRect& aCombinedArea);
-
-  //----------------------------------------
-
-  // Supporting methods and data for flags
-protected:
-#define LL_FIRSTLETTERSTYLEOK          0x00000008
-#define LL_ISTOPOFPAGE                 0x00000010
-#define LL_IMPACTEDBYFLOATS            0x00000040
-#define LL_LASTFLOATWASLETTERFRAME     0x00000080
-#define LL_LINEISEMPTY                 0x00000100
-#define LL_LINEENDSINBR                0x00000200
-#define LL_NEEDBACKUP                  0x00000400
-#define LL_INFIRSTLINE                 0x00000800
-#define LL_GOTLINEBOX                  0x00001000
-#define LL_INFIRSTLETTER               0x00002000
-#define LL_HASBULLET                   0x00004000
-#define LL_DIRTYNEXTLINE               0x00008000
-#define LL_LINEATSTART                 0x00010000
-#define LL_LASTFLAG                    LL_LINEATSTART
-
-  void SetFlag(PRUint32 aFlag, PRBool aValue)
-  {
-    NS_ASSERTION(aFlag<=LL_LASTFLAG, "bad flag");
-    NS_ASSERTION(aValue==PR_FALSE || aValue==PR_TRUE, "bad value");
-    if (aValue) { // set flag
-      mFlags |= aFlag;
-    }
-    else {        // unset flag
-      mFlags &= ~aFlag;
-    }
-  }
-
-  PRBool GetFlag(PRUint32 aFlag) const
-  {
-    NS_ASSERTION(aFlag<=LL_LASTFLAG, "bad flag");
-    return !!(mFlags & aFlag);
-  }
-
-public:
+  void RelativePositionFrames(nsOverflowAreas& aOverflowAreas);
 
   // Support methods for word-wrapping during line reflow
 
-  void SetTextJustificationWeights(PRInt32 aNumSpaces, PRInt32 aNumLetters) {
+  void SetTextJustificationWeights(int32_t aNumSpaces, int32_t aNumLetters) {
     mTextJustificationNumSpaces = aNumSpaces;
     mTextJustificationNumLetters = aNumLetters;
   }
@@ -191,9 +121,9 @@ public:
    * @return true if so far during reflow no non-empty content has been
    * placed in the line (according to nsIFrame::IsEmpty())
    */
-  PRBool LineIsEmpty() const
+  bool LineIsEmpty() const
   {
-    return GetFlag(LL_LINEISEMPTY);
+    return mLineIsEmpty;
   }
 
   /**
@@ -201,27 +131,27 @@ public:
    * (non-collapsed whitespace, replaced element, inline-block, etc) has been
    * placed in the line
    */
-  PRBool LineAtStart() const
+  bool LineAtStart() const
   {
-    return GetFlag(LL_LINEATSTART);
+    return mLineAtStart;
   }
 
-  PRBool LineIsBreakable() const;
+  bool LineIsBreakable() const;
 
-  PRBool GetLineEndsInBR() const 
+  bool GetLineEndsInBR() const 
   { 
-    return GetFlag(LL_LINEENDSINBR); 
+    return mLineEndsInBR;
   }
 
-  void SetLineEndsInBR(PRBool aOn) 
+  void SetLineEndsInBR(bool aOn) 
   { 
-    SetFlag(LL_LINEENDSINBR, aOn); 
+    mLineEndsInBR = aOn;
   }
 
   //----------------------------------------
   // Inform the line-layout about the presence of a floating frame
   // XXX get rid of this: use get-frame-type?
-  PRBool AddFloat(nsIFrame* aFloat, nscoord aAvailableWidth)
+  bool AddFloat(nsIFrame* aFloat, nscoord aAvailableWidth)
   {
     return mBlockRS->AddFloat(this, aFloat, aAvailableWidth);
   }
@@ -232,37 +162,37 @@ public:
 
   //----------------------------------------
 
-  PRBool GetFirstLetterStyleOK() const {
-    return GetFlag(LL_FIRSTLETTERSTYLEOK);
+  bool GetFirstLetterStyleOK() const {
+    return mFirstLetterStyleOK;
   }
 
-  void SetFirstLetterStyleOK(PRBool aSetting) {
-    SetFlag(LL_FIRSTLETTERSTYLEOK, aSetting);
+  void SetFirstLetterStyleOK(bool aSetting) {
+    mFirstLetterStyleOK = aSetting;
   }
 
-  PRBool GetInFirstLetter() const {
-    return GetFlag(LL_INFIRSTLETTER);
+  bool GetInFirstLetter() const {
+    return mInFirstLetter;
   }
 
-  void SetInFirstLetter(PRBool aSetting) {
-    SetFlag(LL_INFIRSTLETTER, aSetting);
+  void SetInFirstLetter(bool aSetting) {
+    mInFirstLetter = aSetting;
   }
 
-  PRBool GetInFirstLine() const {
-    return GetFlag(LL_INFIRSTLINE);
+  bool GetInFirstLine() const {
+    return mInFirstLine;
   }
 
-  void SetInFirstLine(PRBool aSetting) {
-    SetFlag(LL_INFIRSTLINE, aSetting);
+  void SetInFirstLine(bool aSetting) {
+    mInFirstLine = aSetting;
   }
 
   // Calling this during block reflow ensures that the next line of inlines
   // will be marked dirty, if there is one.
   void SetDirtyNextLine() {
-    SetFlag(LL_DIRTYNEXTLINE, PR_TRUE);
+    mDirtyNextLine = true;
   }
-  PRBool GetDirtyNextLine() {
-    return GetFlag(LL_DIRTYNEXTLINE);
+  bool GetDirtyNextLine() {
+    return mDirtyNextLine;
   }
 
   //----------------------------------------
@@ -275,7 +205,7 @@ public:
    * can call SetLastOptionalBreakPosition to record where a break could
    * have been made, but wasn't because we decided to place more content on
    * the line. For non-text frames, offset 0 means
-   * before the content, offset PR_INT32_MAX means after the content.
+   * before the content, offset INT32_MAX means after the content.
    * 
    * Currently this is used to handle cases where a single word comprises
    * multiple frames, and the first frame fits on the line but the whole word
@@ -290,12 +220,12 @@ public:
    * prioritizing break opportunities, we will not set a break if we have
    * already set a break with a higher priority. @see gfxBreakPriority.
    *
-   * @return PR_TRUE if we are actually reflowing with forced break position and we
+   * @return true if we are actually reflowing with forced break position and we
    * should break here
    */
-  PRBool NotifyOptionalBreakPosition(nsIContent* aContent, PRInt32 aOffset,
-                                     PRBool aFits, gfxBreakPriority aPriority) {
-    NS_ASSERTION(!aFits || !GetFlag(LL_NEEDBACKUP),
+  bool NotifyOptionalBreakPosition(nsIContent* aContent, int32_t aOffset,
+                                     bool aFits, gfxBreakPriority aPriority) {
+    NS_ASSERTION(!aFits || !mNeedBackup,
                   "Shouldn't be updating the break position with a break that fits after we've already flagged an overrun");
     // Remember the last break position that fits; if there was no break that fit,
     // just remember the first break
@@ -309,11 +239,11 @@ public:
       mForceBreakContentOffset == aOffset;
   }
   /**
-   * Like NotifyOptionalBreakPosition, but here it's OK for LL_NEEDBACKUP
+   * Like NotifyOptionalBreakPosition, but here it's OK for mNeedBackup
    * to be set, because the caller is merely pruning some saved break position(s)
    * that are actually not feasible.
    */
-  void RestoreSavedBreakPosition(nsIContent* aContent, PRInt32 aOffset,
+  void RestoreSavedBreakPosition(nsIContent* aContent, int32_t aOffset,
                                  gfxBreakPriority aPriority) {
     mLastOptionalBreakContent = aContent;
     mLastOptionalBreakContentOffset = aOffset;
@@ -323,14 +253,14 @@ public:
    * Signal that no backing up will be required after all.
    */
   void ClearOptionalBreakPosition() {
-    SetFlag(LL_NEEDBACKUP, PR_FALSE);
-    mLastOptionalBreakContent = nsnull;
+    mNeedBackup = false;
+    mLastOptionalBreakContent = nullptr;
     mLastOptionalBreakContentOffset = -1;
     mLastOptionalBreakPriority = eNoBreak;
   }
   // Retrieve last set optional break position. When this returns null, no
   // optional break has been recorded (which means that the line can't break yet).
-  nsIContent* GetLastOptionalBreakPosition(PRInt32* aOffset,
+  nsIContent* GetLastOptionalBreakPosition(int32_t* aOffset,
                                            gfxBreakPriority* aPriority) {
     *aOffset = mLastOptionalBreakContentOffset;
     *aPriority = mLastOptionalBreakPriority;
@@ -341,7 +271,7 @@ public:
    * Check whether frames overflowed the available width and CanPlaceFrame
    * requested backing up to a saved break position.
    */  
-  PRBool NeedsBackup() { return GetFlag(LL_NEEDBACKUP); }
+  bool NeedsBackup() { return mNeedBackup; }
   
   // Line layout may place too much content on a line, overflowing its available
   // width. When that happens, if SetLastOptionalBreakPosition has been
@@ -352,12 +282,12 @@ public:
   // Record that we want to break at the given content+offset (which
   // should have been previously returned by GetLastOptionalBreakPosition
   // from another nsLineLayout).
-  void ForceBreakAtPosition(nsIContent* aContent, PRInt32 aOffset) {
+  void ForceBreakAtPosition(nsIContent* aContent, int32_t aOffset) {
     mForceBreakContent = aContent;
     mForceBreakContentOffset = aOffset;
   }
-  PRBool HaveForcedBreakPosition() { return mForceBreakContent != nsnull; }
-  PRInt32 GetForcedBreakPosition(nsIContent* aContent) {
+  bool HaveForcedBreakPosition() { return mForceBreakContent != nullptr; }
+  int32_t GetForcedBreakPosition(nsIContent* aContent) {
     return mForceBreakContent == aContent ? mForceBreakContentOffset : -1;
   }
 
@@ -367,11 +297,14 @@ public:
    * context (e.g. MathML or floating first-letter).
    */
   nsIFrame* GetLineContainerFrame() const { return mBlockReflowState->frame; }
+  const nsHTMLReflowState* GetLineContainerRS() const {
+    return mBlockReflowState;
+  }
   const nsLineList::iterator* GetLine() const {
-    return GetFlag(LL_GOTLINEBOX) ? &mLineBox : nsnull;
+    return mGotLineBox ? &mLineBox : nullptr;
   }
   nsLineList::iterator* GetLine() {
-    return GetFlag(LL_GOTLINEBOX) ? &mLineBox : nsnull;
+    return mGotLineBox ? &mLineBox : nullptr;
   }
   
   /**
@@ -425,7 +358,7 @@ protected:
     // From metrics
     nscoord mAscent;
     nsRect mBounds;
-    nsRect mCombinedArea;
+    nsOverflowAreas mOverflowAreas;
 
     // From reflow-state
     nsMargin mMargin;
@@ -433,11 +366,11 @@ protected:
     nsMargin mOffsets;
 
     // state for text justification
-    PRInt32 mJustificationNumSpaces;
-    PRInt32 mJustificationNumLetters;
+    int32_t mJustificationNumSpaces;
+    int32_t mJustificationNumLetters;
     
     // Other state we use
-    PRUint8 mVerticalAlign;
+    uint8_t mVerticalAlign;
 
 // PerFrameData flags
 #define PFD_RELATIVEPOS                 0x00000001
@@ -450,13 +383,13 @@ protected:
 #define PFD_SKIPWHENTRIMMINGWHITESPACE  0x00000080
 #define PFD_LASTFLAG                    PFD_SKIPWHENTRIMMINGWHITESPACE
 
-    PRUint8 mFlags;
+    uint8_t mFlags;
 
-    void SetFlag(PRUint32 aFlag, PRBool aValue)
+    void SetFlag(uint32_t aFlag, bool aValue)
     {
       NS_ASSERTION(aFlag<=PFD_LASTFLAG, "bad flag");
-      NS_ASSERTION(aFlag<=PR_UINT8_MAX, "bad flag");
-      NS_ASSERTION(aValue==PR_FALSE || aValue==PR_TRUE, "bad value");
+      NS_ASSERTION(aFlag<=UINT8_MAX, "bad flag");
+      NS_ASSERTION(aValue==false || aValue==true, "bad value");
       if (aValue) { // set flag
         mFlags |= aFlag;
       }
@@ -465,7 +398,7 @@ protected:
       }
     }
 
-    PRBool GetFlag(PRUint32 aFlag) const
+    bool GetFlag(uint32_t aFlag) const
     {
       NS_ASSERTION(aFlag<=PFD_LASTFLAG, "bad flag");
       return !!(mFlags & aFlag);
@@ -492,12 +425,12 @@ protected:
     PerFrameData* mLastFrame;
 
     const nsHTMLReflowState* mReflowState;
-    PRPackedBool mNoWrap;
-    PRUint8 mDirection;
-    PRPackedBool mChangedFrameDirection;
-    PRPackedBool mZeroEffectiveSpanBox;
-    PRPackedBool mContainsFloat;
-    PRPackedBool mHasNonemptyContent;
+    bool mNoWrap;
+    uint8_t mDirection;
+    bool mChangedFrameDirection;
+    bool mZeroEffectiveSpanBox;
+    bool mContainsFloat;
+    bool mHasNonemptyContent;
 
     nscoord mLeftEdge;
     nscoord mX;
@@ -506,9 +439,10 @@ protected:
     nscoord mTopLeading, mBottomLeading;
     nscoord mLogicalHeight;
     nscoord mMinY, mMaxY;
+    nscoord* mBaseline;
 
     void AppendFrame(PerFrameData* pfd) {
-      if (nsnull == mLastFrame) {
+      if (nullptr == mLastFrame) {
         mFirstFrame = pfd;
       }
       else {
@@ -523,8 +457,8 @@ protected:
   PerSpanData* mCurrentSpan;
 
   gfxBreakPriority mLastOptionalBreakPriority;
-  PRInt32     mLastOptionalBreakContentOffset;
-  PRInt32     mForceBreakContentOffset;
+  int32_t     mLastOptionalBreakContentOffset;
+  int32_t     mForceBreakContentOffset;
 
   nscoord mMinLineHeight;
   
@@ -534,15 +468,17 @@ protected:
 
   // This state varies during the reflow of a line but is line
   // "global" state not span "local" state.
-  PRInt32 mLineNumber;
-  PRInt32 mTextJustificationNumSpaces;
-  PRInt32 mTextJustificationNumLetters;
+  int32_t mLineNumber;
+  int32_t mTextJustificationNumSpaces;
+  int32_t mTextJustificationNumLetters;
 
-  PRInt32 mTotalPlacedFrames;
+  int32_t mTotalPlacedFrames;
 
   nscoord mTopEdge;
   nscoord mMaxTopBoxHeight;
   nscoord mMaxBottomBoxHeight;
+
+  nscoord mInflationMinFontSize;
 
   // Final computed line-height value after VerticalAlignFrames for
   // the block has been called.
@@ -551,16 +487,26 @@ protected:
   // Amount of trimmable whitespace width for the trailing text frame, if any
   nscoord mTrimmableWidth;
 
-  PRInt32 mSpanDepth;
+  bool mFirstLetterStyleOK      : 1;
+  bool mIsTopOfPage             : 1;
+  bool mImpactedByFloats        : 1;
+  bool mLastFloatWasLetterFrame : 1;
+  bool mLineIsEmpty             : 1;
+  bool mLineEndsInBR            : 1;
+  bool mNeedBackup              : 1;
+  bool mInFirstLine             : 1;
+  bool mGotLineBox              : 1;
+  bool mInFirstLetter           : 1;
+  bool mHasBullet               : 1;
+  bool mDirtyNextLine           : 1;
+  bool mLineAtStart             : 1;
+
+  int32_t mSpanDepth;
 #ifdef DEBUG
-  PRInt32 mSpansAllocated, mSpansFreed;
-  PRInt32 mFramesAllocated, mFramesFreed;
+  int32_t mSpansAllocated, mSpansFreed;
+  int32_t mFramesAllocated, mFramesFreed;
 #endif
   PLArenaPool mArena; // Per span and per frame data, 4 byte aligned
-
-  PRUint32 mFlags;
-
-  PRUint8 mTextAlign;
 
   nsresult NewPerFrameData(PerFrameData** aResult);
 
@@ -568,7 +514,7 @@ protected:
 
   void FreeSpan(PerSpanData* psd);
 
-  PRBool InBlockContext() const {
+  bool InBlockContext() const {
     return mSpanDepth == 0;
   }
 
@@ -577,14 +523,14 @@ protected:
   void ApplyStartMargin(PerFrameData* pfd,
                         nsHTMLReflowState& aReflowState);
 
-  PRBool CanPlaceFrame(PerFrameData* pfd,
-                       PRUint8 aFrameDirection,
-                       PRBool aNotSafeToBreak,
-                       PRBool aFrameCanContinueTextRun,
-                       PRBool aCanRollBackBeforeFrame,
+  bool CanPlaceFrame(PerFrameData* pfd,
+                       uint8_t aFrameDirection,
+                       bool aNotSafeToBreak,
+                       bool aFrameCanContinueTextRun,
+                       bool aCanRollBackBeforeFrame,
                        nsHTMLReflowMetrics& aMetrics,
                        nsReflowStatus& aStatus,
-                       PRBool* aOptionalBreakAfterFits);
+                       bool* aOptionalBreakAfterFits);
 
   void PlaceFrame(PerFrameData* pfd,
                   nsHTMLReflowMetrics& aMetrics);
@@ -595,19 +541,19 @@ protected:
                             nscoord aDistanceFromTop,
                             nscoord aLineHeight);
 
-  void RelativePositionFrames(PerSpanData* psd, nsRect& aCombinedArea);
+  void RelativePositionFrames(PerSpanData* psd, nsOverflowAreas& aOverflowAreas);
 
-  PRBool TrimTrailingWhiteSpaceIn(PerSpanData* psd, nscoord* aDeltaWidth);
+  bool TrimTrailingWhiteSpaceIn(PerSpanData* psd, nscoord* aDeltaWidth);
 
-  void ComputeJustificationWeights(PerSpanData* psd, PRInt32* numSpaces, PRInt32* numLetters);
+  void ComputeJustificationWeights(PerSpanData* psd, int32_t* numSpaces, int32_t* numLetters);
 
   struct FrameJustificationState {
-    PRInt32 mTotalNumSpaces;
-    PRInt32 mTotalNumLetters;
+    int32_t mTotalNumSpaces;
+    int32_t mTotalNumLetters;
     nscoord mTotalWidthForSpaces;
     nscoord mTotalWidthForLetters;
-    PRInt32 mNumSpacesProcessed;
-    PRInt32 mNumLettersProcessed;
+    int32_t mNumSpacesProcessed;
+    int32_t mNumLettersProcessed;
     nscoord mWidthForSpacesProcessed;
     nscoord mWidthForLettersProcessed;
   };
@@ -619,7 +565,7 @@ protected:
 
 
 #ifdef DEBUG
-  void DumpPerSpanData(PerSpanData* psd, PRInt32 aIndent);
+  void DumpPerSpanData(PerSpanData* psd, int32_t aIndent);
 #endif
 };
 

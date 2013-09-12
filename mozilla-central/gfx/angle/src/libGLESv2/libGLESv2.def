@@ -144,11 +144,44 @@ EXPORTS
     glViewport                      @142
 
     ; Extensions
-    glTexImage3DOES					@143
-    
+    glTexImage3DOES                 @143
+    glBlitFramebufferANGLE          @149
+    glRenderbufferStorageMultisampleANGLE @150
+    glDeleteFencesNV                @151
+    glFinishFenceNV                 @152
+    glGenFencesNV                   @153
+    glGetFenceivNV                  @154
+    glIsFenceNV                     @155
+    glSetFenceNV                    @156
+    glTestFenceNV                   @157
+    glGetTranslatedShaderSourceANGLE @159
+    glTexStorage2DEXT               @160
+    glGetGraphicsResetStatusEXT     @161
+    glReadnPixelsEXT                @162
+    glGetnUniformfvEXT              @163
+    glGetnUniformivEXT              @164
+    glGenQueriesEXT                 @165
+    glDeleteQueriesEXT              @166
+    glIsQueryEXT                    @167
+    glBeginQueryEXT                 @168
+    glEndQueryEXT                   @169
+    glGetQueryivEXT                 @170
+    glGetQueryObjectuivEXT          @171
+    glVertexAttribDivisorANGLE      @172
+    glDrawArraysInstancedANGLE      @173
+    glDrawElementsInstancedANGLE    @174
+    glProgramBinaryOES              @175
+    glGetProgramBinaryOES           @176
+
     ; EGL dependencies
-    glCreateContext					@144 NONAME
-    glDestroyContext				@145 NONAME
-    glMakeCurrent					@146 NONAME
-    glGetCurrentContext				@147 NONAME
+    glCreateContext                 @144 NONAME
+    glDestroyContext                @145 NONAME
+    glMakeCurrent                   @146 NONAME
+    glGetCurrentContext             @147 NONAME
     glGetProcAddress                @148 NONAME
+    glBindTexImage                  @158 NONAME
+
+    ; GCC has problems with linking to undecored stdcall functions,
+    ; so we explicitly add aliases for APIs used by EGL
+    glGetProcAddress@4=glGetProcAddress
+    glBindTexImage@4=glBindTexImage

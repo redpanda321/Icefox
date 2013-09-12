@@ -1,3 +1,6 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """
 Makefile execution.
 
@@ -105,8 +108,13 @@ class _MakeContext(object):
                                           makeflags=self.makeflags,
                                           makeoverrides=self.overrides,
                                           workdir=self.workdir,
-                                          context=self.context, env=self.env, makelevel=self.makelevel,
-                                          targets=self.targets, keepgoing=self.options.keepgoing)
+                                          context=self.context,
+                                          env=self.env,
+                                          makelevel=self.makelevel,
+                                          targets=self.targets,
+                                          keepgoing=self.options.keepgoing,
+                                          silent=self.options.silent,
+                                          justprint=self.options.justprint)
 
             self.restarts += 1
 
@@ -186,6 +194,11 @@ def main(args, env, cwd, cb):
                       dest="printdir")
         op.add_option('--no-print-directory', action="store_false",
                       dest="printdir", default=True)
+        op.add_option('-s', '--silent', action="store_true",
+                      dest="silent", default=False)
+        op.add_option('-n', '--just-print', '--dry-run', '--recon',
+                      action="store_true",
+                      dest="justprint", default=False)
 
         options, arguments1 = op.parse_args(parsemakeflags(env))
         options, arguments2 = op.parse_args(args, values=options)
@@ -207,6 +220,13 @@ def main(args, env, cwd, cb):
 
         if options.printdir:
             shortflags.append('w')
+
+        if options.silent:
+            shortflags.append('s')
+            options.printdir = False
+
+        if options.justprint:
+            shortflags.append('n')
 
         loglevel = logging.WARNING
         if options.verbose:

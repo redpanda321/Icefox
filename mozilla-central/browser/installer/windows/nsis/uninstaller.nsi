@@ -1,41 +1,10 @@
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is the Mozilla Installer code.
-#
-# The Initial Developer of the Original Code is Mozilla Foundation
-# Portions created by the Initial Developer are Copyright (C) 2006
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#  Robert Strong <robert.bugzilla@gmail.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 # Required Plugins:
 # AppAssocReg http://nsis.sourceforge.net/Application_Association_Registration_plug-in
+# CityHash    http://mxr.mozilla.org/mozilla-central/source/other-licenses/nsis/Contrib/CityHash
 # ShellLink   http://nsis.sourceforge.net/ShellLink_plug-in
 # UAC         http://nsis.sourceforge.net/UAC_plug-in
 
@@ -59,7 +28,11 @@ RequestExecutionLevel user
 ; prevents compiling of the reg write logging.
 !define NO_LOG
 
+!define MaintUninstallKey \
+ "Software\Microsoft\Windows\CurrentVersion\Uninstall\MozillaMaintenanceService"
+
 Var TmpVal
+Var MaintCertKey
 
 ; Other included files may depend upon these includes!
 ; The following includes are provided by NSIS.
@@ -81,32 +54,38 @@ Var TmpVal
 !include defines.nsi
 !include common.nsh
 !include locales.nsi
-!include version.nsh
 
 ; This is named BrandShortName helper because we use this for software update
 ; post update cleanup.
 VIAddVersionKey "FileDescription" "${BrandShortName} Helper"
 VIAddVersionKey "OriginalFilename" "helper.exe"
 
-; Most commonly used macros for managing shortcuts
-!insertmacro _LoggingShortcutsCommon
-
-!insertmacro AddDDEHandlerValues
+!insertmacro AddDisabledDDEHandlerValues
 !insertmacro CleanVirtualStore
 !insertmacro ElevateUAC
-!insertmacro FindSMProgramsDir
 !insertmacro GetLongPath
 !insertmacro GetPathFromString
+!insertmacro InitHashAppModelId
 !insertmacro IsHandlerForInstallDir
+!insertmacro IsPinnedToTaskBar
+!insertmacro IsUserAdmin
+!insertmacro LogDesktopShortcut
+!insertmacro LogQuickLaunchShortcut
+!insertmacro LogStartMenuShortcut
+!insertmacro PinnedToStartMenuLnkCount
 !insertmacro RegCleanAppHandler
 !insertmacro RegCleanMain
 !insertmacro RegCleanUninstall
+!ifdef MOZ_METRO
+!insertmacro RemoveDEHRegistrationIfMatching
+!endif
 !insertmacro SetAppLSPCategories
 !insertmacro SetBrandNameVars
 !insertmacro UpdateShortcutAppModelIDs
 !insertmacro UnloadUAC
 !insertmacro WriteRegDWORD2
 !insertmacro WriteRegStr2
+!insertmacro CheckIfRegistryKeyExists
 
 !insertmacro un.ChangeMUIHeaderImage
 !insertmacro un.CheckForFilesInUse
@@ -116,6 +95,7 @@ VIAddVersionKey "OriginalFilename" "helper.exe"
 !insertmacro un.DeleteShortcuts
 !insertmacro un.GetLongPath
 !insertmacro un.GetSecondInstallPath
+!insertmacro un.InitHashAppModelId
 !insertmacro un.ManualCloseAppPrompt
 !insertmacro un.ParseUninstallLog
 !insertmacro un.RegCleanAppHandler
@@ -123,6 +103,9 @@ VIAddVersionKey "OriginalFilename" "helper.exe"
 !insertmacro un.RegCleanMain
 !insertmacro un.RegCleanUninstall
 !insertmacro un.RegCleanProtocolHandler
+!ifdef MOZ_METRO
+!insertmacro un.RemoveDEHRegistrationIfMatching
+!endif
 !insertmacro un.RemoveQuotesFromPath
 !insertmacro un.SetAppLSPCategories
 !insertmacro un.SetBrandNameVars
@@ -194,6 +177,51 @@ UninstPage custom un.preConfirm un.leaveConfirm
 ; Use the default dialog for IDD_VERIFY for a simple Banner
 ChangeUI IDD_VERIFY "${NSISDIR}\Contrib\UIs\default.exe"
 
+; This function is used to uninstall the maintenance service if the
+; application currently being uninstalled is the last application to use the 
+; maintenance service.
+Function un.UninstallServiceIfNotUsed
+  ; $0 will store if a subkey exists
+  ; $1 will store the first subkey if it exists or an empty string if it doesn't
+  ; Backup the old values
+  Push $0
+  Push $1
+
+  ; The maintenance service always uses the 64-bit registry on x64 systems
+  ${If} ${RunningX64}
+    SetRegView 64
+  ${EndIf}
+
+  ; Figure out the number of subkeys
+  StrCpy $0 0
+loop:
+  EnumRegKey $1 HKLM "Software\Mozilla\MaintenanceService" $0
+  StrCmp $1 "" doneCount
+  IntOp $0 $0 + 1
+  goto loop
+doneCount:
+  ; Restore back the registry view
+  ${If} ${RunningX64}
+    SetRegView lastUsed
+  ${EndIf}
+  ${If} $0 == 0
+    ; Get the path of the maintenance service uninstaller
+    ReadRegStr $1 HKLM ${MaintUninstallKey} "UninstallString"
+
+    ; If the uninstall string does not exist, skip executing it
+    StrCmp $1 "" doneUninstall
+
+    ; $1 is already a quoted string pointing to the install path
+    ; so we're already protected against paths with spaces
+    nsExec::Exec "$1 /S"
+doneUninstall:
+  ${EndIf}
+
+  ; Restore the old value of $1 and $0
+  Pop $1
+  Pop $0
+FunctionEnd
+
 ################################################################################
 # Install Sections
 ; Empty section required for the installer to compile as an uninstaller
@@ -223,10 +251,14 @@ Section "Uninstall"
   ${MUI_INSTALLOPTIONS_READ} $0 "unconfirm.ini" "Field 3" "State"
   ${If} "$0" == "1"
     ${un.DeleteRelativeProfiles} "Mozilla\Firefox"
+    ${un.DeleteRelativeProfiles} "Mozilla\MetroFirefox"
     RmDir "$APPDATA\Mozilla\Extensions\{ec8030f7-c20a-464f-9b0e-13a3a9e97384}"
     RmDir "$APPDATA\Mozilla\Extensions"
     RmDir "$APPDATA\Mozilla"
   ${EndIf}
+
+  ; setup the application model id registration value
+  ${un.InitHashAppModelId} "$INSTDIR" "Software\Mozilla\${AppName}\TaskBarIDs"
 
   SetShellVarContext current  ; Set SHCTX to HKCU
   ${un.RegCleanMain} "Software\Mozilla"
@@ -234,7 +266,14 @@ Section "Uninstall"
   ${un.DeleteShortcuts}
 
   ; Unregister resources associated with Win7 taskbar jump lists.
-  ApplicationID::UninstallJumpLists "${AppUserModelID}"
+  ${If} ${AtLeastWin7}
+  ${AndIf} "$AppUserModelID" != ""
+    ApplicationID::UninstallJumpLists "$AppUserModelID"
+  ${EndIf}
+
+  ; Remove any app model id's stored in the registry for this install path
+  DeleteRegValue HKCU "Software\Mozilla\${AppName}\TaskBarIDs" "$INSTDIR"
+  DeleteRegValue HKLM "Software\Mozilla\${AppName}\TaskBarIDs" "$INSTDIR"
 
   ClearErrors
   WriteRegStr HKLM "Software\Mozilla" "${BrandShortName}InstallerTest" "Write Test"
@@ -249,6 +288,12 @@ Section "Uninstall"
     ${un.DeleteShortcuts}
     ${un.SetAppLSPCategories}
   ${EndIf}
+
+!ifdef MOZ_METRO
+  ${If} ${AtLeastWin8}
+    ${un.CleanupMetroBrowserHandlerValues} ${DELEGATE_EXECUTE_HANDLER_ID}
+  ${EndIf}
+!endif
 
   ${un.RegCleanAppHandler} "FirefoxURL"
   ${un.RegCleanAppHandler} "FirefoxHTML"
@@ -266,6 +311,7 @@ Section "Uninstall"
     ${un.RegCleanFileHandler}  ".shtml" "FirefoxHTML"
     ${un.RegCleanFileHandler}  ".xht"   "FirefoxHTML"
     ${un.RegCleanFileHandler}  ".xhtml" "FirefoxHTML"
+    ${un.RegCleanFileHandler}  ".webm"  "FirefoxHTML"
   ${EndIf}
 
   SetShellVarContext all  ; Set SHCTX to HKLM
@@ -292,11 +338,30 @@ Section "Uninstall"
     DeleteRegValue HKLM "Software\RegisteredApplications" "${AppRegName}"
   ${EndIf}
 
+  ReadRegStr $R1 HKCU "$0" ""
+  ${un.RemoveQuotesFromPath} "$R1" $R1
+  ${un.GetParent} "$R1" $R1
+
+  ; Only remove the StartMenuInternet key if it refers to this install location.
+  ; The StartMenuInternet registry key is independent of the default browser
+  ; settings. The XPInstall base un-installer always removes this key if it is
+  ; uninstalling the default browser and it will always replace the keys when
+  ; installing even if there is another install of Firefox that is set as the
+  ; default browser. Now the key is always updated on install but it is only
+  ; removed if it refers to this install location.
+  ${If} "$INSTDIR" == "$R1"
+    DeleteRegKey HKCU "Software\Clients\StartMenuInternet\${FileMainEXE}"
+    DeleteRegValue HKCU "Software\RegisteredApplications" "${AppRegName}"
+  ${EndIf}
+
   StrCpy $0 "Software\Microsoft\Windows\CurrentVersion\App Paths\${FileMainEXE}"
   ${If} $R9 == "false"
     DeleteRegKey HKLM "$0"
     DeleteRegKey HKCU "$0"
     StrCpy $0 "Software\Microsoft\MediaPlayer\ShimInclusionList\${FileMainEXE}"
+    DeleteRegKey HKLM "$0"
+    DeleteRegKey HKCU "$0"
+    StrCpy $0 "Software\Microsoft\MediaPlayer\ShimInclusionList\plugin-container.exe"
     DeleteRegKey HKLM "$0"
     DeleteRegKey HKCU "$0"
     StrCpy $0 "Software\Classes\MIME\Database\Content Type\application/x-xpinstall;app=firefox"
@@ -317,6 +382,9 @@ Section "Uninstall"
   ; log so empty directories can be removed.
   ${If} ${FileExists} "$INSTDIR\updates"
     RmDir /r /REBOOTOK "$INSTDIR\updates"
+  ${EndIf}
+  ${If} ${FileExists} "$INSTDIR\updated"
+    RmDir /r /REBOOTOK "$INSTDIR\updated"
   ${EndIf}
   ${If} ${FileExists} "$INSTDIR\defaults\shortcuts"
     RmDir /r /REBOOTOK "$INSTDIR\defaults\shortcuts"
@@ -342,6 +410,13 @@ Section "Uninstall"
   ; Remove the uninstall directory that we control
   RmDir /r /REBOOTOK "$INSTDIR\uninstall"
 
+  ; Explictly remove empty webapprt dir in case it exists
+  ; See bug 757978
+  RmDir "$INSTDIR\webapprt\components"
+  RmDir "$INSTDIR\webapprt"
+
+  RmDir /r /REBOOTOK "$INSTDIR\${TO_BE_DELETED}"
+
   ; Remove the installation directory if it is empty
   ${RemoveDir} "$INSTDIR"
 
@@ -361,7 +436,26 @@ Section "Uninstall"
   ; Refresh desktop icons otherwise the start menu internet item won't be
   ; removed and other ugly things will happen like recreation of the app's
   ; clients registry key by the OS under some conditions.
-  System::Call "shell32::SHChangeNotify(i, i, i, i) v (0x08000000, 0, 0, 0)"
+  System::Call "shell32::SHChangeNotify(i ${SHCNE_ASSOCCHANGED}, i 0, i 0, i 0)"
+
+!ifdef MOZ_MAINTENANCE_SERVICE
+  ; Get the path the allowed cert is at and remove it
+  ; Keep this block of code last since it modfies the reg view
+  ServicesHelper::PathToUniqueRegistryPath "$INSTDIR"
+  Pop $MaintCertKey
+  ${If} $MaintCertKey != ""
+    ; We always use the 64bit registry for certs
+    ${If} ${RunningX64}
+      SetRegView 64
+    ${EndIf}
+    DeleteRegKey HKLM "$MaintCertKey"
+    ${If} ${RunningX64}
+      SetRegView lastused
+    ${EndIf}
+  ${EndIf}
+  Call un.UninstallServiceIfNotUsed
+!endif
+
 SectionEnd
 
 ################################################################################
@@ -572,10 +666,19 @@ FunctionEnd
 # Initialization Functions
 
 Function .onInit
+  ; Remove the current exe directory from the search order.
+  ; This only effects LoadLibrary calls and not implicitly loaded DLLs.
+  System::Call 'kernel32::SetDllDirectoryW(w "")'
+
+  ; We need this set up for most of the helper.exe operations.
   ${UninstallOnInitCommon}
 FunctionEnd
 
 Function un.onInit
+  ; Remove the current exe directory from the search order.
+  ; This only effects LoadLibrary calls and not implicitly loaded DLLs.
+  System::Call 'kernel32::SetDllDirectoryW(w "")'
+
   StrCpy $LANGUAGE 0
 
   ${un.UninstallUnOnInitCommon}

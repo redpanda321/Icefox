@@ -1,40 +1,8 @@
 /* -*- Mode: Java; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is sanitize dialog test code.
- *
- * The Initial Developer of the Original Code is Mozilla Corp.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Drew Willcoxon <adw@mozilla.com> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  * Tests the sanitize dialog (a.k.a. the clear recent history dialog).
@@ -51,16 +19,10 @@
 
 Cc["@mozilla.org/moz/jssubscript-loader;1"].
   getService(Ci.mozIJSSubScriptLoader).
-  loadSubScript("chrome://mochikit/content/MochiKit/packed.js");
-
-Cc["@mozilla.org/moz/jssubscript-loader;1"].
-  getService(Ci.mozIJSSubScriptLoader).
   loadSubScript("chrome://browser/content/sanitize.js");
 
 const dm = Cc["@mozilla.org/download-manager;1"].
            getService(Ci.nsIDownloadManager);
-const bhist = Cc["@mozilla.org/browser/global-history;2"].
-              getService(Ci.nsIBrowserHistory);
 const formhist = Cc["@mozilla.org/satchel/form-history;1"].
                  getService(Ci.nsIFormHistory2);
 
@@ -407,8 +369,9 @@ WindowHelper.prototype = {
     let key = aDelta < 0 ? "UP" : "DOWN";
     let abs = Math.abs(aDelta);
     let treechildren = this.getTree().treeBoxObject.treeBody;
+    treechildren.focus();
     for (let i = 0; i < abs; i++) {
-      EventUtils.sendKey(key, treechildren);
+      EventUtils.sendKey(key);
     }
   },
 
@@ -451,15 +414,16 @@ function addDownloadWithMinutesAgo(aMinutesAgo) {
     startTime: now_uSec - (aMinutesAgo * 60 * 1000000),
     endTime:   now_uSec - ((aMinutesAgo + 1) *60 * 1000000),
     state:     Ci.nsIDownloadManager.DOWNLOAD_FINISHED,
-    currBytes: 0, maxBytes: -1, preferredAction: 0, autoResume: 0
+    currBytes: 0, maxBytes: -1, preferredAction: 0, autoResume: 0,
+    guid: "a1bcD23eF4g5"
   };
 
   let db = dm.DBConnection;
   let stmt = db.createStatement(
     "INSERT INTO moz_downloads (id, name, source, target, startTime, endTime, " +
-      "state, currBytes, maxBytes, preferredAction, autoResume) " +
+      "state, currBytes, maxBytes, preferredAction, autoResume, guid) " +
     "VALUES (:id, :name, :source, :target, :startTime, :endTime, :state, " +
-      ":currBytes, :maxBytes, :preferredAction, :autoResume)");
+      ":currBytes, :maxBytes, :preferredAction, :autoResume, :guid)");
   try {
     for (let prop in data) {
       stmt.params[prop] = data[prop];
@@ -506,10 +470,13 @@ function addFormEntryWithMinutesAgo(aMinutesAgo) {
  */
 function addHistoryWithMinutesAgo(aMinutesAgo) {
   let pURI = makeURI("http://" + aMinutesAgo + "-minutes-ago.com/");
-  bhist.addPageWithDetails(pURI,
-                           aMinutesAgo + " minutes ago",
-                           now_uSec - (aMinutesAgo * 60 * 1000 * 1000));
-  is(bhist.isVisited(pURI), true,
+  PlacesUtils.history.addVisit(pURI,
+                               now_uSec - (aMinutesAgo * 60 * 1000 * 1000),
+                               null,
+                               Ci.nsINavHistoryService.TRANSITION_LINK,
+                               false,
+                               0);
+  is(PlacesUtils.bhistory.isVisited(pURI), true,
      "Sanity check: history visit " + pURI.spec +
      " should exist after creating it");
   return pURI;
@@ -519,9 +486,48 @@ function addHistoryWithMinutesAgo(aMinutesAgo) {
  * Removes all history visits, downloads, and form entries.
  */
 function blankSlate() {
-  bhist.removeAllPages();
+  PlacesUtils.bhistory.removeAllPages();
   dm.cleanUp();
   formhist.removeAllEntries();
+}
+
+/**
+ * Waits for all pending async statements on the default connection, before
+ * proceeding with aCallback.
+ *
+ * @param aCallback
+ *        Function to be called when done.
+ * @param aScope
+ *        Scope for the callback.
+ * @param aArguments
+ *        Arguments array for the callback.
+ *
+ * @note The result is achieved by asynchronously executing a query requiring
+ *       a write lock.  Since all statements on the same connection are
+ *       serialized, the end of this write operation means that all writes are
+ *       complete.  Note that WAL makes so that writers don't block readers, but
+ *       this is a problem only across different connections.
+ */
+function waitForAsyncUpdates(aCallback, aScope, aArguments)
+{
+  let scope = aScope || this;
+  let args = aArguments || [];
+  let db = PlacesUtils.history.QueryInterface(Ci.nsPIPlacesDatabase)
+                              .DBConnection;
+  let begin = db.createAsyncStatement("BEGIN EXCLUSIVE");
+  begin.executeAsync();
+  begin.finalize();
+
+  let commit = db.createAsyncStatement("COMMIT");
+  commit.executeAsync({
+    handleResult: function() {},
+    handleError: function() {},
+    handleCompletion: function(aReason)
+    {
+      aCallback.apply(scope, args);
+    }
+  });
+  commit.finalize();
 }
 
 /**
@@ -552,7 +558,7 @@ function downloadExists(aID)
 function doNextTest() {
   if (gAllTests.length <= gCurrTest) {
     blankSlate();
-    finish();
+    waitForAsyncUpdates(finish);
   }
   else {
     let ct = gCurrTest;
@@ -604,7 +610,7 @@ function ensureFormEntriesClearedState(aFormEntries, aShouldBeCleared) {
 function ensureHistoryClearedState(aURIs, aShouldBeCleared) {
   let niceStr = aShouldBeCleared ? "no longer" : "still";
   aURIs.forEach(function (aURI) {
-    is(bhist.isVisited(aURI), !aShouldBeCleared,
+    is(PlacesUtils.bhistory.isVisited(aURI), !aShouldBeCleared,
        "history visit " + aURI.spec + " should " + niceStr + " exist");
   });
 }
@@ -629,7 +635,7 @@ function openWindow(aOnloadCallback) {
         // ok()/is() do...
         try {
           aOnloadCallback(win);
-          doNextTest();
+          waitForAsyncUpdates(doNextTest);
         }
         catch (exc) {
           win.close();
@@ -653,5 +659,5 @@ function test() {
   blankSlate();
   waitForExplicitFinish();
   // Kick off all the tests in the gAllTests array.
-  doNextTest();
+  waitForAsyncUpdates(doNextTest);
 }

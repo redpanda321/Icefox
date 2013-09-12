@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set ts=2 sw=2 et tw=80: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsIScriptGlobalObject_h__
 #define nsIScriptGlobalObject_h__
@@ -44,7 +12,6 @@
 #include "nsIProgrammingLanguage.h"
 
 class nsIScriptContext;
-class nsIDOMDocument;
 class nsIDOMEvent;
 class nsIScriptGlobalObjectOwner;
 class nsIArray;
@@ -52,21 +19,14 @@ class nsScriptErrorEvent;
 class nsIScriptGlobalObject;
 struct JSObject; // until we finally remove GetGlobalJSObject...
 
+// XXXbz can we just remove all this script type id stuff?
 // Some helpers for working with integer "script type IDs", and specifically
 // for working with arrays of such objects. For example, it is common for
 // implementations supporting multiple script languages to keep each
 // language's nsIScriptContext in an array indexed by the language ID.
 
-// Implementation note: We always ignore nsIProgrammingLanguage::UNKNOWN and
-// nsIProgrammingLanguage::CPLUSPLUS - this gives javascript slot 0.  An
-// attempted micro-optimization tried to avoid us going all the way to 
-// nsIProgrammingLanguage::MAX; however:
-// * Someone is reportedly working on a PHP impl - that has value 9
-// * nsGenericElement therefore allows 4 bits for the value.
-// So there is no good reason for us to be more restrictive again...
-
 #define NS_STID_FIRST nsIProgrammingLanguage::JAVASCRIPT
-// like nsGenericElement, only 4 bits worth is valid...
+// only 4 bits worth is valid...
 #define NS_STID_LAST (nsIProgrammingLanguage::MAX > 0x000FU ? \
                       0x000FU : nsIProgrammingLanguage::MAX)
 
@@ -91,21 +51,21 @@ struct JSObject; // until we finally remove GetGlobalJSObject...
 // A helper function for nsIScriptGlobalObject implementations to use
 // when handling a script error.  Generally called by the global when a context
 // notifies it of an error via nsIScriptGlobalObject::HandleScriptError.
-// Returns PR_TRUE if HandleDOMEvent was actually called, in which case
+// Returns true if HandleDOMEvent was actually called, in which case
 // aStatus will be filled in with the status.
-PRBool
+bool
 NS_HandleScriptError(nsIScriptGlobalObject *aScriptGlobal,
                      nsScriptErrorEvent *aErrorEvent,
                      nsEventStatus *aStatus);
 
 
 #define NS_ISCRIPTGLOBALOBJECT_IID \
-{ 0xe9f3f2c1, 0x2d94, 0x4722, \
-  { 0xbb, 0xd4, 0x2b, 0xf6, 0xfd, 0xf4, 0x2f, 0x48 } }
+{ 0x92569431, 0x6e6e, 0x408a, \
+  { 0xa8, 0x8c, 0x45, 0x28, 0x5c, 0x1c, 0x85, 0x73 } }
 
 /**
-  * The global object which keeps a script context for each supported script
-  * language. This often used to store per-window global state.
+ * The global object which keeps a script context for each supported script
+ * language. This often used to store per-window global state.
  */
 
 class nsIScriptGlobalObject : public nsISupports
@@ -122,32 +82,17 @@ public:
    * has not been registered, as well as 'normal' errors, such as
    * out-of-memory
    */
-  virtual nsresult EnsureScriptEnvironment(PRUint32 aLangID) = 0;
+  virtual nsresult EnsureScriptEnvironment() = 0;
   /**
    * Get a script context (WITHOUT added reference) for the specified language.
    */
-  virtual nsIScriptContext *GetScriptContext(PRUint32 lang) = 0;
+  virtual nsIScriptContext *GetScriptContext() = 0;
   
-  /**
-   * Get the opaque "global" object for the specified lang.
-   */
-  virtual void *GetScriptGlobal(PRUint32 lang) = 0;
+  virtual JSObject* GetGlobalJSObject() = 0;
 
-  // Set/GetContext deprecated methods - use GetScriptContext/Global
-  virtual JSObject *GetGlobalJSObject() {
-        return (JSObject *)GetScriptGlobal(nsIProgrammingLanguage::JAVASCRIPT);
+  nsIScriptContext* GetContext() {
+    return GetScriptContext();
   }
-
-  virtual nsIScriptContext *GetContext() {
-        return GetScriptContext(nsIProgrammingLanguage::JAVASCRIPT);
-  }
-
-  /**
-   * Set a new language context for this global.  The native global for the
-   * context is created by the context's GetNativeGlobal() method.
-   */
-
-  virtual nsresult SetScriptContext(PRUint32 lang, nsIScriptContext *aContext) = 0;
 
   /**
    * Called when the global script for a language is finalized, typically as
@@ -156,21 +101,23 @@ public:
    * After this call, the passed object is dead - which should generally be the
    * same object the global is using for a global for that language.
    */
-
-  virtual void OnFinalize(PRUint32 aLangID, void *aScriptGlobal) = 0;
+  virtual void OnFinalize(JSObject* aObject) = 0;
 
   /**
    * Called to enable/disable scripts.
    */
-  virtual void SetScriptsEnabled(PRBool aEnabled, PRBool aFireTimeouts) = 0;
+  virtual void SetScriptsEnabled(bool aEnabled, bool aFireTimeouts) = 0;
 
   /**
    * Handle a script error.  Generally called by a script context.
    */
   virtual nsresult HandleScriptError(nsScriptErrorEvent *aErrorEvent,
                                      nsEventStatus *aEventStatus) {
-    return NS_HandleScriptError(this, aErrorEvent, aEventStatus);
+    NS_ENSURE_STATE(NS_HandleScriptError(this, aErrorEvent, aEventStatus));
+    return NS_OK;
   }
+
+  virtual bool IsBlackForCC() { return false; }
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsIScriptGlobalObject,

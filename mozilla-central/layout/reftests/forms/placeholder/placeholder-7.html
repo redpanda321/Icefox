@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html class="reftest-wait">
+  <link rel='stylesheet' type='text/css' href='placeholder-style.css'>
   <!-- Test: when focused, element should show placeholder. -->
   <script type="text/javascript">
     function focusPlaceholder()
@@ -13,6 +14,6 @@
   </script>
 
   <body onload="focusPlaceholder();">
-    <input type="text" id="p1" value="" placeholder="my placeholder" readonly onfocus="disableReftestWait();">
+    <input type="text" id="p1" value="" placeholder="my placeholder" onfocus="disableReftestWait();">
   </body>
 </html>

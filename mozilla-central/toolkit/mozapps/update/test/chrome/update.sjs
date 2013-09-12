@@ -1,14 +1,26 @@
-#include ../shared.js
+/* Any copyright is dedicated to the Public Domain.
+ * http://creativecommons.org/publicdomain/zero/1.0/
+ */
+
+/**
+ * Server side http server script for application update tests.
+ *
+ * !IMPORTANT - Since xpcshell used by the http server is launched with -v 170
+ * this file must not use features greater than JavaScript 1.7.
+ */
+
+const AUS_Cc = Components.classes;
+const AUS_Ci = Components.interfaces;
+
+#include ../sharedUpdateXML.js
 
 const URL_HOST = "http://example.com/";
 const URL_PATH = "chrome/toolkit/mozapps/update/test/chrome/";
 const URL_UPDATE = URL_HOST + URL_PATH + "update.sjs";
-const SHA512_HASH = "1d2307e309587ddd04299423b34762639ce6af3ee17cfdaa8fdd4e6" +
-                    "6b5a61bfb6555b6e40a82604908d6d68d3e42f318f82e22b6f5e111" +
-                    "8b4222e3417a2fa2d0";
-const SERVICE_URL = URL_HOST + URL_PATH + "empty.mar";
+const SERVICE_URL = URL_HOST + URL_PATH + FILE_SIMPLE_MAR;
 
 const SLOW_MAR_DOWNLOAD_INTERVAL = 100;
+var gTimer;
 
 function handleRequest(aRequest, aResponse) {
   var params = { };
@@ -33,18 +45,18 @@ function handleRequest(aRequest, aResponse) {
   if (params.slowDownloadMar) {
     aResponse.processAsync();
     aResponse.setHeader("Content-Type", "binary/octet-stream");
-    aResponse.setHeader("Content-Length", "775");
+    aResponse.setHeader("Content-Length", SIZE_SIMPLE_MAR);
     var marFile = AUS_Cc["@mozilla.org/file/directory_service;1"].
                   getService(AUS_Ci.nsIProperties).
                   get("CurWorkD", AUS_Ci.nsILocalFile);
-    var path = URL_PATH + "empty.mar";
+    var path = URL_PATH + FILE_SIMPLE_MAR;
     var pathParts = path.split("/");
     for(var i = 0; i < pathParts.length; ++i)
       marFile.append(pathParts[i]);
     var contents = readFileBytes(marFile);
-    var timer = AUS_Cc["@mozilla.org/timer;1"].
-                createInstance(AUS_Ci.nsITimer);
-    timer.initWithCallback(function(aTimer) {
+    gTimer = AUS_Cc["@mozilla.org/timer;1"].
+             createInstance(AUS_Ci.nsITimer);
+    gTimer.initWithCallback(function(aTimer) {
       aResponse.write(contents);
       aResponse.finish();
     }, SLOW_MAR_DOWNLOAD_INTERVAL, AUS_Ci.nsITimer.TYPE_ONE_SHOT);
@@ -54,8 +66,9 @@ function handleRequest(aRequest, aResponse) {
   if (params.uiURL) {
     var remoteType = "";
     if (!params.remoteNoTypeAttr &&
-        (params.uiURL == "BILLBOARD" || params.uiURL == "LICENSE"))
+        (params.uiURL == "BILLBOARD" || params.uiURL == "LICENSE")) {
       remoteType = " " + params.uiURL.toLowerCase() + "=\"1\"";
+    }
     aResponse.write("<html><head><meta http-equiv=\"content-type\" content=" +
                     "\"text/html; charset=utf-8\"></head><body" +
                     remoteType + ">" + params.uiURL +
@@ -74,12 +87,20 @@ function handleRequest(aRequest, aResponse) {
     return;
   }
 
-  var patches = getRemotePatchString("complete", SERVICE_URL, "SHA512",
-                                     SHA512_HASH, "775");
+  var hash;
+  var patches = "";
+  if (!params.partialPatchOnly) {
+    hash = SHA512_HASH_SIMPLE_MAR + (params.invalidCompleteHash ? "e" : "");
+    patches += getRemotePatchString("complete", SERVICE_URL, "SHA512",
+                                    hash, SIZE_SIMPLE_MAR);
+  }
 
-  if (!params.completePatchOnly)
+  if (!params.completePatchOnly) {
+    hash = SHA512_HASH_SIMPLE_MAR + (params.invalidPartialHash ? "e" : "");
     patches += getRemotePatchString("partial", SERVICE_URL, "SHA512",
-                                    SHA512_HASH, "775");
+                                    hash, SIZE_SIMPLE_MAR);
+  }
+
   var type = params.type ? params.type : "major";
   var name = params.name ? params.name : "App Update Test";
   var appVersion = params.appVersion ? params.appVersion : "99.9";
@@ -102,14 +123,31 @@ function handleRequest(aRequest, aResponse) {
     licenseURL = URL_HOST + URL_PATH + "missing.html";
   var showPrompt = params.showPrompt ? "true" : null;
   var showNever = params.showNever ? "true" : null;
+  var promptWaitTime = params.promptWaitTime ? params.promptWaitTime : null;
   var showSurvey = params.showSurvey ? "true" : null;
-  var extra1 = params.extra1 ? params.extra1 : null;
+
+  // For testing the deprecated update xml format
+  if (params.oldFormat) {
+    appVersion = null;
+    displayVersion = null;
+    billboardURL = null;
+    showPrompt = null;
+    showNever = null;
+    showSurvey = null;
+    detailsURL = URL_UPDATE + "?uiURL=BILLBOARD";
+    if (params.remoteNoTypeAttr)
+      detailsURL += "&amp;remoteNoTypeAttr=1";
+    var extensionVersion = params.appVersion ? params.appVersion : "99.9";
+    var version = params.displayVersion ? params.displayVersion
+                                        : "version " + extensionVersion;
+  }
+
   var updates = getRemoteUpdateString(patches, type, "App Update Test",
                                       displayVersion, appVersion,
-                                      platformVersion, buildID,
-                                      detailsURL, billboardURL,
-                                      licenseURL, showPrompt,
-                                      showNever, showSurvey, "test extra1");
+                                      platformVersion, buildID, detailsURL,
+                                      billboardURL, licenseURL, showPrompt,
+                                      showNever, promptWaitTime, showSurvey,
+                                      version, extensionVersion);
 
   aResponse.write(getRemoteUpdatesXMLString(updates));
 }
@@ -194,4 +232,32 @@ function getUpdateRDF(aParams) {
          "    </em:targetApplication>\n" +
          "  </RDF:Description>\n" +
          "</RDF:RDF>\n";
+}
+
+/**
+ * Reads the binary contents of a file and returns it as a string.
+ *
+ * @param  aFile
+ *         The file to read from.
+ * @return The contents of the file as a string.
+ */
+function readFileBytes(aFile) {
+  var fis = AUS_Cc["@mozilla.org/network/file-input-stream;1"].
+            createInstance(AUS_Ci.nsIFileInputStream);
+  fis.init(aFile, -1, -1, false);
+  var bis = AUS_Cc["@mozilla.org/binaryinputstream;1"].
+            createInstance(AUS_Ci.nsIBinaryInputStream);
+  bis.setInputStream(fis);
+  var data = [];
+  var count = fis.available();
+  while (count > 0) {
+    var bytes = bis.readByteArray(Math.min(65535, count));
+    data.push(String.fromCharCode.apply(null, bytes));
+    count -= bytes.length;
+    if (bytes.length == 0)
+      throw "Nothing read from input stream!";
+  }
+  data.join('');
+  fis.close();
+  return data.toString();
 }

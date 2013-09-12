@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et cindent: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla.
- *
- * The Initial Developer of the Original Code is IBM Corporation.
- * Portions created by IBM Corporation are Copyright (C) 2003
- * IBM Corporation. All Rights Reserved.
- *
- * Contributor(s):
- *   Darin Fisher <darin@meer.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsScannerString_h___
 #define nsScannerString_h___
@@ -99,7 +67,7 @@ class nsScannerBufferList
             void IncrementUsageCount() { ++mUsageCount; }
             void DecrementUsageCount() { --mUsageCount; }
 
-            PRBool IsInUse() const { return mUsageCount != 0; }
+            bool IsInUse() const { return mUsageCount != 0; }
 
             const PRUnichar* DataStart() const { return (const PRUnichar*) (this+1); }
                   PRUnichar* DataStart()       { return (      PRUnichar*) (this+1); }
@@ -113,14 +81,14 @@ class nsScannerBufferList
             const Buffer* Prev() const { return static_cast<const Buffer*>(prev); }
                   Buffer* Prev()       { return static_cast<Buffer*>(prev); }
 
-            PRUint32 DataLength() const { return mDataEnd - DataStart(); }
-            void SetDataLength(PRUint32 len) { mDataEnd = DataStart() + len; }
+            uint32_t DataLength() const { return mDataEnd - DataStart(); }
+            void SetDataLength(uint32_t len) { mDataEnd = DataStart() + len; }
 
           private:
 
             friend class nsScannerBufferList;
 
-            PRInt32    mUsageCount;
+            int32_t    mUsageCount;
             PRUnichar* mDataEnd;
         };
 
@@ -153,7 +121,7 @@ class nsScannerBufferList
         };
 
       static Buffer* AllocBufferFromString( const nsAString& );
-      static Buffer* AllocBuffer( PRUint32 capacity ); // capacity = number of chars
+      static Buffer* AllocBuffer( uint32_t capacity ); // capacity = number of chars
 
       nsScannerBufferList( Buffer* buf )
         : mRefCnt(0)
@@ -183,7 +151,7 @@ class nsScannerBufferList
       ~nsScannerBufferList() { ReleaseAll(); }
       void ReleaseAll();
 
-      PRInt32 mRefCnt;
+      int32_t mRefCnt;
       PRCList mBuffers;
   };
 
@@ -213,7 +181,7 @@ class nsScannerSubstring
     public:
       typedef nsScannerBufferList::Buffer      Buffer;
       typedef nsScannerBufferList::Position    Position;
-      typedef PRUint32                         size_type;
+      typedef uint32_t                         size_type;
 
       nsScannerSubstring();
       nsScannerSubstring( const nsAString& s );
@@ -225,15 +193,15 @@ class nsScannerSubstring
 
       size_type Length() const { return mLength; }
 
-      PRInt32 CountChar( PRUnichar ) const;
+      int32_t CountChar( PRUnichar ) const;
 
       void Rebind( const nsScannerSubstring&, const nsScannerIterator&, const nsScannerIterator& );
       void Rebind( const nsAString& );
 
       const nsSubstring& AsString() const;
 
-      PRBool GetNextFragment( nsScannerFragment& ) const;
-      PRBool GetPrevFragment( nsScannerFragment& ) const;
+      bool GetNextFragment( nsScannerFragment& ) const;
+      bool GetPrevFragment( nsScannerFragment& ) const;
 
       static inline Buffer* AllocBufferFromString( const nsAString& aStr ) { return nsScannerBufferList::AllocBufferFromString(aStr); }
       static inline Buffer* AllocBuffer( size_type aCapacity )             { return nsScannerBufferList::AllocBuffer(aCapacity); }
@@ -274,7 +242,7 @@ class nsScannerSubstring
 
       // these fields are used to implement AsString
       nsDependentSubstring mFlattenedRep;
-      PRBool               mIsDirty;
+      bool                 mIsDirty;
 
       friend class nsScannerSharedSubstring;
   };
@@ -314,7 +282,7 @@ class nsScannerSharedSubstring
   {
     public:
       nsScannerSharedSubstring()
-        : mBuffer(nsnull), mBufferList(nsnull) { }
+        : mBuffer(nullptr), mBufferList(nullptr) { }
 
       ~nsScannerSharedSubstring()
         {
@@ -472,7 +440,7 @@ class nsScannerIterator
 
 
 inline
-PRBool
+bool
 SameFragment( const nsScannerIterator& a, const nsScannerIterator& b )
   {
     return a.fragment().mFragmentStart == b.fragment().mFragmentStart;
@@ -482,16 +450,16 @@ SameFragment( const nsScannerIterator& a, const nsScannerIterator& b )
   /**
    * this class is needed in order to make use of the methods in nsAlgorithm.h
    */
-NS_SPECIALIZE_TEMPLATE
+template <>
 struct nsCharSourceTraits<nsScannerIterator>
   {
     typedef nsScannerIterator::difference_type difference_type;
 
     static
-    PRUint32
+    uint32_t
     readable_distance( const nsScannerIterator& first, const nsScannerIterator& last )
       {
-        return PRUint32(SameFragment(first, last) ? last.get() - first.get() : first.size_forward());
+        return uint32_t(SameFragment(first, last) ? last.get() - first.get() : first.size_forward());
       }
 
     static
@@ -531,14 +499,14 @@ nsScannerIterator::normalize_backward()
   }
 
 inline
-PRBool
+bool
 operator==( const nsScannerIterator& lhs, const nsScannerIterator& rhs )
   {
     return lhs.get() == rhs.get();
   }
 
 inline
-PRBool
+bool
 operator!=( const nsScannerIterator& lhs, const nsScannerIterator& rhs )
   {
     return lhs.get() != rhs.get();
@@ -607,25 +575,25 @@ AppendUnicodeTo( const nsScannerIterator& aSrcStart,
                  const nsScannerIterator& aSrcEnd,
                  nsScannerSharedSubstring& aDest );
 
-PRBool
+bool
 FindCharInReadable( PRUnichar aChar,
                     nsScannerIterator& aStart,
                     const nsScannerIterator& aEnd );
 
-PRBool
+bool
 FindInReadable( const nsAString& aPattern,
                 nsScannerIterator& aStart,
                 nsScannerIterator& aEnd,
                 const nsStringComparator& = nsDefaultStringComparator() );
 
-PRBool
+bool
 RFindInReadable( const nsAString& aPattern,
                  nsScannerIterator& aStart,
                  nsScannerIterator& aEnd,
                  const nsStringComparator& = nsDefaultStringComparator() );
 
 inline
-PRBool
+bool
 CaseInsensitiveFindInReadable( const nsAString& aPattern, 
                                nsScannerIterator& aStart,
                                nsScannerIterator& aEnd )

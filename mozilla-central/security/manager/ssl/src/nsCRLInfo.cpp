@@ -1,40 +1,7 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "prmem.h"
 #include "prerror.h"
 #include "prprf.h"
 
@@ -47,7 +14,6 @@
 #include "nsNSSShutDown.h"
 
 #include "nspr.h"
-extern "C" {
 #include "pk11func.h"
 #include "certdb.h"
 #include "cert.h"
@@ -55,7 +21,6 @@ extern "C" {
 #include "nssb64.h"
 #include "secasn1.h"
 #include "secder.h"
-}
 
 NS_IMPL_ISUPPORTS1(nsCRLInfo, nsICRLInfo)
 
@@ -73,7 +38,7 @@ nsCRLInfo::nsCRLInfo(CERTSignedCrl *signedCrl)
   nsAutoString nameInDb;
   nsAutoString nextUpdateLocale;
   nsAutoString lastUpdateLocale;
-  nsCAutoString lastFetchURL;
+  nsAutoCString lastFetchURL;
   PRTime lastUpdate = 0;
   PRTime nextUpdate = 0;
   SECStatus sec_rv;
@@ -100,7 +65,7 @@ nsCRLInfo::nsCRLInfo(CERTSignedCrl *signedCrl)
   if (crl->lastUpdate.len) {
     sec_rv = DER_UTCTimeToTime(&lastUpdate, &(crl->lastUpdate));
     if (sec_rv == SECSuccess && dateFormatter) {
-      dateFormatter->FormatPRTime(nsnull, kDateFormatShort, kTimeFormatNone,
+      dateFormatter->FormatPRTime(nullptr, kDateFormatShort, kTimeFormatNone,
                             lastUpdate, lastUpdateLocale);
     }
   }
@@ -109,7 +74,7 @@ nsCRLInfo::nsCRLInfo(CERTSignedCrl *signedCrl)
     // Next update time
     sec_rv = DER_UTCTimeToTime(&nextUpdate, &(crl->nextUpdate));
     if (sec_rv == SECSuccess && dateFormatter) {
-      dateFormatter->FormatPRTime(nsnull, kDateFormatShort, kTimeFormatNone,
+      dateFormatter->FormatPRTime(nullptr, kDateFormatShort, kTimeFormatNone,
                             nextUpdate, nextUpdateLocale);
     }
   }

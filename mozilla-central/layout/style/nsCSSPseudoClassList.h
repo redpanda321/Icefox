@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is atom lists for CSS pseudos.
- *
- * The Initial Developer of the Original Code is 
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   L. David Baron <dbaron@dbaron.org>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* atom list for CSS pseudo-classes */
 
@@ -42,33 +9,52 @@
  * This file contains the list of nsIAtoms and their values for CSS
  * pseudo-classes.  It is designed to be used as inline input to
  * nsCSSPseudoClasses.cpp *only* through the magic of C preprocessing.
- * All entries must be enclosed in the macros CSS_PSEUDO_CLASS or
- * CSS_STATE_PSEUDO_CLASS which will have cruel and unusual things
- * done to it.  The entries should be kept in some sort of logical
- * order.  The first argument to CSS_PSEUDO_CLASS is the C++
- * identifier of the atom.  The second argument is the string value of
- * the atom.  CSS_STATE_PSEUDO_CLASS also takes the name of the state
- * bits that the class corresponds to.  Only one of the bits needs to
- * match for the pseudo-class to match.  If CSS_STATE_PSEUDO_CLASS is
- * not defined, it'll be automatically defined to CSS_PSEUDO_CLASS.
+ * All entries must be enclosed in the macros CSS_PSEUDO_CLASS,
+ * CSS_STATE_DEPENDENT_PSEUDO_CLASS, or CSS_STATE_PSEUDO_CLASS which
+ * will have cruel and unusual things done to them.  The entries should
+ * be kept in some sort of logical order.  The first argument to
+ * CSS_PSEUDO_CLASS is the C++ identifier of the atom.  The second
+ * argument is the string value of the atom.
+ * CSS_STATE_DEPENDENT_PSEUDO_CLASS and CSS_STATE_PSEUDO_CLASS also take
+ * the name of the state bits that the class corresponds to.  Only one
+ * of the bits needs to match for a CSS_STATE_PSEUDO_CLASS to match;
+ * CSS_STATE_DEPENDENT_PSEUDO_CLASS matching depends on a customized per-class
+ * algorithm which should be defined in SelectorMatches() in
+ * nsCSSRuleProcessor.cpp.
+ *
+ * If CSS_STATE_PSEUDO_CLASS is not defined, it'll be automatically
+ * defined to CSS_STATE_DEPENDENT_PSEUDO_CLASS;
+ * if CSS_STATE_DEPENDENT_PSEUDO_CLASS is not defined, it'll be
+ * automatically defined to CSS_PSEUDO_CLASS.
  */
 
 // OUTPUT_CLASS=nsCSSPseudoClasses
 // MACRO_NAME=CSS_PSEUDO_CLASS
 
+#ifdef DEFINED_CSS_STATE_DEPENDENT_PSEUDO_CLASS
+#error "CSS_STATE_DEPENDENT_PSEUDO_CLASS shouldn't be defined"
+#endif
+
+#ifndef CSS_STATE_DEPENDENT_PSEUDO_CLASS
+#define CSS_STATE_DEPENDENT_PSEUDO_CLASS(_name, _value, _bit) \
+  CSS_PSEUDO_CLASS(_name, _value)
+#define DEFINED_CSS_STATE_DEPENDENT_PSEUDO_CLASS
+#endif
+
 #ifdef DEFINED_CSS_STATE_PSEUDO_CLASS
-#error "This shouldn't be defined"
+#error "CSS_STATE_PSEUDO_CLASS shouldn't be defined"
 #endif
 
 #ifndef CSS_STATE_PSEUDO_CLASS
 #define CSS_STATE_PSEUDO_CLASS(_name, _value, _bit) \
-  CSS_PSEUDO_CLASS(_name, _value)
+  CSS_STATE_DEPENDENT_PSEUDO_CLASS(_name, _value, _bit)
 #define DEFINED_CSS_STATE_PSEUDO_CLASS
 #endif
 
 // The CSS_PSEUDO_CLASS entries should all come before the
 // CSS_STATE_PSEUDO_CLASS entries.  The CSS_PSEUDO_CLASS entry order
-// must be the same as the order of cases in SelectorMatches.
+// must be the same as the order of cases in SelectorMatches.  :not
+// must be the last CSS_PSEUDO_CLASS.
 
 CSS_PSEUDO_CLASS(empty, ":empty")
 CSS_PSEUDO_CLASS(mozOnlyWhitespace, ":-moz-only-whitespace")
@@ -91,8 +77,6 @@ CSS_PSEUDO_CLASS(nthLastChild, ":nth-last-child")
 CSS_PSEUDO_CLASS(nthOfType, ":nth-of-type")
 CSS_PSEUDO_CLASS(nthLastOfType, ":nth-last-of-type")
 
-CSS_PSEUDO_CLASS(mozHasHandlerRef, ":-moz-has-handlerref")
-
 // Match nodes that are HTML but not XHTML
 CSS_PSEUDO_CLASS(mozIsHTML, ":-moz-is-html")
 
@@ -106,7 +90,7 @@ CSS_PSEUDO_CLASS(mozLocaleDir, ":-moz-locale-dir")
 // -moz-lwtheme may be used to match a document that has a lightweight theme
 CSS_PSEUDO_CLASS(mozLWTheme, ":-moz-lwtheme")
 
-// -moz-lwtheme-brighttext matches a document that has a bright lightweight theme
+// -moz-lwtheme-brighttext matches a document that has a dark lightweight theme
 CSS_PSEUDO_CLASS(mozLWThemeBrightText, ":-moz-lwtheme-brighttext")
 
 // -moz-lwtheme-darktext matches a document that has a bright lightweight theme
@@ -115,9 +99,22 @@ CSS_PSEUDO_CLASS(mozLWThemeDarkText, ":-moz-lwtheme-darktext")
 // Matches anything when the containing window is inactive
 CSS_PSEUDO_CLASS(mozWindowInactive, ":-moz-window-inactive")
 
+// Matches any table elements that have a nonzero border attribute,
+// according to HTML integer attribute parsing rules.
+CSS_PSEUDO_CLASS(mozTableBorderNonzero, ":-moz-table-border-nonzero")
+
+// Matches whatever the contextual reference elements are for the
+// matching operation.
+CSS_PSEUDO_CLASS(scope, ":-moz-scope")
+
 // :not needs to come at the end of the non-bit pseudo-class list, since
 // it doesn't actually get directly matched on in SelectorMatches.
 CSS_PSEUDO_CLASS(notPseudo, ":not")
+
+// :-moz-dir(ltr) and :-moz-dir(rtl) match elements whose resolved
+// directionality in the markup language is ltr or rtl respectively
+CSS_STATE_DEPENDENT_PSEUDO_CLASS(dir, ":-moz-dir",
+                                 NS_EVENT_STATE_LTR | NS_EVENT_STATE_RTL)
 
 CSS_STATE_PSEUDO_CLASS(link, ":link", NS_EVENT_STATE_UNVISITED)
 // what matches :link or :visited
@@ -136,6 +133,14 @@ CSS_STATE_PSEUDO_CLASS(target, ":target", NS_EVENT_STATE_URLTARGET)
 CSS_STATE_PSEUDO_CLASS(indeterminate, ":indeterminate",
                        NS_EVENT_STATE_INDETERMINATE)
 
+// Matches the element which is being displayed full-screen, and
+// any containing frames.
+CSS_STATE_PSEUDO_CLASS(mozFullScreen, ":-moz-full-screen", NS_EVENT_STATE_FULL_SCREEN)
+
+// Matches any element which is an ancestor of the DOM full-screen element,
+// or an ancestor of a containing frame of the full-screen element.
+CSS_STATE_PSEUDO_CLASS(mozFullScreenAncestor, ":-moz-full-screen-ancestor", NS_EVENT_STATE_FULL_SCREEN_ANCESTOR)
+
 // Matches if the element is focused and should show a focus ring
 CSS_STATE_PSEUDO_CLASS(mozFocusRing, ":-moz-focusring", NS_EVENT_STATE_FOCUSRING)
 
@@ -148,6 +153,16 @@ CSS_STATE_PSEUDO_CLASS(mozSuppressed, ":-moz-suppressed",
 CSS_STATE_PSEUDO_CLASS(mozLoading, ":-moz-loading", NS_EVENT_STATE_LOADING)
 CSS_STATE_PSEUDO_CLASS(mozTypeUnsupported, ":-moz-type-unsupported",
                        NS_EVENT_STATE_TYPE_UNSUPPORTED)
+CSS_STATE_PSEUDO_CLASS(mozTypeUnsupportedPlatform, ":-moz-type-unsupported-platform",
+                       NS_EVENT_STATE_TYPE_UNSUPPORTED_PLATFORM)
+CSS_STATE_PSEUDO_CLASS(mozHandlerClickToPlay, ":-moz-handler-clicktoplay",
+                       NS_EVENT_STATE_TYPE_CLICK_TO_PLAY)
+CSS_STATE_PSEUDO_CLASS(mozHandlerPlayPreview, ":-moz-handler-playpreview",
+                       NS_EVENT_STATE_TYPE_PLAY_PREVIEW)
+CSS_STATE_PSEUDO_CLASS(mozHandlerVulnerableUpdatable, ":-moz-handler-vulnerable-updatable",
+                       NS_EVENT_STATE_VULNERABLE_UPDATABLE)
+CSS_STATE_PSEUDO_CLASS(mozHandlerVulnerableNoUpdate, ":-moz-handler-vulnerable-no-update",
+                       NS_EVENT_STATE_VULNERABLE_NO_UPDATE)
 CSS_STATE_PSEUDO_CLASS(mozHandlerDisabled, ":-moz-handler-disabled",
                        NS_EVENT_STATE_HANDLER_DISABLED)
 CSS_STATE_PSEUDO_CLASS(mozHandlerBlocked, ":-moz-handler-blocked",
@@ -155,11 +170,9 @@ CSS_STATE_PSEUDO_CLASS(mozHandlerBlocked, ":-moz-handler-blocked",
 CSS_STATE_PSEUDO_CLASS(mozHandlerCrashed, ":-moz-handler-crashed",
                        NS_EVENT_STATE_HANDLER_CRASHED)
 
-#ifdef MOZ_MATHML
 CSS_STATE_PSEUDO_CLASS(mozMathIncrementScriptLevel,
                        ":-moz-math-increment-script-level",
                        NS_EVENT_STATE_INCREMENT_SCRIPT_LEVEL)
-#endif
 
 // CSS 3 UI
 // http://www.w3.org/TR/2004/CR-css3-ui-20040511/#pseudo-classes
@@ -174,10 +187,25 @@ CSS_STATE_PSEUDO_CLASS(mozReadOnly, ":-moz-read-only",
                        NS_EVENT_STATE_MOZ_READONLY)
 CSS_STATE_PSEUDO_CLASS(mozReadWrite, ":-moz-read-write",
                        NS_EVENT_STATE_MOZ_READWRITE)
-CSS_STATE_PSEUDO_CLASS(mozPlaceholder, ":-moz-placeholder",
-                       NS_EVENT_STATE_MOZ_PLACEHOLDER)
+CSS_STATE_PSEUDO_CLASS(mozSubmitInvalid, ":-moz-submit-invalid",
+                       NS_EVENT_STATE_MOZ_SUBMITINVALID)
+CSS_STATE_PSEUDO_CLASS(mozUIInvalid, ":-moz-ui-invalid",
+                       NS_EVENT_STATE_MOZ_UI_INVALID)
+CSS_STATE_PSEUDO_CLASS(mozUIValid, ":-moz-ui-valid",
+                       NS_EVENT_STATE_MOZ_UI_VALID)
+CSS_STATE_PSEUDO_CLASS(mozMeterOptimum, ":-moz-meter-optimum",
+                       NS_EVENT_STATE_OPTIMUM)
+CSS_STATE_PSEUDO_CLASS(mozMeterSubOptimum, ":-moz-meter-sub-optimum",
+                       NS_EVENT_STATE_SUB_OPTIMUM)
+CSS_STATE_PSEUDO_CLASS(mozMeterSubSubOptimum, ":-moz-meter-sub-sub-optimum",
+                       NS_EVENT_STATE_SUB_SUB_OPTIMUM)
 
 #ifdef DEFINED_CSS_STATE_PSEUDO_CLASS
 #undef DEFINED_CSS_STATE_PSEUDO_CLASS
 #undef CSS_STATE_PSEUDO_CLASS
+#endif
+
+#ifdef DEFINED_CSS_STATE_DEPENDENT_PSEUDO_CLASS
+#undef DEFINED_CSS_STATE_DEPENDENT_PSEUDO_CLASS
+#undef CSS_STATE_DEPENDENT_PSEUDO_CLASS
 #endif

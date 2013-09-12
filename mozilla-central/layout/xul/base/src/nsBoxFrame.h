@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
 
@@ -46,8 +14,11 @@
 #ifndef nsBoxFrame_h___
 #define nsBoxFrame_h___
 
+#include "mozilla/Attributes.h"
 #include "nsCOMPtr.h"
 #include "nsContainerFrame.h"
+#include "nsBoxLayout.h"
+
 class nsBoxLayoutState;
 
 // flags from box
@@ -59,15 +30,17 @@ class nsBoxLayoutState;
 #define NS_STATE_CURRENTLY_IN_DEBUG      NS_FRAME_STATE_BIT(25)
 //#define NS_STATE_SET_TO_DEBUG            NS_FRAME_STATE_BIT(26)  moved to nsBox.h
 //#define NS_STATE_DEBUG_WAS_SET           NS_FRAME_STATE_BIT(27)  moved to nsBox.h
-//                                         NS_FRAME_STATE_BIT(28)  not used anymore
+#define NS_STATE_MENU_HAS_POPUP_LIST       NS_FRAME_STATE_BIT(28) /* used on nsMenuFrame */
 #define NS_STATE_BOX_WRAPS_KIDS_IN_BLOCK NS_FRAME_STATE_BIT(29)
 #define NS_STATE_EQUAL_SIZE              NS_FRAME_STATE_BIT(30)
 //#define NS_STATE_IS_DIRECTION_NORMAL     NS_FRAME_STATE_BIT(31)  moved to nsIFrame.h
+#define NS_FRAME_MOUSE_THROUGH_ALWAYS    NS_FRAME_STATE_BIT(60)
+#define NS_FRAME_MOUSE_THROUGH_NEVER     NS_FRAME_STATE_BIT(61)
 
 nsIFrame* NS_NewBoxFrame(nsIPresShell* aPresShell,
                          nsStyleContext* aContext,
-                         PRBool aIsRoot,
-                         nsIBoxLayout* aLayoutManager);
+                         bool aIsRoot,
+                         nsBoxLayout* aLayoutManager);
 nsIFrame* NS_NewBoxFrame(nsIPresShell* aPresShell,
                          nsStyleContext* aContext);
 
@@ -78,18 +51,18 @@ public:
 
   friend nsIFrame* NS_NewBoxFrame(nsIPresShell* aPresShell, 
                                   nsStyleContext* aContext,
-                                  PRBool aIsRoot,
-                                  nsIBoxLayout* aLayoutManager);
+                                  bool aIsRoot,
+                                  nsBoxLayout* aLayoutManager);
   friend nsIFrame* NS_NewBoxFrame(nsIPresShell* aPresShell,
                                   nsStyleContext* aContext);
 
   // gets the rect inside our border and debug border. If you wish to paint inside a box
   // call this method to get the rect so you don't draw on the debug border or outer border.
 
-  // ------ nsIBox -------------
-  NS_IMETHOD SetLayoutManager(nsIBoxLayout* aLayout);
-  NS_IMETHOD GetLayoutManager(nsIBoxLayout** aLayout);
-  NS_IMETHOD RelayoutChildAtOrdinal(nsBoxLayoutState& aState, nsIBox* aChild);
+  virtual void SetLayoutManager(nsBoxLayout* aLayout) { mLayoutManager = aLayout; }
+  virtual nsBoxLayout* GetLayoutManager() { return mLayoutManager; }
+
+  NS_IMETHOD RelayoutChildAtOrdinal(nsBoxLayoutState& aState, nsIFrame* aChild);
 
   virtual nsSize GetPrefSize(nsBoxLayoutState& aBoxLayoutState);
   virtual nsSize GetMinSize(nsBoxLayoutState& aBoxLayoutState);
@@ -97,15 +70,14 @@ public:
   virtual nscoord GetFlex(nsBoxLayoutState& aBoxLayoutState);
   virtual nscoord GetBoxAscent(nsBoxLayoutState& aBoxLayoutState);
 #ifdef DEBUG_LAYOUT
-  NS_IMETHOD SetDebug(nsBoxLayoutState& aBoxLayoutState, PRBool aDebug);
-  NS_IMETHOD GetDebug(PRBool& aDebug);
+  NS_IMETHOD SetDebug(nsBoxLayoutState& aBoxLayoutState, bool aDebug);
+  NS_IMETHOD GetDebug(bool& aDebug) MOZ_OVERRIDE;
 #endif
-  virtual Valignment GetVAlign() const { return mValign; }
-  virtual Halignment GetHAlign() const { return mHalign; }
+  virtual Valignment GetVAlign() const MOZ_OVERRIDE { return mValign; }
+  virtual Halignment GetHAlign() const MOZ_OVERRIDE { return mHalign; }
   NS_IMETHOD DoLayout(nsBoxLayoutState& aBoxLayoutState);
 
-  virtual PRBool GetMouseThrough() const;
-  virtual PRBool ComputesOwnOverflowArea() { return PR_FALSE; }
+  virtual bool ComputesOwnOverflowArea() MOZ_OVERRIDE { return false; }
 
   // ----- child and sibling operations ---
 
@@ -113,42 +85,42 @@ public:
   
   NS_IMETHOD  Init(nsIContent*      aContent,
                    nsIFrame*        aParent,
-                   nsIFrame*        asPrevInFlow);
+                   nsIFrame*        asPrevInFlow) MOZ_OVERRIDE;
 
  
-  NS_IMETHOD AttributeChanged(PRInt32         aNameSpaceID,
+  NS_IMETHOD AttributeChanged(int32_t         aNameSpaceID,
                               nsIAtom*        aAttribute,
-                              PRInt32         aModType);
+                              int32_t         aModType) MOZ_OVERRIDE;
 
-  virtual void MarkIntrinsicWidthsDirty();
-  virtual nscoord GetMinWidth(nsIRenderingContext *aRenderingContext);
-  virtual nscoord GetPrefWidth(nsIRenderingContext *aRenderingContext);
+  virtual void MarkIntrinsicWidthsDirty() MOZ_OVERRIDE;
+  virtual nscoord GetMinWidth(nsRenderingContext *aRenderingContext) MOZ_OVERRIDE;
+  virtual nscoord GetPrefWidth(nsRenderingContext *aRenderingContext) MOZ_OVERRIDE;
 
   NS_IMETHOD Reflow(nsPresContext*          aPresContext,
                     nsHTMLReflowMetrics&     aDesiredSize,
                     const nsHTMLReflowState& aReflowState,
-                    nsReflowStatus&          aStatus);
+                    nsReflowStatus&          aStatus) MOZ_OVERRIDE;
 
-  NS_IMETHOD  AppendFrames(nsIAtom*        aListName,
-                           nsFrameList&    aFrameList);
+  NS_IMETHOD  AppendFrames(ChildListID     aListID,
+                           nsFrameList&    aFrameList) MOZ_OVERRIDE;
 
-  NS_IMETHOD  InsertFrames(nsIAtom*        aListName,
+  NS_IMETHOD  InsertFrames(ChildListID     aListID,
                            nsIFrame*       aPrevFrame,
-                           nsFrameList&    aFrameList);
+                           nsFrameList&    aFrameList) MOZ_OVERRIDE;
 
-  NS_IMETHOD  RemoveFrame(nsIAtom*        aListName,
-                          nsIFrame*       aOldFrame);
+  NS_IMETHOD  RemoveFrame(ChildListID     aListID,
+                          nsIFrame*       aOldFrame) MOZ_OVERRIDE;
 
   virtual nsIFrame* GetContentInsertionFrame();
 
-  NS_IMETHOD  SetInitialChildList(nsIAtom*        aListName,
-                                  nsFrameList&    aChildList);
+  NS_IMETHOD  SetInitialChildList(ChildListID     aListID,
+                                  nsFrameList&    aChildList) MOZ_OVERRIDE;
 
-  virtual void DidSetStyleContext(nsStyleContext* aOldStyleContext);
+  virtual void DidSetStyleContext(nsStyleContext* aOldStyleContext) MOZ_OVERRIDE;
 
-  virtual nsIAtom* GetType() const;
+  virtual nsIAtom* GetType() const MOZ_OVERRIDE;
 
-  virtual PRBool IsFrameOfType(PRUint32 aFlags) const
+  virtual bool IsFrameOfType(uint32_t aFlags) const
   {
     // record that children that are ignorable whitespace should be excluded 
     // (When content was loaded via the XUL content sink, it's already
@@ -166,26 +138,18 @@ public:
   }
 
 #ifdef DEBUG
-  NS_IMETHOD GetFrameName(nsAString& aResult) const;
+  NS_IMETHOD GetFrameName(nsAString& aResult) const MOZ_OVERRIDE;
 #endif
 
   NS_IMETHOD DidReflow(nsPresContext*           aPresContext,
                        const nsHTMLReflowState*  aReflowState,
-                       nsDidReflowStatus         aStatus);
+                       nsDidReflowStatus         aStatus) MOZ_OVERRIDE;
 
-  virtual PRBool HonorPrintBackgroundSettings();
+  virtual bool HonorPrintBackgroundSettings();
 
   virtual ~nsBoxFrame();
   
-  nsBoxFrame(nsIPresShell* aPresShell, nsStyleContext* aContext, PRBool aIsRoot = PR_FALSE, nsIBoxLayout* aLayoutManager = nsnull);
-
-  // if aIsPopup is true, then the view is for a popup. In this case,
-  // the view is added a child of the root view, and is initially hidden
-  static nsresult CreateViewForFrame(nsPresContext* aPresContext,
-                                     nsIFrame* aChild,
-                                     nsStyleContext* aStyleContext,
-                                     PRBool aForce,
-                                     PRBool aIsPopup = PR_FALSE);
+  nsBoxFrame(nsIPresShell* aPresShell, nsStyleContext* aContext, bool aIsRoot = false, nsBoxLayout* aLayoutManager = nullptr);
 
   // virtual so nsStackFrame, nsButtonBoxFrame, nsSliderFrame and nsMenuFrame
   // can override it
@@ -195,15 +159,15 @@ public:
 
   NS_IMETHOD BuildDisplayList(nsDisplayListBuilder*   aBuilder,
                               const nsRect&           aDirtyRect,
-                              const nsDisplayListSet& aLists);
+                              const nsDisplayListSet& aLists) MOZ_OVERRIDE;
   
 #ifdef DEBUG_LAYOUT
-    virtual void SetDebugOnChildList(nsBoxLayoutState& aState, nsIBox* aChild, PRBool aDebug);
-    nsresult DisplayDebugInfoFor(nsIBox*  aBox, 
+    virtual void SetDebugOnChildList(nsBoxLayoutState& aState, nsIFrame* aChild, bool aDebug);
+    nsresult DisplayDebugInfoFor(nsIFrame*  aBox, 
                                  nsPoint& aPoint);
 #endif
 
-  static nsresult LayoutChildAt(nsBoxLayoutState& aState, nsIBox* aBox, const nsRect& aRect);
+  static nsresult LayoutChildAt(nsBoxLayoutState& aState, nsIFrame* aBox, const nsRect& aRect);
 
   /**
    * Utility method to redirect events on descendants to this frame.
@@ -218,25 +182,25 @@ public:
    * This defaults to true, but some box frames (nsListBoxBodyFrame for
    * example) don't support ordinals in their children.
    */
-  virtual PRBool SupportsOrdinalsInChildren();
+  virtual bool SupportsOrdinalsInChildren();
 
 protected:
 #ifdef DEBUG_LAYOUT
-    virtual void GetBoxName(nsAutoString& aName);
-    void PaintXULDebugBackground(nsIRenderingContext& aRenderingContext,
+    virtual void GetBoxName(nsAutoString& aName) MOZ_OVERRIDE;
+    void PaintXULDebugBackground(nsRenderingContext& aRenderingContext,
                                  nsPoint aPt);
-    void PaintXULDebugOverlay(nsIRenderingContext& aRenderingContext,
+    void PaintXULDebugOverlay(nsRenderingContext& aRenderingContext,
                               nsPoint aPt);
 #endif
 
-    virtual PRBool GetInitialEqualSize(PRBool& aEqualSize); 
-    virtual void GetInitialOrientation(PRBool& aIsHorizontal);
-    virtual void GetInitialDirection(PRBool& aIsNormal);
-    virtual PRBool GetInitialHAlignment(Halignment& aHalign); 
-    virtual PRBool GetInitialVAlignment(Valignment& aValign); 
-    virtual PRBool GetInitialAutoStretch(PRBool& aStretch); 
+    virtual bool GetInitialEqualSize(bool& aEqualSize); 
+    virtual void GetInitialOrientation(bool& aIsHorizontal);
+    virtual void GetInitialDirection(bool& aIsNormal);
+    virtual bool GetInitialHAlignment(Halignment& aHalign); 
+    virtual bool GetInitialVAlignment(Valignment& aValign); 
+    virtual bool GetInitialAutoStretch(bool& aStretch); 
   
-    virtual void DestroyFrom(nsIFrame* aDestructRoot);
+    virtual void DestroyFrom(nsIFrame* aDestructRoot) MOZ_OVERRIDE;
 
     nsSize mPrefSize;
     nsSize mMinSize;
@@ -244,35 +208,42 @@ protected:
     nscoord mFlex;
     nscoord mAscent;
 
-    nsCOMPtr<nsIBoxLayout> mLayoutManager;
+    nsCOMPtr<nsBoxLayout> mLayoutManager;
+
+    // Get the point associated with this event. Returns true if a single valid
+    // point was found. Otherwise false.
+    bool GetEventPoint(nsGUIEvent *aEvent, nsPoint &aPoint);
+    // Gets the event coordinates relative to the widget offset associated with
+    // this frame. Return true if a single valid point was found.
+    bool GetEventPoint(nsGUIEvent *aEvent, nsIntPoint &aPoint);
 
 protected:
-    nsresult RegUnregAccessKey(PRBool aDoReg);
+    nsresult RegUnregAccessKey(bool aDoReg);
 
-  NS_HIDDEN_(void) CheckBoxOrder(nsBoxLayoutState& aState);
+  NS_HIDDEN_(void) CheckBoxOrder();
 
 private: 
 
 #ifdef DEBUG_LAYOUT
-    nsresult SetDebug(nsPresContext* aPresContext, PRBool aDebug);
-    PRBool GetInitialDebug(PRBool& aDebug);
+    nsresult SetDebug(nsPresContext* aPresContext, bool aDebug);
+    bool GetInitialDebug(bool& aDebug);
     void GetDebugPref(nsPresContext* aPresContext);
 
     void GetDebugBorder(nsMargin& aInset);
     void GetDebugPadding(nsMargin& aInset);
     void GetDebugMargin(nsMargin& aInset);
 
-    nsresult GetFrameSizeWithMargin(nsIBox* aBox, nsSize& aSize);
+    nsresult GetFrameSizeWithMargin(nsIFrame* aBox, nsSize& aSize);
 
     void PixelMarginToTwips(nsPresContext* aPresContext, nsMargin& aMarginPixels);
 
     void GetValue(nsPresContext* aPresContext, const nsSize& a, const nsSize& b, char* value);
-    void GetValue(nsPresContext* aPresContext, PRInt32 a, PRInt32 b, char* value);
-    void DrawSpacer(nsPresContext* aPresContext, nsIRenderingContext& aRenderingContext, PRBool aHorizontal, PRInt32 flex, nscoord x, nscoord y, nscoord size, nscoord spacerSize);
-    void DrawLine(nsIRenderingContext& aRenderingContext,  PRBool aHorizontal, nscoord x1, nscoord y1, nscoord x2, nscoord y2);
-    void FillRect(nsIRenderingContext& aRenderingContext,  PRBool aHorizontal, nscoord x, nscoord y, nscoord width, nscoord height);
+    void GetValue(nsPresContext* aPresContext, int32_t a, int32_t b, char* value);
+    void DrawSpacer(nsPresContext* aPresContext, nsRenderingContext& aRenderingContext, bool aHorizontal, int32_t flex, nscoord x, nscoord y, nscoord size, nscoord spacerSize);
+    void DrawLine(nsRenderingContext& aRenderingContext,  bool aHorizontal, nscoord x1, nscoord y1, nscoord x2, nscoord y2);
+    void FillRect(nsRenderingContext& aRenderingContext,  bool aHorizontal, nscoord x, nscoord y, nscoord width, nscoord height);
 #endif
-    void UpdateMouseThrough();
+    virtual void UpdateMouseThrough();
 
     void CacheAttributes();
 
@@ -280,11 +251,9 @@ private:
     Halignment mHalign;
     Valignment mValign;
 
-    eMouseThrough mMouseThrough;
-
 #ifdef DEBUG_LAYOUT
-    static PRBool gDebug;
-    static nsIBox* mDebugChild;
+    static bool gDebug;
+    static nsIFrame* mDebugChild;
 #endif
 
 }; // class nsBoxFrame

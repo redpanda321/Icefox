@@ -6,41 +6,9 @@
  *              To test in NONFIPS mode: pk11mode -n
  *              usage: pk11mode -h
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #include <assert.h>
@@ -883,18 +851,21 @@ CK_RV PKM_KeyTests(CK_FUNCTION_LIST_PTR pFunctionList,
 
     mech_str digestMechs[] = {
         {CKM_SHA_1, "CKM_SHA_1 "},
+        {CKM_SHA224, "CKM_SHA224"},
         {CKM_SHA256, "CKM_SHA256"},
         {CKM_SHA384, "CKM_SHA384"},
         {CKM_SHA512, "CKM_SHA512"}
     };
     mech_str hmacMechs[] = {
         {CKM_SHA_1_HMAC, "CKM_SHA_1_HMAC"}, 
+        {CKM_SHA224_HMAC, "CKM_SHA224_HMAC"},
         {CKM_SHA256_HMAC, "CKM_SHA256_HMAC"},
         {CKM_SHA384_HMAC, "CKM_SHA384_HMAC"},
         {CKM_SHA512_HMAC, "CKM_SHA512_HMAC"}
     };
     mech_str sigRSAMechs[] = {
         {CKM_SHA1_RSA_PKCS, "CKM_SHA1_RSA_PKCS"}, 
+        {CKM_SHA224_RSA_PKCS, "CKM_SHA224_RSA_PKCS"},
         {CKM_SHA256_RSA_PKCS, "CKM_SHA256_RSA_PKCS"},
         {CKM_SHA384_RSA_PKCS, "CKM_SHA384_RSA_PKCS"},
         {CKM_SHA512_RSA_PKCS, "CKM_SHA512_RSA_PKCS"}
@@ -5123,7 +5094,7 @@ CK_RV PKM_Digest(CK_FUNCTION_LIST_PTR pFunctionList,
     CK_BYTE digest2[MAX_DIGEST_SZ];
     CK_ULONG digest2Len = 0;
 
-    /* Tested with CKM_SHA_1, CKM_SHA256, CKM_SHA384, CKM_SHA512 */
+    /* Tested with CKM_SHA_1, CKM_SHA224, CKM_SHA256, CKM_SHA384, CKM_SHA512 */
 
     memset(digest1, 0, sizeof(digest1));
     memset(digest2, 0, sizeof(digest2));

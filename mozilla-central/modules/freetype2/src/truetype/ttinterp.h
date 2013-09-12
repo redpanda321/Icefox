@@ -102,6 +102,7 @@ FT_BEGIN_HEADER
     FT_Long  Caller_IP;
     FT_Long  Cur_Count;
     FT_Long  Cur_Restart;
+    FT_Long  Cur_End;
 
   } TT_CallRec, *TT_CallStack;
 
@@ -150,7 +151,7 @@ FT_BEGIN_HEADER
 
     FT_Bool            step_ins;  /* true if the interpreter must */
                                   /* increment IP after ins. exec */
-    FT_Long            cvtSize;
+    FT_ULong           cvtSize;
     FT_Long*           cvt;
 
     FT_UInt            glyphSize; /* glyph instructions buffer size */

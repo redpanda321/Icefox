@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Chris Waterson <waterson@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsRDFConMemberTestNode.h"
 #include "nsIRDFContainer.h"
@@ -61,7 +28,7 @@ nsRDFConMemberTestNode::nsRDFConMemberTestNode(TestNode* aParent,
 {
 #ifdef PR_LOGGING
     if (PR_LOG_TEST(gXULTemplateLog, PR_LOG_DEBUG)) {
-        nsCAutoString props;
+        nsAutoCString props;
 
         nsResourceSet& containmentProps = aProcessor->ContainmentProperties();
         nsResourceSet::ConstIterator last = containmentProps.Last();
@@ -99,13 +66,13 @@ nsRDFConMemberTestNode::nsRDFConMemberTestNode(TestNode* aParent,
 
 nsresult
 nsRDFConMemberTestNode::FilterInstantiations(InstantiationSet& aInstantiations,
-                                             PRBool* aCantHandleYet) const
+                                             bool* aCantHandleYet) const
 {
     // XXX Uh, factor me, please!
     nsresult rv;
 
     if (aCantHandleYet)
-        *aCantHandleYet = PR_FALSE;
+        *aCantHandleYet = false;
 
     nsCOMPtr<nsIRDFContainerUtils> rdfc =
         do_GetService("@mozilla.org/rdf/container-utils;1");
@@ -117,7 +84,7 @@ nsRDFConMemberTestNode::FilterInstantiations(InstantiationSet& aInstantiations,
 
     InstantiationSet::Iterator last = aInstantiations.Last();
     for (InstantiationSet::Iterator inst = aInstantiations.First(); inst != last; ++inst) {
-        PRBool hasContainerBinding;
+        bool hasContainerBinding;
         nsCOMPtr<nsIRDFNode> containerValue;
         hasContainerBinding = inst->mAssignments.GetAssignmentFor(mContainerVariable,
                                                                   getter_AddRefs(containerValue));
@@ -130,7 +97,7 @@ nsRDFConMemberTestNode::FilterInstantiations(InstantiationSet& aInstantiations,
             // If we have a container assignment, then see if the
             // container is an RDF container (bag, seq, alt), and if
             // so, wrap it.
-            PRBool isRDFContainer;
+            bool isRDFContainer;
             rv = rdfc->IsContainer(ds, containerRes, &isRDFContainer);
             if (NS_FAILED(rv)) return rv;
 
@@ -143,7 +110,7 @@ nsRDFConMemberTestNode::FilterInstantiations(InstantiationSet& aInstantiations,
             }
         }
 
-        PRBool hasMemberBinding;
+        bool hasMemberBinding;
         nsCOMPtr<nsIRDFNode> memberValue;
         hasMemberBinding = inst->mAssignments.GetAssignmentFor(mMemberVariable,
                                                                getter_AddRefs(memberValue));
@@ -166,16 +133,16 @@ nsRDFConMemberTestNode::FilterInstantiations(InstantiationSet& aInstantiations,
 
         if (hasContainerBinding && hasMemberBinding) {
             // it's a consistency check. see if we have a assignment that is consistent
-            PRBool isconsistent = PR_FALSE;
+            bool isconsistent = false;
 
             if (rdfcontainer) {
                 // RDF containers are easy. Just use the container API.
-                PRInt32 index;
+                int32_t index;
                 rv = rdfcontainer->IndexOf(memberValue, &index);
                 if (NS_FAILED(rv)) return rv;
 
                 if (index >= 0)
-                    isconsistent = PR_TRUE;
+                    isconsistent = true;
             }
 
             // XXXwaterson oof. if we *are* an RDF container, why do
@@ -190,18 +157,18 @@ nsRDFConMemberTestNode::FilterInstantiations(InstantiationSet& aInstantiations,
                 for (nsResourceSet::ConstIterator property = containmentProps.First();
                      property != containmentProps.Last();
                      ++property) {
-                    PRBool hasAssertion;
+                    bool hasAssertion;
                     rv = ds->HasAssertion(containerRes,
                                           *property,
                                           memberValue,
-                                          PR_TRUE,
+                                          true,
                                           &hasAssertion);
                     if (NS_FAILED(rv)) return rv;
 
                     if (hasAssertion) {
                         // it's consistent. leave it in the set and we'll
                         // run it up to our parent.
-                        isconsistent = PR_TRUE;
+                        isconsistent = true;
                         break;
                     }
                 }
@@ -239,7 +206,7 @@ nsRDFConMemberTestNode::FilterInstantiations(InstantiationSet& aInstantiations,
             if (NS_FAILED(rv)) return rv;
 
             while (1) {
-                PRBool hasmore;
+                bool hasmore;
                 rv = elements->HasMoreElements(&hasmore);
                 if (NS_FAILED(rv)) return rv;
 
@@ -292,7 +259,7 @@ nsRDFConMemberTestNode::FilterInstantiations(InstantiationSet& aInstantiations,
                 nsCOMPtr<nsIRDFResource> property;
 
                 {
-                    PRBool hasmore;
+                    bool hasmore;
                     rv = arcsin->HasMoreElements(&hasmore);
                     if (NS_FAILED(rv)) return rv;
 
@@ -313,7 +280,7 @@ nsRDFConMemberTestNode::FilterInstantiations(InstantiationSet& aInstantiations,
                 // we're *only* concerned with ordinal properties
                 // here: the next block will worry about the other
                 // membership properties.
-                PRBool isordinal;
+                bool isordinal;
                 rv = rdfc->IsOrdinalProperty(property, &isordinal);
                 if (NS_FAILED(rv)) return rv;
 
@@ -323,12 +290,12 @@ nsRDFConMemberTestNode::FilterInstantiations(InstantiationSet& aInstantiations,
                     // member node. Find all the people that point to
                     // it, and call them containers.
                     nsCOMPtr<nsISimpleEnumerator> sources;
-                    rv = ds->GetSources(property, memberValue, PR_TRUE,
+                    rv = ds->GetSources(property, memberValue, true,
                                         getter_AddRefs(sources));
                     if (NS_FAILED(rv)) return rv;
 
                     while (1) {
-                        PRBool hasmore;
+                        bool hasmore;
                         rv = sources->HasMoreElements(&hasmore);
                         if (NS_FAILED(rv)) return rv;
 
@@ -383,17 +350,17 @@ nsRDFConMemberTestNode::FilterInstantiations(InstantiationSet& aInstantiations,
                  ++property) {
                 nsCOMPtr<nsISimpleEnumerator> results;
                 if (hasContainerBinding) {
-                    rv = ds->GetTargets(containerRes, *property, PR_TRUE,
+                    rv = ds->GetTargets(containerRes, *property, true,
                                         getter_AddRefs(results));
                 }
                 else {
-                    rv = ds->GetSources(*property, memberValue, PR_TRUE,
+                    rv = ds->GetSources(*property, memberValue, true,
                                         getter_AddRefs(results));
                 }
                 if (NS_FAILED(rv)) return rv;
 
                 while (1) {
-                    PRBool hasmore;
+                    bool hasmore;
                     rv = results->HasMoreElements(&hasmore);
                     if (NS_FAILED(rv)) return rv;
 
@@ -412,7 +379,7 @@ nsRDFConMemberTestNode::FilterInstantiations(InstantiationSet& aInstantiations,
                         variable = mMemberVariable;
 
                         value = do_QueryInterface(isupports);
-                        NS_ASSERTION(value != nsnull, "member is not an nsIRDFNode");
+                        NS_ASSERTION(value != nullptr, "member is not an nsIRDFNode");
                         if (! value) continue;
 
 #ifdef PR_LOGGING
@@ -429,7 +396,7 @@ nsRDFConMemberTestNode::FilterInstantiations(InstantiationSet& aInstantiations,
                         variable = mContainerVariable;
 
                         valueRes = do_QueryInterface(isupports);
-                        NS_ASSERTION(valueRes != nsnull, "container is not an nsIRDFResource");
+                        NS_ASSERTION(valueRes != nullptr, "container is not an nsIRDFResource");
                         if (! valueRes) continue;
 
                         value = valueRes;
@@ -478,7 +445,7 @@ nsRDFConMemberTestNode::FilterInstantiations(InstantiationSet& aInstantiations,
                 return NS_ERROR_UNEXPECTED;
             }
 
-            *aCantHandleYet = PR_TRUE;
+            *aCantHandleYet = true;
             return NS_OK;
         }
 
@@ -489,7 +456,7 @@ nsRDFConMemberTestNode::FilterInstantiations(InstantiationSet& aInstantiations,
     return NS_OK;
 }
 
-PRBool
+bool
 nsRDFConMemberTestNode::CanPropagate(nsIRDFResource* aSource,
                                      nsIRDFResource* aProperty,
                                      nsIRDFNode* aTarget,
@@ -497,17 +464,17 @@ nsRDFConMemberTestNode::CanPropagate(nsIRDFResource* aSource,
 {
     nsresult rv;
 
-    PRBool canpropagate = PR_FALSE;
+    bool canpropagate = false;
 
     nsCOMPtr<nsIRDFContainerUtils> rdfc =
         do_GetService("@mozilla.org/rdf/container-utils;1");
 
     if (! rdfc)
-        return PR_FALSE;
+        return false;
 
     // We can certainly propagate ordinal properties
     rv = rdfc->IsOrdinalProperty(aProperty, &canpropagate);
-    if (NS_FAILED(rv)) return PR_FALSE;
+    if (NS_FAILED(rv)) return false;
 
     if (! canpropagate) {
         canpropagate = mProcessor->ContainmentProperties().Contains(aProperty);
@@ -534,10 +501,10 @@ nsRDFConMemberTestNode::CanPropagate(nsIRDFResource* aSource,
     if (canpropagate) {
         aInitialBindings.AddAssignment(mContainerVariable, aSource);
         aInitialBindings.AddAssignment(mMemberVariable, aTarget);
-        return PR_TRUE;
+        return true;
     }
 
-    return PR_FALSE;
+    return false;
 }
 
 void
@@ -545,7 +512,7 @@ nsRDFConMemberTestNode::Retract(nsIRDFResource* aSource,
                                 nsIRDFResource* aProperty,
                                 nsIRDFNode* aTarget) const
 {
-    PRBool canretract = PR_FALSE;
+    bool canretract = false;
 
     nsCOMPtr<nsIRDFContainerUtils> rdfc =
         do_GetService("@mozilla.org/rdf/container-utils;1");

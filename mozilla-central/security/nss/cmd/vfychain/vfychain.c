@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /****************************************************************************
  *  Read in a cert chain from one or more files, and verify the chain for
@@ -129,11 +97,8 @@ Usage(const char *progName)
 void
 errWarn(char *function)
 {
-    PRErrorCode  errorNumber = PR_GetError();
-    const char * errorString = SECU_Strerror(errorNumber);
-
-    fprintf(stderr, "Error in function %s: %d\n - %s\n",
-		    function, errorNumber, errorString);
+    fprintf(stderr, "Error in function %s: %s\n",
+		    function, SECU_Strerror(PR_GetError()));
 }
 
 void
@@ -210,7 +175,7 @@ getCert(const char *name, PRBool isAscii, const char * progName)
      * open a file with such name and get the cert from there.*/
     fd = PR_Open(name, PR_RDONLY, 0777); 
     if (!fd) {
-	PRIntn err = PR_GetError();
+	PRErrorCode err = PR_GetError();
     	fprintf(stderr, "open of %s failed, %d = %s\n", 
 	        name, err, SECU_Strerror(err));
 	return cert;
@@ -233,7 +198,7 @@ getCert(const char *name, PRBool isAscii, const char * progName)
                                    PR_FALSE /* isPerm */, 
 				   PR_TRUE  /* copyDER */);
     if (!cert) {
-	PRIntn err = PR_GetError();
+	PRErrorCode err = PR_GetError();
 	fprintf(stderr, "couldn't import %s, %d = %s\n",
 	        name, err, SECU_Strerror(err));
     }
@@ -538,12 +503,12 @@ breakout:
     if (usePkix < 2) {
         if (oidStr) {
             fprintf(stderr, "Policy oid(-o) can be used only with"
-                    " CERT_PKIXVerifyChain(-pp) function.\n");
+                    " CERT_PKIXVerifyCert(-pp) function.\n");
             Usage(progName);
         }
         if (trusted) {
             fprintf(stderr, "Cert trust flag can be used only with"
-                    " CERT_PKIXVerifyChain(-pp) function.\n");
+                    " CERT_PKIXVerifyCert(-pp) function.\n");
             Usage(progName);
         }
     }
@@ -586,7 +551,7 @@ breakout:
 	case  0  : /* positional parameter */
             if (usePkix < 2 && trusted) {
                 fprintf(stderr, "Cert trust flag can be used only with"
-                        " CERT_PKIXVerifyChain(-pp) function.\n");
+                        " CERT_PKIXVerifyCert(-pp) function.\n");
                 Usage(progName);
             }
 	    cert = getCert(optstate->value, isAscii, progName);
@@ -729,8 +694,7 @@ breakout:
         /* Display validation results */
         if (secStatus != SECSuccess || log.count > 0) {
             CERTVerifyLogNode *node = NULL;
-            PRIntn err = PR_GetError();
-            fprintf(stderr, "Chain is bad, %d = %s\n", err, SECU_Strerror(err));
+            fprintf(stderr, "Chain is bad!\n");
             
             SECU_displayVerifyLog(stderr, &log, verbose); 
             /* Have cert refs in the log only in case of failure.
@@ -789,6 +753,7 @@ punt:
     if (pwdata.data) {
         PORT_Free(pwdata.data);
     }
+    PL_ArenaFinish();
     PR_Cleanup();
     return rv;
 }

@@ -7,8 +7,6 @@
  * Purpose of the test is to check that a stopSearch call comes always before a
  * startSearch call.
  */
-const Cc = Components.classes;
-const Ci = Components.interfaces;
 
 Components.utils.import("resource://gre/modules/XPCOMUtils.jsm");
 
@@ -123,6 +121,8 @@ let gTests = [
   function(controller) {
     print("handleEndComposition");
     controller.handleEndComposition();
+    // an input event always follows compositionend event.
+    controller.handleText();
   },
   function(controller) {
     print("handleEscape");

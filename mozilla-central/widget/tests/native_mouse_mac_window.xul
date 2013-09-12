@@ -1,41 +1,8 @@
 <?xml version="1.0"?>
 
-<!-- ***** BEGIN LICENSE BLOCK *****
-   - Version: MPL 1.1/GPL 2.0/LGPL 2.1
-   -
-   - The contents of this file are subject to the Mozilla Public License Version
-   - 1.1 (the "License"); you may not use this file except in compliance with
-   - the License. You may obtain a copy of the License at
-   - http://www.mozilla.org/MPL/
-   -
-   - Software distributed under the License is distributed on an "AS IS" basis,
-   - WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-   - for the specific language governing rights and limitations under the
-   - License.
-   -
-   - The Original Code is Native Menus Test code
-   -
-   - The Initial Developer of the Original Code is
-   - Mozilla Corporation.
-   - Portions created by the Initial Developer are Copyright (C) 2009
-   - the Initial Developer. All Rights Reserved.
-   -
-   - Contributor(s):
-   -   Markus Stange <mstange@themasta.com>
-   -
-   - Alternatively, the contents of this file may be used under the terms of
-   - either the GNU General Public License Version 2 or later (the "GPL"), or
-   - the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-   - in which case the provisions of the GPL or the LGPL are applicable instead
-   - of those above. If you wish to allow use of your version of this file only
-   - under the terms of either the GPL or the LGPL, and not to allow others to
-   - use your version of this file under the terms of the MPL, indicate your
-   - decision by deleting the provisions above and replace them with the notice
-   - and other provisions required by the GPL or the LGPL. If you do not delete
-   - the provisions above, a recipient may use your version of this file under
-   - the terms of any one of the MPL, the GPL or the LGPL.
-   -
-   - ***** END LICENSE BLOCK ***** -->
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
 
 <?xml-stylesheet href="chrome://global/skin" type="text/css"?>
 
@@ -72,12 +39,14 @@
     }
 
     function onTestsFinished() {
+      clearTimeout(gAfterLoopExecution);
       observe(window, eventMonitor, false);
       observe(gRightWindow, eventMonitor, false);
       observe(gPopup, eventMonitor, false);
       gRightWindow.close();
+      var openerSimpleTest = window.opener.wrappedJSObject.SimpleTest;
       window.close();
-      window.opener.wrappedJSObject.SimpleTest.finish();
+      openerSimpleTest.finish();
     }
 
     const XUL_NS = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
@@ -128,23 +97,45 @@
 
     var gExpectedEvents = [];
     var gRightWindow = null, gPopup = null;
+    var gCurrentMouseX = 0, gCurrentMouseY = 0;
+    var gAfterLoopExecution = 0;
 
     function testMouse(x, y, msg, elem, win, exp, flags, callback) {
       clearExpectedEvents();
+      var syntheticEvent = null;
       exp.forEach(function (expEv) {
         expEv.screenX = x;
         expEv.screenY = y;
+        if (expEv.synthetic) {
+          is(syntheticEvent, null,
+             "Can't handle two synthetic events in a single testMouse call");
+          syntheticEvent = expEv;
+        }
         gExpectedEvents.push(expEv);
       });
       printDebug("sending event: " + x + ", " + y + " (" + msg + ")\n");
+      gCurrentMouseX = x;
+      gCurrentMouseY = y;
       netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
       var utils = win.QueryInterface(Components.interfaces.nsIInterfaceRequestor).
                                      getInterface(Components.interfaces.nsIDOMWindowUtils);
-      utils.sendNativeMouseEvent(x, y, msg, flags || 0, elem);
-      SimpleTest.executeSoon(function () {
+      var callbackFunc = function() {
         clearExpectedEvents();
         callback();
-      });
+      }
+      if (syntheticEvent) {
+        // Set up this listener before we sendNativeMouseEvent, just
+        // in case that synchronously calls us.
+        eventListenOnce(syntheticEvent.target, syntheticEvent.type,
+                        // Trigger callbackFunc async, so we're not assuming
+                        // anything about how our listener gets ordered with
+                        // others.
+                        function () { SimpleTest.executeSoon(callbackFunc) });
+      }
+      utils.sendNativeMouseEvent(x, y, msg, flags || 0, elem);
+      if (!syntheticEvent) {
+        gAfterLoopExecution = setTimeout(callbackFunc, 0);
+      }
     }
 
     function eventListenOnce(elem, name, callback) {
@@ -182,10 +173,15 @@
     }
 
     function processEvent(e) {
+      if (e.screenX != gCurrentMouseX || e.screenY != gCurrentMouseY) {
+        todo(false, "Oh no! Received a stray event from a confused tracking area. Aborting test.");
+        onTestsFinished();
+        return;
+      }
       var expectedEvent = gExpectedEvents.shift();
       if (!expectedEvent) {
         ok(false, "received event I didn't expect: " + eventToString(e));
-        return true;
+        return;
       }
       if (e.type != expectedEvent.type) {
         // Didn't get expectedEvent.
@@ -289,7 +285,7 @@
         // Clicking an inactive window should make it active and fire a mouseover
         // event.
         [400, 150, NSLeftMouseDown, null, right, [
-          { type: "mouseover", target: rightElem },
+          { type: "mouseover", target: rightElem, synthetic: true },
         ]],
         [400, 150, NSLeftMouseUp, null, right, [
         ]],
@@ -305,6 +301,10 @@
         [410, 150, NSLeftMouseUp, null, right, [
           { type: "mouseup", target: rightElem },
           { type: "click", target: rightElem },
+        ]],
+        // Move the mouse back over the left window, which is inactive.
+        [150, 170, NSMouseMoved, null, left, [
+          { type: "mouseout", target: rightElem },
         ]],
         // Now we're being sneaky. The left window is inactive, but *right*-clicks to it
         // should still get through. Test that.
@@ -327,9 +327,16 @@
         // Still, mouseout and mouseover events should fire.
         function raiseLeftWindow(callback) {
           clearExpectedEvents();
-          gExpectedEvents.push({ screenX: 150, screenY: 170, type: "mouseout", target: rightElem });
           gExpectedEvents.push({ screenX: 150, screenY: 170, type: "mouseover", target: leftElem });
-          focusAndThen(left, function () { SimpleTest.executeSoon(callback); });
+          // We have to be a bit careful here.  The synthetic mouse event may
+          // not fire for a bit after we focus the left window.
+          eventListenOnce(leftElem, "mouseover", function() {
+            // Trigger callback async, so we're not assuming
+            // anything about how our listener gets ordered with others.
+            SimpleTest.executeSoon(callback);
+          });
+          printDebug("focusing left window");
+          left.focus();
         },
         // It's active, so it should respond to mousemove events now.
         [150, 170, NSMouseMoved, null, left, [
@@ -370,7 +377,7 @@
         // Activate the right window with a click.
         // This will close the popup and make the mouse enter the right window.
         [400, 180, NSLeftMouseDown, null, right, [
-          { type: "mouseover", target: rightElem },
+          { type: "mouseover", target: rightElem, synthetic: true },
         ]],
         [400, 180, NSLeftMouseUp, null, right, [
         ]],
@@ -391,25 +398,20 @@
         // Install the tooltip, but don't show it yet.
         function setTooltip(callback) {
           rightElem.setAttribute("tooltip", "tip");
-          callback();
-        },
-        // Move the mouse to trigger the appearance of the tooltip.
-        [410, 180, NSMouseMoved, null, right, [
-          { type: "mousemove", target: rightElem },
-        ]],
-        // Wait for the tooltip to appear.
-        function (callback) {
+          gExpectedEvents.push({ screenX: 410, screenY: 180, type: "mousemove", target: rightElem });
           eventListenOnce(rightElem, "popupshown", callback);
+          gCurrentMouseX = 410;
+          gCurrentMouseY = 180;
+          var utils = right.QueryInterface(Components.interfaces.nsIInterfaceRequestor).
+                               getInterface(Components.interfaces.nsIDOMWindowUtils);
+          utils.sendNativeMouseEvent(410, 180, NSMouseMoved, 0, null);
         },
         // Now the tooltip is visible.
-        // Move the mouse a little to the right, but send the event to the tooltip's
-        // widget, even though the mouse is not over the tooltip, because that's what
-        // Mac OS X does.
-        [411, 180, NSMouseMoved, tooltip, right, [
+        // Move the mouse a little to the right.
+        [411, 180, NSMouseMoved, null, right, [
           { type: "mousemove", target: rightElem },
         ]],
-        // Move another pixel. This time send the event to the right widget.
-        // However, that must not make a difference.
+        // Move another pixel.
         [412, 180, NSMouseMoved, null, right, [
           { type: "mousemove", target: rightElem },
         ]],
@@ -434,22 +436,21 @@
         // Now we move the mouse over the part where the panel rect intersects the
         // right window's rect. Since the panel is under the window, all the events
         // should target the right window.
-        // Try with sending to three different targets.
         [390, 170, NSMouseMoved, null, right, [
           { type: "mousemove", target: rightElem },
         ]],
-        [390, 171, NSMouseMoved, null, left, [
+        [390, 171, NSMouseMoved, null, right, [
           { type: "mousemove", target: rightElem },
         ]],
-        [391, 171, NSMouseMoved, panel, left, [
+        [391, 171, NSMouseMoved, null, right, [
           { type: "mousemove", target: rightElem },
         ]],
         // Now move off the right window, so that the mouse is directly over the
         // panel.
-        [260, 170, NSMouseMoved, null, left, [
+        [260, 170, NSMouseMoved, panel, left, [
           { type: "mouseout", target: rightElem },
         ]],
-        [260, 171, NSMouseMoved, null, left, [
+        [260, 171, NSMouseMoved, panel, left, [
         ]],
         [261, 171, NSMouseMoved, panel, left, [
         ]],
@@ -464,11 +465,11 @@
         },
         // Now mouse events should get through to the panel (which is now over the
         // right window).
-        [387, 170, NSMouseMoved, null, right, [
+        [387, 170, NSMouseMoved, panel, left, [
           { type: "mouseover", target: panel },
           { type: "mousemove", target: panel },
         ]],
-        [387, 171, NSMouseMoved, null, left, [
+        [387, 171, NSMouseMoved, panel, left, [
           { type: "mousemove", target: panel },
         ]],
         [388, 171, NSMouseMoved, panel, left, [
@@ -486,12 +487,12 @@
         // Last test for this part: Hit testing in the Canyon of Nowhere -
         // the pixel row directly south of the panel, over the left window.
         // Before bug 515003 we wrongly thought the mouse wasn't over any window.
-        [173, 200, NSMouseMoved, panel, left, [
+        [173, 200, NSMouseMoved, null, left, [
           { type: "mouseout", target: panel },
           { type: "mouseover", target: leftElem },
           { type: "mousemove", target: leftElem },
         ]],
-        [173, 201, NSMouseMoved, panel, left, [
+        [173, 201, NSMouseMoved, null, left, [
           { type: "mousemove", target: leftElem },
         ]],
 
@@ -567,32 +568,28 @@
           { type: "mouseup", target: rightElem },
           { type: "click", target: rightElem },
         ]],
-        // Now we're being sneaky. The left window is inactive, but *right*-clicks to it
-        // should still get through. Test that.
-        // Ideally we'd be bracketing that event with over and out events, too, but it
-        // probably doesn't matter too much.
+        // Move the mouse back over the left window, which is inactive.
+        [150, 170, NSMouseMoved, null, left, [
+          { type: "mouseout", target: rightElem },
+          { type: "mouseover", target: leftElem },
+          { type: "mousemove", target: leftElem },
+        ]],
+        // Right-click it.
         [150, 170, NSRightMouseDown, null, left, [
-          { type: "mouseover", target: leftElem, shouldFireButDoesnt: true },
           { type: "mousedown", target: leftElem },
-          { type: "mouseout", target: leftElem, shouldFireButDoesnt: true },
         ]],
         // Let go of the mouse.
         [150, 170, NSRightMouseUp, null, left, [
-          { type: "mouseover", target: leftElem, shouldFireButDoesnt: true },
           { type: "mouseup", target: leftElem },
           { type: "click", target: leftElem },
-          { type: "mouseout", target: leftElem, shouldFireButDoesnt: true },
         ]],
         // Right clicking hasn't focused it, so the window is still inactive.
         // Let's focus it; this time without the mouse, for variaton's sake.
-        // Still, mouseout and mouseover events should fire.
         function raiseLeftWindow(callback) {
           clearExpectedEvents();
-          gExpectedEvents.push({ screenX: 150, screenY: 170, type: "mouseout", target: rightElem });
-          gExpectedEvents.push({ screenX: 150, screenY: 170, type: "mouseover", target: leftElem });
           focusAndThen(left, function () { SimpleTest.executeSoon(callback); });
         },
-        // It's active, so it should respond to mousemove events now.
+        // It's active and should still respond to mousemove events.
         [150, 170, NSMouseMoved, null, left, [
           { type: "mousemove", target: leftElem },
         ]],
@@ -653,27 +650,22 @@
 
         // Time for our next trick: a tooltip!
         // Install the tooltip, but don't show it yet.
-        function setTooltip(callback) {
+        function setTooltip2(callback) {
           rightElem.setAttribute("tooltip", "tip");
-          callback();
-        },
-        // Move the mouse to trigger the appearance of the tooltip.
-        [410, 180, NSMouseMoved, null, right, [
-          { type: "mousemove", target: rightElem },
-        ]],
-        // Wait for the tooltip to appear.
-        function (callback) {
+          gExpectedEvents.push({ screenX: 410, screenY: 180, type: "mousemove", target: rightElem });
           eventListenOnce(rightElem, "popupshown", callback);
+          gCurrentMouseX = 410;
+          gCurrentMouseY = 180;
+          var utils = right.QueryInterface(Components.interfaces.nsIInterfaceRequestor).
+                               getInterface(Components.interfaces.nsIDOMWindowUtils);
+          utils.sendNativeMouseEvent(410, 180, NSMouseMoved, 0, null);
         },
         // Now the tooltip is visible.
-        // Move the mouse a little to the right, but send the event to the tooltip's
-        // widget, even though the mouse is not over the tooltip, because that's what
-        // Mac OS X does.
-        [411, 180, NSMouseMoved, tooltip, right, [
+        // Move the mouse a little to the right.
+        [411, 180, NSMouseMoved, null, right, [
           { type: "mousemove", target: rightElem },
         ]],
-        // Move another pixel. This time send the event to the right widget.
-        // However, that must not make a difference.
+        // Move another pixel.
         [412, 180, NSMouseMoved, null, right, [
           { type: "mousemove", target: rightElem },
         ]],
@@ -698,24 +690,23 @@
         // Now we move the mouse over the part where the panel rect intersects the
         // right window's rect. Since the panel is under the window, all the events
         // should target the right window.
-        // Try with sending to three different targets.
         [390, 170, NSMouseMoved, null, right, [
           { type: "mousemove", target: rightElem },
         ]],
-        [390, 171, NSMouseMoved, null, left, [
+        [390, 171, NSMouseMoved, null, right, [
           { type: "mousemove", target: rightElem },
         ]],
-        [391, 171, NSMouseMoved, panel, left, [
+        [391, 171, NSMouseMoved, null, right, [
           { type: "mousemove", target: rightElem },
         ]],
         // Now move off the right window, so that the mouse is directly over the
         // panel.
-        [260, 170, NSMouseMoved, null, left, [
+        [260, 170, NSMouseMoved, panel, left, [
           { type: "mouseout", target: rightElem },
           { type: "mouseover", target: panel },
           { type: "mousemove", target: panel },
         ]],
-        [260, 171, NSMouseMoved, null, left, [
+        [260, 171, NSMouseMoved, panel, left, [
           { type: "mousemove", target: panel },
         ]],
         [261, 171, NSMouseMoved, panel, left, [
@@ -733,10 +724,10 @@
         function raiseLeftWindowTakeTwo(callback) {
           focusAndThen(left, callback);
         },
-        [387, 170, NSMouseMoved, null, right, [
+        [387, 170, NSMouseMoved, panel, left, [
           { type: "mousemove", target: panel },
         ]],
-        [387, 171, NSMouseMoved, null, left, [
+        [387, 171, NSMouseMoved, panel, left, [
           { type: "mousemove", target: panel },
         ]],
         [388, 171, NSMouseMoved, panel, left, [
@@ -754,12 +745,12 @@
         // Last test for today: Hit testing in the Canyon of Nowhere -
         // the pixel row directly south of the panel, over the left window.
         // Before bug 515003 we wrongly thought the mouse wasn't over any window.
-        [173, 200, NSMouseMoved, panel, left, [
+        [173, 200, NSMouseMoved, null, left, [
           { type: "mouseout", target: panel },
           { type: "mouseover", target: leftElem },
           { type: "mousemove", target: leftElem },
         ]],
-        [173, 201, NSMouseMoved, panel, left, [
+        [173, 201, NSMouseMoved, null, left, [
           { type: "mousemove", target: leftElem },
         ]],
       ];

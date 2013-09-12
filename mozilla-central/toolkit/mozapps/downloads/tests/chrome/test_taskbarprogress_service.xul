@@ -1,54 +1,16 @@
 <?xml version="1.0"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/.  -->
 <!--
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Windows Download Taskbar Progress.
- *
- * The Initial Developer of the Original Code is
- * the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Felipe Gomes <felipc@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-
-/**
  * This tests that the Windows 7 Taskbar Progress is correctly updated when
  * windows are opened and closed.
- */
 -->
 
 <window title="Win7 Taskbar Progress"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         onload="test();">
 
-  <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"/>
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"/>
   <script type="application/javascript"
@@ -60,6 +22,8 @@
 const kTaskbarID = "@mozilla.org/windows-taskbar;1";
 const DOWNLOAD_MANAGER_URL = "chrome://mozapps/content/downloads/downloads.xul";
 const DLMGR_UI_DONE = "download-manager-ui-done";
+
+Components.utils.import("resource://gre/modules/Services.jsm");
 
 let DownloadTaskbarProgress, TaskbarService, observerService, wwatch, chromeWindow;
 let gGen = null;
@@ -74,6 +38,7 @@ function test() {
   } catch (ex) { }
 
   if (!isWin7OrHigher) {
+    ok(true, "This test only runs on Windows 7 or higher");
     return;
   }
 
@@ -87,6 +52,9 @@ function continueTest() {
 }
 
 function doTest() {
+  // Ensure that the download manager callbacks always use the window UI instead
+  // of the panel in the browser's window.
+  Services.prefs.setBoolPref("browser.download.useToolkitUI", true);
 
   let tempScope = {};
   Components.utils.import("resource://gre/modules/DownloadTaskbarProgress.jsm", tempScope);
@@ -144,6 +112,8 @@ function doTest() {
   // The owner window should not have changed, since our
   // original window still exists
   checkActiveTaskbar(false, window);
+
+  Services.prefs.clearUserPref("browser.download.useToolkitUI");
 
   browserWindow.close();
   SimpleTest.finish();

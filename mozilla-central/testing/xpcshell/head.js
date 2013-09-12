@@ -1,42 +1,8 @@
+/* -*- Mode: JavaScript; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is Google Inc.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Darin Fisher <darin@meer.net>
- *  Boris Zbarsky <bzbarsky@mit.edu>
- *  Jeff Walden <jwalden+code@mit.edu>
- *  Serge Gautherie <sgautherie.bz@free.fr>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * This file contains common code that is loaded before each test file(s).
@@ -48,14 +14,17 @@ var _quit = false;
 var _passed = true;
 var _tests_pending = 0;
 var _passedChecks = 0, _falsePassedChecks = 0;
+var _todoChecks = 0;
 var _cleanupFunctions = [];
 var _pendingTimers = [];
+var _profileInitialized = false;
 
 function _dump(str) {
+  let start = /^TEST-/.test(str) ? "\n" : "";
   if (typeof _XPCSHELL_PROCESS == "undefined") {
-    dump(str);
+    dump(start + str);
   } else {
-    dump(_XPCSHELL_PROCESS + ": " + str);
+    dump(start + _XPCSHELL_PROCESS + ": " + str);
   }
 }
 
@@ -67,15 +36,39 @@ let (ios = Components.classes["@mozilla.org/network/io-service;1"]
   ios.offline = false;
 }
 
+// Determine if we're running on parent or child
+let runningInParent = true;
+try {
+  runningInParent = Components.classes["@mozilla.org/xre/runtime;1"].
+                    getService(Components.interfaces.nsIXULRuntime).processType
+                    == Components.interfaces.nsIXULRuntime.PROCESS_TYPE_DEFAULT;
+} 
+catch (e) { }
+
+try {
+  if (runningInParent) {
+    let prefs = Components.classes["@mozilla.org/preferences-service;1"]
+                .getService(Components.interfaces.nsIPrefBranch);
+
+    // disable necko IPC security checks for xpcshell, as they lack the
+    // docshells needed to pass them
+    prefs.setBoolPref("network.disable.ipc.security", true);
+
+    // Disable IPv6 lookups for 'localhost' on windows.
+    if ("@mozilla.org/windows-registry-key;1" in Components.classes) {
+      prefs.setCharPref("network.dns.ipv4OnlyDomains", "localhost");
+    }
+  }
+}
+catch (e) { }
+
 // Enable crash reporting, if possible
 // We rely on the Python harness to set MOZ_CRASHREPORTER_NO_REPORT
 // and handle checking for minidumps.
 // Note that if we're in a child process, we don't want to init the
 // crashreporter component.
 try { // nsIXULRuntime is not available in some configurations.
-  let processType = Components.classes["@mozilla.org/xre/runtime;1"].
-    getService(Components.interfaces.nsIXULRuntime).processType;
-  if (processType == Components.interfaces.nsIXULRuntime.PROCESS_TYPE_DEFAULT &&
+  if (runningInParent &&
       "@mozilla.org/toolkit/crash-reporter;1" in Components.classes) {
     // Remember to update </toolkit/crashreporter/test/unit/test_crashreporter.js>
     // too if you change this initial setting.
@@ -178,12 +171,113 @@ function _dump_exception_stack(stack) {
     // frame is of the form "fname(args)@file:line"
     let frame_regexp = new RegExp("(.*)\\(.*\\)@(.*):(\\d*)", "g");
     let parts = frame_regexp.exec(frame);
-    dump("JS frame :: " + parts[2] + " :: " + (parts[1] ? parts[1] : "anonymous") + " :: line " + parts[3] + "\n");
+    if (parts)
+        dump("JS frame :: " + parts[2] + " :: " + (parts[1] ? parts[1] : "anonymous")
+             + " :: line " + parts[3] + "\n");
+    else /* Could be a -e (command line string) style location. */
+        dump("JS frame :: " + frame + "\n");
   });
 }
 
-function _execute_test() {
-  // Map resource://test/ to the current working directory.
+/**
+ * Overrides idleService with a mock.  Idle is commonly used for maintenance
+ * tasks, thus if a test uses a service that requires the idle service, it will
+ * start handling them.
+ * This behaviour would cause random failures and slowdown tests execution,
+ * for example by running database vacuum or cleanups for each test.
+ *
+ * @note Idle service is overridden by default.  If a test requires it, it will
+ *       have to call do_get_idle() function at least once before use.
+ */
+_fakeIdleService = {
+  get registrar() {
+    delete this.registrar;
+    return this.registrar =
+      Components.manager.QueryInterface(Components.interfaces.nsIComponentRegistrar);
+  },
+  contractID: "@mozilla.org/widget/idleservice;1",
+  get CID() this.registrar.contractIDToCID(this.contractID),
+
+  activate: function FIS_activate()
+  {
+    if (!this.originalFactory) {
+      // Save original factory.
+      this.originalFactory =
+        Components.manager.getClassObject(Components.classes[this.contractID],
+                                          Components.interfaces.nsIFactory);
+      // Unregister original factory.
+      this.registrar.unregisterFactory(this.CID, this.originalFactory);
+      // Replace with the mock.
+      this.registrar.registerFactory(this.CID, "Fake Idle Service",
+                                     this.contractID, this.factory
+      );
+    }
+  },
+
+  deactivate: function FIS_deactivate()
+  {
+    if (this.originalFactory) {
+      // Unregister the mock.
+      this.registrar.unregisterFactory(this.CID, this.factory);
+      // Restore original factory.
+      this.registrar.registerFactory(this.CID, "Idle Service",
+                                     this.contractID, this.originalFactory);
+      delete this.originalFactory;
+    }
+  },
+
+  factory: {
+    // nsIFactory
+    createInstance: function (aOuter, aIID)
+    {
+      if (aOuter) {
+        throw Components.results.NS_ERROR_NO_AGGREGATION;
+      }
+      return _fakeIdleService.QueryInterface(aIID);
+    },
+    lockFactory: function (aLock) {
+      throw Components.results.NS_ERROR_NOT_IMPLEMENTED;
+    },
+    QueryInterface: function(aIID) {
+      if (aIID.equals(Components.interfaces.nsIFactory) ||
+          aIID.equals(Components.interfaces.nsISupports)) {
+        return this;
+      }
+      throw Components.results.NS_ERROR_NO_INTERFACE;
+    }
+  },
+
+  // nsIIdleService
+  get idleTime() 0,
+  addIdleObserver: function () {},
+  removeIdleObserver: function () {},
+
+  QueryInterface: function(aIID) {
+    // Useful for testing purposes, see test_get_idle.js.
+    if (aIID.equals(Components.interfaces.nsIFactory)) {
+      return this.factory;
+    }
+    if (aIID.equals(Components.interfaces.nsIIdleService) ||
+        aIID.equals(Components.interfaces.nsISupports)) {
+      return this;
+    }
+    throw Components.results.NS_ERROR_NO_INTERFACE;
+  }
+}
+
+/**
+ * Restores the idle service factory if needed and returns the service's handle.
+ * @return A handle to the idle service.
+ */
+function do_get_idle() {
+  _fakeIdleService.deactivate();
+  return Components.classes[_fakeIdleService.contractID]
+                   .getService(Components.interfaces.nsIIdleService);
+}
+
+// Map resource://test/ to current working directory and
+// resource://testing-common/ to the shared test modules directory.
+function _register_protocol_handlers() {
   let (ios = Components.classes["@mozilla.org/network/io-service;1"]
              .getService(Components.interfaces.nsIIOService)) {
     let protocolHandler =
@@ -191,7 +285,35 @@ function _execute_test() {
          .QueryInterface(Components.interfaces.nsIResProtocolHandler);
     let curDirURI = ios.newFileURI(do_get_cwd());
     protocolHandler.setSubstitution("test", curDirURI);
+
+    if (this._TESTING_MODULES_DIR) {
+      let modulesFile = Components.classes["@mozilla.org/file/local;1"].
+                        createInstance(Components.interfaces.nsILocalFile);
+      modulesFile.initWithPath(_TESTING_MODULES_DIR);
+
+      if (!modulesFile.exists()) {
+        throw new Error("Specified modules directory does not exist: " +
+                        _TESTING_MODULES_DIR);
+      }
+
+      if (!modulesFile.isDirectory()) {
+        throw new Error("Specified modules directory is not a directory: " +
+                        _TESTING_MODULES_DIR);
+      }
+
+      let modulesURI = ios.newFileURI(modulesFile);
+
+      protocolHandler.setSubstitution("testing-common", modulesURI);
+    }
   }
+}
+
+function _execute_test() {
+  _register_protocol_handlers();
+
+  // Override idle service by default.
+  // Call do_get_idle() to restore the factory and get the service.
+  _fakeIdleService.activate();
 
   // _HEAD_FILES is dynamically defined by <runxpcshelltests.py>.
   _load_files(_HEAD_FILES);
@@ -211,13 +333,22 @@ function _execute_test() {
     // possible that this will mask an NS_ERROR_ABORT that happens after a
     // do_check failure though.
     if (!_quit || e != Components.results.NS_ERROR_ABORT) {
-      _dump("TEST-UNEXPECTED-FAIL | (xpcshell/head.js) | " + e);
+      msg = "TEST-UNEXPECTED-FAIL | ";
+      if (e.fileName) {
+        msg += e.fileName;
+        if (e.lineNumber) {
+          msg += ":" + e.lineNumber;
+        }
+      } else {
+        msg += "xpcshell/head.js";
+      }
+      msg += " | " + e;
       if (e.stack) {
-        _dump(" - See following stack:\n");
+        _dump(msg + " - See following stack:\n");
         _dump_exception_stack(e.stack);
       }
       else {
-        _dump("\n");
+        _dump(msg + "\n");
       }
     }
   }
@@ -230,6 +361,9 @@ function _execute_test() {
   while ((func = _cleanupFunctions.pop()))
     func();
 
+  // Restore idle service to avoid leaks.
+  _fakeIdleService.deactivate();
+
   if (!_passed)
     return;
 
@@ -237,6 +371,8 @@ function _execute_test() {
   if (truePassedChecks > 0) {
     _dump("TEST-PASS | (xpcshell/head.js) | " + truePassedChecks + " (+ " +
             _falsePassedChecks + ") check(s) passed\n");
+    _dump("TEST-INFO | (xpcshell/head.js) | " + _todoChecks +
+            " check(s) todo\n");
   } else {
     // ToDo: switch to TEST-UNEXPECTED-FAIL when all tests have been updated. (Bug 496443)
     _dump("TEST-INFO | (xpcshell/head.js) | No (+ " + _falsePassedChecks + ") checks actually run\n");
@@ -258,6 +394,14 @@ function _load_files(aFiles) {
 
 
 /************** Functions to be used from the tests **************/
+
+/**
+ * Prints a message to the output log.
+ */
+function do_print(msg) {
+  var caller_stack = Components.stack.caller;
+  _dump("TEST-INFO | " + caller_stack.filename + " | " + msg + "\n");
+}
 
 /**
  * Calls the given function at least the specified number of milliseconds later.
@@ -289,7 +433,7 @@ function do_execute_soon(callback) {
         // possible that this will mask an NS_ERROR_ABORT that happens after a
         // do_check failure though.
         if (!_quit || e != Components.results.NS_ERROR_ABORT) {
-          dump("TEST-UNEXPECTED-FAIL | (xpcshell/head.js) | " + e);
+          _dump("TEST-UNEXPECTED-FAIL | (xpcshell/head.js) | " + e);
           if (e.stack) {
             dump(" - See following stack:\n");
             _dump_exception_stack(e.stack);
@@ -313,7 +457,7 @@ function do_throw(text, stack) {
 
   _passed = false;
   _dump("TEST-UNEXPECTED-FAIL | " + stack.filename + " | " + text +
-         " - See following stack:\n");
+        " - See following stack:\n");
   var frame = Components.stack;
   while (frame != null) {
     _dump(frame + "\n");
@@ -324,17 +468,104 @@ function do_throw(text, stack) {
   throw Components.results.NS_ERROR_ABORT;
 }
 
-function do_check_neq(left, right, stack) {
+function do_throw_todo(text, stack) {
+  if (!stack)
+    stack = Components.stack.caller;
+
+  _passed = false;
+  _dump("TEST-UNEXPECTED-PASS | " + stack.filename + " | " + text +
+        " - See following stack:\n");
+  var frame = Components.stack;
+  while (frame != null) {
+    _dump(frame + "\n");
+    frame = frame.caller;
+  }
+
+  _do_quit();
+  throw Components.results.NS_ERROR_ABORT;
+}
+
+function do_report_unexpected_exception(ex, text) {
+  var caller_stack = Components.stack.caller;
+  text = text ? text + " - " : "";
+
+  _passed = false;
+  _dump("TEST-UNEXPECTED-FAIL | " + caller_stack.filename + " | " + text +
+        "Unexpected exception " + ex + ", see following stack:\n" + ex.stack +
+        "\n");
+
+  _do_quit();
+  throw Components.results.NS_ERROR_ABORT;
+}
+
+function do_note_exception(ex, text) {
+  var caller_stack = Components.stack.caller;
+  text = text ? text + " - " : "";
+
+  _dump("TEST-INFO | " + caller_stack.filename + " | " + text +
+        "Swallowed exception " + ex + ", see following stack:\n" + ex.stack +
+        "\n");
+}
+
+function _do_check_neq(left, right, stack, todo) {
   if (!stack)
     stack = Components.stack.caller;
 
   var text = left + " != " + right;
   if (left == right) {
-    do_throw(text, stack);
+    if (!todo) {
+      do_throw(text, stack);
+    } else {
+      ++_todoChecks;
+      _dump("TEST-KNOWN-FAIL | " + stack.filename + " | [" + stack.name +
+            " : " + stack.lineNumber + "] " + text +"\n");
+    }
   } else {
-    ++_passedChecks;
-    _dump("TEST-PASS | " + stack.filename + " | [" + stack.name + " : " +
-         stack.lineNumber + "] " + text + "\n");
+    if (!todo) {
+      ++_passedChecks;
+      _dump("TEST-PASS | " + stack.filename + " | [" + stack.name + " : " +
+            stack.lineNumber + "] " + text + "\n");
+    } else {
+      do_throw_todo(text, stack);
+    }
+  }
+}
+
+function do_check_neq(left, right, stack) {
+  if (!stack)
+    stack = Components.stack.caller;
+
+  _do_check_neq(left, right, stack, false);
+}
+
+function todo_check_neq(left, right, stack) {
+  if (!stack)
+      stack = Components.stack.caller;
+
+  _do_check_neq(left, right, stack, true);
+}
+
+function _do_check_eq(left, right, stack, todo) {
+  if (!stack)
+    stack = Components.stack.caller;
+
+  var text = left + " == " + right;
+  if (left != right) {
+    if (!todo) {
+      do_throw(text, stack);
+    } else {
+      ++_todoChecks;
+      _dump("TEST-KNOWN-FAIL | " + stack.filename + " | [" + stack.name +
+            " : " + stack.lineNumber + "] " + text +"\n");
+    }
+  } else {
+    if (!todo) {
+      ++_passedChecks;
+      _dump("TEST-PASS | " + stack.filename + " | [" + stack.name + " : " +
+            stack.lineNumber + "] " + text + "\n");
+    } else {
+      do_throw_todo(text, stack);
+    }
   }
 }
 
@@ -342,14 +573,14 @@ function do_check_eq(left, right, stack) {
   if (!stack)
     stack = Components.stack.caller;
 
-  var text = left + " == " + right;
-  if (left != right) {
-    do_throw(text, stack);
-  } else {
-    ++_passedChecks;
-    _dump("TEST-PASS | " + stack.filename + " | [" + stack.name + " : " +
-         stack.lineNumber + "] " + text + "\n");
-  }
+  _do_check_eq(left, right, stack, false);
+}
+
+function todo_check_eq(left, right, stack) {
+  if (!stack)
+      stack = Components.stack.caller;
+
+  _do_check_eq(left, right, stack, true);
 }
 
 function do_check_true(condition, stack) {
@@ -359,11 +590,33 @@ function do_check_true(condition, stack) {
   do_check_eq(condition, true, stack);
 }
 
+function todo_check_true(condition, stack) {
+  if (!stack)
+    stack = Components.stack.caller;
+
+  todo_check_eq(condition, true, stack);
+}
+
 function do_check_false(condition, stack) {
   if (!stack)
     stack = Components.stack.caller;
 
   do_check_eq(condition, false, stack);
+}
+
+function todo_check_false(condition, stack) {
+  if (!stack)
+    stack = Components.stack.caller;
+
+  todo_check_eq(condition, false, stack);
+}
+
+function do_check_null(condition, stack=Components.stack.caller) {
+  do_check_eq(condition, null, stack);
+}
+
+function todo_check_null(condition, stack=Components.stack.caller) {
+  todo_check_eq(condition, null, stack);
 }
 
 function do_test_pending() {
@@ -402,8 +655,8 @@ function do_get_file(path, allowNonexistent) {
       _passed = false;
       var stack = Components.stack.caller;
       _dump("TEST-UNEXPECTED-FAIL | " + stack.filename + " | [" +
-             stack.name + " : " + stack.lineNumber + "] " + lf.path +
-             " does not exist\n");
+            stack.name + " : " + stack.lineNumber + "] " + lf.path +
+            " does not exist\n");
     }
 
     return lf;
@@ -418,14 +671,6 @@ function do_get_file(path, allowNonexistent) {
 // do_get_cwd() isn't exactly self-explanatory, so provide a helper
 function do_get_cwd() {
   return do_get_file("");
-}
-
-/**
- * Loads _HTTPD_JS_PATH file, which is dynamically defined by
- * <runxpcshelltests.py>.
- */
-function do_load_httpd_js() {
-  load(_HTTPD_JS_PATH);
 }
 
 function do_load_manifest(path) {
@@ -493,15 +738,17 @@ function do_register_cleanup(aFunction)
  * @return nsILocalFile of the profile directory.
  */
 function do_get_profile() {
-  // Since we have a profile, we will notify profile shutdown topics at
-  // the end of the current test, to ensure correct cleanup on shutdown.
-  do_register_cleanup(function() {
-    let obsSvc = Components.classes["@mozilla.org/observer-service;1"].
-                 getService(Components.interfaces.nsIObserverService);
-    obsSvc.notifyObservers(null, "profile-change-net-teardown", null);
-    obsSvc.notifyObservers(null, "profile-change-teardown", null);
-    obsSvc.notifyObservers(null, "profile-before-change", null);
-  });
+  if (!_profileInitialized) {
+    // Since we have a profile, we will notify profile shutdown topics at
+    // the end of the current test, to ensure correct cleanup on shutdown.
+    do_register_cleanup(function() {
+      let obsSvc = Components.classes["@mozilla.org/observer-service;1"].
+                   getService(Components.interfaces.nsIObserverService);
+      obsSvc.notifyObservers(null, "profile-change-net-teardown", null);
+      obsSvc.notifyObservers(null, "profile-change-teardown", null);
+      obsSvc.notifyObservers(null, "profile-before-change", null);
+    });
+  }
 
   let env = Components.classes["@mozilla.org/process/environment;1"]
                       .getService(Components.interfaces.nsIEnvironment);
@@ -516,7 +763,8 @@ function do_get_profile() {
   let provider = {
     getFile: function(prop, persistent) {
       persistent.value = true;
-      if (prop == "ProfD" || prop == "ProfLD" || prop == "ProfDS") {
+      if (prop == "ProfD" || prop == "ProfLD" || prop == "ProfDS" ||
+          prop == "ProfLDS" || prop == "TmpD") {
         return file.clone();
       }
       throw Components.results.NS_ERROR_FAILURE;
@@ -531,6 +779,22 @@ function do_get_profile() {
   };
   dirSvc.QueryInterface(Components.interfaces.nsIDirectoryService)
         .registerProvider(provider);
+
+  let obsSvc = Components.classes["@mozilla.org/observer-service;1"].
+        getService(Components.interfaces.nsIObserverService);
+
+  if (!_profileInitialized) {
+    obsSvc.notifyObservers(null, "profile-do-change", "xpcshell-do-get-profile");
+    _profileInitialized = true;
+  }
+
+  // The methods of 'provider' will retain this scope so null out everything
+  // to avoid spurious leak reports.
+  env = null;
+  profd = null;
+  dirSvc = null;
+  provider = null;
+  obsSvc = null;
   return file.clone();
 }
 
@@ -545,11 +809,7 @@ function do_get_profile() {
 function do_load_child_test_harness()
 {
   // Make sure this isn't called from child process
-  var runtime = Components.classes["@mozilla.org/xre/app-info;1"]
-                  .getService(Components.interfaces.nsIXULRuntime);
-  if (runtime.processType != 
-            Components.interfaces.nsIXULRuntime.PROCESS_TYPE_DEFAULT) 
-  {
+  if (!runningInParent) {
     do_throw("run_test_in_child cannot be called from child!");
   }
 
@@ -565,14 +825,22 @@ function do_load_child_test_harness()
   var quoted_tail_files = _TAIL_FILES.map(addQuotes);
 
   _XPCSHELL_PROCESS = "parent";
- 
-  sendCommand(
+
+  let command =
         "const _HEAD_JS_PATH='" + _HEAD_JS_PATH + "'; "
       + "const _HTTPD_JS_PATH='" + _HTTPD_JS_PATH + "'; "
       + "const _HEAD_FILES=[" + quoted_head_files.join() + "];"
       + "const _TAIL_FILES=[" + quoted_tail_files.join() + "];"
-      + "const _XPCSHELL_PROCESS='child';"
-      + "load(_HEAD_JS_PATH);");
+      + "const _XPCSHELL_PROCESS='child';";
+
+  if (this._TESTING_MODULES_DIR) {
+    normalized = this._TESTING_MODULES_DIR.replace('\\', '\\\\', 'g');
+    command += "const _TESTING_MODULES_DIR='" + normalized + "'; ";
+  }
+
+  command += "load(_HEAD_JS_PATH);";
+
+  sendCommand(command);
 }
 
 /**
@@ -596,7 +864,114 @@ function run_test_in_child(testFile, optionalCallback)
 
   var testPath = do_get_file(testFile).path.replace(/\\/g, "/");
   do_test_pending();
-  sendCommand("const _TEST_FILE=['" + testPath + "']; _execute_test();", 
+  sendCommand("_dump('CHILD-TEST-STARTED'); "
+              + "const _TEST_FILE=['" + testPath + "']; _execute_test(); "
+              + "_dump('CHILD-TEST-COMPLETED');", 
               callback);
 }
 
+
+/**
+ * Add a test function to the list of tests that are to be run asynchronously.
+ *
+ * Each test function must call run_next_test() when it's done. Test files
+ * should call run_next_test() in their run_test function to execute all
+ * async tests.
+ *
+ * @return the test function that was passed in.
+ */
+let _gTests = [];
+function add_test(func) {
+  _gTests.push([false, func]);
+  return func;
+}
+
+// We lazy import Task.jsm so we don't incur a run-time penalty for all tests.
+let _Task;
+
+/**
+ * Add a test function which is a Task function.
+ *
+ * Task functions are functions fed into Task.jsm's Task.spawn(). They are
+ * generators that emit promises.
+ *
+ * If an exception is thrown, a do_check_* comparison fails, or if a rejected
+ * promise is yielded, the test function aborts immediately and the test is
+ * reported as a failure.
+ *
+ * Unlike add_test(), there is no need to call run_next_test(). The next test
+ * will run automatically as soon the task function is exhausted. To trigger
+ * premature (but successful) termination of the function, simply return or
+ * throw a Task.Result instance.
+ *
+ * Example usage:
+ *
+ * add_task(function test() {
+ *   let result = yield Promise.resolve(true);
+ *
+ *   do_check_true(result);
+ *
+ *   let secondary = yield someFunctionThatReturnsAPromise(result);
+ *   do_check_eq(secondary, "expected value");
+ * });
+ *
+ * add_task(function test_early_return() {
+ *   let result = yield somethingThatReturnsAPromise();
+ *
+ *   if (!result) {
+ *     // Test is ended immediately, with success.
+ *     return;
+ *   }
+ *
+ *   do_check_eq(result, "foo");
+ * });
+ */
+function add_task(func) {
+  if (!_Task) {
+    let ns = {};
+    _Task = Components.utils.import("resource://gre/modules/Task.jsm", ns).Task;
+  }
+
+  _gTests.push([true, func]);
+}
+
+/**
+ * Runs the next test function from the list of async tests.
+ */
+let _gRunningTest = null;
+let _gTestIndex = 0; // The index of the currently running test.
+function run_next_test()
+{
+  function _run_next_test()
+  {
+    if (_gTestIndex < _gTests.length) {
+      do_test_pending();
+      let _isTask;
+      [_isTask, _gRunningTest] = _gTests[_gTestIndex++];
+      print("TEST-INFO | " + _TEST_FILE + " | Starting " + _gRunningTest.name);
+
+      if (_isTask) {
+        _Task.spawn(_gRunningTest)
+             .then(run_next_test, do_report_unexpected_exception);
+      } else {
+        // Exceptions do not kill asynchronous tests, so they'll time out.
+        try {
+          _gRunningTest();
+        } catch (e) {
+          do_throw(e);
+        }
+      }
+    }
+  }
+
+  // For sane stacks during failures, we execute this code soon, but not now.
+  // We do this now, before we call do_test_finished(), to ensure the pending
+  // counter (_tests_pending) never reaches 0 while we still have tests to run
+  // (do_execute_soon bumps that counter).
+  do_execute_soon(_run_next_test);
+
+  if (_gRunningTest !== null) {
+    // Close the previous test do_test_pending call.
+    do_test_finished();
+  }
+}

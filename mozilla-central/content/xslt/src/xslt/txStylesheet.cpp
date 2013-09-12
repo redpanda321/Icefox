@@ -1,40 +1,9 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is TransforMiiX XSLT processor code.
- *
- * The Initial Developer of the Original Code is
- * Jonas Sicking.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Jonas Sicking <jonas@sicking.cc>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "mozilla/FloatingPoint.h"
 
 #include "txStylesheet.h"
 #include "txExpr.h"
@@ -47,7 +16,7 @@
 #include "txXPathTreeWalker.h"
 
 txStylesheet::txStylesheet()
-    : mRootFrame(nsnull)
+    : mRootFrame(nullptr)
 {
 }
 
@@ -99,7 +68,7 @@ txStylesheet::init()
 
     nt.forget();
 
-    mCharactersTemplate = new txValueOf(nodeExpr, PR_FALSE);
+    mCharactersTemplate = new txValueOf(nodeExpr, false);
     NS_ENSURE_TRUE(mCharactersTemplate, NS_ERROR_OUT_OF_MEMORY);
 
     mCharactersTemplate->mNext = new txReturn();
@@ -143,9 +112,9 @@ txStylesheet::findTemplate(const txXPathNode& aNode,
 {
     NS_ASSERTION(aImportFrame, "missing ImportFrame pointer");
 
-    *aImportFrame = nsnull;
-    txInstruction* matchTemplate = nsnull;
-    ImportFrame* endFrame = nsnull;
+    *aImportFrame = nullptr;
+    txInstruction* matchTemplate = nullptr;
+    ImportFrame* endFrame = nullptr;
     txListIterator frameIter(&mImportFrames);
 
     if (aImportedBy) {
@@ -171,7 +140,7 @@ txStylesheet::findTemplate(const txXPathNode& aNode,
 
         if (templates) {
             // Find template with highest priority
-            PRUint32 i, len = templates->Length();
+            uint32_t i, len = templates->Length();
             for (i = 0; i < len && !matchTemplate; ++i) {
                 MatchableTemplate& templ = (*templates)[i];
                 if (templ.mMatch->matches(aNode, aContext)) {
@@ -265,29 +234,29 @@ txStylesheet::getKeyMap()
     return mKeys;
 }
 
-PRBool
+bool
 txStylesheet::isStripSpaceAllowed(const txXPathNode& aNode, txIMatchContext* aContext)
 {
-    PRInt32 frameCount = mStripSpaceTests.Length();
+    int32_t frameCount = mStripSpaceTests.Length();
     if (frameCount == 0) {
-        return PR_FALSE;
+        return false;
     }
 
     txXPathTreeWalker walker(aNode);
 
     if (txXPathNodeUtils::isText(walker.getCurrentPosition()) &&
         (!txXPathNodeUtils::isWhitespace(aNode) || !walker.moveToParent())) {
-        return PR_FALSE;
+        return false;
     }
 
     const txXPathNode& node = walker.getCurrentPosition();
 
     if (!txXPathNodeUtils::isElement(node)) {
-        return PR_FALSE;
+        return false;
     }
 
     // check Whitespace stipping handling list against given Node
-    PRInt32 i;
+    int32_t i;
     for (i = 0; i < frameCount; ++i) {
         txStripSpaceTest* sst = mStripSpaceTests[i];
         if (sst->matches(node, aContext)) {
@@ -295,7 +264,7 @@ txStylesheet::isStripSpaceAllowed(const txXPathNode& aNode, txIMatchContext* aCo
         }
     }
 
-    return PR_FALSE;
+    return false;
 }
 
 nsresult
@@ -307,7 +276,7 @@ txStylesheet::doneCompiling()
     rv = frameIter.addAfter(mRootFrame);
     NS_ENSURE_SUCCESS(rv, rv);
     
-    mRootFrame = nsnull;
+    mRootFrame = nullptr;
     frameIter.next();
     rv = addFrames(frameIter);
     NS_ENSURE_SUCCESS(rv, rv);
@@ -317,7 +286,7 @@ txStylesheet::doneCompiling()
     frameIter.reset();
     ImportFrame* frame;
     while ((frame = static_cast<ImportFrame*>(frameIter.next()))) {
-        nsTPtrArray<txStripSpaceTest> frameStripSpaceTests;
+        nsTArray<txStripSpaceTest*> frameStripSpaceTests;
 
         txListIterator itemIter(&frame->mToplevelItems);
         itemIter.resetToEnd();
@@ -436,19 +405,19 @@ txStylesheet::addTemplate(txTemplateItem* aTemplate,
     if (simple->getType() == txPattern::UNION_PATTERN) {
         unionPattern = simple;
         simple = unionPattern->getSubPatternAt(0);
-        unionPattern->setSubPatternAt(0, nsnull);
+        unionPattern->setSubPatternAt(0, nullptr);
     }
 
-    PRUint32 unionPos = 1; // only used when unionPattern is set
+    uint32_t unionPos = 1; // only used when unionPattern is set
     while (simple) {
         double priority = aTemplate->mPrio;
-        if (Double::isNaN(priority)) {
+        if (MOZ_DOUBLE_IS_NaN(priority)) {
             priority = simple->getDefaultPriority();
-            NS_ASSERTION(!Double::isNaN(priority),
+            NS_ASSERTION(!MOZ_DOUBLE_IS_NaN(priority),
                          "simple pattern without default priority");
         }
 
-        PRUint32 i, len = templates->Length();
+        uint32_t i, len = templates->Length();
         for (i = 0; i < len; ++i) {
             if (priority > (*templates)[i].mPriority) {
                 break;
@@ -465,7 +434,7 @@ txStylesheet::addTemplate(txTemplateItem* aTemplate,
         if (unionPattern) {
             simple = unionPattern->getSubPatternAt(unionPos);
             if (simple) {
-                unionPattern->setSubPatternAt(unionPos, nsnull);
+                unionPattern->setSubPatternAt(unionPos, nullptr);
             }
             ++unionPos;
         }
@@ -502,13 +471,13 @@ txStylesheet::addFrames(txListIterator& aInsertIter)
 
 nsresult
 txStylesheet::addStripSpace(txStripSpaceItem* aStripSpaceItem,
-                            nsTPtrArray<txStripSpaceTest>& aFrameStripSpaceTests)
+                            nsTArray<txStripSpaceTest*>& aFrameStripSpaceTests)
 {
-    PRInt32 testCount = aStripSpaceItem->mStripSpaceTests.Length();
+    int32_t testCount = aStripSpaceItem->mStripSpaceTests.Length();
     for (; testCount > 0; --testCount) {
         txStripSpaceTest* sst = aStripSpaceItem->mStripSpaceTests[testCount-1];
         double priority = sst->getDefaultPriority();
-        PRInt32 i, frameCount = aFrameStripSpaceTests.Length();
+        int32_t i, frameCount = aFrameStripSpaceTests.Length();
         for (i = 0; i < frameCount; ++i) {
             if (aFrameStripSpaceTests[i]->getDefaultPriority() < priority) {
                 break;
@@ -541,7 +510,7 @@ txStylesheet::addAttributeSet(txAttributeSetItem* aAttributeSetItem)
     
     // We need to prepend the new instructions before the existing ones.
     txInstruction* instr = aAttributeSetItem->mFirstInstruction;
-    txInstruction* lastNonReturn = nsnull;
+    txInstruction* lastNonReturn = nullptr;
     while (instr->mNext) {
         lastNonReturn = instr;
         instr = instr->mNext;
@@ -636,7 +605,7 @@ txStylesheet::ImportFrame::~ImportFrame()
 
 txStylesheet::GlobalVariable::GlobalVariable(nsAutoPtr<Expr> aExpr,
                                              nsAutoPtr<txInstruction> aFirstInstruction,
-                                             PRBool aIsParam)
+                                             bool aIsParam)
     : mExpr(aExpr), mFirstInstruction(aFirstInstruction), mIsParam(aIsParam)
 {
 }

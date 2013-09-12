@@ -54,12 +54,10 @@ function thirdPageLoaded() {
 
 function imageLoaded() {
   zoomTest(gTab1, 1, "Zoom should be 1 when image was loaded in the background");
-  afterZoom(function() {
-    zoomTest(gTab1, 1, "Zoom should still be 1 when tab with image is selected");
-
-    executeSoon(imageZoomSwitch);
-  });
   gBrowser.selectedTab = gTab1;
+  zoomTest(gTab1, 1, "Zoom should still be 1 when tab with image is selected");
+
+  executeSoon(imageZoomSwitch);
 }
 
 function imageZoomSwitch() {
@@ -72,13 +70,14 @@ function imageZoomSwitch() {
         finishTest();
       });
       gBrowser.selectedTab = gTab2;
-
-      finishTest();
     });
   });
 }
 
+var finishTestStarted  = false;
 function finishTest() {
+  ok(!finishTestStarted, "finishTest called more than once");
+  finishTestStarted = true;
   gBrowser.selectedTab = gTab1;
   FullZoom.reset();
   gBrowser.removeTab(gTab1);
@@ -94,7 +93,8 @@ function zoomTest(tab, val, msg) {
 }
 
 function load(tab, url, cb) {
-  let didLoad = didZoom = false;
+  let didLoad = false;
+  let didZoom = false;
   tab.linkedBrowser.addEventListener("load", function (event) {
     event.currentTarget.removeEventListener("load", arguments.callee, true);
     didLoad = true;
@@ -112,7 +112,8 @@ function load(tab, url, cb) {
 }
 
 function navigate(direction, cb) {
-  let didPs = didZoom = false;
+  let didPs = false;
+  let didZoom = false;
   gBrowser.addEventListener("pageshow", function (event) {
     gBrowser.removeEventListener("pageshow", arguments.callee, true);
     didPs = true;
@@ -133,12 +134,10 @@ function navigate(direction, cb) {
 }
 
 function afterZoom(cb) {
-  let oldAPTS = FullZoom._applyPrefToSetting;
-  FullZoom._applyPrefToSetting = function(value, browser) {
-    if (!value)
-      value = undefined;
-    oldAPTS.call(FullZoom, value, browser);
-    FullZoom._applyPrefToSetting = oldAPTS;
+  let oldSZFB = ZoomManager.setZoomForBrowser;
+  ZoomManager.setZoomForBrowser = function(browser, value) {
+    oldSZFB.call(ZoomManager, browser, value);
+    ZoomManager.setZoomForBrowser = oldSZFB;
     executeSoon(cb);
   };
 }

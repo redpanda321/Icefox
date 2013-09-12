@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 // vim: ft=cpp tw=78 sw=4 et ts=8
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla code.
- *
- * The Initial Developer of the Original Code is
- * Zero-Knowledge Systems, Inc.
- * Portions created by the Initial Developer are Copyright (C) 2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* 
  * Implementation of the "@mozilla.org/layout/content-policy;1" contract.
@@ -86,7 +54,7 @@ nsContentPolicy::~nsContentPolicy()
 #define WARN_IF_URI_UNINITIALIZED(uri,name)                         \
   PR_BEGIN_MACRO                                                    \
     if ((uri)) {                                                    \
-        nsCAutoString spec;                                         \
+        nsAutoCString spec;                                         \
         (uri)->GetAsciiSpec(spec);                                  \
         if (spec.IsEmpty()) {                                       \
             NS_WARNING(name " is uninitialized, fix caller");       \
@@ -102,13 +70,14 @@ nsContentPolicy::~nsContentPolicy()
 
 inline nsresult
 nsContentPolicy::CheckPolicy(CPMethod          policyMethod,
-                             PRUint32          contentType,
+                             uint32_t          contentType,
                              nsIURI           *contentLocation,
                              nsIURI           *requestingLocation,
                              nsISupports      *requestingContext,
                              const nsACString &mimeType,
                              nsISupports      *extra,
-                             PRInt16           *decision)
+                             nsIPrincipal     *requestPrincipal,
+                             int16_t           *decision)
 {
     //sanity-check passed-through parameters
     NS_PRECONDITION(decision, "Null out pointer");
@@ -133,7 +102,7 @@ nsContentPolicy::CheckPolicy(CPMethod          policyMethod,
         nsCOMPtr<nsIDocument> doc;
         nsCOMPtr<nsIContent> node = do_QueryInterface(requestingContext);
         if (node) {
-            doc = node->GetOwnerDoc();
+            doc = node->OwnerDoc();
         }
         if (!doc) {
             doc = do_QueryInterface(requestingContext);
@@ -149,12 +118,13 @@ nsContentPolicy::CheckPolicy(CPMethod          policyMethod,
      */
     nsresult rv;
     const nsCOMArray<nsIContentPolicy>& entries = mPolicies.GetEntries();
-    PRInt32 count = entries.Count();
-    for (PRInt32 i = 0; i < count; i++) {
+    int32_t count = entries.Count();
+    for (int32_t i = 0; i < count; i++) {
         /* check the appropriate policy */
         rv = (entries[i]->*policyMethod)(contentType, contentLocation,
                                          requestingLocation, requestingContext,
-                                         mimeType, extra, decision);
+                                         mimeType, extra, requestPrincipal,
+                                         decision);
 
         if (NS_SUCCEEDED(rv) && NS_CP_REJECTED(*decision)) {
             /* policy says no, no point continuing to check */
@@ -181,11 +151,11 @@ nsContentPolicy::CheckPolicy(CPMethod          policyMethod,
       } else {                                                                \
         resultName = "(null ptr)";                                            \
       }                                                                       \
-      nsCAutoString spec("None");                                             \
+      nsAutoCString spec("None");                                             \
       if (contentLocation) {                                                  \
           contentLocation->GetSpec(spec);                                     \
       }                                                                       \
-      nsCAutoString refSpec("None");                                          \
+      nsAutoCString refSpec("None");                                          \
       if (requestingLocation) {                                               \
           requestingLocation->GetSpec(refSpec);                               \
       }                                                                       \
@@ -203,36 +173,40 @@ nsContentPolicy::CheckPolicy(CPMethod          policyMethod,
 #endif //!defined(PR_LOGGING)
 
 NS_IMETHODIMP
-nsContentPolicy::ShouldLoad(PRUint32          contentType,
+nsContentPolicy::ShouldLoad(uint32_t          contentType,
                             nsIURI           *contentLocation,
                             nsIURI           *requestingLocation,
                             nsISupports      *requestingContext,
                             const nsACString &mimeType,
                             nsISupports      *extra,
-                            PRInt16          *decision)
+                            nsIPrincipal     *requestPrincipal,
+                            int16_t          *decision)
 {
     // ShouldProcess does not need a content location, but we do
     NS_PRECONDITION(contentLocation, "Must provide request location");
     nsresult rv = CheckPolicy(&nsIContentPolicy::ShouldLoad, contentType,
                               contentLocation, requestingLocation,
-                              requestingContext, mimeType, extra, decision);
+                              requestingContext, mimeType, extra,
+                              requestPrincipal, decision);
     LOG_CHECK("ShouldLoad");
 
     return rv;
 }
 
 NS_IMETHODIMP
-nsContentPolicy::ShouldProcess(PRUint32          contentType,
+nsContentPolicy::ShouldProcess(uint32_t          contentType,
                                nsIURI           *contentLocation,
                                nsIURI           *requestingLocation,
                                nsISupports      *requestingContext,
                                const nsACString &mimeType,
                                nsISupports      *extra,
-                               PRInt16          *decision)
+                               nsIPrincipal     *requestPrincipal,
+                               int16_t          *decision)
 {
     nsresult rv = CheckPolicy(&nsIContentPolicy::ShouldProcess, contentType,
                               contentLocation, requestingLocation,
-                              requestingContext, mimeType, extra, decision);
+                              requestingContext, mimeType, extra,
+                              requestPrincipal, decision);
     LOG_CHECK("ShouldProcess");
 
     return rv;

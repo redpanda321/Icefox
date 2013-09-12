@@ -6,57 +6,40 @@
 <window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         title="Accessible Table indexes tests">
 
-  <script type="application/javascript" 
-          src="chrome://mochikit/content/MochiKit/packed.js" />
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/treeview.js" />
+          src="../treeview.js" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/common.js" />
+          src="../common.js" />
   <script type="application/javascript"
-          src="chrome://mochikit/content/a11y/accessible/table.js" />
+          src="../events.js" />
+  <script type="application/javascript"
+          src="../table.js" />
 
   <script type="application/javascript">
   <![CDATA[
     ////////////////////////////////////////////////////////////////////////////
     // Test
 
-    var gTree = null;
-    var gTreeBox = null;
-    var gTreeView = null;
-
     // gA11yEventDumpID = "debug";
 
     function doTest()
     {
-      // Initialize the tree
-      gTree = document.getElementById("tree");
-      gTreeBox = gTree.treeBoxObject;
-      gView = new nsTableTreeView(3);
-
-      gTree.addEventListener("TreeViewChanged", continueTest, false);
-      gTreeBox.view = gView;
-    }
-
-    function continueTest()
-    {
-      gTree.removeEventListener("TreeViewChanged", continueTest, false);
-
       var idxes = [
         [0, 1],
         [2, 3],
         [4, 5]
       ];
-      testTableIndexes(gTree, idxes);
+      testTableIndexes("tree", idxes);
 
       SimpleTest.finish();
     }
 
     SimpleTest.waitForExplicitFinish();
-    addA11yLoadEvent(doTest);
+    addA11yXULTreeLoadEvent(doTest, "tree", new nsTableTreeView(3));
   ]]>
   </script>
 

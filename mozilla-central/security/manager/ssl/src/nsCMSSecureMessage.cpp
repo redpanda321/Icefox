@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corp..
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s): Terry Hayes <thayes@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "nsMemory.h"
 #include "nsXPIDLString.h"
 #include "nsCOMPtr.h"
 #include "nsISupports.h"
@@ -108,7 +75,7 @@ GetCertByPrefID(const char *certID, char **_retval)
 
   /* Find a good cert in the user's database */
   cert = CERT_FindUserCertByUsage(CERT_GetDefaultCertDB(), const_cast<char*>(nickname.get()), 
-           certUsageEmailRecipient, PR_TRUE, ctx);
+           certUsageEmailRecipient, true, ctx);
 
   if (!cert) { 
     /* Success, but no value */
@@ -132,7 +99,7 @@ DecodeCert(const char *value, nsIX509Cert ** _retval)
   nsNSSShutDownPreventionLock locker;
   PR_LOG(gPIPNSSLog, PR_LOG_DEBUG, ("nsCMSSecureMessage::DecodeCert\n"));
   nsresult rv = NS_OK;
-  PRInt32 length;
+  int32_t length;
   unsigned char *data = 0;
 
   *_retval = 0;
@@ -169,18 +136,17 @@ SendMessage(const char *msg, const char *base64Cert, char ** _retval)
   CERTCertificate *cert = 0;
   NSSCMSMessage *cmsMsg = 0;
   unsigned char *certDER = 0;
-  PRInt32 derLen;
+  int32_t derLen;
   NSSCMSEnvelopedData *env;
   NSSCMSContentInfo *cinfo;
   NSSCMSRecipientInfo *rcpt;
-  SECItem item;
   SECItem output;
   PLArenaPool *arena = PORT_NewArena(1024);
   SECStatus s;
   nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext();
 
   /* Step 0. Create a CMS Message */
-  cmsMsg = NSS_CMSMessage_Create(NULL);
+  cmsMsg = NSS_CMSMessage_Create(nullptr);
   if (!cmsMsg) {
     PR_LOG(gPIPNSSLog, PR_LOG_DEBUG, ("nsCMSSecureMessage::SendMessage - can't create NSSCMSMessage\n"));
     rv = NS_ERROR_FAILURE;
@@ -218,9 +184,7 @@ SendMessage(const char *msg, const char *base64Cert, char ** _retval)
   }
 
   cinfo = NSS_CMSEnvelopedData_GetContentInfo(env);
-  item.data = (unsigned char *)msg;
-  item.len = strlen(msg);  /* XPCOM equiv?? */
-  s = NSS_CMSContentInfo_SetContent_Data(cmsMsg, cinfo, 0, PR_FALSE);
+  s = NSS_CMSContentInfo_SetContent_Data(cmsMsg, cinfo, 0, false);
   if (s != SECSuccess) {
     PR_LOG(gPIPNSSLog, PR_LOG_DEBUG, ("nsCMSSecureMessage::SendMessage - can't set content data\n"));
     rv = NS_ERROR_FAILURE;
@@ -283,7 +247,7 @@ done:
   if (certDER) nsCRT::free((char *)certDER);
   if (cert) CERT_DestroyCertificate(cert);
   if (cmsMsg) NSS_CMSMessage_Destroy(cmsMsg);
-  if (arena) PORT_FreeArena(arena, PR_FALSE);  /* PR_FALSE? */
+  if (arena) PORT_FreeArena(arena, false);  /* false? */
 
   return rv;
 }
@@ -299,7 +263,7 @@ ReceiveMessage(const char *msg, char **_retval)
   nsresult rv = NS_OK;
   NSSCMSDecoderContext *dcx;
   unsigned char *der = 0;
-  PRInt32 derLen;
+  int32_t derLen;
   NSSCMSMessage *cmsMsg = 0;
   SECItem *content;
   nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext();
@@ -347,11 +311,11 @@ done:
 }
 
 nsresult nsCMSSecureMessage::
-encode(const unsigned char *data, PRInt32 dataLen, char **_retval)
+encode(const unsigned char *data, int32_t dataLen, char **_retval)
 {
   nsresult rv = NS_OK;
 
-  *_retval = PL_Base64Encode((const char *)data, dataLen, NULL);
+  *_retval = PL_Base64Encode((const char *)data, dataLen, nullptr);
   if (!*_retval) { rv = NS_ERROR_OUT_OF_MEMORY; goto loser; }
 
 loser:
@@ -359,11 +323,11 @@ loser:
 }
 
 nsresult nsCMSSecureMessage::
-decode(const char *data, unsigned char **result, PRInt32 * _retval)
+decode(const char *data, unsigned char **result, int32_t * _retval)
 {
   PR_LOG(gPIPNSSLog, PR_LOG_DEBUG, ("nsCMSSecureMessage::decode\n"));
   nsresult rv = NS_OK;
-  PRUint32 len = PL_strlen(data);
+  uint32_t len = PL_strlen(data);
   int adjust = 0;
 
   /* Compute length adjustment */
@@ -372,7 +336,7 @@ decode(const char *data, unsigned char **result, PRInt32 * _retval)
     if (data[len-2] == '=') adjust++;
   }
 
-  *result = (unsigned char *)PL_Base64Decode(data, len, NULL);
+  *result = (unsigned char *)PL_Base64Decode(data, len, nullptr);
   if (!*result) {
     PR_LOG(gPIPNSSLog, PR_LOG_DEBUG, ("nsCMSSecureMessage::decode - error decoding base64\n"));
     rv = NS_ERROR_ILLEGAL_VALUE;

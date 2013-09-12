@@ -1,54 +1,25 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Ryan Jones <sciguyryan@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "nsIDOMHTMLTitleElement.h"
 #include "nsIDOMEventTarget.h"
 #include "nsGenericHTMLElement.h"
 #include "nsStyleConsts.h"
-#include "nsIDOMText.h"
 #include "nsIDocument.h"
-#include "nsIDOMHTMLDocument.h"
 #include "nsContentUtils.h"
+#include "nsStubMutationObserver.h"
+
+using namespace mozilla::dom;
 
 class nsHTMLTitleElement : public nsGenericHTMLElement,
                            public nsIDOMHTMLTitleElement,
                            public nsStubMutationObserver
 {
 public:
+  using Element::GetText;
+  using Element::SetText;
+
   nsHTMLTitleElement(already_AddRefed<nsINodeInfo> aNodeInfo);
   virtual ~nsHTMLTitleElement();
 
@@ -56,13 +27,13 @@ public:
   NS_DECL_ISUPPORTS_INHERITED
 
   // nsIDOMNode
-  NS_FORWARD_NSIDOMNODE(nsGenericHTMLElement::)
+  NS_FORWARD_NSIDOMNODE_TO_NSINODE
 
   // nsIDOMElement
-  NS_FORWARD_NSIDOMELEMENT(nsGenericHTMLElement::)
+  NS_FORWARD_NSIDOMELEMENT_TO_GENERIC
 
   // nsIDOMHTMLElement
-  NS_FORWARD_NSIDOMHTMLELEMENT(nsGenericHTMLElement::)
+  NS_FORWARD_NSIDOMHTMLELEMENT_TO_GENERIC
 
   // nsIDOMHTMLTitleElement
   NS_DECL_NSIDOMHTMLTITLEELEMENT
@@ -77,16 +48,18 @@ public:
 
   virtual nsresult BindToTree(nsIDocument *aDocument, nsIContent *aParent,
                               nsIContent *aBindingParent,
-                              PRBool aCompileEventHandlers);
+                              bool aCompileEventHandlers);
 
-  virtual void UnbindFromTree(PRBool aDeep = PR_TRUE,
-                              PRBool aNullParent = PR_TRUE);
+  virtual void UnbindFromTree(bool aDeep = true,
+                              bool aNullParent = true);
 
-  virtual nsresult DoneAddingChildren(PRBool aHaveNotified);
+  virtual void DoneAddingChildren(bool aHaveNotified);
 
   virtual nsXPCClassInfo* GetClassInfo();
+
+  virtual nsIDOMNode* AsDOMNode() { return this; }
 private:
-  void SendTitleChangeEvent(PRBool aBound);
+  void SendTitleChangeEvent(bool aBound);
 };
 
 
@@ -104,8 +77,8 @@ nsHTMLTitleElement::~nsHTMLTitleElement()
 }
 
 
-NS_IMPL_ADDREF_INHERITED(nsHTMLTitleElement, nsGenericElement) 
-NS_IMPL_RELEASE_INHERITED(nsHTMLTitleElement, nsGenericElement) 
+NS_IMPL_ADDREF_INHERITED(nsHTMLTitleElement, Element)
+NS_IMPL_RELEASE_INHERITED(nsHTMLTitleElement, Element)
 
 
 DOMCI_NODE_DATA(HTMLTitleElement, nsHTMLTitleElement)
@@ -126,14 +99,14 @@ NS_IMPL_ELEMENT_CLONE(nsHTMLTitleElement)
 NS_IMETHODIMP 
 nsHTMLTitleElement::GetText(nsAString& aTitle)
 {
-  nsContentUtils::GetNodeTextContent(this, PR_FALSE, aTitle);
+  nsContentUtils::GetNodeTextContent(this, false, aTitle);
   return NS_OK;
 }
 
 NS_IMETHODIMP 
 nsHTMLTitleElement::SetText(const nsAString& aTitle)
 {
-  return nsContentUtils::SetNodeTextContent(this, aTitle, PR_TRUE);
+  return nsContentUtils::SetNodeTextContent(this, aTitle, true);
 }
 
 void
@@ -141,42 +114,42 @@ nsHTMLTitleElement::CharacterDataChanged(nsIDocument *aDocument,
                                          nsIContent *aContent,
                                          CharacterDataChangeInfo *aInfo)
 {
-  SendTitleChangeEvent(PR_FALSE);
+  SendTitleChangeEvent(false);
 }
 
 void
 nsHTMLTitleElement::ContentAppended(nsIDocument *aDocument,
                                     nsIContent *aContainer,
                                     nsIContent *aFirstNewContent,
-                                    PRInt32 aNewIndexInContainer)
+                                    int32_t aNewIndexInContainer)
 {
-  SendTitleChangeEvent(PR_FALSE);
+  SendTitleChangeEvent(false);
 }
 
 void
 nsHTMLTitleElement::ContentInserted(nsIDocument *aDocument,
                                     nsIContent *aContainer,
                                     nsIContent *aChild,
-                                    PRInt32 aIndexInContainer)
+                                    int32_t aIndexInContainer)
 {
-  SendTitleChangeEvent(PR_FALSE);
+  SendTitleChangeEvent(false);
 }
 
 void
 nsHTMLTitleElement::ContentRemoved(nsIDocument *aDocument,
                                    nsIContent *aContainer,
                                    nsIContent *aChild,
-                                   PRInt32 aIndexInContainer,
+                                   int32_t aIndexInContainer,
                                    nsIContent *aPreviousSibling)
 {
-  SendTitleChangeEvent(PR_FALSE);
+  SendTitleChangeEvent(false);
 }
 
 nsresult
 nsHTMLTitleElement::BindToTree(nsIDocument *aDocument,
                                nsIContent *aParent,
                                nsIContent *aBindingParent,
-                               PRBool aCompileEventHandlers)
+                               bool aCompileEventHandlers)
 {
   // Let this fall through.
   nsresult rv = nsGenericHTMLElement::BindToTree(aDocument, aParent,
@@ -184,31 +157,30 @@ nsHTMLTitleElement::BindToTree(nsIDocument *aDocument,
                                                  aCompileEventHandlers);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  SendTitleChangeEvent(PR_TRUE);
+  SendTitleChangeEvent(true);
 
   return NS_OK;
 }
 
 void
-nsHTMLTitleElement::UnbindFromTree(PRBool aDeep, PRBool aNullParent)
+nsHTMLTitleElement::UnbindFromTree(bool aDeep, bool aNullParent)
 {
-  SendTitleChangeEvent(PR_FALSE);
+  SendTitleChangeEvent(false);
 
   // Let this fall through.
   nsGenericHTMLElement::UnbindFromTree(aDeep, aNullParent);
 }
 
-nsresult
-nsHTMLTitleElement::DoneAddingChildren(PRBool aHaveNotified)
+void
+nsHTMLTitleElement::DoneAddingChildren(bool aHaveNotified)
 {
   if (!aHaveNotified) {
-    SendTitleChangeEvent(PR_FALSE);
+    SendTitleChangeEvent(false);
   }
-  return NS_OK;
 }
 
 void
-nsHTMLTitleElement::SendTitleChangeEvent(PRBool aBound)
+nsHTMLTitleElement::SendTitleChangeEvent(bool aBound)
 {
   nsIDocument* doc = GetCurrentDoc();
   if (doc) {

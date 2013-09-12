@@ -3,10 +3,14 @@ Any copyright is dedicated to the Public Domain.
 http://creativecommons.org/publicdomain/zero/1.0/
 */
 
-Cu.import("resource://gre/modules/NetUtil.jsm");
+Components.utils.import("resource://gre/modules/NetUtil.jsm");
 
 function test() {
   waitForExplicitFinish();
+
+  // We overload this test to include verifying that httpd.js is
+  // importable as a testing-only JS module.
+  Components.utils.import("resource://testing-common/httpd.js", {});
 
   nextTest();
 }
@@ -24,6 +28,9 @@ var tests = [
 
 var gCertErrorDialogShown = 0;
 
+// We used to show a dialog box by default when we encountered an SSL
+// certificate error. Now we treat these errors just like other
+// networking errors; the dialog is no longer shown.
 function test_asyncFetchBadCert() {
   let listener = new WindowListener("chrome://pippki/content/certerror.xul", function (domwindow) {
     gCertErrorDialogShown++;
@@ -39,7 +46,7 @@ function test_asyncFetchBadCert() {
     ok(!Components.isSuccessCode(aStatusCode), "request failed");
     ok(aRequest instanceof Ci.nsIHttpChannel, "request is an nsIHttpChannel");
 
-    is(gCertErrorDialogShown, 0, "cert error was suppressed");
+    is(gCertErrorDialogShown, 0, "cert error dialog was not shown");
 
     // Now try again with a channel whose notificationCallbacks doesn't suprress errors
     let channel = NetUtil.newChannel("https://untrusted.example.com");
@@ -54,15 +61,16 @@ function test_asyncFetchBadCert() {
       ok(!Components.isSuccessCode(aStatusCode), "request failed");
       ok(aRequest instanceof Ci.nsIHttpChannel, "request is an nsIHttpChannel");
 
-      is(gCertErrorDialogShown, 1, "cert error was not suppressed");
+      is(gCertErrorDialogShown, 0, "cert error dialog was not shown");
 
       // Now try a valid request
       NetUtil.asyncFetch("https://example.com", function (aInputStream, aStatusCode, aRequest) {
+        info("aStatusCode for valid request: " + aStatusCode);
         ok(Components.isSuccessCode(aStatusCode), "request succeeded");
         ok(aRequest instanceof Ci.nsIHttpChannel, "request is an nsIHttpChannel");
         ok(aRequest.requestSucceeded, "HTTP request succeeded");
   
-        is(gCertErrorDialogShown, 1, "cert error was not shown");
+        is(gCertErrorDialogShown, 0, "cert error dialog was not shown");
 
         Services.wm.removeListener(listener);
         nextTest();
@@ -79,7 +87,7 @@ function WindowListener(aURL, aCallback) {
 WindowListener.prototype = {
   onOpenWindow: function(aXULWindow) {
     var domwindow = aXULWindow.QueryInterface(Ci.nsIInterfaceRequestor)
-                              .getInterface(Ci.nsIDOMWindowInternal);
+                              .getInterface(Ci.nsIDOMWindow);
     var self = this;
     domwindow.addEventListener("load", function() {
       domwindow.removeEventListener("load", arguments.callee, false);

@@ -1,46 +1,14 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsMIMEInfoImpl.h"
 #include "nsXPIDLString.h"
 #include "nsReadableUtils.h"
 #include "nsStringEnumerator.h"
-#include "nsILocalFile.h"
+#include "nsIFile.h"
 #include "nsIFileURL.h"
 #include "nsEscape.h"
 #include "nsNetUtil.h"
@@ -65,7 +33,7 @@ nsMIMEInfoBase::nsMIMEInfoBase(const char *aMIMEType) :
     mSchemeOrType(aMIMEType),
     mClass(eMIMEInfo),
     mPreferredAction(nsIMIMEInfo::saveToDisk),
-    mAlwaysAskBeforeHandling(PR_TRUE)
+    mAlwaysAskBeforeHandling(true)
 {
 }
 
@@ -73,7 +41,7 @@ nsMIMEInfoBase::nsMIMEInfoBase(const nsACString& aMIMEType) :
     mSchemeOrType(aMIMEType),
     mClass(eMIMEInfo),
     mPreferredAction(nsIMIMEInfo::saveToDisk),
-    mAlwaysAskBeforeHandling(PR_TRUE)
+    mAlwaysAskBeforeHandling(true)
 {
 }
 
@@ -86,7 +54,7 @@ nsMIMEInfoBase::nsMIMEInfoBase(const nsACString& aType, HandlerClass aClass) :
     mSchemeOrType(aType),
     mClass(aClass),
     mPreferredAction(nsIMIMEInfo::saveToDisk),
-    mAlwaysAskBeforeHandling(PR_TRUE)
+    mAlwaysAskBeforeHandling(true)
 {
 }
 
@@ -101,17 +69,17 @@ nsMIMEInfoBase::GetFileExtensions(nsIUTF8StringEnumerator** aResult)
 }
 
 NS_IMETHODIMP
-nsMIMEInfoBase::ExtensionExists(const nsACString& aExtension, PRBool *_retval)
+nsMIMEInfoBase::ExtensionExists(const nsACString& aExtension, bool *_retval)
 {
     NS_ASSERTION(!aExtension.IsEmpty(), "no extension");
-    PRBool found = PR_FALSE;
-    PRUint32 extCount = mExtensions.Length();
+    bool found = false;
+    uint32_t extCount = mExtensions.Length();
     if (extCount < 1) return NS_OK;
 
-    for (PRUint8 i=0; i < extCount; i++) {
+    for (uint8_t i=0; i < extCount; i++) {
         const nsCString& ext = mExtensions[i];
         if (ext.Equals(aExtension, nsCaseInsensitiveCStringComparator())) {
-            found = PR_TRUE;
+            found = true;
             break;
         }
     }
@@ -134,13 +102,13 @@ NS_IMETHODIMP
 nsMIMEInfoBase::SetPrimaryExtension(const nsACString& aExtension)
 {
   NS_ASSERTION(!aExtension.IsEmpty(), "no extension");
-  PRUint32 extCount = mExtensions.Length();
-  PRUint8 i;
-  PRBool found = PR_FALSE;
+  uint32_t extCount = mExtensions.Length();
+  uint8_t i;
+  bool found = false;
   for (i=0; i < extCount; i++) {
     const nsCString& ext = mExtensions[i];
     if (ext.Equals(aExtension, nsCaseInsensitiveCStringComparator())) {
-      found = PR_TRUE;
+      found = true;
       break;
     }
   }
@@ -195,11 +163,11 @@ nsMIMEInfoBase::SetDescription(const nsAString& aDescription)
 }
 
 NS_IMETHODIMP
-nsMIMEInfoBase::Equals(nsIMIMEInfo *aMIMEInfo, PRBool *_retval)
+nsMIMEInfoBase::Equals(nsIMIMEInfo *aMIMEInfo, bool *_retval)
 {
     if (!aMIMEInfo) return NS_ERROR_NULL_POINTER;
 
-    nsCAutoString type;
+    nsAutoCString type;
     nsresult rv = aMIMEInfo->GetMIMEType(type);
     if (NS_FAILED(rv)) return rv;
 
@@ -214,7 +182,7 @@ nsMIMEInfoBase::SetFileExtensions(const nsACString& aExtensions)
     mExtensions.Clear();
     nsCString extList( aExtensions );
     
-    PRInt32 breakLocation = -1;
+    int32_t breakLocation = -1;
     while ( (breakLocation= extList.FindChar(',') )!= -1)
     {
         mExtensions.AppendElement(Substring(extList.get(), extList.get() + breakLocation));
@@ -276,7 +244,7 @@ nsMIMEInfoBase::SetPreferredAction(nsHandlerInfoAction aPreferredAction)
 }
 
 NS_IMETHODIMP
-nsMIMEInfoBase::GetAlwaysAskBeforeHandling(PRBool * aAlwaysAsk)
+nsMIMEInfoBase::GetAlwaysAskBeforeHandling(bool * aAlwaysAsk)
 {
   *aAlwaysAsk = mAlwaysAskBeforeHandling;
 
@@ -284,7 +252,7 @@ nsMIMEInfoBase::GetAlwaysAskBeforeHandling(PRBool * aAlwaysAsk)
 }
 
 NS_IMETHODIMP
-nsMIMEInfoBase::SetAlwaysAskBeforeHandling(PRBool aAlwaysAsk)
+nsMIMEInfoBase::SetAlwaysAskBeforeHandling(bool aAlwaysAsk)
 {
   mAlwaysAskBeforeHandling = aAlwaysAsk;
   return NS_OK;
@@ -292,7 +260,7 @@ nsMIMEInfoBase::SetAlwaysAskBeforeHandling(PRBool aAlwaysAsk)
 
 /* static */
 nsresult 
-nsMIMEInfoBase::GetLocalFileFromURI(nsIURI *aURI, nsILocalFile **aFile)
+nsMIMEInfoBase::GetLocalFileFromURI(nsIURI *aURI, nsIFile **aFile)
 {
   nsresult rv;
 
@@ -332,7 +300,7 @@ nsMIMEInfoBase::LaunchWithFile(nsIFile* aFile)
     rv = localHandler->GetExecutable(getter_AddRefs(executable));
     NS_ENSURE_SUCCESS(rv, rv);
 
-    nsCAutoString path;
+    nsAutoCString path;
     aFile->GetNativePath(path);
     return LaunchWithIProcess(executable, path);
   }
@@ -381,11 +349,11 @@ nsMIMEInfoBase::InitProcess(nsIFile* aApp, nsresult* aResult)
   nsCOMPtr<nsIProcess> process = do_CreateInstance(NS_PROCESS_CONTRACTID,
                                                    aResult);
   if (NS_FAILED(*aResult))
-    return nsnull;
+    return nullptr;
 
   *aResult = process->Init(aApp);
   if (NS_FAILED(*aResult))
-    return nsnull;
+    return nullptr;
 
   return process.forget();
 }
@@ -401,7 +369,7 @@ nsMIMEInfoBase::LaunchWithIProcess(nsIFile* aApp, const nsCString& aArg)
 
   const char *string = aArg.get();
 
-  return process->Run(PR_FALSE, &string, 1);
+  return process->Run(false, &string, 1);
 }
 
 /* static */
@@ -415,7 +383,7 @@ nsMIMEInfoBase::LaunchWithIProcess(nsIFile* aApp, const nsString& aArg)
 
   const PRUnichar *string = aArg.get();
 
-  return process->Runw(PR_FALSE, &string, 1);
+  return process->Runw(false, &string, 1);
 }
 
 // nsMIMEInfoImpl implementation
@@ -434,11 +402,11 @@ nsMIMEInfoImpl::GetDefaultDescription(nsAString& aDefaultDescription)
 }
 
 NS_IMETHODIMP
-nsMIMEInfoImpl::GetHasDefaultHandler(PRBool * _retval)
+nsMIMEInfoImpl::GetHasDefaultHandler(bool * _retval)
 {
   *_retval = !mDefaultAppDescription.IsEmpty();
   if (mDefaultApplication) {
-    PRBool exists;
+    bool exists;
     *_retval = NS_SUCCEEDED(mDefaultApplication->Exists(&exists)) && exists;
   }
   return NS_OK;
@@ -450,7 +418,7 @@ nsMIMEInfoImpl::LaunchDefaultWithFile(nsIFile* aFile)
   if (!mDefaultApplication)
     return NS_ERROR_FILE_NOT_FOUND;
 
-  nsCAutoString nativePath;
+  nsAutoCString nativePath;
   aFile->GetNativePath(nativePath);
   
   return LaunchWithIProcess(mDefaultApplication, nativePath);

@@ -4,7 +4,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=572270
 -->
 <head>
   <title>Test TimeEvents dispatching</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -158,7 +157,7 @@ function testCreateEvent()
   is(evt.detail, 3, "Unexpected detail for user-generated event");
   is(evt.target, null, "Unexpected event target");
   is(evt.currentTarget, null, "Unexpected event current target");
-  is(evt.eventPhase, evt.AT_TARGET);
+  is(evt.eventPhase, evt.NONE);
   is(evt.bubbles, false, "Event should not bubble");
   is(evt.cancelable, false, "Event should not be cancelable");
   is(evt.view, null, "Event view should be null");

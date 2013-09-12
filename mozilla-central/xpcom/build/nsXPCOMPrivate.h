@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /* vim:set ts=4 sw=4 et cindent: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsXPComPrivate_h__
 #define nsXPComPrivate_h__
@@ -67,70 +35,70 @@ typedef nsresult   (* GetServiceManagerFunc)(nsIServiceManager* *result);
 typedef nsresult   (* GetComponentManagerFunc)(nsIComponentManager* *result);
 typedef nsresult   (* GetComponentRegistrarFunc)(nsIComponentRegistrar* *result);
 typedef nsresult   (* GetMemoryManagerFunc)(nsIMemory* *result);
-typedef nsresult   (* NewLocalFileFunc)(const nsAString &path, PRBool followLinks, nsILocalFile* *result);
-typedef nsresult   (* NewNativeLocalFileFunc)(const nsACString &path, PRBool followLinks, nsILocalFile* *result);
+typedef nsresult   (* NewLocalFileFunc)(const nsAString &path, bool followLinks, nsIFile* *result);
+typedef nsresult   (* NewNativeLocalFileFunc)(const nsACString &path, bool followLinks, nsIFile* *result);
 
 typedef nsresult   (* GetDebugFunc)(nsIDebug* *result);
 typedef nsresult   (* GetTraceRefcntFunc)(nsITraceRefcnt* *result);
 
 typedef nsresult   (* StringContainerInitFunc)(nsStringContainer&);
-typedef nsresult   (* StringContainerInit2Func)(nsStringContainer&, const PRUnichar *, PRUint32, PRUint32);
+typedef nsresult   (* StringContainerInit2Func)(nsStringContainer&, const PRUnichar *, uint32_t, uint32_t);
 typedef void       (* StringContainerFinishFunc)(nsStringContainer&);
-typedef PRUint32   (* StringGetDataFunc)(const nsAString&, const PRUnichar**, PRBool*);
-typedef PRUint32   (* StringGetMutableDataFunc)(nsAString&, PRUint32, PRUnichar**);
+typedef uint32_t   (* StringGetDataFunc)(const nsAString&, const PRUnichar**, bool*);
+typedef uint32_t   (* StringGetMutableDataFunc)(nsAString&, uint32_t, PRUnichar**);
 typedef PRUnichar* (* StringCloneDataFunc)(const nsAString&);
-typedef nsresult   (* StringSetDataFunc)(nsAString&, const PRUnichar*, PRUint32);
-typedef nsresult   (* StringSetDataRangeFunc)(nsAString&, PRUint32, PRUint32, const PRUnichar*, PRUint32);
+typedef nsresult   (* StringSetDataFunc)(nsAString&, const PRUnichar*, uint32_t);
+typedef nsresult   (* StringSetDataRangeFunc)(nsAString&, uint32_t, uint32_t, const PRUnichar*, uint32_t);
 typedef nsresult   (* StringCopyFunc)(nsAString &, const nsAString &);
-typedef void       (* StringSetIsVoidFunc)(nsAString &, const PRBool);
-typedef PRBool     (* StringGetIsVoidFunc)(const nsAString &);
+typedef void       (* StringSetIsVoidFunc)(nsAString &, const bool);
+typedef bool       (* StringGetIsVoidFunc)(const nsAString &);
 
 typedef nsresult   (* CStringContainerInitFunc)(nsCStringContainer&);
-typedef nsresult   (* CStringContainerInit2Func)(nsCStringContainer&, const char *, PRUint32, PRUint32);
+typedef nsresult   (* CStringContainerInit2Func)(nsCStringContainer&, const char *, uint32_t, uint32_t);
 typedef void       (* CStringContainerFinishFunc)(nsCStringContainer&);
-typedef PRUint32   (* CStringGetDataFunc)(const nsACString&, const char**, PRBool*);
-typedef PRUint32   (* CStringGetMutableDataFunc)(nsACString&, PRUint32, char**);
+typedef uint32_t   (* CStringGetDataFunc)(const nsACString&, const char**, bool*);
+typedef uint32_t   (* CStringGetMutableDataFunc)(nsACString&, uint32_t, char**);
 typedef char*      (* CStringCloneDataFunc)(const nsACString&);
-typedef nsresult   (* CStringSetDataFunc)(nsACString&, const char*, PRUint32);
-typedef nsresult   (* CStringSetDataRangeFunc)(nsACString&, PRUint32, PRUint32, const char*, PRUint32);
+typedef nsresult   (* CStringSetDataFunc)(nsACString&, const char*, uint32_t);
+typedef nsresult   (* CStringSetDataRangeFunc)(nsACString&, uint32_t, uint32_t, const char*, uint32_t);
 typedef nsresult   (* CStringCopyFunc)(nsACString &, const nsACString &);
-typedef void       (* CStringSetIsVoidFunc)(nsACString &, const PRBool);
-typedef PRBool     (* CStringGetIsVoidFunc)(const nsACString &);
+typedef void       (* CStringSetIsVoidFunc)(nsACString &, const bool);
+typedef bool       (* CStringGetIsVoidFunc)(const nsACString &);
 
 typedef nsresult   (* CStringToUTF16)(const nsACString &, nsCStringEncoding, nsAString &);
 typedef nsresult   (* UTF16ToCString)(const nsAString &, nsCStringEncoding, nsACString &);
 
-typedef void*      (* AllocFunc)(PRSize size);
-typedef void*      (* ReallocFunc)(void* ptr, PRSize size);
+typedef void*      (* AllocFunc)(size_t size);
+typedef void*      (* ReallocFunc)(void* ptr, size_t size);
 typedef void       (* FreeFunc)(void* ptr);
 
-typedef void       (* DebugBreakFunc)(PRUint32 aSeverity,
+typedef void       (* DebugBreakFunc)(uint32_t aSeverity,
                                       const char *aStr, const char *aExpr,
-                                      const char *aFile, PRInt32 aLine);
+                                      const char *aFile, int32_t aLine);
 
 typedef void       (* xpcomVoidFunc)();
-typedef void       (* LogAddRefFunc)(void*, nsrefcnt, const char*, PRUint32);
+typedef void       (* LogAddRefFunc)(void*, nsrefcnt, const char*, uint32_t);
 typedef void       (* LogReleaseFunc)(void*, nsrefcnt, const char*);
-typedef void       (* LogCtorFunc)(void*, const char*, PRUint32);
+typedef void       (* LogCtorFunc)(void*, const char*, uint32_t);
 typedef void       (* LogCOMPtrFunc)(void*, nsISupports*);
 
 typedef nsresult   (* GetXPTCallStubFunc)(REFNSIID, nsIXPTCProxy*, nsISomeInterface**);
 typedef void       (* DestroyXPTCallStubFunc)(nsISomeInterface*);
-typedef nsresult   (* InvokeByIndexFunc)(nsISupports*, PRUint32, PRUint32, nsXPTCVariant*);
-typedef PRBool     (* CycleCollectorFunc)(nsISupports*);
+typedef nsresult   (* InvokeByIndexFunc)(nsISupports*, uint32_t, uint32_t, nsXPTCVariant*);
+typedef bool       (* CycleCollectorFunc)(nsISupports*);
 typedef nsPurpleBufferEntry*
-                   (* CycleCollectorSuspect2Func)(nsISupports*);
-typedef PRBool     (* CycleCollectorForget2Func)(nsPurpleBufferEntry*);
+                   (* CycleCollectorSuspect2Func)(void*, nsCycleCollectionParticipant*);
+typedef bool       (* CycleCollectorForget2Func)(nsPurpleBufferEntry*);
 
 // PRIVATE AND DEPRECATED
 typedef NS_CALLBACK(XPCOMExitRoutine)(void);
 
-typedef nsresult   (* RegisterXPCOMExitRoutineFunc)(XPCOMExitRoutine exitRoutine, PRUint32 priority);
+typedef nsresult   (* RegisterXPCOMExitRoutineFunc)(XPCOMExitRoutine exitRoutine, uint32_t priority);
 typedef nsresult   (* UnregisterXPCOMExitRoutineFunc)(XPCOMExitRoutine exitRoutine);
 
 typedef struct XPCOMFunctions{
-    PRUint32 version;
-    PRUint32 size;
+    uint32_t version;
+    uint32_t size;
 
     InitFunc init;
     ShutdownFunc shutdown;
@@ -189,8 +157,8 @@ typedef struct XPCOMFunctions{
     GetXPTCallStubFunc getXPTCallStubFunc;
     DestroyXPTCallStubFunc destroyXPTCallStubFunc;
     InvokeByIndexFunc invokeByIndexFunc;
-    CycleCollectorFunc cycleSuspectFunc;
-    CycleCollectorFunc cycleForgetFunc;
+    CycleCollectorFunc cycleSuspectFunc; // obsolete: use cycleSuspect2Func
+    CycleCollectorFunc cycleForgetFunc; // obsolete: use cycleForget2Func
     StringSetIsVoidFunc stringSetIsVoid;
     StringGetIsVoidFunc stringGetIsVoid;
     CStringSetIsVoidFunc cstringSetIsVoid;
@@ -244,7 +212,7 @@ void LogTerm();
  * GRE_CONF_NAME          - Name of the GRE Configuration file
  */
 
-#if defined(XP_WIN32) || defined(XP_OS2) || defined(WINCE)
+#if defined(XP_WIN32) || defined(XP_OS2)
 
 #define XPCOM_SEARCH_KEY  "PATH"
 #define GRE_CONF_NAME     "gre.config"
@@ -254,28 +222,19 @@ void LogTerm();
 #define XUL_DLL           "xul.dll"
 #define LXUL_DLL          L"xul.dll"
 
-#elif defined(XP_BEOS)
-
-#define XPCOM_SEARCH_KEY  "ADDON_PATH"
-#define GRE_CONF_NAME "gre.config"
-#define GRE_CONF_PATH "gre.conf"
-#define GRE_CONF_DIR  "gre.d"
-#define XPCOM_DLL "libxpcom"MOZ_DLL_SUFFIX
-#define XUL_DLL   "libxul"MOZ_DLL_SUFFIX
-
 #else // Unix
 #include <limits.h> // for PATH_MAX
 
-#define XPCOM_DLL "libxpcom"MOZ_DLL_SUFFIX
+#define XPCOM_DLL "libxpcom" MOZ_DLL_SUFFIX
 
 // you have to love apple..
-#ifdef XP_MACOSX  
+#if defined(XP_MACOSX) || defined(XP_IOS)
 #define XPCOM_SEARCH_KEY  "DYLD_LIBRARY_PATH"
 #define GRE_FRAMEWORK_NAME "XUL.framework"
 #define XUL_DLL            "XUL"
 #else
 #define XPCOM_SEARCH_KEY  "LD_LIBRARY_PATH"
-#define XUL_DLL   "libxul"MOZ_DLL_SUFFIX
+#define XUL_DLL   "libxul" MOZ_DLL_SUFFIX
 #endif
 
 #define GRE_CONF_NAME ".gre.config"
@@ -287,7 +246,7 @@ void LogTerm();
 #if defined(XP_WIN) || defined(XP_OS2)
   #define XPCOM_FILE_PATH_SEPARATOR       "\\"
   #define XPCOM_ENV_PATH_SEPARATOR        ";"
-#elif defined(XP_UNIX) || defined(XP_BEOS)
+#elif defined(XP_UNIX)
   #define XPCOM_FILE_PATH_SEPARATOR       "/"
   #define XPCOM_ENV_PATH_SEPARATOR        ":"
 #else
@@ -310,7 +269,7 @@ void LogTerm();
 #endif
 #endif
 
-extern PRBool gXPCOMShuttingDown;
+extern bool gXPCOMShuttingDown;
 
 namespace mozilla {
 namespace services {

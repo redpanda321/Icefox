@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * base class for rendering objects that can be split across lines,
@@ -131,36 +99,36 @@ nsIFrame* nsSplittableFrame::GetLastContinuation() const
 }
 
 #ifdef DEBUG
-PRBool nsSplittableFrame::IsInPrevContinuationChain(nsIFrame* aFrame1, nsIFrame* aFrame2)
+bool nsSplittableFrame::IsInPrevContinuationChain(nsIFrame* aFrame1, nsIFrame* aFrame2)
 {
-  PRInt32 iterations = 0;
+  int32_t iterations = 0;
   while (aFrame1 && iterations < 10) {
     // Bail out after 10 iterations so we don't bog down debug builds too much
     if (aFrame1 == aFrame2)
-      return PR_TRUE;
+      return true;
     aFrame1 = aFrame1->GetPrevContinuation();
     ++iterations;
   }
-  return PR_FALSE;
+  return false;
 }
 
-PRBool nsSplittableFrame::IsInNextContinuationChain(nsIFrame* aFrame1, nsIFrame* aFrame2)
+bool nsSplittableFrame::IsInNextContinuationChain(nsIFrame* aFrame1, nsIFrame* aFrame2)
 {
-  PRInt32 iterations = 0;
+  int32_t iterations = 0;
   while (aFrame1 && iterations < 10) {
     // Bail out after 10 iterations so we don't bog down debug builds too much
     if (aFrame1 == aFrame2)
-      return PR_TRUE;
+      return true;
     aFrame1 = aFrame1->GetNextContinuation();
     ++iterations;
   }
-  return PR_FALSE;
+  return false;
 }
 #endif
 
 nsIFrame* nsSplittableFrame::GetPrevInFlow() const
 {
-  return (GetStateBits() & NS_FRAME_IS_FLUID_CONTINUATION) ? mPrevContinuation : nsnull;
+  return (GetStateBits() & NS_FRAME_IS_FLUID_CONTINUATION) ? mPrevContinuation : nullptr;
 }
 
 NS_METHOD nsSplittableFrame::SetPrevInFlow(nsIFrame* aFrame)
@@ -175,7 +143,7 @@ NS_METHOD nsSplittableFrame::SetPrevInFlow(nsIFrame* aFrame)
 nsIFrame* nsSplittableFrame::GetNextInFlow() const
 {
   return mNextContinuation && (mNextContinuation->GetStateBits() & NS_FRAME_IS_FLUID_CONTINUATION) ? 
-    mNextContinuation : nsnull;
+    mNextContinuation : nullptr;
 }
 
 NS_METHOD nsSplittableFrame::SetNextInFlow(nsIFrame* aFrame)
@@ -233,22 +201,22 @@ nsSplittableFrame::RemoveFromFlow(nsIFrame* aFrame)
     }
   }
 
-  aFrame->SetPrevInFlow(nsnull);
-  aFrame->SetNextInFlow(nsnull);
+  aFrame->SetPrevInFlow(nullptr);
+  aFrame->SetNextInFlow(nullptr);
 }
 
 #ifdef DEBUG
 void
-nsSplittableFrame::DumpBaseRegressionData(nsPresContext* aPresContext, FILE* out, PRInt32 aIndent)
+nsSplittableFrame::DumpBaseRegressionData(nsPresContext* aPresContext, FILE* out, int32_t aIndent)
 {
   nsFrame::DumpBaseRegressionData(aPresContext, out, aIndent);
-  if (nsnull != mNextContinuation) {
+  if (nullptr != mNextContinuation) {
     IndentBy(out, aIndent);
-    fprintf(out, "<next-continuation va=\"%ld\"/>\n", PRUptrdiff(mNextContinuation));
+    fprintf(out, "<next-continuation va=\"%p\"/>\n", (void*)mNextContinuation);
   }
-  if (nsnull != mPrevContinuation) {
+  if (nullptr != mPrevContinuation) {
     IndentBy(out, aIndent);
-    fprintf(out, "<prev-continuation va=\"%ld\"/>\n", PRUptrdiff(mPrevContinuation));
+    fprintf(out, "<prev-continuation va=\"%p\"/>\n", (void*)mPrevContinuation);
   }
 
 }

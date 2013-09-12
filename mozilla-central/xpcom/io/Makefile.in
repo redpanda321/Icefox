@@ -1,41 +1,9 @@
 # 
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1998
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either of the GNU General Public License Version 2 or later (the "GPL"),
-# or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH		= ../..
+DEPTH		= @DEPTH@
 topsrcdir	= @top_srcdir@
 srcdir		= @srcdir@
 VPATH		= @srcdir@
@@ -47,15 +15,18 @@ XPIDL_MODULE	= xpcom_io
 LIBRARY_NAME	= xpcomio_s
 GRE_MODULE	= 1
 MOZILLA_INTERNAL_API = 1
+LIBXUL_LIBRARY  = 1
 
 # work around bug 408258
 ifdef GNU_CC 
 ifneq ($(OS_ARCH), Darwin)
-MODULE_OPTIMIZE_FLAGS = -Os -fno-strict-aliasing $(MOZ_OPTIMIZE_SIZE_TWEAK)
+MODULE_OPTIMIZE_FLAGS = $(MOZ_OPTIMIZE_FLAGS) -fno-strict-aliasing
 endif
 endif
 
 CPPSRCS		= \
+		Base64.cpp \
+		nsAnonymousTemporaryFile.cpp \
 		nsAppFileLocationProvider.cpp \
 		nsBinaryStream.cpp \
 		nsDirectoryService.cpp \
@@ -68,6 +39,7 @@ CPPSRCS		= \
 		nsPipe3.cpp \
 		nsStreamUtils.cpp \
 		nsScriptableInputStream.cpp \
+		nsScriptableBase64Encoder.cpp \
 		nsSegmentedBuffer.cpp \
 		nsStorageStream.cpp \
 		nsStringStream.cpp \
@@ -83,13 +55,6 @@ CMMSRCS		+= \
 		$(NULL)
 endif
 
-ifndef MOZ_NO_FAST_LOAD
-CPPSRCS += \
-		nsFastLoadFile.cpp \
-		nsFastLoadService.cpp \
-		$(NULL)
-endif
-
 ifeq ($(MOZ_WIDGET_TOOLKIT),os2)
 CPPSRCS		+= nsLocalFileOS2.cpp
 else
@@ -101,11 +66,11 @@ endif # windows
 endif # OS2
 
 EXPORTS		= \
+		nsAnonymousTemporaryFile.h \
 		nsAppDirectoryServiceDefs.h \
 		nsDirectoryService.h \
 		nsDirectoryServiceAtomList.h \
 		nsEscape.h \
-		nsFastLoadService.h \
 		nsLinebreakConverter.h \
 		nsLocalFile.h \
 		nsMultiplexInputStream.h \
@@ -114,8 +79,10 @@ EXPORTS		= \
 		nsStorageStream.h \
 		nsStringStream.h \
 		nsStreamUtils.h \
+		nsUnicharInputStream.h \
 		nsWildCard.h \
-		$(NULL)			
+		SpecialSystemDirectory.h \
+		$(NULL)
 
 ifeq ($(MOZ_WIDGET_TOOLKIT),os2)
 EXPORTS		+= nsLocalFileOS2.h
@@ -127,12 +94,15 @@ EXPORTS		+= nsLocalFileUnix.h
 endif # windows
 endif # os2
 
+EXPORTS_NAMESPACES = mozilla
+EXPORTS_mozilla = \
+    Base64.h \
+    $(NULL)
+
 XPIDLSRCS	= \
 		nsIBinaryInputStream.idl \
 		nsIBinaryOutputStream.idl  \
 		nsIDirectoryEnumerator.idl \
-		nsIFastLoadFileControl.idl \
-		nsIFastLoadService.idl \
 		nsIInputStreamTee.idl \
 		nsILocalFileWin.idl \
 		nsILineInputStream.idl \
@@ -154,6 +124,7 @@ XPIDLSRCS	= \
 		nsIConverterOutputStream.idl \
 		nsIIOUtil.idl \
 		nsISafeOutputStream.idl \
+		nsIScriptableBase64Encoder.idl \
 		$(NULL)
 
 ifeq ($(MOZ_WIDGET_TOOLKIT),os2)
@@ -183,10 +154,9 @@ EXPORTS		:= $(addprefix $(srcdir)/, $(EXPORTS))
 # we don't want the shared lib, but we want to force the creation of a static lib.
 FORCE_STATIC_LIB = 1
 
-# Force use of PIC
-FORCE_USE_PIC	= 1
 
 include $(topsrcdir)/config/rules.mk
+include $(topsrcdir)/ipc/chromium/chromium-config.mk
 
 DEFINES		+= -D_IMPL_NS_COM
 
@@ -196,7 +166,7 @@ DEFINES     += -DHAVE_USR_LIB64_DIR
 endif
 endif
 
-LOCAL_INCLUDES	= -I..
+LOCAL_INCLUDES	+= -I..
 
 ifeq ($(MOZ_PLATFORM_MAEMO),5)
 CFLAGS          += $(MOZ_DBUS_CFLAGS)
@@ -204,7 +174,7 @@ CXXFLAGS        += $(MOZ_DBUS_CFLAGS)
 endif
 
 ifdef MOZ_PLATFORM_MAEMO
-CFLAGS          += $(MOZ_PLATFORM_MAEMO_CFLAGS)
-CXXFLAGS        += $(MOZ_PLATFORM_MAEMO_CFLAGS)
+CFLAGS          += $(MOZ_PLATFORM_MAEMO_CFLAGS) $(MOZ_QT_CFLAGS)
+CXXFLAGS        += $(MOZ_PLATFORM_MAEMO_CFLAGS) $(MOZ_QT_CFLAGS)
 endif
 

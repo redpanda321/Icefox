@@ -1,6 +1,11 @@
 /* Tests various aspects of nsIResumableChannel in combination with HTTP */
 
-do_load_httpd_js();
+const Cc = Components.classes;
+const Ci = Components.interfaces;
+const Cu = Components.utils;
+const Cr = Components.results;
+
+Cu.import("resource://testing-common/httpd.js");
 
 var httpserver = null;
 
@@ -69,7 +74,7 @@ Requestor.prototype = {
 
 function run_test() {
   dump("*** run_test\n");
-  httpserver = new nsHttpServer();
+  httpserver = new HttpServer();
   httpserver.registerPathHandler("/auth", authHandler);
   httpserver.registerPathHandler("/range", rangeHandler);
   httpserver.registerPathHandler("/acceptranges", acceptRangesHandler);
@@ -214,20 +219,6 @@ function run_test() {
 
     // Authentication (no password; working resume)
     // (should not give us any data)
-    // XXX skip authentication tests on e10s (bug 587146)
-    try { // nsIXULRuntime is not available in some configurations.
-      let processType = Components.classes["@mozilla.org/xre/runtime;1"].
-                        getService(Components.interfaces.nsIXULRuntime).processType;
-      if (processType != Components.interfaces.nsIXULRuntime.PROCESS_TYPE_DEFAULT) {
-        // 404 page (same content length as real content)
-        var chan = make_channel("http://localhost:4444/range");
-        chan.nsIResumableChannel.resumeAt(1, entityID);
-        chan.nsIHttpChannel.setRequestHeader("X-Want-404", "true", false);
-        chan.asyncOpen(new ChannelListener(test_404, null, CL_EXPECT_FAILURE), null);
-        return;
-      }
-    } catch (e) { }
-
     var chan = make_channel("http://localhost:4444/range");
     chan.nsIResumableChannel.resumeAt(1, entityID);
     chan.nsIHttpChannel.setRequestHeader("X-Need-Auth", "true", false);
@@ -240,7 +231,7 @@ function run_test() {
     do_check_eq(request.status, NS_ERROR_ENTITY_CHANGED);
 
     // Authentication + not working resume
-    var chan = make_channel("http://localhost:4444/auth");
+    var chan = make_channel("http://guest:guest@localhost:4444/auth");
     chan.nsIResumableChannel.resumeAt(1, entityID);
     chan.notificationCallbacks = new Requestor();
     chan.asyncOpen(new ChannelListener(test_auth, null, CL_EXPECT_FAILURE), null);
@@ -251,7 +242,7 @@ function run_test() {
     do_check_true(request.nsIHttpChannel.responseStatus < 300);
 
     // Authentication + working resume
-    var chan = make_channel("http://localhost:4444/range");
+    var chan = make_channel("http://guest:guest@localhost:4444/range");
     chan.nsIResumableChannel.resumeAt(1, entityID);
     chan.notificationCallbacks = new Requestor();
     chan.nsIHttpChannel.setRequestHeader("X-Need-Auth", "true", false);

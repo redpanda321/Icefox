@@ -1,39 +1,7 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Simple arena allocator for xpt (which avoids using NSPR).
@@ -44,6 +12,7 @@
 
 #include "prtypes.h"
 #include <stdlib.h>
+#include "mozilla/StandardInteger.h"
 
 
 /*
@@ -53,7 +22,9 @@
 #define XPT_PUBLIC_API(t)    t
 #define XPT_PUBLIC_DATA(t)   t
 
-PR_BEGIN_EXTERN_C
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*
  * Simple Arena support. Use with caution!
@@ -62,7 +33,7 @@ PR_BEGIN_EXTERN_C
 typedef struct XPTArena XPTArena;
 
 XPT_PUBLIC_API(XPTArena *)
-XPT_NewArena(PRUint32 block_size, size_t alignment, const char* name);
+XPT_NewArena(uint32_t block_size, size_t alignment, const char* name);
 
 XPT_PUBLIC_API(void)
 XPT_DestroyArena(XPTArena *arena);
@@ -81,6 +52,12 @@ XPT_NotifyDoneLoading(XPTArena *arena);
 
 XPT_PUBLIC_API(void)
 XPT_ArenaFree(XPTArena *arena, void* block);
+
+/* A synonym of |nsMallocSizeOfFun|, because we don't #include nscore.h. */
+typedef size_t(*xptMallocSizeOfFun)(const void *p);
+
+XPT_PUBLIC_API(size_t)
+XPT_SizeOfArena(XPTArena *arena, xptMallocSizeOfFun mallocSizeOf);
 
 /* --------------------------------------------------------- */
 
@@ -108,13 +85,15 @@ XPT_ArenaFree(XPTArena *arena, void* block);
 
 #ifdef DEBUG
 XPT_PUBLIC_API(void)
-XPT_AssertFailed(const char *s, const char *file, PRUint32 lineno);
+XPT_AssertFailed(const char *s, const char *file, uint32_t lineno);
 #define XPT_ASSERT(_expr) \
     ((_expr)?((void)0):XPT_AssertFailed(# _expr, __FILE__, __LINE__))
 #else
 #define XPT_ASSERT(_expr) ((void)0)
 #endif
 
-PR_END_EXTERN_C
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __xpt_arena_h__ */

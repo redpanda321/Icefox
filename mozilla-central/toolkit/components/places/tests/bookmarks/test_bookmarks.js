@@ -1,42 +1,8 @@
 /* -*- Mode: Java; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is Google Inc.
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Darin Fisher <darin@meer.net>
- *  Dietrich Ayala <dietrich@mozilla.com>
- *  Marco Bonardo <mak77@bonardo.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 let bs = PlacesUtils.bookmarks;
 let hs = PlacesUtils.history;
@@ -50,10 +16,26 @@ let bookmarksObserver = {
   onEndUpdateBatch: function() {
     this._endUpdateBatch = true;
   },
-  onItemAdded: function(id, folder, index, itemType) {
+  onItemAdded: function(id, folder, index, itemType, uri, title, dateAdded,
+                        guid) {
     this._itemAddedId = id;
     this._itemAddedParent = folder;
     this._itemAddedIndex = index;
+    this._itemAddedURI = uri;
+    this._itemAddedTitle = title;
+
+    // Ensure that we've created a guid for this item.
+    let stmt = DBConn().createStatement(
+      "SELECT guid "
+    + "FROM moz_bookmarks "
+    + "WHERE id = :item_id "
+    );
+    stmt.params.item_id = id;
+    do_check_true(stmt.executeStep());
+    do_check_false(stmt.getIsNull(0));
+    do_check_valid_places_guid(stmt.row.guid);
+    do_check_eq(stmt.row.guid, guid);
+    stmt.finalize();
   },
   onBeforeItemRemoved: function(){},
   onItemRemoved: function(id, folder, index, itemType) {
@@ -94,6 +76,10 @@ let bmStartIndex = 0;
 
 
 function run_test() {
+  run_next_test();
+}
+
+add_task(function test_bookmarks() {
   bs.addObserver(bookmarksObserver, false);
 
   // test special folders
@@ -128,6 +114,7 @@ function run_test() {
   do_check_eq(bookmarksObserver._itemAddedId, testRoot);
   do_check_eq(bookmarksObserver._itemAddedParent, root);
   do_check_eq(bookmarksObserver._itemAddedIndex, bmStartIndex);
+  do_check_eq(bookmarksObserver._itemAddedURI, null);
   let testStartIndex = 0;
 
   // test getItemIndex for folders
@@ -136,7 +123,7 @@ function run_test() {
   // test getItemType for folders
   do_check_eq(bs.getItemType(testRoot), bs.TYPE_FOLDER);
 
-  // insert a bookmark 
+  // insert a bookmark.
   // the time before we insert, in microseconds
   let beforeInsert = Date.now() * 1000;
   do_check_true(beforeInsert > 0);
@@ -146,6 +133,7 @@ function run_test() {
   do_check_eq(bookmarksObserver._itemAddedId, newId);
   do_check_eq(bookmarksObserver._itemAddedParent, testRoot);
   do_check_eq(bookmarksObserver._itemAddedIndex, testStartIndex);
+  do_check_true(bookmarksObserver._itemAddedURI.equals(uri("http://google.com/")));
   do_check_eq(bs.getBookmarkURI(newId).spec, "http://google.com/");
 
   let dateAdded = bs.getItemDateAdded(newId);
@@ -210,6 +198,7 @@ function run_test() {
   do_check_eq(bookmarksObserver._itemAddedId, workFolder);
   do_check_eq(bookmarksObserver._itemAddedParent, testRoot);
   do_check_eq(bookmarksObserver._itemAddedIndex, 0);
+  do_check_eq(bookmarksObserver._itemAddedURI, null);
 
   do_check_eq(bs.getItemTitle(workFolder), "Work");
   bs.setItemTitle(workFolder, "Work #");
@@ -627,10 +616,27 @@ function run_test() {
   // bug 378820
   let uri1 = uri("http://foo.tld/a");
   bs.insertBookmark(testRoot, uri1, bs.DEFAULT_INDEX, "");
-  hs.addVisit(uri1, Date.now() * 1000, null, hs.TRANSITION_TYPED, false, 0);
+  yield promiseAddVisits(uri1);
+
+  // bug 646993 - test bookmark titles longer than the maximum allowed length
+  let title15 = Array(TITLE_LENGTH_MAX + 5).join("X");
+  let title15expected = title15.substring(0, TITLE_LENGTH_MAX);
+  let newId15 = bs.insertBookmark(testRoot, uri("http://evil.com/"),
+                                  bs.DEFAULT_INDEX, title15);
+
+  do_check_eq(bs.getItemTitle(newId15).length,
+              title15expected.length);
+  do_check_eq(bookmarksObserver._itemAddedTitle, title15expected);
+  // test title length after updates
+  bs.setItemTitle(newId15, title15 + " updated");
+  do_check_eq(bs.getItemTitle(newId15).length,
+              title15expected.length);
+  do_check_eq(bookmarksObserver._itemChangedId, newId15);
+  do_check_eq(bookmarksObserver._itemChangedProperty, "title");
+  do_check_eq(bookmarksObserver._itemChangedValue, title15expected);
 
   testSimpleFolderResult();
-}
+});
 
 function testSimpleFolderResult() {
   // the time before we create a folder, in microseconds
@@ -670,13 +676,17 @@ function testSimpleFolderResult() {
   let folder = bs.createFolder(parent, "test folder", bs.DEFAULT_INDEX);
   bs.setItemTitle(folder, "test folder");
 
+  let longName = Array(TITLE_LENGTH_MAX + 5).join("A");
+  let folderLongName = bs.createFolder(parent, longName, bs.DEFAULT_INDEX);
+  do_check_eq(bookmarksObserver._itemAddedTitle, longName.substring(0, TITLE_LENGTH_MAX));
+
   let options = hs.getNewQueryOptions();
   let query = hs.getNewQuery();
   query.setFolders([parent], 1);
   let result = hs.executeQuery(query, options);
   let rootNode = result.root;
   rootNode.containerOpen = true;
-  do_check_eq(rootNode.childCount, 3);
+  do_check_eq(rootNode.childCount, 4);
 
   let node = rootNode.getChild(0);
   do_check_true(node.dateAdded > 0);
@@ -693,6 +703,20 @@ function testSimpleFolderResult() {
   do_check_eq(node.title, "test folder");
   do_check_true(node.dateAdded > 0);
   do_check_true(node.lastModified > 0);
+  node = rootNode.getChild(3);
+  do_check_eq(node.itemId, folderLongName);
+  do_check_eq(node.title, longName.substring(0, TITLE_LENGTH_MAX));
+  do_check_true(node.dateAdded > 0);
+  do_check_true(node.lastModified > 0);
+
+  // update with another long title
+  bs.setItemTitle(folderLongName, longName + " updated");
+  do_check_eq(bookmarksObserver._itemChangedId, folderLongName);
+  do_check_eq(bookmarksObserver._itemChangedProperty, "title");
+  do_check_eq(bookmarksObserver._itemChangedValue, longName.substring(0, TITLE_LENGTH_MAX));
+
+  node = rootNode.getChild(3);
+  do_check_eq(node.title, longName.substring(0, TITLE_LENGTH_MAX));
 
   rootNode.containerOpen = false;
 }

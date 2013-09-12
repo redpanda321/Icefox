@@ -5,11 +5,10 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=464848
 -->
 <head>
   <title>XMLHttpRequest send data and headers</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>        
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
-<body>
+<body onload="gen.next();">
 <a target="_blank"
    href="https://bugzilla.mozilla.org/show_bug.cgi?id=464848">Mozilla Bug 464848</a>
 <p id="display">
@@ -20,12 +19,18 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=464848
 </div>
 <pre id="test">
 <script class="testbody" type="application/javascript;version=1.8">
+SimpleTest.waitForExplicitFinish();
+
+var gen = runTests();
+function continueTest() { gen.next(); }
+
+function runTests() {
 
 xhr = new XMLHttpRequest();
 xhr.open("GET", "file_XHRSendData_doc.xml", false);
 xhr.send();
 testDoc1 = xhr.responseXML;
-is(testDoc1.inputEncoding, "ISO-8859-1", "wrong encoding");
+is(testDoc1.inputEncoding, "windows-1252", "wrong encoding");
 
 testDoc2 = document.implementation.createDocument("", "", null);
 testDoc2.appendChild(testDoc2.createComment(" doc 2 "));
@@ -40,6 +45,26 @@ var extensions = [".txt",".png",".jpg",".gif",".xml", "noext"];
 var fileTypes = ["text/plain", "image/png", "image/jpeg", "image/gif", "text/xml", null];
 var testFiles = new Array;
 var testDOMFiles = new Array;
+
+// arraybuffer test objects
+var shortArray = new ArrayBuffer(1);
+var shortInt8View = new Uint8Array(shortArray);
+shortInt8View[0] = 3;
+
+var longArray = new ArrayBuffer(512);
+var longInt8View = new Uint8Array(longArray);
+for (var i = 0; i < longInt8View.length; i++) {
+  longInt8View[i] = i % 255;
+}
+
+// arraybufferview test objects
+var longArraySlice = longArray.slice(256, 384);
+var longInt32View1 = new Int32Array(longArraySlice)
+var longInt32View2 = new Int32Array(longArray, 256, 32)
+var longInt16View1 = new Uint16Array(longArraySlice)
+var longInt16View2 = new Uint16Array(longArray, 256, 64)
+var longInt8View1 = new Int8Array(longArraySlice)
+var longInt8View2 = new Int8Array(longArray, 256, 128)
 
 extensions.forEach(
     function (extension) {
@@ -105,22 +130,22 @@ tests = [{ body: null,
          },
          { body: testDoc1,
            resBody: "<!-- comment -->\n<out>hi</out>",
-           resContentType: "application/xml; charset=ISO-8859-1",
+           resContentType: "application/xml; charset=windows-1252",
          },
          { body: testDoc1,
            contentType: "foo/bar",
            resBody: "<!-- comment -->\n<out>hi</out>",
-           resContentType: "foo/bar; charset=ISO-8859-1",
+           resContentType: "foo/bar; charset=windows-1252",
          },
          { body: testDoc1,
            contentType: "foo/bar; charset=ascii; baz=bin",
            resBody: "<!-- comment -->\n<out>hi</out>",
-           resContentType: "foo/bar; charset=ISO-8859-1; baz=bin",
+           resContentType: "foo/bar; charset=windows-1252; baz=bin",
          },
          { body: testDoc1,
-           contentType: "foo/bar; charset=IsO-8859-1",
+           contentType: "foo/bar; charset=wIndows-1252",
            resBody: "<!-- comment -->\n<out>hi</out>",
-           resContentType: "foo/bar; charset=IsO-8859-1",
+           resContentType: "foo/bar; charset=wIndows-1252",
          },
          { body: testDoc2,
            resBody: "<!-- doc 2 -->\n<res>text</res>",
@@ -145,6 +170,38 @@ tests = [{ body: null,
            body: ("TEST_REDIRECT_STR&url=" + window.location.host + window.location.pathname),
            redirect: true,
          },
+         { body: shortArray,
+           resBody: shortArray,
+           resType: "arraybuffer"
+         },
+         { body: longArray,
+           resBody: longArray,
+           resType: "arraybuffer"
+         },
+         { body: longInt32View1,
+           resBody: longArraySlice,
+           resType: "arraybuffer"
+         },
+         { body: longInt32View2,
+           resBody: longArraySlice,
+           resType: "arraybuffer"
+         },
+         { body: longInt16View1,
+           resBody: longArraySlice,
+           resType: "arraybuffer"
+         },
+         { body: longInt16View2,
+           resBody: longArraySlice,
+           resType: "arraybuffer"
+         },
+         { body: longInt8View1,
+           resBody: longArraySlice,
+           resType: "arraybuffer"
+         },
+         { body: longInt8View2,
+           resBody: longArraySlice,
+           resType: "arraybuffer"
+         },
          ];
 
 for (var i = 0; i < testDOMFiles.length; i++) {
@@ -156,12 +213,18 @@ for (var i = 0; i < testDOMFiles.length; i++) {
 }
 
 try {
-  for each(test in tests) {
+  for (test of tests) {
     xhr = new XMLHttpRequest;
-    xhr.open("POST", "file_XHRSendData.sjs", false);
+    xhr.open("POST", "file_XHRSendData.sjs", !!test.resType);
     if (test.contentType)
       xhr.setRequestHeader("Content-Type", test.contentType);
+    if (test.resType) {
+      xhr.responseType = test.resType;
+      xhr.onloadend = continueTest;
+    }
     xhr.send(test.body);
+    if (test.resType)
+      yield;
 
     if (test.resContentType) {
       is(xhr.getResponseHeader("Result-Content-Type"), test.resContentType,
@@ -175,7 +238,10 @@ try {
       is(xhr.getResponseHeader("Result-Content-Length"), test.resContentLength, "Wrong Content-Length sent");
     }
 
-    if (test.body instanceof Document) {
+    if (test.resType == "arraybuffer") {
+      is_identical_arraybuffer(xhr.response, test.resBody);
+    }
+    else if (test.body instanceof Document) {
       is(xhr.responseText.replace("\r\n", "\n"), test.resBody, "Wrong body");
     }
     else if (!test.redirect) {
@@ -202,6 +268,18 @@ function cleanUpData() {
       }
   );
 }
+
+function is_identical_arraybuffer(ab1, ab2) {
+  is(ab1.byteLength, ab2.byteLength, "arraybuffer byteLengths not equal");
+  u8v1 = new Uint8Array(ab1);
+  u8v2 = new Uint8Array(ab2);
+  is(String.fromCharCode.apply(String, u8v1),
+     String.fromCharCode.apply(String, u8v2), "arraybuffer values not equal");
+}
+
+SimpleTest.finish();
+yield;
+} /* runTests */
 
 </script>
 </pre>

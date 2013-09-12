@@ -4,7 +4,12 @@
 
 #include "base/file_version_info.h"
 
+#ifdef XP_MACOSX
 #import <Cocoa/Cocoa.h>
+#else
+#import <Foundation/NSString.h>
+#import <Foundation/NSBundle.h>
+#endif
 
 #include "base/logging.h"
 #include "base/string_util.h"

@@ -1,14 +1,12 @@
 <?xml version="1.0"?>
 <?xml-stylesheet type="text/css" href="chrome://global/skin"?>
-<?xml-stylesheet type="text/css" href="/tests/SimpleTest/test.css"?>
+<?xml-stylesheet type="text/css" href="chrome://mochikit/content/tests/SimpleTest/test.css"?>
 <!--
 https://bugzilla.mozilla.org/show_bug.cgi?id=462106
 -->
 <window title="Mozilla Bug 462106"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         onload="initAndRunTests()">
-  <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"/>
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"/>
 
@@ -31,12 +29,19 @@ const Ci = Components.interfaces;
 function copy(str) {
   Cc["@mozilla.org/widget/clipboardhelper;1"].
   getService(Ci.nsIClipboardHelper).
-  copyString(str);
+  copyString(str, document);
+}
+
+function getLoadContext() {
+  return window.QueryInterface(Ci.nsIInterfaceRequestor)
+               .getInterface(Ci.nsIWebNavigation)
+               .QueryInterface(Ci.nsILoadContext);
 }
 
 function paste() {
   let trans = Cc["@mozilla.org/widget/transferable;1"].
               createInstance(Ci.nsITransferable);
+  trans.init(getLoadContext());
   trans.addDataFlavor("text/unicode");
   let clip = Cc["@mozilla.org/widget/clipboard;1"].
              getService(Ci.nsIClipboard);

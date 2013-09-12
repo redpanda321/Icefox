@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Daniel Witte.
- * Portions created by the Initial Developer are Copyright (C) 2003
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Daniel Witte (dwitte@stanford.edu)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsCookie_h__
 #define nsCookie_h__
@@ -69,12 +36,12 @@ class nsCookie : public nsICookie2
              const char     *aHost,
              const char     *aPath,
              const char     *aEnd,
-             PRInt64         aExpiry,
-             PRInt64         aLastAccessed,
-             PRInt64         aCreationID,
-             PRBool          aIsSession,
-             PRBool          aIsSecure,
-             PRBool          aIsHttpOnly)
+             int64_t         aExpiry,
+             int64_t         aLastAccessed,
+             int64_t         aCreationTime,
+             bool            aIsSession,
+             bool            aIsSecure,
+             bool            aIsHttpOnly)
      : mName(aName)
      , mValue(aValue)
      , mHost(aHost)
@@ -82,18 +49,17 @@ class nsCookie : public nsICookie2
      , mEnd(aEnd)
      , mExpiry(aExpiry)
      , mLastAccessed(aLastAccessed)
-     , mCreationID(aCreationID)
-     , mIsSession(aIsSession != PR_FALSE)
-     , mIsSecure(aIsSecure != PR_FALSE)
-     , mIsHttpOnly(aIsHttpOnly != PR_FALSE)
+     , mCreationTime(aCreationTime)
+     , mIsSession(aIsSession != false)
+     , mIsSecure(aIsSecure != false)
+     , mIsHttpOnly(aIsHttpOnly != false)
     {
     }
 
   public:
-    // Generate a unique creationID. This will usually be the same as the
-    // creation time, but with a guarantee of monotonicity such that it can
-    // be used as a sqlite rowid.
-    static PRInt64 GenerateCreationID(PRInt64 aCreationTime);
+    // Generate a unique and monotonically increasing creation time. See comment
+    // in nsCookie.cpp.
+    static int64_t GenerateUniqueCreationTime(int64_t aCreationTime);
 
     // public helper to create an nsCookie object. use |operator delete|
     // to destroy an object created by this method.
@@ -101,12 +67,12 @@ class nsCookie : public nsICookie2
                              const nsACString &aValue,
                              const nsACString &aHost,
                              const nsACString &aPath,
-                             PRInt64           aExpiry,
-                             PRInt64           aLastAccessed,
-                             PRInt64           aCreationID,
-                             PRBool            aIsSession,
-                             PRBool            aIsSecure,
-                             PRBool            aIsHttpOnly);
+                             int64_t           aExpiry,
+                             int64_t           aLastAccessed,
+                             int64_t           aCreationTime,
+                             bool              aIsSession,
+                             bool              aIsSecure,
+                             bool              aIsHttpOnly);
 
     virtual ~nsCookie() {}
 
@@ -116,21 +82,21 @@ class nsCookie : public nsICookie2
     inline const nsDependentCString Host()  const { return nsDependentCString(mHost, mPath - 1); }
     inline const nsDependentCString RawHost() const { return nsDependentCString(IsDomain() ? mHost + 1 : mHost, mPath - 1); }
     inline const nsDependentCString Path()  const { return nsDependentCString(mPath, mEnd); }
-    inline PRInt64 Expiry()                 const { return mExpiry; }        // in seconds
-    inline PRInt64 LastAccessed()           const { return mLastAccessed; }  // in microseconds
-    inline PRInt64 CreationID()             const { return mCreationID; }    // in microseconds
-    inline PRBool IsSession()               const { return mIsSession; }
-    inline PRBool IsDomain()                const { return *mHost == '.'; }
-    inline PRBool IsSecure()                const { return mIsSecure; }
-    inline PRBool IsHttpOnly()              const { return mIsHttpOnly; }
+    inline int64_t Expiry()                 const { return mExpiry; }        // in seconds
+    inline int64_t LastAccessed()           const { return mLastAccessed; }  // in microseconds
+    inline int64_t CreationTime()           const { return mCreationTime; }  // in microseconds
+    inline bool IsSession()               const { return mIsSession; }
+    inline bool IsDomain()                const { return *mHost == '.'; }
+    inline bool IsSecure()                const { return mIsSecure; }
+    inline bool IsHttpOnly()              const { return mIsHttpOnly; }
 
     // setters
-    inline void SetExpiry(PRInt64 aExpiry)        { mExpiry = aExpiry; }
-    inline void SetLastAccessed(PRInt64 aTime)    { mLastAccessed = aTime; }
-    inline void SetIsSession(PRBool aIsSession)   { mIsSession = (PRPackedBool) aIsSession; }
-    // set the creation id manually, overriding the monotonicity checks in Create().
-    // use with caution!
-    inline void SetCreationID(PRInt64 aID)        { mCreationID = aID; }
+    inline void SetExpiry(int64_t aExpiry)        { mExpiry = aExpiry; }
+    inline void SetLastAccessed(int64_t aTime)    { mLastAccessed = aTime; }
+    inline void SetIsSession(bool aIsSession)   { mIsSession = (bool) aIsSession; }
+    // Set the creation time manually, overriding the monotonicity checks in
+    // Create(). Use with caution!
+    inline void SetCreationTime(int64_t aTime)    { mCreationTime = aTime; }
 
   protected:
     // member variables
@@ -143,14 +109,12 @@ class nsCookie : public nsICookie2
     const char  *mHost;
     const char  *mPath;
     const char  *mEnd;
-    PRInt64      mExpiry;
-    PRInt64      mLastAccessed;
-    // creation id is unique for each cookie and approximately represents the cookie
-    // creation time, in microseconds.
-    PRInt64      mCreationID;
-    PRPackedBool mIsSession;
-    PRPackedBool mIsSecure;
-    PRPackedBool mIsHttpOnly;
+    int64_t      mExpiry;
+    int64_t      mLastAccessed;
+    int64_t      mCreationTime;
+    bool mIsSession;
+    bool mIsSecure;
+    bool mIsHttpOnly;
 };
 
 #endif // nsCookie_h__

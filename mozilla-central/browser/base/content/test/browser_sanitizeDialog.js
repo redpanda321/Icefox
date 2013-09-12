@@ -1,41 +1,8 @@
 /* -*- Mode: Java; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is sanitize dialog test code.
- *
- * The Initial Developer of the Original Code is Mozilla Corp.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Drew Willcoxon <adw@mozilla.com> (Original Author)
- *   Ehsan Akhgari <ehsan.akhgari@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  * Tests the sanitize dialog (a.k.a. the clear recent history dialog).
@@ -50,20 +17,17 @@
  * browser/base/content/test/browser_sanitize-timespans.js.
  */
 
-Cc["@mozilla.org/moz/jssubscript-loader;1"].
-  getService(Ci.mozIJSSubScriptLoader).
-  loadSubScript("chrome://mochikit/content/MochiKit/packed.js");
-
-Cc["@mozilla.org/moz/jssubscript-loader;1"].
-  getService(Ci.mozIJSSubScriptLoader).
-  loadSubScript("chrome://browser/content/sanitize.js");
+let tempScope = {};
+Cc["@mozilla.org/moz/jssubscript-loader;1"].getService(Ci.mozIJSSubScriptLoader)
+                                           .loadSubScript("chrome://browser/content/sanitize.js", tempScope);
+let Sanitizer = tempScope.Sanitizer;
 
 const dm = Cc["@mozilla.org/download-manager;1"].
            getService(Ci.nsIDownloadManager);
-const bhist = Cc["@mozilla.org/browser/global-history;2"].
-              getService(Ci.nsIBrowserHistory);
 const formhist = Cc["@mozilla.org/satchel/form-history;1"].
                  getService(Ci.nsIFormHistory2);
+
+const kUsecPerMin = 60 * 1000000;
 
 // Add tests here.  Each is a function that's called by doNextTest().
 var gAllTests = [
@@ -295,6 +259,88 @@ var gAllTests = [
   },
 
   /**
+   * The next three tests checks that when a certain history item cannot be
+   * cleared then the checkbox should be both disabled and unchecked.
+   * In addition, we ensure that this behavior does not modify the preferences.
+   */
+  function () {
+    // Add history.
+    let uris = [ addHistoryWithMinutesAgo(10) ];
+    let formEntries = [ addFormEntryWithMinutesAgo(10) ];
+
+    let wh = new WindowHelper();
+    wh.onload = function() {
+      // Check that the relevant checkboxes are enabled
+      var cb = this.win.document.querySelectorAll(
+                 "#itemList > [preference='privacy.cpd.formdata']");
+      ok(cb.length == 1 && !cb[0].disabled, "There is formdata, checkbox to " +
+         "clear formdata should be enabled.");
+
+      var cb = this.win.document.querySelectorAll(
+                 "#itemList > [preference='privacy.cpd.history']");
+      ok(cb.length == 1 && !cb[0].disabled, "There is history, checkbox to " +
+         "clear history should be enabled.");
+
+      this.checkAllCheckboxes();
+      this.acceptDialog();
+
+      ensureHistoryClearedState(uris, true);
+      ensureFormEntriesClearedState(formEntries, true);
+    };
+    wh.open();
+  },
+  function () {
+    let wh = new WindowHelper();
+    wh.onload = function() {
+      boolPrefIs("cpd.history", true,
+                 "history pref should be true after accepting dialog with " +
+                 "history checkbox checked");
+      boolPrefIs("cpd.formdata", true,
+                 "formdata pref should be true after accepting dialog with " +
+                 "formdata checkbox checked");
+
+
+      // Even though the formdata pref is true, because there is no history
+      // left to clear, the checkbox will be disabled.
+      var cb = this.win.document.querySelectorAll(
+                 "#itemList > [preference='privacy.cpd.formdata']");
+      ok(cb.length == 1 && cb[0].disabled && !cb[0].checked,
+         "There is no formdata history, checkbox should be disabled and be " +
+         "cleared to reduce user confusion (bug 497664).");
+
+      var cb = this.win.document.querySelectorAll(
+                 "#itemList > [preference='privacy.cpd.history']");
+      ok(cb.length == 1 && !cb[0].disabled && cb[0].checked,
+         "There is no history, but history checkbox should always be enabled " +
+         "and will be checked from previous preference.");
+
+      this.acceptDialog();
+    }
+    wh.open();
+  },
+  function () {
+    let formEntries = [ addFormEntryWithMinutesAgo(10) ];
+
+    let wh = new WindowHelper();
+    wh.onload = function() {
+      boolPrefIs("cpd.formdata", true,
+                 "formdata pref should persist previous value after accepting " +
+                 "dialog where you could not clear formdata.");
+
+      var cb = this.win.document.querySelectorAll(
+                 "#itemList > [preference='privacy.cpd.formdata']");
+      ok(cb.length == 1 && !cb[0].disabled && cb[0].checked,
+         "There exists formEntries so the checkbox should be in sync with " +
+         "the pref.");
+
+      this.acceptDialog();
+      ensureFormEntriesClearedState(formEntries, true);
+    };
+    wh.open();
+  },
+
+
+  /**
    * These next six tests together ensure that toggling details persists
    * across dialog openings.
    */
@@ -385,6 +431,111 @@ var gAllTests = [
       this.toggleDetails();
       this.checkDetails(true);
       this.cancelDialog();
+    };
+    wh.open();
+  },
+  function () {
+    // Test for offline cache deletion
+
+    // Prepare stuff, we will work with www.example.com
+    var URL = "http://www.example.com";
+
+    var ios = Cc["@mozilla.org/network/io-service;1"]
+              .getService(Ci.nsIIOService);
+    var URI = ios.newURI(URL, null, null);
+
+    var sm = Cc["@mozilla.org/scriptsecuritymanager;1"]
+             .getService(Ci.nsIScriptSecurityManager);
+    var principal = sm.getNoAppCodebasePrincipal(URI);
+
+    // Give www.example.com privileges to store offline data
+    var pm = Cc["@mozilla.org/permissionmanager;1"]
+             .getService(Ci.nsIPermissionManager);
+    pm.addFromPrincipal(principal, "offline-app", Ci.nsIPermissionManager.ALLOW_ACTION);
+    pm.addFromPrincipal(principal, "offline-app", Ci.nsIOfflineCacheUpdateService.ALLOW_NO_WARN);
+
+    // Store something to the offline cache
+    const nsICache = Components.interfaces.nsICache;
+    var cs = Components.classes["@mozilla.org/network/cache-service;1"]
+             .getService(Components.interfaces.nsICacheService);
+    var session = cs.createSession(URL + "/manifest", nsICache.STORE_OFFLINE, nsICache.STREAM_BASED);
+
+    // Open the dialog
+    let wh = new WindowHelper();
+    wh.onload = function () {
+      this.selectDuration(Sanitizer.TIMESPAN_EVERYTHING);
+      // Show details
+      this.toggleDetails();
+      // Clear only offlineApps
+      this.uncheckAllCheckboxes();
+      this.checkPrefCheckbox("offlineApps", true);
+      this.acceptDialog();
+
+      // Check if the cache has been deleted
+      var size = -1;
+      var visitor = {
+        visitDevice: function (deviceID, deviceInfo)
+        {
+          if (deviceID == "offline")
+            size = deviceInfo.totalSize;
+
+          // Do not enumerate entries
+          return false;
+        },
+
+        visitEntry: function (deviceID, entryInfo)
+        {
+          // Do not enumerate entries.
+          return false;
+        }
+      };
+      cs.visitEntries(visitor);
+      is(size, 0, "offline application cache entries evicted");
+    };
+
+    var cacheListener = {
+      onCacheEntryAvailable: function (entry, access, status) {
+        is(status, Cr.NS_OK);
+        var stream = entry.openOutputStream(0);
+        var content = "content";
+        stream.write(content, content.length);
+        stream.close();
+        entry.close();
+        wh.open();
+      }
+    };
+
+    session.asyncOpenCacheEntry(URL, nsICache.ACCESS_READ_WRITE, cacheListener);
+  },
+  function () {
+    // Test for offline apps permission deletion
+
+    // Prepare stuff, we will work with www.example.com
+    var URL = "http://www.example.com";
+
+    var ios = Cc["@mozilla.org/network/io-service;1"]
+              .getService(Ci.nsIIOService);
+    var URI = ios.newURI(URL, null, null);
+
+    var sm = Cc["@mozilla.org/scriptsecuritymanager;1"]
+             .getService(Ci.nsIScriptSecurityManager);
+    var principal = sm.getNoAppCodebasePrincipal(URI);
+
+    // Open the dialog
+    let wh = new WindowHelper();
+    wh.onload = function () {
+      this.selectDuration(Sanitizer.TIMESPAN_EVERYTHING);
+      // Show details
+      this.toggleDetails();
+      // Clear only offlineApps
+      this.uncheckAllCheckboxes();
+      this.checkPrefCheckbox("siteSettings", true);
+      this.acceptDialog();
+
+      // Check all has been deleted (privileges, data, cache)
+      var pm = Cc["@mozilla.org/permissionmanager;1"]
+               .getService(Ci.nsIPermissionManager);
+      is(pm.testPermissionFromPrincipal(principal, "offline-app"), 0, "offline-app permissions removed");
     };
     wh.open();
   }
@@ -481,14 +632,22 @@ WindowHelper.prototype = {
   /**
    * Makes sure all the checkboxes are checked.
    */
-  checkAllCheckboxes: function () {
+  _checkAllCheckboxesCustom: function (check) {
     var cb = this.win.document.querySelectorAll("#itemList > [preference]");
     ok(cb.length > 1, "found checkboxes for preferences");
     for (var i = 0; i < cb.length; ++i) {
       var pref = this.win.document.getElementById(cb[i].getAttribute("preference"));
-      if (!pref.value)
+      if (!!pref.value ^ check)
         cb[i].click();
     }
+  },
+
+  checkAllCheckboxes: function () {
+    this._checkAllCheckboxesCustom(true);
+  },
+
+  uncheckAllCheckboxes: function () {
+    this._checkAllCheckboxesCustom(false);
   },
 
   /**
@@ -587,7 +746,7 @@ WindowHelper.prototype = {
           try {
             if (wh.onunload)
               wh.onunload();
-            doNextTest();
+            waitForAsyncUpdates(doNextTest);
           }
           catch (exc) {
             win.close();
@@ -644,8 +803,8 @@ function addDownloadWithMinutesAgo(aMinutesAgo) {
     name:      name,
     source:   "https://bugzilla.mozilla.org/show_bug.cgi?id=480169",
     target:    name,
-    startTime: now_uSec - (aMinutesAgo * 60 * 1000000),
-    endTime:   now_uSec - ((aMinutesAgo + 1) *60 * 1000000),
+    startTime: now_uSec - (aMinutesAgo * kUsecPerMin),
+    endTime:   now_uSec - ((aMinutesAgo + 1) * kUsecPerMin),
     state:     Ci.nsIDownloadManager.DOWNLOAD_FINISHED,
     currBytes: 0, maxBytes: -1, preferredAction: 0, autoResume: 0
   };
@@ -685,7 +844,7 @@ function addFormEntryWithMinutesAgo(aMinutesAgo) {
 
   // Artifically age the entry to the proper vintage.
   let db = formhist.DBConnection;
-  let timestamp = now_uSec - (aMinutesAgo * 60 * 1000000);
+  let timestamp = now_uSec - (aMinutesAgo * kUsecPerMin);
   db.executeSimpleSQL("UPDATE moz_formhistory SET firstUsed = " +
                       timestamp +  " WHERE fieldname = '" + name + "'");
 
@@ -702,10 +861,13 @@ function addFormEntryWithMinutesAgo(aMinutesAgo) {
  */
 function addHistoryWithMinutesAgo(aMinutesAgo) {
   let pURI = makeURI("http://" + aMinutesAgo + "-minutes-ago.com/");
-  bhist.addPageWithDetails(pURI,
-                           aMinutesAgo + " minutes ago",
-                           now_uSec - (aMinutesAgo * 60 * 1000 * 1000));
-  is(bhist.isVisited(pURI), true,
+  PlacesUtils.history.addVisit(pURI,
+                               now_uSec - aMinutesAgo * kUsecPerMin,
+                               null,
+                               Ci.nsINavHistoryService.TRANSITION_LINK,
+                               false,
+                               0);
+  is(PlacesUtils.bhistory.isVisited(pURI), true,
      "Sanity check: history visit " + pURI.spec +
      " should exist after creating it");
   return pURI;
@@ -715,9 +877,48 @@ function addHistoryWithMinutesAgo(aMinutesAgo) {
  * Removes all history visits, downloads, and form entries.
  */
 function blankSlate() {
-  bhist.removeAllPages();
+  PlacesUtils.bhistory.removeAllPages();
   dm.cleanUp();
   formhist.removeAllEntries();
+}
+
+/**
+ * Waits for all pending async statements on the default connection, before
+ * proceeding with aCallback.
+ *
+ * @param aCallback
+ *        Function to be called when done.
+ * @param aScope
+ *        Scope for the callback.
+ * @param aArguments
+ *        Arguments array for the callback.
+ *
+ * @note The result is achieved by asynchronously executing a query requiring
+ *       a write lock.  Since all statements on the same connection are
+ *       serialized, the end of this write operation means that all writes are
+ *       complete.  Note that WAL makes so that writers don't block readers, but
+ *       this is a problem only across different connections.
+ */
+function waitForAsyncUpdates(aCallback, aScope, aArguments)
+{
+  let scope = aScope || this;
+  let args = aArguments || [];
+  let db = PlacesUtils.history.QueryInterface(Ci.nsPIPlacesDatabase)
+                              .DBConnection;
+  let begin = db.createAsyncStatement("BEGIN EXCLUSIVE");
+  begin.executeAsync();
+  begin.finalize();
+
+  let commit = db.createAsyncStatement("COMMIT");
+  commit.executeAsync({
+    handleResult: function() {},
+    handleError: function() {},
+    handleCompletion: function(aReason)
+    {
+      aCallback.apply(scope, args);
+    }
+  });
+  commit.finalize();
 }
 
 /**
@@ -762,7 +963,7 @@ function downloadExists(aID)
 function doNextTest() {
   if (gAllTests.length <= gCurrTest) {
     blankSlate();
-    finish();
+    waitForAsyncUpdates(finish);
   }
   else {
     let ct = gCurrTest;
@@ -814,7 +1015,7 @@ function ensureFormEntriesClearedState(aFormEntries, aShouldBeCleared) {
 function ensureHistoryClearedState(aURIs, aShouldBeCleared) {
   let niceStr = aShouldBeCleared ? "no longer" : "still";
   aURIs.forEach(function (aURI) {
-    is(bhist.isVisited(aURI), !aShouldBeCleared,
+    is(PlacesUtils.bhistory.isVisited(aURI), !aShouldBeCleared,
        "history visit " + aURI.spec + " should " + niceStr + " exist");
   });
 }
@@ -836,8 +1037,9 @@ function intPrefIs(aPrefName, aExpectedVal, aMsg) {
 ///////////////////////////////////////////////////////////////////////////////
 
 function test() {
+  requestLongerTimeout(2);
   blankSlate();
   waitForExplicitFinish();
   // Kick off all the tests in the gAllTests array.
-  doNextTest();
+  waitForAsyncUpdates(doNextTest);
 }

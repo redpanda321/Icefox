@@ -1,42 +1,9 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Camellia code.
- *
- * The Initial Developer of the Original Code is
- * NTT(Nippon Telegraph and Telephone Corporation).
- *
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
- * $Id: camellia.c,v 1.3 2010/04/30 00:10:53 wtc%google.com Exp $
+ * $Id: camellia.c,v 1.5 2012/04/25 14:49:43 gerv%gerv.net Exp $
  */
 
 #ifdef FREEBL_NO_DEPEND
@@ -50,6 +17,7 @@
 #include "prtypes.h"
 #include "blapi.h"
 #include "camellia.h"
+#include "sha_fast.h" /* for SHA_HTONL and related configuration macros */
 
 
 /* key constants */
@@ -72,15 +40,18 @@
  */
 
 
-#if defined(_MSC_VER) && defined(NSS_X86_OR_X64)
+#if defined(SHA_ALLOW_UNALIGNED_ACCESS)
 
-/* require a little-endian CPU that allows unaligned access */
+/* require a CPU that allows unaligned access */
 
-# define SWAP(x) (_lrotl(x, 8) & 0x00ff00ff | _lrotr(x, 8) & 0xff00ff00)
-# define GETU32(p) SWAP(*((PRUint32 *)(p)))
-# define PUTU32(ct, st) {*((PRUint32 *)(ct)) = SWAP((st));}
+#if defined(SHA_NEED_TMP_VARIABLE)
+#define CAMELLIA_NEED_TMP_VARIABLE 1
+#endif
 
-#else /* not MSVC or not x86/x64 */
+# define GETU32(p) SHA_HTONL(*((PRUint32 *)(p)))
+# define PUTU32(ct, st) {*((PRUint32 *)(ct)) = SHA_HTONL(st);}
+
+#else /* no unaligned access */
 
 # define GETU32(pt)					\
     (((PRUint32)(pt)[0] << 24)				\
@@ -473,6 +444,9 @@ void camellia_setup128(const unsigned char *key, PRUint32 *subkey)
     PRUint32 kw4l, kw4r, dw, tl, tr;
     PRUint32 subL[26];
     PRUint32 subR[26];
+#if defined(CAMELLIA_NEED_TMP_VARIABLE)
+    PRUint32 tmp;
+#endif
 
     /**
      *  k == kll || klr || krl || krr (|| is concatination)
@@ -685,6 +659,9 @@ void camellia_setup256(const unsigned char *key, PRUint32 *subkey)
     PRUint32 kw4l, kw4r, dw, tl, tr;
     PRUint32 subL[34];
     PRUint32 subR[34];
+#if defined(CAMELLIA_NEED_TMP_VARIABLE)
+    PRUint32 tmp;
+#endif
 
     /**
      *  key = (kll || klr || krl || krr || krll || krlr || krrl || krrr)
@@ -991,6 +968,9 @@ camellia_encrypt128(const PRUint32 *subkey,
 {
     PRUint32 il, ir, t0, t1;
     PRUint32 io[4];
+#if defined(CAMELLIA_NEED_TMP_VARIABLE)
+    PRUint32 tmp;
+#endif
 
     io[0] = GETU32(input);
     io[1] = GETU32(input+4);
@@ -1095,6 +1075,9 @@ camellia_decrypt128(const PRUint32 *subkey,
 {
     PRUint32 il,ir,t0,t1;               /* temporary valiables */
     PRUint32 io[4];
+#if defined(CAMELLIA_NEED_TMP_VARIABLE)
+    PRUint32 tmp;
+#endif
 
     io[0] = GETU32(input);
     io[1] = GETU32(input+4);
@@ -1202,6 +1185,9 @@ camellia_encrypt256(const PRUint32 *subkey,
 {
     PRUint32 il,ir,t0,t1;           /* temporary valiables */
     PRUint32 io[4];
+#if defined(CAMELLIA_NEED_TMP_VARIABLE)
+    PRUint32 tmp;
+#endif
 
     io[0] = GETU32(input);
     io[1] = GETU32(input+4);
@@ -1330,6 +1316,9 @@ camellia_decrypt256(const PRUint32 *subkey,
 {
     PRUint32 il,ir,t0,t1;           /* temporary valiables */
     PRUint32 io[4];
+#if defined(CAMELLIA_NEED_TMP_VARIABLE)
+    PRUint32 tmp;
+#endif
 
     io[0] = GETU32(input);
     io[1] = GETU32(input+4);

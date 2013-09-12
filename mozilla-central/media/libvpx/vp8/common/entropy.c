@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license 
+ *  Use of this source code is governed by a BSD-style license
  *  that can be found in the LICENSE file in the root of the source
  *  tree. An additional intellectual property rights grant can be found
- *  in the file PATENTS.  All contributing project authors may 
+ *  in the file PATENTS.  All contributing project authors may
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
@@ -15,6 +15,7 @@
 #include "string.h"
 #include "blockd.h"
 #include "onyxc_int.h"
+#include "vpx_mem/vpx_mem.h"
 
 #define uchar unsigned char     /* typedefs can clash */
 #define uint  unsigned int
@@ -26,14 +27,46 @@ typedef vp8_prob Prob;
 
 #include "coefupdateprobs.h"
 
-DECLARE_ALIGNED(16, cuchar, vp8_coef_bands[16]) = { 0, 1, 2, 3, 6, 4, 5, 6, 6, 6, 6, 6, 6, 6, 6, 7};
-DECLARE_ALIGNED(16, cuchar, vp8_prev_token_class[MAX_ENTROPY_TOKENS]) = { 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0};
+DECLARE_ALIGNED(16, const unsigned char, vp8_norm[256]) =
+{
+    0, 7, 6, 6, 5, 5, 5, 5, 4, 4, 4, 4, 4, 4, 4, 4,
+    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+};
+
+DECLARE_ALIGNED(16, cuchar, vp8_coef_bands[16]) =
+{ 0, 1, 2, 3, 6, 4, 5, 6, 6, 6, 6, 6, 6, 6, 6, 7};
+
+DECLARE_ALIGNED(16, cuchar, vp8_prev_token_class[MAX_ENTROPY_TOKENS]) =
+{ 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0};
+
 DECLARE_ALIGNED(16, const int, vp8_default_zig_zag1d[16]) =
 {
     0,  1,  4,  8,
     5,  2,  3,  6,
     9, 12, 13, 10,
     7, 11, 14, 15,
+};
+
+DECLARE_ALIGNED(16, const short, vp8_default_inv_zig_zag[16]) =
+{
+    1,  2,  6,  7,
+    3,  5,  8, 13,
+    4,  9, 12, 14,
+   10, 11, 15, 16
 };
 
 DECLARE_ALIGNED(16, short, vp8_default_zig_zag_mask[16]);
@@ -57,7 +90,7 @@ const vp8_tree_index vp8_coef_tree[ 22] =     /* corresponding _CONTEXT_NODEs */
     -DCT_VAL_CATEGORY5, -DCT_VAL_CATEGORY6   /* 10 = CAT_FIVE */
 };
 
-struct vp8_token_struct vp8_coef_encodings[vp8_coef_tokens];
+struct vp8_token_struct vp8_coef_encodings[MAX_ENTROPY_TOKENS];
 
 /* Trees for extra bits.  Probabilities are constant and
    do not depend on previously encoded bits */
@@ -106,54 +139,29 @@ static void init_bit_trees()
     init_bit_tree(cat6, 11);
 }
 
-
-static vp8bc_index_t bcc1[1], bcc2[2], bcc3[3], bcc4[4], bcc5[5], bcc6[11];
-
 vp8_extra_bit_struct vp8_extra_bits[12] =
 {
-    { 0, 0, 0, 0, 0},
-    { 0, 0, 0, 0, 1},
-    { 0, 0, 0, 0, 2},
-    { 0, 0, 0, 0, 3},
-    { 0, 0, 0, 0, 4},
-    { cat1, Pcat1, bcc1, 1, 5},
-    { cat2, Pcat2, bcc2, 2, 7},
-    { cat3, Pcat3, bcc3, 3, 11},
-    { cat4, Pcat4, bcc4, 4, 19},
-    { cat5, Pcat5, bcc5, 5, 35},
-    { cat6, Pcat6, bcc6, 11, 67},
-    { 0, 0, 0, 0, 0}
+    { 0, 0, 0, 0},
+    { 0, 0, 0, 1},
+    { 0, 0, 0, 2},
+    { 0, 0, 0, 3},
+    { 0, 0, 0, 4},
+    { cat1, Pcat1, 1, 5},
+    { cat2, Pcat2, 2, 7},
+    { cat3, Pcat3, 3, 11},
+    { cat4, Pcat4, 4, 19},
+    { cat5, Pcat5, 5, 35},
+    { cat6, Pcat6, 11, 67},
+    { 0, 0, 0, 0}
 };
-#include "defaultcoefcounts.h"
+
+#include "default_coef_probs.h"
 
 void vp8_default_coef_probs(VP8_COMMON *pc)
 {
-    int h = 0;
-
-    do
-    {
-        int i = 0;
-
-        do
-        {
-            int k = 0;
-
-            do
-            {
-                unsigned int branch_ct [vp8_coef_tokens-1] [2];
-                vp8_tree_probs_from_distribution(
-                    vp8_coef_tokens, vp8_coef_encodings, vp8_coef_tree,
-                    pc->fc.coef_probs [h][i][k], branch_ct, default_coef_counts [h][i][k],
-                    256, 1);
-
-            }
-            while (++k < PREV_COEF_CONTEXTS);
-        }
-        while (++i < COEF_BANDS);
-    }
-    while (++h < BLOCK_TYPES);
+    vpx_memcpy(pc->fc.coef_probs, default_coef_probs,
+                   sizeof(default_coef_probs));
 }
-
 
 void vp8_coef_tree_initialize()
 {

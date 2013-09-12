@@ -1,42 +1,12 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et cindent: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla code.
- *
- * The Initial Developer of the Original Code is Google Inc.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Darin Fisher <darin@meer.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsThreadUtils.h"
+#include "mozilla/Attributes.h"
+#include "mozilla/Likely.h"
 
 #ifdef MOZILLA_INTERNAL_API
 # include "nsThreadManager.h"
@@ -48,14 +18,36 @@
 
 #ifdef XP_WIN
 #include <windows.h>
+#include "nsWindowsHelpers.h"
+#elif defined(XP_MACOSX)
+#include <sys/resource.h>
 #endif
+
+#include <pratom.h>
+#include <prthread.h>
 
 #ifndef XPCOM_GLUE_AVOID_NSPR
 
 NS_IMPL_THREADSAFE_ISUPPORTS1(nsRunnable, nsIRunnable)
-  
+
 NS_IMETHODIMP
 nsRunnable::Run()
+{
+  // Do nothing
+  return NS_OK;
+}
+
+NS_IMPL_THREADSAFE_ISUPPORTS1(nsCancelableRunnable, nsICancelableRunnable)
+
+NS_IMETHODIMP
+nsCancelableRunnable::Run()
+{
+  // Do nothing
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsCancelableRunnable::Cancel()
 {
   // Do nothing
   return NS_OK;
@@ -66,19 +58,19 @@ nsRunnable::Run()
 //-----------------------------------------------------------------------------
 
 NS_METHOD
-NS_NewThread(nsIThread **result, nsIRunnable *event)
+NS_NewThread(nsIThread **result, nsIRunnable *event, uint32_t stackSize)
 {
   nsCOMPtr<nsIThread> thread;
 #ifdef MOZILLA_INTERNAL_API
   nsresult rv = nsThreadManager::get()->
-      nsThreadManager::NewThread(0, getter_AddRefs(thread));
+      nsThreadManager::NewThread(0, stackSize, getter_AddRefs(thread));
 #else
   nsresult rv;
   nsCOMPtr<nsIThreadManager> mgr =
       do_GetService(NS_THREADMANAGER_CONTRACTID, &rv);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  rv = mgr->NewThread(0, getter_AddRefs(thread));
+  rv = mgr->NewThread(0, stackSize, getter_AddRefs(thread));
 #endif
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -87,7 +79,7 @@ NS_NewThread(nsIThread **result, nsIRunnable *event)
     NS_ENSURE_SUCCESS(rv, rv);
   }
 
-  *result = nsnull;
+  *result = nullptr;
   thread.swap(*result);
   return NS_OK;
 }
@@ -123,7 +115,7 @@ NS_GetMainThread(nsIThread **result)
 #ifndef MOZILLA_INTERNAL_API
 bool NS_IsMainThread()
 {
-  PRBool result = PR_FALSE;
+  bool result = false;
   nsCOMPtr<nsIThreadManager> mgr =
     do_GetService(NS_THREADMANAGER_CONTRACTID);
   if (mgr)
@@ -131,23 +123,18 @@ bool NS_IsMainThread()
   return bool(result);
 }
 #elif defined(XP_WIN)
-extern DWORD gTLSIsMainThreadIndex;
+extern DWORD gTLSThreadIDIndex;
 bool
 NS_IsMainThread()
 {
-  return !!TlsGetValue(gTLSIsMainThreadIndex);
+  return TlsGetValue(gTLSThreadIDIndex) == (void*) mozilla::threads::Main;
 }
 #elif !defined(NS_TLS)
 bool NS_IsMainThread()
 {
-  PRBool result = PR_FALSE;
+  bool result = false;
   nsThreadManager::get()->nsThreadManager::GetIsMainThread(&result);
   return bool(result);
-}
-#elif !defined(MOZ_ENABLE_LIBXUL)
-bool NS_IsMainThread()
-{
-  return gTLSIsMainThread;
 }
 #endif
 
@@ -166,7 +153,7 @@ NS_DispatchToCurrentThread(nsIRunnable *event)
 }
 
 NS_METHOD
-NS_DispatchToMainThread(nsIRunnable *event, PRUint32 dispatchFlags)
+NS_DispatchToMainThread(nsIRunnable *event, uint32_t dispatchFlags)
 {
   nsCOMPtr<nsIThread> thread;
   nsresult rv = NS_GetMainThread(getter_AddRefs(thread));
@@ -196,8 +183,8 @@ NS_ProcessPendingEvents(nsIThread *thread, PRIntervalTime timeout)
 
   PRIntervalTime start = PR_IntervalNow();
   for (;;) {
-    PRBool processedEvent;
-    rv = thread->ProcessNextEvent(PR_FALSE, &processedEvent);
+    bool processedEvent;
+    rv = thread->ProcessNextEvent(false, &processedEvent);
     if (NS_FAILED(rv) || !processedEvent)
       break;
     if (PR_IntervalNow() - start > timeout)
@@ -207,14 +194,14 @@ NS_ProcessPendingEvents(nsIThread *thread, PRIntervalTime timeout)
 }
 #endif // XPCOM_GLUE_AVOID_NSPR
 
-inline PRBool
+inline bool
 hasPendingEvents(nsIThread *thread)
 {
-  PRBool val;
+  bool val;
   return NS_SUCCEEDED(thread->HasPendingEvents(&val)) && val;
 }
 
-PRBool
+bool
 NS_HasPendingEvents(nsIThread *thread)
 {
   if (!thread) {
@@ -224,31 +211,78 @@ NS_HasPendingEvents(nsIThread *thread)
     return hasPendingEvents(current);
 #else
     thread = NS_GetCurrentThread();
-    NS_ENSURE_TRUE(thread, PR_FALSE);
+    NS_ENSURE_TRUE(thread, false);
 #endif
   }
   return hasPendingEvents(thread);
 }
 
-PRBool
-NS_ProcessNextEvent(nsIThread *thread, PRBool mayWait)
+bool
+NS_ProcessNextEvent(nsIThread *thread, bool mayWait)
 {
 #ifdef MOZILLA_INTERNAL_API
   if (!thread) {
     thread = NS_GetCurrentThread();
-    NS_ENSURE_TRUE(thread, PR_FALSE);
+    NS_ENSURE_TRUE(thread, false);
   }
 #else
   nsCOMPtr<nsIThread> current;
   if (!thread) {
     NS_GetCurrentThread(getter_AddRefs(current));
-    NS_ENSURE_TRUE(current, PR_FALSE);
+    NS_ENSURE_TRUE(current, false);
     thread = current.get();
   }
 #endif
-  PRBool val;
+  bool val;
   return NS_SUCCEEDED(thread->ProcessNextEvent(mayWait, &val)) && val;
 }
+
+#ifndef XPCOM_GLUE_AVOID_NSPR
+
+namespace {
+
+class nsNameThreadRunnable MOZ_FINAL : public nsIRunnable
+{
+public:
+  nsNameThreadRunnable(const nsACString &name) : mName(name) { }
+
+  NS_DECL_ISUPPORTS
+  NS_DECL_NSIRUNNABLE
+
+protected:
+  const nsCString mName;
+};
+
+NS_IMPL_THREADSAFE_ISUPPORTS1(nsNameThreadRunnable, nsIRunnable)
+
+NS_IMETHODIMP
+nsNameThreadRunnable::Run()
+{
+  PR_SetCurrentThreadName(mName.BeginReading());
+  return NS_OK;
+}
+
+} // anonymous namespace
+
+void
+NS_SetThreadName(nsIThread *thread, const nsACString &name)
+{
+  if (!thread)
+    return;
+
+  thread->Dispatch(new nsNameThreadRunnable(name),
+                   nsIEventTarget::DISPATCH_NORMAL);
+}
+
+#else // !XPCOM_GLUE_AVOID_NSPR
+
+void
+NS_SetThreadName(nsIThread *thread, const nsACString &name)
+{
+  // No NSPR, no love.
+}
+
+#endif
 
 #ifdef MOZILLA_INTERNAL_API
 nsIThread *
@@ -256,3 +290,55 @@ NS_GetCurrentThread() {
   return nsThreadManager::get()->GetCurrentThread();
 }
 #endif
+
+// nsThreadPoolNaming
+void
+nsThreadPoolNaming::SetThreadPoolName(const nsACString & aPoolName,
+                                      nsIThread * aThread)
+{
+  nsCString name(aPoolName);
+  name.Append(NS_LITERAL_CSTRING(" #"));
+  name.AppendInt(++mCounter, 10); // The counter is declared as volatile
+
+  if (aThread) {
+    // Set on the target thread
+    NS_SetThreadName(aThread, name);
+  }
+  else {
+    // Set on the current thread
+    PR_SetCurrentThreadName(name.BeginReading());
+  }
+}
+
+// nsAutoLowPriorityIO
+nsAutoLowPriorityIO::nsAutoLowPriorityIO()
+{
+#if defined(XP_WIN)
+  lowIOPrioritySet = IsVistaOrLater() &&
+                     SetThreadPriority(GetCurrentThread(),
+                                       THREAD_MODE_BACKGROUND_BEGIN);
+#elif defined(XP_MACOSX)
+  oldPriority = getiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD);
+  lowIOPrioritySet = oldPriority != -1 &&
+                     setiopolicy_np(IOPOL_TYPE_DISK,
+                                    IOPOL_SCOPE_THREAD,
+                                    IOPOL_THROTTLE) != -1;
+#else
+  lowIOPrioritySet = false;
+#endif
+}
+
+nsAutoLowPriorityIO::~nsAutoLowPriorityIO()
+{
+#if defined(XP_WIN)
+  if (MOZ_LIKELY(lowIOPrioritySet)) {
+    // On Windows the old thread priority is automatically restored
+    SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END);
+  }
+#elif defined(XP_MACOSX)
+  if (MOZ_LIKELY(lowIOPrioritySet)) {
+    setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, oldPriority);
+  }
+#endif
+}
+

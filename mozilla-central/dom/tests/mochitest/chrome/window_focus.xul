@@ -8,8 +8,6 @@
 <window id="outer-document" title="Focus Test" width="600" height="550"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
   <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/EventUtils.js"></script>
@@ -283,12 +281,13 @@ function getTopWindow(win)
 function mouseOnElement(element, expectedElement, focusChanged, testid)
 {
   var expectedWindow = (element.ownerDocument.defaultView == gChildWindow) ? gChildWindow : window;
-  // on Mac, elements are not focused when clicking, except for lists and textboxes.
+  // on Mac, form elements are not focused when clicking, except for lists and textboxes.
   var noFocusOnMouse = (navigator.platform.indexOf("Mac") == 0);
   if (noFocusOnMouse) {
     if (element.namespaceURI == "http://www.w3.org/1999/xhtml") {
       // links are special. They can be focused but show no focus ring
-      if (element.localName == "a" || element.localName == "select" ||
+      if (element.localName == "a" || element.localName == "div" ||
+          element.localName == "select" ||
           element.localName == "input" && (element.type == "text" ||
                                            element.type == "password")) {
         noFocusOnMouse = false;
@@ -492,7 +491,9 @@ function startTest()
   ok(gEvents === "", "focusing element that is already focused");
 
   $("t2").blur();
+  $("t7").blur();
   ok(gEvents === "", "blurring element that is not focused");
+  is(document.activeElement, $("t1"), "old element still focused after blur() on another element");
 
   // focus() method on elements that are not tabbable 
   for (idx = 1; idx <= kFocusSteps; idx++) {
@@ -538,8 +539,13 @@ function startTest()
     gLastFocusMethod = (key == "D" || key == "G") ? fm.FLAG_BYMOVEFOCUS : fm.FLAG_BYKEY;
 
     // on Windows and Linux, the shift key must be pressed for content area access keys
-    if (navigator.platform.indexOf("Mac") == -1)
-      accessKeyDetails.shiftKey = (getById(keys[k]).ownerDocument.defaultView == gChildWindow);
+    // and on Mac, the alt key must be pressed for content area access keys
+    var isContent = (getById(keys[k]).ownerDocument.defaultView == gChildWindow);
+    if (navigator.platform.indexOf("Mac") == -1) {
+      accessKeyDetails.shiftKey = isContent;
+    } else {
+      accessKeyDetails.altKey = isContent;
+    }
 
     expectFocusShift(function () synthesizeKey(key, accessKeyDetails),
                      null, getById(keys[k]), true, "accesskey " + key);
@@ -801,6 +807,39 @@ function startTest()
   gLastFocusMethod = fm.FLAG_BYKEY;
   expectFocusShift(function () synthesizeKey("VK_TAB", { shiftKey: true }),
                    null, textbox1.inputField, true, "shift+tab on textbox with tabindex set");
+
+  // ---- test for bug 618907 which ensures that canceling the mousedown event still focuses the
+  //      right frame
+
+  var childContentFrame = document.getElementById("ifa")
+  childContentFrame.style.MozUserFocus = "";
+
+  var frab = childContentFrame.contentDocument.getElementById("fra-b");
+  var mouseDownListener = function(event) event.preventDefault();
+  frab.addEventListener("mousedown", mouseDownListener, false);
+
+  var childElementToFocus = childContentFrame.contentDocument.getElementById("fra");
+  gLastFocus = childElementToFocus;
+  gLastFocusWindow = childContentFrame.contentWindow;
+  gLastFocus.focus();
+  gEvents = "";
+
+  setFocusTo("t1", window);
+
+  gLastFocusMethod = -1;
+  expectFocusShift(function () synthesizeMouse(frab, 5, 5, { }, childContentFrame.contentWindow),
+                   null, childElementToFocus, true,
+                   "mousedown event canceled - chrome to content");
+
+  frab.removeEventListener("mousedown", mouseDownListener, false);
+
+  var t5 = getById("t5");
+  t5.addEventListener("mousedown", mouseDownListener, false);
+  synthesizeMouse(t5, 10, 10, { })
+  t5.removeEventListener("mousedown", mouseDownListener, false);
+  is(fm.focusedElement, childElementToFocus,
+     "mousedown event cancelled - content to chrome - element");
+  is(fm.focusedWindow, childContentFrame.contentWindow, "mousedown event cancelled - content to chrome - window");
 
   // ---- test to check that refocusing an element during a blur event doesn't succeed
 
@@ -1511,7 +1550,6 @@ function doFrameHistoryTests()
   var t20 = getById("t20");
   t20.focus();
 
-  addEventListener("message", function() { $("childframe").goBack(); }, true);
   gChildWindow.addEventListener("focus",
     function(event) {
       if (event.target == t20) {
@@ -1520,11 +1558,7 @@ function doFrameHistoryTests()
   }, true);
 
   // make sure that loading a new page and then going back maintains the focus
-  gChildWindow.location = "data:text/html,<html><body onload='window.QueryInterface(Components.interfaces.nsIInterfaceRequestor)." +
-                          "getInterface(Components.interfaces.nsIWebNavigation)." +
-                          "QueryInterface(Components.interfaces.nsIDocShellTreeItem).rootTreeItem." +
-                          "QueryInterface(Components.interfaces.nsIInterfaceRequestor)." +
-                          "getInterface(Components.interfaces.nsIDOMWindow).postMessage(\"content loaded\", \"*\");'>Next</body></html>";
+  gChildWindow.location = "data:text/html,<script>window.onload=function() {setTimeout(function () {window.back();}, 0);}</script>";
 }
 
 function addFrameSwitchingListeners(frame)
@@ -1666,8 +1700,8 @@ SimpleTest.waitForFocus(startTest);
 <checkbox id="n2"/><checkbox id="n4"/><checkbox id="n6"/><checkbox id="n8"/><checkbox id="n10"/><checkbox id="n12"/>
 <listbox id="last" width="20" rows="1"/>
 
-<iframe id="ifa" width="20" height="20" style="-moz-user-focus: ignore;"
-        src="data:text/html,&lt;input id=fra&gt;
+<iframe id="ifa" width="40" height="60" style="-moz-user-focus: ignore;" type="content"
+        src="data:text/html,&lt;input id=fra size='2'&gt;&lt;input id='fra-b' size='2'&gt;
         &lt;iframe src='data:text/html,&lt;input id=frc&gt;&lt;iframe src=&quot;data:text/html,&lt;input id=frd&gt;&quot;&gt;&lt;/iframe&gt;'&gt;&lt;/iframe&gt;"/>
 <iframe id="ifb" width="20" height="20" style="-moz-user-focus: ignore;"
         src="data:text/html,&lt;input id=frd&gt;&lt;/iframe&gt;"/>

@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 
 @import url("chrome://global/skin/");
 @namespace url("http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul");
@@ -13,7 +17,7 @@
   background-color: -moz-Field;
   color: -moz-FieldText;
   border: 1px solid ThreeDShadow;
-  -moz-border-radius: 10px;
+  border-radius: 10px;
   padding: 3em;
   -moz-padding-start: 30px;
   margin-left: 1em;
@@ -50,7 +54,7 @@
 
 #exclam
 {
-%ifdef MOZ_WIDGET_GTK2
+%ifdef MOZ_WIDGET_GTK
   list-style-image: url("moz-icon://stock/gtk-dialog-warning?size=dialog");
 %else
   list-style-image: url("chrome://global/skin/icons/warning-large.png");

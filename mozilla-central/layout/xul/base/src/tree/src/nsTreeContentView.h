@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is Jan Varga.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Brian Ryner <bryner@brianryner.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsTreeContentView_h__
 #define nsTreeContentView_h__
@@ -47,14 +15,15 @@
 #include "nsITreeView.h"
 #include "nsITreeContentView.h"
 #include "nsITreeSelection.h"
+#include "mozilla/Attributes.h"
 
 class Row;
 
 nsresult NS_NewTreeContentView(nsITreeView** aResult);
 
-class nsTreeContentView : public nsINativeTreeView,
-                          public nsITreeContentView,
-                          public nsStubDocumentObserver
+class nsTreeContentView MOZ_FINAL : public nsINativeTreeView,
+                                    public nsITreeContentView,
+                                    public nsStubDocumentObserver
 {
   public:
     nsTreeContentView(void);
@@ -72,59 +41,49 @@ class nsTreeContentView : public nsINativeTreeView,
     NS_DECL_NSITREECONTENTVIEW
 
     // nsIDocumentObserver
-    virtual void ContentStatesChanged(nsIDocument* aDocument,
-                                      nsIContent* aContent1,
-                                      nsIContent* aContent2,
-                                      PRInt32 aStateMask);
     NS_DECL_NSIMUTATIONOBSERVER_ATTRIBUTECHANGED
     NS_DECL_NSIMUTATIONOBSERVER_CONTENTAPPENDED
     NS_DECL_NSIMUTATIONOBSERVER_CONTENTINSERTED
     NS_DECL_NSIMUTATIONOBSERVER_CONTENTREMOVED
     NS_DECL_NSIMUTATIONOBSERVER_NODEWILLBEDESTROYED
 
-    static PRBool CanTrustTreeSelection(nsISupports* aValue);
+    static bool CanTrustTreeSelection(nsISupports* aValue);
 
   protected:
     // Recursive methods which deal with serializing of nested content.
-    void Serialize(nsIContent* aContent, PRInt32 aParentIndex, PRInt32* aIndex,
+    void Serialize(nsIContent* aContent, int32_t aParentIndex, int32_t* aIndex,
                    nsTArray<Row*>& aRows);
 
-    void SerializeItem(nsIContent* aContent, PRInt32 aParentIndex,
-                       PRInt32* aIndex, nsTArray<Row*>& aRows);
+    void SerializeItem(nsIContent* aContent, int32_t aParentIndex,
+                       int32_t* aIndex, nsTArray<Row*>& aRows);
 
-    void SerializeSeparator(nsIContent* aContent, PRInt32 aParentIndex,
-                            PRInt32* aIndex, nsTArray<Row*>& aRows);
+    void SerializeSeparator(nsIContent* aContent, int32_t aParentIndex,
+                            int32_t* aIndex, nsTArray<Row*>& aRows);
 
-    void SerializeOption(nsIContent* aContent, PRInt32 aParentIndex, PRInt32* aIndex,
-                         nsTArray<Row*>& aRows);
-
-    void SerializeOptGroup(nsIContent* aContent, PRInt32 aParentIndex, PRInt32* aIndex,
-                           nsTArray<Row*>& aRows);
-
-    void GetIndexInSubtree(nsIContent* aContainer, nsIContent* aContent, PRInt32* aResult);
+    void GetIndexInSubtree(nsIContent* aContainer, nsIContent* aContent, int32_t* aResult);
     
     // Helper methods which we use to manage our plain array of rows.
-    PRInt32 EnsureSubtree(PRInt32 aIndex);
+    int32_t EnsureSubtree(int32_t aIndex);
 
-    PRInt32 RemoveSubtree(PRInt32 aIndex);
+    int32_t RemoveSubtree(int32_t aIndex);
 
-    PRInt32 InsertRow(PRInt32 aParentIndex, PRInt32 aIndex, nsIContent* aContent);
+    int32_t InsertRow(int32_t aParentIndex, int32_t aIndex, nsIContent* aContent);
 
     void InsertRowFor(nsIContent* aParent, nsIContent* aChild);
 
-    PRInt32 RemoveRow(PRInt32 aIndex);
+    int32_t RemoveRow(int32_t aIndex);
 
     void ClearRows();
     
-    void OpenContainer(PRInt32 aIndex);
+    void OpenContainer(int32_t aIndex);
 
-    void CloseContainer(PRInt32 aIndex);
+    void CloseContainer(int32_t aIndex);
 
-    PRInt32 FindContent(nsIContent* aContent);
+    int32_t FindContent(nsIContent* aContent);
 
-    void UpdateSubtreeSizes(PRInt32 aIndex, PRInt32 aCount);
+    void UpdateSubtreeSizes(int32_t aIndex, int32_t aCount);
 
-    void UpdateParentIndexes(PRInt32 aIndex, PRInt32 aSkip, PRInt32 aCount);
+    void UpdateParentIndexes(int32_t aIndex, int32_t aSkip, int32_t aCount);
 
     // Content helpers.
     nsIContent* GetCell(nsIContent* aContainer, nsITreeColumn* aCol);
@@ -137,8 +96,6 @@ class nsTreeContentView : public nsINativeTreeView,
     nsIDocument*                        mDocument;      // WEAK
     nsFixedSizeAllocator                mAllocator;
     nsTArray<Row*>                      mRows;
-
-    PRPackedBool                        mUpdateSelection;
 };
 
 #endif // nsTreeContentView_h__

@@ -1,44 +1,9 @@
 /* -*- Mode: C++; tab-width: 3; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  * vim:set ts=2 sts=2 sw=2 et cin:
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla browser.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications, Inc.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Scott MacGregor <mscott@netscape.com>
- *   Dan Mosedale <dmose@mozilla.org>
- *   Jim Mathies <jmathies@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsOSHelperAppService.h"
 #include "nsISupports.h"
@@ -68,25 +33,19 @@ static nsresult GetExtensionFromWindowsMimeDatabase(const nsACString& aMimeType,
 
 nsOSHelperAppService::nsOSHelperAppService() : 
   nsExternalHelperAppService()
-#if MOZ_WINSDK_TARGETVER >= MOZ_NTDDI_LONGHORN
-  , mAppAssoc(nsnull)
-#endif
+  , mAppAssoc(nullptr)
 {
-#if MOZ_WINSDK_TARGETVER >= MOZ_NTDDI_LONGHORN
   CoInitialize(NULL);
   CoCreateInstance(CLSID_ApplicationAssociationRegistration, NULL, CLSCTX_INPROC,
                    IID_IApplicationAssociationRegistration, (void**)&mAppAssoc);
-#endif
 }
 
 nsOSHelperAppService::~nsOSHelperAppService()
 {
-#if MOZ_WINSDK_TARGETVER >= MOZ_NTDDI_LONGHORN
   if (mAppAssoc)
     mAppAssoc->Release();
-  mAppAssoc = nsnull;
+  mAppAssoc = nullptr;
   CoUninitialize();
-#endif
 }
 
 // The windows registry provides a mime database key which lists a set of mime types and corresponding "Extension" values. 
@@ -143,7 +102,7 @@ static nsresult GetExtensionFrom4xRegistryInfo(const nsACString& aMimeType,
   // this may be a comma separated list of extensions...just take the 
   // first one for now...
 
-  PRInt32 pos = aFileExtension.FindChar(PRUnichar(','));
+  int32_t pos = aFileExtension.FindChar(PRUnichar(','));
   if (pos > 0) {
     // we have a comma separated list of types...
     // truncate everything after the first comma (including the comma)
@@ -153,16 +112,15 @@ static nsresult GetExtensionFrom4xRegistryInfo(const nsACString& aMimeType,
   return NS_OK;
 }
 
-nsresult nsOSHelperAppService::OSProtocolHandlerExists(const char * aProtocolScheme, PRBool * aHandlerExists)
+nsresult nsOSHelperAppService::OSProtocolHandlerExists(const char * aProtocolScheme, bool * aHandlerExists)
 {
   // look up the protocol scheme in the windows registry....if we find a match then we have a handler for it...
-  *aHandlerExists = PR_FALSE;
+  *aHandlerExists = false;
   if (aProtocolScheme && *aProtocolScheme)
   {
-#if MOZ_WINSDK_TARGETVER >= MOZ_NTDDI_LONGHORN
     // Vista: use new application association interface
     if (mAppAssoc) {
-      PRUnichar * pResult = nsnull;
+      PRUnichar * pResult = nullptr;
       NS_ConvertASCIItoUTF16 scheme(aProtocolScheme);
       // We are responsible for freeing returned strings.
       HRESULT hr = mAppAssoc->QueryCurrentDefault(scheme.get(),
@@ -170,11 +128,10 @@ nsresult nsOSHelperAppService::OSProtocolHandlerExists(const char * aProtocolSch
                                                   &pResult);
       if (SUCCEEDED(hr)) {
         CoTaskMemFree(pResult);
-        *aHandlerExists = PR_TRUE;
+        *aHandlerExists = true;
       }
       return NS_OK;
     }
-#endif
 
     HKEY hKey;
     LONG err = ::RegOpenKeyExW(HKEY_CLASSES_ROOT,
@@ -203,10 +160,9 @@ NS_IMETHODIMP nsOSHelperAppService::GetApplicationDescription(const nsACString& 
 
   NS_ConvertASCIItoUTF16 buf(aScheme);
 
-#if MOZ_WINSDK_TARGETVER >= MOZ_NTDDI_LONGHORN
   // Vista: use new application association interface
   if (mAppAssoc) {
-    PRUnichar * pResult = nsnull;
+    PRUnichar * pResult = nullptr;
     // We are responsible for freeing returned strings.
     HRESULT hr = mAppAssoc->QueryCurrentDefault(buf.get(),
                                                 AT_URLPROTOCOL, AL_EFFECTIVE,
@@ -220,7 +176,6 @@ NS_IMETHODIMP nsOSHelperAppService::GetApplicationDescription(const nsACString& 
     }
     return NS_ERROR_NOT_AVAILABLE;
   }
-#endif
 
   nsCOMPtr<nsIFile> app;
   GetDefaultAppInfo(buf, _retval, getter_AddRefs(app));
@@ -280,18 +235,18 @@ nsresult nsOSHelperAppService::GetMIMEInfoFromRegistry(const nsAFlatString& file
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Looks up the type for the extension aExt and compares it to aType
-/* static */ PRBool
+/* static */ bool
 nsOSHelperAppService::typeFromExtEquals(const PRUnichar* aExt, const char *aType)
 {
   if (!aType)
-    return PR_FALSE;
+    return false;
   nsAutoString fileExtToUse;
   if (aExt[0] != PRUnichar('.'))
     fileExtToUse = PRUnichar('.');
 
   fileExtToUse.Append(aExt);
 
-  PRBool eq = PR_FALSE;
+  bool eq = false;
   nsCOMPtr<nsIWindowsRegKey> regKey = 
     do_CreateInstance("@mozilla.org/windows-registry-key;1");
   if (!regKey) 
@@ -321,22 +276,22 @@ static void CleanupHandlerPath(nsString& aPath)
   // 3) C:\Windows\some.dll,-foo -bar
   // 4) C:\Windows\some.cpl,-foo -bar
 
-  PRInt32 lastCommaPos = aPath.RFindChar(',');
+  int32_t lastCommaPos = aPath.RFindChar(',');
   if (lastCommaPos != kNotFound)
     aPath.Truncate(lastCommaPos);
 
   aPath.AppendLiteral(" ");
 
   // case insensitive
-  PRUint32 index = aPath.Find(".exe ", PR_TRUE);
+  uint32_t index = aPath.Find(".exe ", true);
   if (index == kNotFound)
-    index = aPath.Find(".dll ", PR_TRUE);
+    index = aPath.Find(".dll ", true);
   if (index == kNotFound)
-    index = aPath.Find(".cpl ", PR_TRUE);
+    index = aPath.Find(".cpl ", true);
 
   if (index != kNotFound)
     aPath.Truncate(index + 4);
-  aPath.Trim(" ", PR_TRUE, PR_TRUE);
+  aPath.Trim(" ", true, true);
 }
 
 // Strip the windows host process bootstrap executable rundll32.exe
@@ -353,15 +308,15 @@ static void StripRundll32(nsString& aCommandString)
   NS_NAMED_LITERAL_STRING(rundllSegmentShort, "rundll32 ");
 
   // case insensitive
-  PRInt32 strLen = rundllSegment.Length();
-  PRInt32 index = aCommandString.Find(rundllSegment, PR_TRUE);
+  int32_t strLen = rundllSegment.Length();
+  int32_t index = aCommandString.Find(rundllSegment, true);
   if (index == kNotFound) {
     strLen = rundllSegmentShort.Length();
-    index = aCommandString.Find(rundllSegmentShort, PR_TRUE);
+    index = aCommandString.Find(rundllSegmentShort, true);
   }
 
   if (index != kNotFound) {
-    PRUint32 rundllSegmentLength = index + strLen;
+    uint32_t rundllSegmentLength = index + strLen;
     aCommandString.Cut(0, rundllSegmentLength);
   }
 }
@@ -371,7 +326,7 @@ static void StripRundll32(nsString& aCommandString)
 // to launch the associated application as it strips parameters and
 // rundll.exe from the string. Designed for retrieving display information
 // on a particular handler.   
-/* static */ PRBool nsOSHelperAppService::CleanupCmdHandlerPath(nsAString& aCommandHandler)
+/* static */ bool nsOSHelperAppService::CleanupCmdHandlerPath(nsAString& aCommandHandler)
 {
   nsAutoString handlerCommand(aCommandHandler);
 
@@ -390,17 +345,17 @@ static void StripRundll32(nsString& aCommandString)
   //    Viewer.dll", var var
 
   // Expand environment variables so we have full path strings.
-  PRUint32 bufLength = ::ExpandEnvironmentStringsW(handlerCommand.get(),
+  uint32_t bufLength = ::ExpandEnvironmentStringsW(handlerCommand.get(),
                                                    L"", 0);
   if (bufLength == 0) // Error
-    return PR_FALSE;
+    return false;
 
   nsAutoArrayPtr<PRUnichar> destination(new PRUnichar[bufLength]);
   if (!destination)
-    return PR_FALSE;
+    return false;
   if (!::ExpandEnvironmentStringsW(handlerCommand.get(), destination,
                                    bufLength))
-    return PR_FALSE;
+    return false;
 
   handlerCommand = destination;
 
@@ -416,7 +371,7 @@ static void StripRundll32(nsString& aCommandString)
   CleanupHandlerPath(handlerCommand);
 
   aCommandHandler.Assign(handlerCommand);
-  return PR_TRUE;
+  return true;
 }
 
 // The "real" name of a given helper app (as specified by the path to the 
@@ -433,7 +388,7 @@ nsOSHelperAppService::GetDefaultAppInfo(const nsAString& aAppInfo,
   // If all else fails, use the file type key name, which will be 
   // something like "pngfile" for .pngs, "WMVFile" for .wmvs, etc. 
   aDefaultDescription = aAppInfo;
-  *aDefaultApplication = nsnull;
+  *aDefaultApplication = nullptr;
 
   if (aAppInfo.IsEmpty())
     return NS_ERROR_FAILURE;
@@ -473,8 +428,38 @@ nsOSHelperAppService::GetDefaultAppInfo(const nsAString& aAppInfo,
      
     // OK, the default value here is the description of the type.
     rv = regKey->ReadStringValue(EmptyString(), handlerCommand);
-    if (NS_FAILED(rv))
-      return NS_ERROR_FAILURE;
+    if (NS_FAILED(rv)) {
+
+      // Check if there is a DelegateExecute string
+      nsAutoString delegateExecute;
+      rv = regKey->ReadStringValue(NS_LITERAL_STRING("DelegateExecute"), delegateExecute);
+      NS_ENSURE_SUCCESS(rv, rv);
+
+      // Look for InProcServer32
+      nsAutoString delegateExecuteRegPath;
+      delegateExecuteRegPath.AssignLiteral("CLSID\\");
+      delegateExecuteRegPath.Append(delegateExecute);
+      delegateExecuteRegPath.AppendLiteral("\\InProcServer32");
+      rv = chkKey->Open(nsIWindowsRegKey::ROOT_KEY_CLASSES_ROOT,
+                        delegateExecuteRegPath, 
+                        nsIWindowsRegKey::ACCESS_QUERY_VALUE);
+      if (NS_SUCCEEDED(rv)) {
+        rv = chkKey->ReadStringValue(EmptyString(), handlerCommand);
+      }
+
+      if (NS_FAILED(rv)) {
+        // Look for LocalServer32
+        delegateExecuteRegPath.AssignLiteral("CLSID\\");
+        delegateExecuteRegPath.Append(delegateExecute);
+        delegateExecuteRegPath.AppendLiteral("\\LocalServer32");
+        rv = chkKey->Open(nsIWindowsRegKey::ROOT_KEY_CLASSES_ROOT,
+                          delegateExecuteRegPath, 
+                          nsIWindowsRegKey::ACCESS_QUERY_VALUE);
+        NS_ENSURE_SUCCESS(rv, rv);
+        rv = chkKey->ReadStringValue(EmptyString(), handlerCommand);
+        NS_ENSURE_SUCCESS(rv, rv);
+      }
+    }
   }
 
   if (!CleanupCmdHandlerPath(handlerCommand))
@@ -485,12 +470,12 @@ nsOSHelperAppService::GetDefaultAppInfo(const nsAString& aAppInfo,
   // There are some rare cases this can happen - ["url.dll" -foo]
   // for example won't resolve correctly to the system dir. The 
   // subsequent launch of the helper app will work though.
-  nsCOMPtr<nsILocalFile> lf;
-  NS_NewLocalFile(handlerCommand, PR_TRUE, getter_AddRefs(lf));
+  nsCOMPtr<nsIFile> lf;
+  NS_NewLocalFile(handlerCommand, true, getter_AddRefs(lf));
   if (!lf)
     return NS_ERROR_FILE_NOT_FOUND;
 
-  nsILocalFileWin* lfw = nsnull;
+  nsILocalFileWin* lfw = nullptr;
   CallQueryInterface(lf, &lfw);
 
   if (lfw) {
@@ -506,7 +491,7 @@ nsOSHelperAppService::GetDefaultAppInfo(const nsAString& aAppInfo,
 already_AddRefed<nsMIMEInfoWin> nsOSHelperAppService::GetByExtension(const nsAFlatString& aFileExt, const char *aTypeHint)
 {
   if (aFileExt.IsEmpty())
-    return nsnull;
+    return nullptr;
 
   // windows registry assumes your file extension is going to include the '.'.
   // so make sure it's there...
@@ -520,15 +505,15 @@ already_AddRefed<nsMIMEInfoWin> nsOSHelperAppService::GetByExtension(const nsAFl
   nsCOMPtr<nsIWindowsRegKey> regKey = 
     do_CreateInstance("@mozilla.org/windows-registry-key;1");
   if (!regKey) 
-    return nsnull; 
+    return nullptr; 
 
   nsresult rv = regKey->Open(nsIWindowsRegKey::ROOT_KEY_CLASSES_ROOT,
                              fileExtToUse,
                              nsIWindowsRegKey::ACCESS_QUERY_VALUE);
   if (NS_FAILED(rv))
-    return nsnull; 
+    return nullptr; 
 
-  nsCAutoString typeToUse;
+  nsAutoCString typeToUse;
   if (aTypeHint && *aTypeHint) {
     typeToUse.Assign(aTypeHint);
   }
@@ -536,7 +521,7 @@ already_AddRefed<nsMIMEInfoWin> nsOSHelperAppService::GetByExtension(const nsAFl
     nsAutoString temp;
     if (NS_FAILED(regKey->ReadStringValue(NS_LITERAL_STRING("Content Type"),
                   temp)) || temp.IsEmpty()) {
-      return nsnull; 
+      return nullptr; 
     }
     // Content-Type is always in ASCII
     LossyAppendUTF16toASCII(temp, typeToUse);
@@ -544,7 +529,7 @@ already_AddRefed<nsMIMEInfoWin> nsOSHelperAppService::GetByExtension(const nsAFl
 
   nsMIMEInfoWin* mimeInfo = new nsMIMEInfoWin(typeToUse);
   if (!mimeInfo)
-    return nsnull; // out of memory
+    return nullptr; // out of memory
 
   NS_ADDREF(mimeInfo);
 
@@ -553,29 +538,27 @@ already_AddRefed<nsMIMEInfoWin> nsOSHelperAppService::GetByExtension(const nsAFl
   mimeInfo->SetPreferredAction(nsIMIMEInfo::useSystemDefault);
 
   nsAutoString appInfo;
-  PRBool found;
+  bool found;
 
-#if MOZ_WINSDK_TARGETVER >= MOZ_NTDDI_LONGHORN
   // Retrieve the default application for this extension
   if (mAppAssoc) {
     // Vista: use the new application association COM interfaces
     // for resolving helpers.
     nsString assocType(fileExtToUse);
-    PRUnichar * pResult = nsnull;
+    PRUnichar * pResult = nullptr;
     HRESULT hr = mAppAssoc->QueryCurrentDefault(assocType.get(),
                                                 AT_FILEEXTENSION, AL_EFFECTIVE,
                                                 &pResult);
     if (SUCCEEDED(hr)) {
-      found = PR_TRUE;
+      found = true;
       appInfo.Assign(pResult);
       CoTaskMemFree(pResult);
     } 
     else {
-      found = PR_FALSE;
+      found = false;
     }
   } 
   else
-#endif
   {
     found = NS_SUCCEEDED(regKey->ReadStringValue(EmptyString(), 
                                                  appInfo));
@@ -583,11 +566,11 @@ already_AddRefed<nsMIMEInfoWin> nsOSHelperAppService::GetByExtension(const nsAFl
 
   // Bug 358297 - ignore the default handler, force the user to choose app
   if (appInfo.EqualsLiteral("XPSViewer.Document"))
-    found = PR_FALSE;
+    found = false;
 
   if (!found) {
     NS_IF_RELEASE(mimeInfo); // we failed to really find an entry in the registry
-    return nsnull;
+    return nullptr;
   }
 
   // Get other nsIMIMEInfo fields from registry, if possible.
@@ -597,7 +580,7 @@ already_AddRefed<nsMIMEInfoWin> nsOSHelperAppService::GetByExtension(const nsAFl
   if (NS_FAILED(GetDefaultAppInfo(appInfo, defaultDescription,
                                   getter_AddRefs(defaultApplication)))) {
     NS_IF_RELEASE(mimeInfo);
-    return nsnull;
+    return nullptr;
   }
 
   mimeInfo->SetDefaultDescription(defaultDescription);
@@ -609,9 +592,9 @@ already_AddRefed<nsMIMEInfoWin> nsOSHelperAppService::GetByExtension(const nsAFl
   return mimeInfo;
 }
 
-already_AddRefed<nsIMIMEInfo> nsOSHelperAppService::GetMIMEInfoFromOS(const nsACString& aMIMEType, const nsACString& aFileExt, PRBool *aFound)
+already_AddRefed<nsIMIMEInfo> nsOSHelperAppService::GetMIMEInfoFromOS(const nsACString& aMIMEType, const nsACString& aFileExt, bool *aFound)
 {
-  *aFound = PR_TRUE;
+  *aFound = true;
 
   const nsCString& flatType = PromiseFlatCString(aMIMEType);
   const nsCString& flatExt = PromiseFlatCString(aFileExt);
@@ -636,12 +619,12 @@ already_AddRefed<nsIMIMEInfo> nsOSHelperAppService::GetMIMEInfoFromOS(const nsAC
     }
   }
   // If we found an extension for the type, do the lookup
-  nsMIMEInfoWin* mi = nsnull;
+  nsMIMEInfoWin* mi = nullptr;
   if (!fileExtension.IsEmpty())
     mi = GetByExtension(fileExtension, flatType.get()).get();
   LOG(("Extension lookup on '%s' found: 0x%p\n", fileExtension.get(), mi));
 
-  PRBool hasDefault = PR_FALSE;
+  bool hasDefault = false;
   if (mi) {
     mi->GetHasDefaultHandler(&hasDefault);
     // OK. We might have the case that |aFileExt| is a valid extension for the
@@ -652,7 +635,7 @@ already_AddRefed<nsIMIMEInfo> nsOSHelperAppService::GetMIMEInfoFromOS(const nsAC
     if (!aFileExt.IsEmpty() && typeFromExtEquals(NS_ConvertUTF8toUTF16(flatExt).get(), flatType.get())) {
       LOG(("Appending extension '%s' to mimeinfo, because its mimetype is '%s'\n",
            flatExt.get(), flatType.get()));
-      PRBool extExist = PR_FALSE;
+      bool extExist = false;
       mi->ExtensionExists(aFileExt, &extExist);
       if (!extExist)
         mi->AppendExtension(aFileExt);
@@ -669,7 +652,7 @@ already_AddRefed<nsIMIMEInfo> nsOSHelperAppService::GetMIMEInfoFromOS(const nsAC
       return mi;
     }
     if (!miByExt && !mi) {
-      *aFound = PR_FALSE;
+      *aFound = false;
       mi = new nsMIMEInfoWin(flatType);
       if (mi) {
         NS_ADDREF(mi);
@@ -692,7 +675,7 @@ already_AddRefed<nsIMIMEInfo> nsOSHelperAppService::GetMIMEInfoFromOS(const nsAC
 
 NS_IMETHODIMP
 nsOSHelperAppService::GetProtocolHandlerInfoFromOS(const nsACString &aScheme,
-                                                   PRBool *found,
+                                                   bool *found,
                                                    nsIHandlerInfo **_retval)
 {
   NS_ASSERTION(!aScheme.IsEmpty(), "No scheme was specified!");

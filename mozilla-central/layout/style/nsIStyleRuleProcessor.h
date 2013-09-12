@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   L. David Baron <dbaron@dbaron.org>, Mozilla Corporation
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * internal abstract interface for containers (roughly origins within
@@ -61,10 +28,10 @@ struct AttributeRuleProcessorData;
 class nsPresContext;
 
 // IID for the nsIStyleRuleProcessor interface
-// {b8e44bbe-aaac-4125-8ab2-0f42802e14ad}
+// {c1d6001e-4fcb-4c40-bce1-5eba80bfd8f3}
 #define NS_ISTYLE_RULE_PROCESSOR_IID     \
-{ 0xb8e44bbe, 0xaaac, 0x4125, \
- { 0x8a, 0xb2, 0x0f, 0x42, 0x80, 0x2e, 0x14, 0xad } }
+{ 0xc1d6001e, 0x4fcb, 0x4c40, \
+  {0xbc, 0xe1, 0x5e, 0xba, 0x80, 0xbf, 0xd8, 0xf3} }
 
 
 /* The style rule processor interface is a mechanism to separate the matching
@@ -81,7 +48,7 @@ public:
 
   // Shorthand for:
   //  nsCOMArray<nsIStyleRuleProcessor>::nsCOMArrayEnumFunc
-  typedef PRBool (* EnumFunc)(nsIStyleRuleProcessor*, void*);
+  typedef bool (* EnumFunc)(nsIStyleRuleProcessor*, void*);
 
   /**
    * Find the |nsIStyleRule|s matching the given content node and
@@ -115,7 +82,7 @@ public:
    *
    * Document states are defined in nsIDocument.h.
    */
-  virtual PRBool
+  virtual bool
     HasDocumentStateDependentStyle(StateRuleProcessorData* aData) = 0;
 
   /**
@@ -124,7 +91,7 @@ public:
    * test is used for optimization only, and may err on the side of
    * reporting more dependencies than really exist.
    *
-   * Event states are defined in nsIEventStateManager.h.
+   * Event states are defined in nsEventStates.h.
    */
   virtual nsRestyleHint
     HasStateDependentStyle(StateRuleProcessorData* aData) = 0;
@@ -153,7 +120,14 @@ public:
    * the characteristics of the medium, and return whether this rule
    * processor's rules have changed (e.g., because of media queries).
    */
-  virtual PRBool MediumFeaturesChanged(nsPresContext* aPresContext) = 0;
+  virtual bool MediumFeaturesChanged(nsPresContext* aPresContext) = 0;
+
+  /**
+   * Report the size of this style rule processor to about:memory.  A
+   * processor may return 0.
+   */
+  virtual size_t SizeOfExcludingThis(nsMallocSizeOfFun mallocSizeOf) const = 0;
+  virtual size_t SizeOfIncludingThis(nsMallocSizeOfFun mallocSizeOf) const = 0;
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsIStyleRuleProcessor,

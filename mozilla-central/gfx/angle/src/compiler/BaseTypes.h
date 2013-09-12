@@ -7,10 +7,6 @@
 #ifndef _BASICTYPES_INCLUDED_
 #define _BASICTYPES_INCLUDED_
 
-#if defined(__SUNPRO_C) || defined(__SUNPRO_CC)
-#define __inline inline
-#endif
-
 //
 // Precision qualifiers
 //
@@ -23,7 +19,7 @@ enum TPrecision
     EbpHigh,
 };
 
-__inline const char* getPrecisionString(TPrecision p)
+inline const char* getPrecisionString(TPrecision p)
 {
     switch(p)
     {
@@ -46,12 +42,32 @@ enum TBasicType
     EbtGuardSamplerBegin,  // non type:  see implementation of IsSampler()
     EbtSampler2D,
     EbtSamplerCube,
+    EbtSamplerExternalOES,  // Only valid if OES_EGL_image_external exists.
+    EbtSampler2DRect,       // Only valid if GL_ARB_texture_rectangle exists.
     EbtGuardSamplerEnd,    // non type:  see implementation of IsSampler()
     EbtStruct,
     EbtAddress,            // should be deprecated??
+    EbtInvariant,          // used as a type when qualifying a previously declared variable as being invariant
 };
 
-__inline bool IsSampler(TBasicType type)
+inline const char* getBasicString(TBasicType t)
+{
+    switch (t)
+    {
+    case EbtVoid:              return "void";              break;
+    case EbtFloat:             return "float";             break;
+    case EbtInt:               return "int";               break;
+    case EbtBool:              return "bool";              break;
+    case EbtSampler2D:         return "sampler2D";         break;
+    case EbtSamplerCube:       return "samplerCube";       break;
+    case EbtSamplerExternalOES: return "samplerExternalOES"; break;
+    case EbtSampler2DRect:     return "sampler2DRect";     break;
+    case EbtStruct:            return "structure";         break;
+    default:                   return "unknown type";
+    }
+}
+
+inline bool IsSampler(TBasicType type)
 {
     return type > EbtGuardSamplerBegin && type < EbtGuardSamplerEnd;
 }
@@ -104,7 +120,7 @@ enum TQualifier
 //
 // This is just for debug print out, carried along with the definitions above.
 //
-__inline const char* getQualifierString(TQualifier q)
+inline const char* getQualifierString(TQualifier q)
 {
     switch(q)
     {

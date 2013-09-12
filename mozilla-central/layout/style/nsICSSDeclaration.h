@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Boris Zbarsky <bzbarsky@mit.edu>.
- * Portions created by the Initial Developer are Copyright (C) 2004
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * faster version of nsIDOMCSSStyleDeclaration using enums instead of
@@ -53,15 +21,23 @@
 
 #include "nsIDOMCSSStyleDeclaration.h"
 #include "nsCSSProperty.h"
+#include "CSSValue.h"
+#include "nsWrapperCache.h"
+#include "mozilla/dom/BindingUtils.h"
+#include "nsString.h"
+#include "nsIDOMCSSRule.h"
+#include "nsIDOMCSSValue.h"
+#include "mozilla/ErrorResult.h"
 
-// 57eb81d1-a607-4429-926b-802519d43aad
+// dbeabbfa-6cb3-4f5c-aec2-dd558d9d681f
 #define NS_ICSSDECLARATION_IID \
- { 0x57eb81d1, 0xa607, 0x4429, \
-    {0x92, 0x6b, 0x80, 0x25, 0x19, 0xd4, 0x3a, 0xad } }
+{ 0xdbeabbfa, 0x6cb3, 0x4f5c, \
+ { 0xae, 0xc2, 0xdd, 0x55, 0x8d, 0x9d, 0x68, 0x1f } }
 
 class nsINode;
 
-class nsICSSDeclaration : public nsIDOMCSSStyleDeclaration
+class nsICSSDeclaration : public nsIDOMCSSStyleDeclaration,
+                          public nsWrapperCache
 {
 public:
   NS_DECLARE_STATIC_IID_ACCESSOR(NS_ICSSDECLARATION_IID)
@@ -73,11 +49,6 @@ public:
   NS_IMETHOD GetPropertyValue(const nsCSSProperty aPropID,
                               nsAString& aValue) = 0;
 
-  // Also have to declare the nsIDOMCSSStyleDeclaration method, so we
-  // don't hide it... very sad, but it stole the good method name
-  NS_IMETHOD GetPropertyValue(const nsAString& aPropName,
-                              nsAString& aValue) = 0;
-  
   /**
    * Method analogous to nsIDOMCSSStyleDeclaration::SetProperty.  This
    * method does NOT allow setting a priority (the priority will
@@ -87,6 +58,94 @@ public:
                               const nsAString& aValue) = 0;
 
   virtual nsINode *GetParentObject() = 0;
+
+  // Also have to declare all the nsIDOMCSSStyleDeclaration methods,
+  // since we want to be able to call them from the WebIDL versions.
+  NS_IMETHOD GetCssText(nsAString& aCssText) = 0;
+  NS_IMETHOD SetCssText(const nsAString& aCssText) = 0;
+  NS_IMETHOD GetPropertyValue(const nsAString& aPropName,
+                              nsAString& aValue) = 0;
+  virtual already_AddRefed<mozilla::dom::CSSValue>
+    GetPropertyCSSValue(const nsAString& aPropertyName,
+                        mozilla::ErrorResult& aRv) = 0;
+  NS_IMETHOD GetPropertyCSSValue(const nsAString& aProp, nsIDOMCSSValue** aVal)
+  {
+    mozilla::ErrorResult error;
+    nsRefPtr<mozilla::dom::CSSValue> val = GetPropertyCSSValue(aProp, error);
+    if (error.Failed()) {
+      return error.ErrorCode();
+  }
+
+    nsCOMPtr<nsIDOMCSSValue> xpVal = do_QueryInterface(val);
+    xpVal.forget(aVal);
+    return NS_OK;
+  }
+  NS_IMETHOD RemoveProperty(const nsAString& aPropertyName,
+                            nsAString& aReturn) = 0;
+  NS_IMETHOD GetPropertyPriority(const nsAString& aPropertyName,
+                                 nsAString& aReturn) = 0;
+  NS_IMETHOD SetProperty(const nsAString& aPropertyName,
+                         const nsAString& aValue,
+                         const nsAString& aPriority) = 0;
+  NS_IMETHOD GetLength(uint32_t* aLength) = 0;
+  NS_IMETHOD Item(uint32_t aIndex, nsAString& aReturn)
+  {
+    bool found;
+    IndexedGetter(aIndex, found, aReturn);
+    if (!found) {
+      aReturn.Truncate();
+    }
+    return NS_OK;
+  }
+  NS_IMETHOD GetParentRule(nsIDOMCSSRule * *aParentRule) = 0;
+
+  // WebIDL interface for CSSStyleDeclaration
+  void SetCssText(const nsAString& aString, mozilla::ErrorResult& rv) {
+    rv = SetCssText(aString);
+  }
+  void GetCssText(nsString& aString) {
+    // Cast to nsAString& so we end up calling our virtual
+    // |GetCssText(nsAString& aCssText)| overload, which does the real work.
+    GetCssText(static_cast<nsAString&>(aString));
+  }
+  uint32_t Length() {
+    uint32_t length;
+    GetLength(&length);
+    return length;
+  }
+  void Item(uint32_t aIndex, nsString& aPropName) {
+    Item(aIndex, static_cast<nsAString&>(aPropName));
+  }
+
+  // The actual implementation of the Item method and the WebIDL indexed getter
+  virtual void IndexedGetter(uint32_t aIndex, bool& aFound, nsAString& aPropName) = 0;
+
+  void GetPropertyValue(const nsAString& aPropName, nsString& aValue,
+                        mozilla::ErrorResult& rv) {
+    rv = GetPropertyValue(aPropName, aValue);
+  }
+  void GetPropertyPriority(const nsAString& aPropName, nsString& aPriority) {
+    GetPropertyPriority(aPropName, static_cast<nsAString&>(aPriority));
+  }
+  // XXXbz we should nix the Optional thing once bug 759622 is fixed.
+  void SetProperty(const nsAString& aPropName, const nsAString& aValue,
+                   const mozilla::dom::Optional<nsAString>& aPriority,
+                   mozilla::ErrorResult& rv) {
+    if (aPriority.WasPassed()) {
+      rv = SetProperty(aPropName, aValue, aPriority.Value());
+    } else {
+      rv = SetProperty(aPropName, aValue, EmptyString());
+    }
+  }
+  void RemoveProperty(const nsAString& aPropName, nsString& aRetval,
+                      mozilla::ErrorResult& rv) {
+    rv = RemoveProperty(aPropName, aRetval);
+  }
+  already_AddRefed<nsIDOMCSSRule> GetParentRule() {
+    nsCOMPtr<nsIDOMCSSRule> rule;
+    GetParentRule(getter_AddRefs(rule));
+    return rule.forget();
+  }
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsICSSDeclaration, NS_ICSSDECLARATION_IID)
@@ -96,5 +155,16 @@ NS_DEFINE_STATIC_IID_ACCESSOR(nsICSSDeclaration, NS_ICSSDECLARATION_IID)
                               nsAString& aValue);               \
   NS_IMETHOD SetPropertyValue(const nsCSSProperty aPropID,    \
                               const nsAString& aValue);
+
+#define NS_DECL_NSIDOMCSSSTYLEDECLARATION_HELPER \
+  NS_IMETHOD GetCssText(nsAString & aCssText); \
+  NS_IMETHOD SetCssText(const nsAString & aCssText); \
+  NS_IMETHOD GetPropertyValue(const nsAString & propertyName, nsAString & _retval); \
+  NS_IMETHOD RemoveProperty(const nsAString & propertyName, nsAString & _retval); \
+  NS_IMETHOD GetPropertyPriority(const nsAString & propertyName, nsAString & _retval); \
+  NS_IMETHOD SetProperty(const nsAString & propertyName, const nsAString & value, const nsAString & priority); \
+  NS_IMETHOD GetLength(uint32_t *aLength); \
+  NS_IMETHOD Item(uint32_t index, nsAString & _retval); \
+  NS_IMETHOD GetParentRule(nsIDOMCSSRule * *aParentRule);
 
 #endif // nsICSSDeclaration_h__

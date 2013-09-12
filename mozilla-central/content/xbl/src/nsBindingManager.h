@@ -1,41 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Original Author: David W. Hyatt (hyatt@netscape.com)
- *   Alec Flett <alecf@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef nsBindingManager_h_
 #define nsBindingManager_h_
@@ -50,6 +16,7 @@
 #include "nsTArray.h"
 #include "nsThreadUtils.h"
 
+struct ElementDependentRuleProcessorData;
 class nsIContent;
 class nsIXPConnectWrappedJS;
 class nsIAtom;
@@ -64,7 +31,7 @@ template<class E> class nsRefPtr;
 typedef nsTArray<nsRefPtr<nsXBLBinding> > nsBindingList;
 class nsIPrincipal;
 
-class nsBindingManager : public nsStubMutationObserver
+class nsBindingManager MOZ_FINAL : public nsStubMutationObserver
 {
 public:
   NS_DECL_CYCLE_COLLECTING_ISUPPORTS
@@ -95,13 +62,15 @@ public:
   void RemovedFromDocument(nsIContent* aContent, nsIDocument* aOldDocument)
   {
     if (aContent->HasFlag(NODE_MAY_BE_IN_BINDING_MNGR)) {
-      RemovedFromDocumentInternal(aContent, aOldDocument);
+      RemovedFromDocumentInternal(aContent, aOldDocument,
+                                  aContent->GetBindingParent());
     }
   }
   void RemovedFromDocumentInternal(nsIContent* aContent,
-                                   nsIDocument* aOldDocument);
+                                   nsIDocument* aOldDocument,
+                                   nsIContent* aContentBindingParent);
 
-  nsIAtom* ResolveTag(nsIContent* aContent, PRInt32* aNameSpaceID);
+  nsIAtom* ResolveTag(nsIContent* aContent, int32_t* aNameSpaceID);
 
   /**
    * Return a list of all explicit children, including any children
@@ -125,7 +94,7 @@ public:
    * Determine whether or not the explicit child list has been altered
    * by XBL insertion points.
    */
-  PRBool HasContentListFor(nsIContent* aContent);
+  bool HasContentListFor(nsIContent* aContent);
 
   /**
    * Return the nodelist of "anonymous" kids for this node.  This might
@@ -173,20 +142,20 @@ public:
   // shouldn't be handing it out in our public API, since it's not useful to
   // anyone.
   nsIContent* GetInsertionPoint(nsIContent* aParent,
-                                const nsIContent* aChild, PRUint32* aIndex);
+                                const nsIContent* aChild, uint32_t* aIndex);
 
   /**
    * Return the unfiltered insertion point for the specified parent
    * element. If other filtered insertion points exist,
    * aMultipleInsertionPoints will be set to true.
    */
-  nsIContent* GetSingleInsertionPoint(nsIContent* aParent, PRUint32* aIndex,
-                                      PRBool* aMultipleInsertionPoints);
+  nsIContent* GetSingleInsertionPoint(nsIContent* aParent, uint32_t* aIndex,
+                                      bool* aMultipleInsertionPoints);
 
   nsIContent* GetNestedInsertionPoint(nsIContent* aParent,
                                       const nsIContent* aChild);
   nsIContent* GetNestedSingleInsertionPoint(nsIContent* aParent,
-                                            PRBool* aMultipleInsertionPoints);
+                                            bool* aMultipleInsertionPoints);
 
   nsresult AddLayeredBinding(nsIContent* aContent, nsIURI* aURL,
                              nsIPrincipal* aOriginPrincipal);
@@ -195,7 +164,7 @@ public:
                                nsIPrincipal* aOriginPrincipal);
 
   nsresult AddToAttachedQueue(nsXBLBinding* aBinding);
-  void ProcessAttachedQueue(PRUint32 aSkipSize = 0);
+  void ProcessAttachedQueue(uint32_t aSkipSize = 0);
 
   void ExecuteDetachedHandlers();
 
@@ -213,18 +182,18 @@ public:
 
   // Style rule methods
   nsresult WalkRules(nsIStyleRuleProcessor::EnumFunc aFunc,
-                     RuleProcessorData* aData,
-                     PRBool* aCutOffInheritance);
+                     ElementDependentRuleProcessorData* aData,
+                     bool* aCutOffInheritance);
 
   void WalkAllRules(nsIStyleRuleProcessor::EnumFunc aFunc,
-                    RuleProcessorData* aData);
+                    ElementDependentRuleProcessorData* aData);
   /**
    * Do any processing that needs to happen as a result of a change in
    * the characteristics of the medium, and return whether this rule
    * processor's rules have changed (e.g., because of media queries).
    */
   nsresult MediumFeaturesChanged(nsPresContext* aPresContext,
-                                 PRBool* aRulesChanged);
+                                 bool* aRulesChanged);
 
   void AppendAllSheets(nsTArray<nsCSSStyleSheet*>& aArray);
 
@@ -246,16 +215,16 @@ protected:
   nsresult SetWrappedJS(nsIContent* aContent, nsIXPConnectWrappedJS* aResult);
 
   nsINodeList* GetXBLChildNodesInternal(nsIContent* aContent,
-                                        PRBool* aIsAnonymousContentList);
+                                        bool* aIsAnonymousContentList);
   nsINodeList* GetAnonymousNodesInternal(nsIContent* aContent,
-                                         PRBool* aIsAnonymousContentList);
+                                         bool* aIsAnonymousContentList);
 
   // Called by ContentAppended and ContentInserted to handle a single child
   // insertion.  aChild must not be null.  aContainer may be null.
   // aIndexInContainer is the index of the child in the parent.  aAppend is
   // true if this child is being appended, not inserted.
   void HandleChildInsertion(nsIContent* aContainer, nsIContent* aChild,
-                            PRUint32 aIndexInContainer, PRBool aAppend);
+                            uint32_t aIndexInContainer, bool aAppend);
 
   // For the given container under which a child is being added, given
   // insertion parent and given index of the child being inserted, find the
@@ -266,9 +235,9 @@ protected:
   // will be returned; otherwise 0 will be returned.
   nsXBLInsertionPoint* FindInsertionPointAndIndex(nsIContent* aContainer,
                                                   nsIContent* aInsertionParent,
-                                                  PRUint32 aIndexInContainer,
-                                                  PRInt32 aAppend,
-                                                  PRInt32* aInsertionIndex);
+                                                  uint32_t aIndexInContainer,
+                                                  int32_t aAppend,
+                                                  int32_t* aInsertionIndex);
 
   // Same as ProcessAttachedQueue, but also nulls out
   // mProcessAttachedQueueEvent
@@ -328,9 +297,9 @@ protected:
 
   // A queue of binding attached event handlers that are awaiting execution.
   nsBindingList mAttachedStack;
-  PRPackedBool mProcessingAttachedStack;
-  PRPackedBool mDestroyed;
-  PRUint32 mAttachedStackSizeOnOutermost;
+  bool mProcessingAttachedStack;
+  bool mDestroyed;
+  uint32_t mAttachedStackSizeOnOutermost;
 
   // Our posted event to process the attached queue, if any
   friend class nsRunnableMethod<nsBindingManager>;

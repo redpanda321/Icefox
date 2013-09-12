@@ -73,9 +73,9 @@ protected:
                    PRUint16 aWeight, PRUint16 aStretch, PRUint32 aItalicStyle,
                    gfxUserFontData *aUserFontData);
 
-    virtual nsresult GetFontTable(PRUint32 aTableTag, nsTArray<PRUint8>& aBuffer);
+    virtual nsresult GetFontTable(PRUint32 aTableTag, FallibleTArray<PRUint8>& aBuffer);
 
-    virtual gfxFont* CreateFontInstance(const gfxFontStyle *aFontStyle, PRBool aNeedsBold);
+    virtual gfxFont* CreateFontInstance(const gfxFontStyle *aFontStyle, bool aNeedsBold);
 
     CFStringRef mPostscriptName;
 };
@@ -88,13 +88,13 @@ public:
 
     static PRInt32 AppleWeightToCSSWeight(PRInt32 aAppleWeight);
 
-    virtual gfxFontEntry* GetDefaultFont(const gfxFontStyle* aStyle, PRBool& aNeedsBold);
+    virtual gfxFontFamily* GetDefaultFont(const gfxFontStyle* aStyle);
 
-    virtual PRBool GetStandardFamilyName(const nsAString& aFontName, nsAString& aFamilyName);
+    virtual bool GetStandardFamilyName(const nsAString& aFontName, nsAString& aFamilyName);
 
     virtual gfxFontEntry* LookupLocalFont(const gfxProxyFontEntry *aProxyEntry,
                                           const nsAString& aFontName);
-    
+
     virtual gfxFontEntry* MakePlatformFont(const gfxProxyFontEntry *aProxyEntry,
                                            const PRUint8 *aFontData, PRUint32 aLength);
 
@@ -106,7 +106,7 @@ private:
     gfxUIKitPlatformFontList();
 
     // initialize font lists
-    virtual void InitFontList();
+    virtual nsresult InitFontList();
 
     // special case font faces treated as font families (set via prefs)
     void InitSingleFaceList();

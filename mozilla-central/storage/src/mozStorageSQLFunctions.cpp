@@ -1,44 +1,10 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  * vim: sw=2 ts=2 et lcs=trail\:.,tab\:>~ :
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is unicode functions code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * This code is based off of icu.c from the sqlite code
- * whose original author is danielk1977
- *
- * Contributor(s):
- *   Shawn Wilsher <me@shawnwilsher.com> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "mozilla/Util.h"
 
 #include "mozStorageSQLFunctions.h"
 #include "nsUnicharUtils.h"
@@ -77,7 +43,7 @@ likeCompare(nsAString::const_iterator aPatternItr,
   const PRUnichar MATCH_ALL('%');
   const PRUnichar MATCH_ONE('_');
 
-  PRBool lastWasEscape = PR_FALSE;
+  bool lastWasEscape = false;
   while (aPatternItr != aPatternEnd) {
     /**
      * What we do in here is take a look at each character from the input
@@ -127,11 +93,11 @@ likeCompare(nsAString::const_iterator aPatternItr,
         return 0;
       }
       aStringItr++;
-      lastWasEscape = PR_FALSE;
+      lastWasEscape = false;
     }
     else if (!lastWasEscape && *aPatternItr == aEscapeChar) {
       // CASE 3
-      lastWasEscape = PR_TRUE;
+      lastWasEscape = true;
     }
     else {
       // CASE 4
@@ -140,7 +106,7 @@ likeCompare(nsAString::const_iterator aPatternItr,
         return 0;
       }
       aStringItr++;
-      lastWasEscape = PR_FALSE;
+      lastWasEscape = false;
     }
 
     aPatternItr++;
@@ -210,8 +176,8 @@ levenshteinDistance(const nsAString &aStringS,
     // Set the result to a non-sensical value in case we encounter an error.
     *_result = -1;
 
-    const PRUint32 sLen = aStringS.Length();
-    const PRUint32 tLen = aStringT.Length();
+    const uint32_t sLen = aStringS.Length();
+    const uint32_t tLen = aStringT.Length();
 
     if (sLen == 0) {
       *_result = tLen;
@@ -252,7 +218,7 @@ levenshteinDistance(const nsAString &aStringS,
     NS_ENSURE_TRUE(currRow, SQLITE_NOMEM);
 
     // Initialize the first row.
-    for (PRUint32 i = 0; i <= sLen; i++)
+    for (uint32_t i = 0; i <= sLen; i++)
         prevRow[i] = i;
 
     const PRUnichar *s = aStringS.BeginReading();
@@ -260,7 +226,7 @@ levenshteinDistance(const nsAString &aStringS,
 
     // Compute the empty cells in the "matrix" row-by-row, starting with
     // the second row.
-    for (PRUint32 ti = 1; ti <= tLen; ti++) {
+    for (uint32_t ti = 1; ti <= tLen; ti++) {
 
         // Initialize the first cell in this row.
         currRow[0] = ti;
@@ -270,7 +236,7 @@ levenshteinDistance(const nsAString &aStringS,
 
         // Compute the remaining cells in this row, left-to-right,
         // starting at the second column (and first character of "s").
-        for (PRUint32 si = 1; si <= sLen; si++) {
+        for (uint32_t si = 1; si <= sLen; si++) {
             
             // Get the character from "s" that corresponds to this column,
             // compare it to the t-character, and compute the "cost".
@@ -302,6 +268,16 @@ levenshteinDistance(const nsAString &aStringS,
     return SQLITE_OK;
 }
 
+// This struct is used only by registerFunctions below, but ISO C++98 forbids
+// instantiating a template dependent on a locally-defined type.  Boo-urns!
+struct Functions {
+  const char *zName;
+  int nArg;
+  int enc;
+  void *pContext;
+  void (*xFunc)(::sqlite3_context*, int, sqlite3_value**);
+};
+
 } // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -310,14 +286,6 @@ levenshteinDistance(const nsAString &aStringS,
 int
 registerFunctions(sqlite3 *aDB)
 {
-  struct Functions {
-    const char *zName;
-    int nArg;
-    int enc;
-    void *pContext;
-    void (*xFunc)(::sqlite3_context*, int, sqlite3_value**);
-  };
-  
   Functions functions[] = {
     {"lower",               
       1, 
@@ -374,7 +342,7 @@ registerFunctions(sqlite3 *aDB)
   };
 
   int rv = SQLITE_OK;
-  for (size_t i = 0; SQLITE_OK == rv && i < NS_ARRAY_LENGTH(functions); ++i) {
+  for (size_t i = 0; SQLITE_OK == rv && i < ArrayLength(functions); ++i) {
     struct Functions *p = &functions[i];
     rv = ::sqlite3_create_function(aDB, p->zName, p->nArg, p->enc, p->pContext,
                                    p->xFunc, NULL, NULL);
@@ -394,7 +362,7 @@ caseFunction(sqlite3_context *aCtx,
   NS_ASSERTION(1 == aArgc, "Invalid number of arguments!");
 
   nsAutoString data(static_cast<const PRUnichar *>(::sqlite3_value_text16(aArgv[0])));
-  PRBool toUpper = ::sqlite3_user_data(aCtx) ? PR_TRUE : PR_FALSE;
+  bool toUpper = ::sqlite3_user_data(aCtx) ? true : false;
 
   if (toUpper)
     ::ToUpperCase(data);

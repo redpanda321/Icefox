@@ -1,40 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Stephen Henson <stephen.henson@gemplus.com>
- *   Dr Vipul Gupta <vipul.gupta@sun.com>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * This file maps various PKCS #11 Mechanisms to related mechanisms, key
  * types, and ASN.1 encodings.
@@ -373,6 +339,7 @@ PK11_GetKeyType(CK_MECHANISM_TYPE type,unsigned long len)
     case CKM_MD2_RSA_PKCS:
     case CKM_MD5_RSA_PKCS:
     case CKM_SHA1_RSA_PKCS:
+    case CKM_SHA224_RSA_PKCS:
     case CKM_SHA256_RSA_PKCS:
     case CKM_SHA384_RSA_PKCS:
     case CKM_SHA512_RSA_PKCS:
@@ -407,6 +374,8 @@ PK11_GetKeyType(CK_MECHANISM_TYPE type,unsigned long len)
     case CKM_TLS_KEY_AND_MAC_DERIVE:
     case CKM_SHA_1_HMAC:
     case CKM_SHA_1_HMAC_GENERAL:
+    case CKM_SHA224_HMAC:
+    case CKM_SHA224_HMAC_GENERAL:
     case CKM_SHA256_HMAC:
     case CKM_SHA256_HMAC_GENERAL:
     case CKM_SHA384_HMAC:
@@ -560,6 +529,7 @@ PK11_GetKeyGenWithSize(CK_MECHANISM_TYPE type, int size)
     case CKM_MD2_RSA_PKCS:
     case CKM_MD5_RSA_PKCS:
     case CKM_SHA1_RSA_PKCS:
+    case CKM_SHA224_RSA_PKCS:
     case CKM_SHA256_RSA_PKCS:
     case CKM_SHA384_RSA_PKCS:
     case CKM_SHA512_RSA_PKCS:
@@ -593,6 +563,8 @@ PK11_GetKeyGenWithSize(CK_MECHANISM_TYPE type, int size)
 	return CKM_SSL3_PRE_MASTER_KEY_GEN;
     case CKM_SHA_1_HMAC:
     case CKM_SHA_1_HMAC_GENERAL:
+    case CKM_SHA224_HMAC:
+    case CKM_SHA224_HMAC_GENERAL:
     case CKM_SHA256_HMAC:
     case CKM_SHA256_HMAC_GENERAL:
     case CKM_SHA384_HMAC:
@@ -1380,7 +1352,7 @@ pk11_GenIV(CK_MECHANISM_TYPE type, SECItem *iv) {
 
 
 /*
- * create a new paramter block from the passed in MECHANISM and the
+ * create a new parameter block from the passed in MECHANISM and the
  * key. Use Netscape's S/MIME Rules for the New param block.
  */
 SECItem *

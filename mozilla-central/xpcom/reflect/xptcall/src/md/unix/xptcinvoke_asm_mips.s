@@ -1,49 +1,20 @@
 /* -*- Mode: asm; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  * Version: MPL 1.1
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corp, Inc.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Brendan Eich     <brendan@mozilla.org>
- *   Stuart Parmenter <pavlov@netscape.com>
- *   Thiemo Seufer    <seufer@csv.ica.uni-stuttgart.de>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* This code is for MIPS using the O32 ABI. */
 
+#ifdef ANDROID
+#include <asm/regdef.h>
+#include <asm/asm.h>
+#include <machine/asm.h>
+#else
 #include <sys/regdef.h>
 #include <sys/asm.h>
+#endif
 
 # NARGSAVE is the argument space in the callers frame, including extra
 # 'shadowed' space for the argument registers. The minimum of 4
@@ -97,7 +68,7 @@ _NS_InvokeByIndex_P:
 	move	fp, sp
 
 	# extern "C" uint32
-	# invoke_count_words(PRUint32 paramCount, nsXPTCVariant* s);
+	# invoke_count_words(uint32_t paramCount, nsXPTCVariant* s);
 	la	t9, invoke_count_words
 	move	a0, a2
 	move	a1, a3
@@ -116,7 +87,7 @@ _NS_InvokeByIndex_P:
 	# let a0 point to the bottom of the variable stack, allocate
 	# another fixed stack for:
 	# extern "C" void
-	# invoke_copy_to_stack(PRUint32* d, PRUint32 paramCount,
+	# invoke_copy_to_stack(uint32_t* d, uint32_t paramCount,
 	#		       nsXPTCVariant* s);
 	la	t9, invoke_copy_to_stack
 	move	a0, sp
@@ -137,11 +108,7 @@ _NS_InvokeByIndex_P:
 	# t0 = methodIndex << PTRLOG
 	sll	t0, t0, PTRLOG
 	addu	t9, t0
-#if defined(__GXX_ABI_VERSION) && __GXX_ABI_VERSION >= 100 /* G++ V3 ABI */
 	lw	t9, (t9)
-#else /* not G++ V3 ABI */
-	lw	t9, 2*PTRSIZE(t9)
-#endif /* G++ V3 ABI */
 
 	# Set a1-a3 to what invoke_copy_to_stack told us. a0 is already
 	# the "this" pointer. We don't have to care about floating

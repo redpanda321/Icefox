@@ -1,7 +1,6 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <title>Test for SMIL accessKey support</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -168,12 +167,14 @@ function test(spec, charCode, keyCode, offset, modifiers)
          "Unexpected start time for animation with begin: " + spec);
     }
   } catch(e) {
+    is(e.name, "InvalidStateError",
+       "Unexpected exception: " + e.name);
     is(e.code, DOMException.INVALID_STATE_ERR,
-       "Unexpected exception code: " + e);
+       "Unexpected exception code: " + e.code);
     gotStartTimeOk = false;
   }
 
-  removeElement(anim);
+  anim.parentNode.removeChild(anim);
 
   return gotStartTimeOk;
 }
@@ -230,13 +231,15 @@ function testOpenEnd()
     is(anim.getStartTime(), 2,
        "Unexpected start time for second interval of open-ended animation");
   } catch(e) {
+    is(e.name, "InvalidStateError",
+       "Unexpected exception:" + e.name);
     is(e.code, DOMException.INVALID_STATE_ERR,
        "Unexpected exception code:" + e.code);
     ok(false, "Failed to recognise accessKey as qualifying for creating an " +
               "open-ended interval");
   }
 
-  removeElement(anim);
+  anim.parentNode.removeChild(anim);
 }
 
 function testPreventDefault()
@@ -262,7 +265,7 @@ function testPreventDefault()
   }
 
   circle.removeEventListener('keypress', func, false);
-  removeElement(anim);
+  anim.parentNode.removeChild(anim);
 }
 
 function testDispatchToWindow()
@@ -282,7 +285,7 @@ function testDispatchToWindow()
               "accesskey handling");
   }
 
-  removeElement(anim);
+  anim.parentNode.removeChild(anim);
 }
 
 function testAdoptNode()
@@ -326,7 +329,7 @@ function testAdoptNode()
     ok(false, "Adopted node failed to catch accesskey event");
   }
 
-  removeElement(anim);
+  anim.parentNode.removeChild(anim);
 }
 
 function testFauxEvent()
@@ -349,7 +352,7 @@ function testFauxEvent()
     // All is well
   }
 
-  removeElement(anim);
+  anim.parentNode.removeChild(anim);
 }
 
 window.addEventListener("load", main, false);

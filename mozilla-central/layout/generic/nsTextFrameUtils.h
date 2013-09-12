@@ -1,48 +1,17 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Novell code.
- *
- * The Initial Developer of the Original Code is Novell Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   robert@ocallahan.org
- *   Ehsan Akhgari <ehsan.akhgari@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef NSTEXTFRAMEUTILS_H_
 #define NSTEXTFRAMEUTILS_H_
 
 #include "gfxFont.h"
 #include "gfxSkipChars.h"
-#include "gfxTextRunCache.h"
 #include "nsTextFragment.h"
+
+class nsIContent;
+struct nsStyleText;
 
 #define BIG_TEXT_NODE_SIZE 4096
 
@@ -97,20 +66,21 @@ public:
   };
 
   /**
-   * Returns PR_TRUE if aChars/aLength are something that make a space
+   * Returns true if aChars/aLength are something that make a space
    * character not be whitespace when they follow the space character.
    * For now, this is true if and only if aChars starts with a ZWJ. (This
    * is what Uniscribe assumes.)
    */
-  static PRBool
-  IsSpaceCombiningSequenceTail(const PRUnichar* aChars, PRInt32 aLength) {
+  static bool
+  IsSpaceCombiningSequenceTail(const PRUnichar* aChars, int32_t aLength) {
     return aLength > 0 && aChars[0] == 0x200D; // ZWJ
   }
 
   enum CompressionMode {
     COMPRESS_NONE,
     COMPRESS_WHITESPACE,
-    COMPRESS_WHITESPACE_NEWLINE
+    COMPRESS_WHITESPACE_NEWLINE,
+    DISCARD_NEWLINE
   };
 
   /**
@@ -121,71 +91,76 @@ public:
    * 
    * @param aCompressWhitespace control what is compressed to a
    * single space character: no compression, compress spaces (not followed
-   * by combining mark) and tabs, and compress those plus newlines.
+   * by combining mark) and tabs, compress those plus newlines, or
+   * no compression except newlines are discarded.
    * @param aIncomingFlags a flag indicating whether there was whitespace
    * or an Arabic character preceding this text. We set it to indicate if
    * there's an Arabic character or whitespace preceding the end of this text.
    */
-  static PRUnichar* TransformText(const PRUnichar* aText, PRUint32 aLength,
+  static PRUnichar* TransformText(const PRUnichar* aText, uint32_t aLength,
                                   PRUnichar* aOutput,
                                   CompressionMode aCompression,
-                                  PRUint8 * aIncomingFlags,
+                                  uint8_t * aIncomingFlags,
                                   gfxSkipCharsBuilder* aSkipChars,
-                                  PRUint32* aAnalysisFlags);
+                                  uint32_t* aAnalysisFlags);
 
-  static PRUint8* TransformText(const PRUint8* aText, PRUint32 aLength,
-                                PRUint8* aOutput,
+  static uint8_t* TransformText(const uint8_t* aText, uint32_t aLength,
+                                uint8_t* aOutput,
                                 CompressionMode aCompression,
-                                PRUint8 * aIncomingFlags,
+                                uint8_t * aIncomingFlags,
                                 gfxSkipCharsBuilder* aSkipChars,
-                                PRUint32* aAnalysisFlags);
+                                uint32_t* aAnalysisFlags);
 
   static void
-  AppendLineBreakOffset(nsTArray<PRUint32>* aArray, PRUint32 aOffset)
+  AppendLineBreakOffset(nsTArray<uint32_t>* aArray, uint32_t aOffset)
   {
     if (aArray->Length() > 0 && (*aArray)[aArray->Length() - 1] == aOffset)
       return;
     aArray->AppendElement(aOffset);
   }
 
+  static uint32_t
+  ComputeApproximateLengthWithWhitespaceCompression(nsIContent *aContent,
+                                                    const nsStyleText
+                                                      *aStyleText);
 };
 
 class nsSkipCharsRunIterator {
 public:
   enum LengthMode {
-    LENGTH_UNSKIPPED_ONLY   = PR_FALSE,
-    LENGTH_INCLUDES_SKIPPED = PR_TRUE
+    LENGTH_UNSKIPPED_ONLY   = false,
+    LENGTH_INCLUDES_SKIPPED = true
   };
   nsSkipCharsRunIterator(const gfxSkipCharsIterator& aStart,
-      LengthMode aLengthIncludesSkipped, PRUint32 aLength)
+      LengthMode aLengthIncludesSkipped, uint32_t aLength)
     : mIterator(aStart), mRemainingLength(aLength), mRunLength(0),
-      mVisitSkipped(PR_FALSE),
+      mVisitSkipped(false),
       mLengthIncludesSkipped(aLengthIncludesSkipped) {
   }
-  void SetVisitSkipped() { mVisitSkipped = PR_TRUE; }
-  void SetOriginalOffset(PRInt32 aOffset) {
+  void SetVisitSkipped() { mVisitSkipped = true; }
+  void SetOriginalOffset(int32_t aOffset) {
     mIterator.SetOriginalOffset(aOffset);
   }
-  void SetSkippedOffset(PRUint32 aOffset) {
+  void SetSkippedOffset(uint32_t aOffset) {
     mIterator.SetSkippedOffset(aOffset);
   }
 
   // guaranteed to return only positive-length runs
-  PRBool NextRun();
-  PRBool IsSkipped() const { return mSkipped; }
+  bool NextRun();
+  bool IsSkipped() const { return mSkipped; }
   // Always returns something > 0
-  PRInt32 GetRunLength() const { return mRunLength; }
+  int32_t GetRunLength() const { return mRunLength; }
   const gfxSkipCharsIterator& GetPos() const { return mIterator; }
-  PRInt32 GetOriginalOffset() const { return mIterator.GetOriginalOffset(); }
-  PRUint32 GetSkippedOffset() const { return mIterator.GetSkippedOffset(); }
+  int32_t GetOriginalOffset() const { return mIterator.GetOriginalOffset(); }
+  uint32_t GetSkippedOffset() const { return mIterator.GetSkippedOffset(); }
 
 private:
   gfxSkipCharsIterator mIterator;
-  PRInt32              mRemainingLength;
-  PRInt32              mRunLength;
-  PRPackedBool         mSkipped;
-  PRPackedBool         mVisitSkipped;
-  PRPackedBool         mLengthIncludesSkipped;
+  int32_t              mRemainingLength;
+  int32_t              mRunLength;
+  bool                 mSkipped;
+  bool                 mVisitSkipped;
+  bool                 mLengthIncludesSkipped;
 };
 
 #endif /*NSTEXTFRAMEUTILS_H_*/

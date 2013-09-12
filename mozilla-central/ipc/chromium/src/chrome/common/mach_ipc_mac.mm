@@ -198,7 +198,9 @@ ReceivePort::ReceivePort(const char *receive_port_name) {
 
   NSPort *ns_port = [NSMachPort portWithMachPort:port_];
   NSString *port_name = [NSString stringWithUTF8String:receive_port_name];
+#ifdef XP_MACOSX
   [[NSMachBootstrapServer sharedInstance] registerPort:ns_port name:port_name];
+#endif
 }
 
 //==============================================================================
@@ -272,9 +274,13 @@ MachPortSender::MachPortSender(const char *receive_port_name) {
   if (init_result_ != KERN_SUCCESS)
     return;
 
+#ifdef XP_MACOSX
   init_result_ = bootstrap_look_up(bootstrap_port,
                     const_cast<char*>(receive_port_name),
                     &send_port_);
+#else
+  init_result_ = KERN_FAILURE;
+#endif
 }
 
 //==============================================================================

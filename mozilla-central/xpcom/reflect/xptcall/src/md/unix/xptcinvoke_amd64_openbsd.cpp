@@ -1,62 +1,30 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org Code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // Platform specific code to invoke XPCOM methods on native objects
 
 #include "xptcprivate.h"
 
 // 6 integral parameters are passed in registers
-const PRUint32 GPR_COUNT = 6;
+const uint32_t GPR_COUNT = 6;
 
 // 8 floating point parameters are passed in SSE registers
-const PRUint32 FPR_COUNT = 8;
+const uint32_t FPR_COUNT = 8;
 
 // Remember that these 'words' are 64-bit long
 static inline void
-invoke_count_words(PRUint32 paramCount, nsXPTCVariant * s,
-                   PRUint32 & nr_gpr, PRUint32 & nr_fpr, PRUint32 & nr_stack)
+invoke_count_words(uint32_t paramCount, nsXPTCVariant * s,
+                   uint32_t & nr_gpr, uint32_t & nr_fpr, uint32_t & nr_stack)
 {
     nr_gpr = 1; // skip one GP register for 'that'
     nr_fpr = 0;
     nr_stack = 0;
 
     /* Compute number of eightbytes of class MEMORY.  */
-    for (uint32 i = 0; i < paramCount; i++, s++) {
+    for (uint32_t i = 0; i < paramCount; i++, s++) {
         if (!s->IsPtrData()
             && (s->type == nsXPTType::T_FLOAT || s->type == nsXPTType::T_DOUBLE)) {
             if (nr_fpr < FPR_COUNT)
@@ -74,16 +42,16 @@ invoke_count_words(PRUint32 paramCount, nsXPTCVariant * s,
 }
 
 static void
-invoke_copy_to_stack(PRUint64 * d, PRUint32 paramCount, nsXPTCVariant * s,
-                     PRUint64 * gpregs, double * fpregs)
+invoke_copy_to_stack(uint64_t * d, uint32_t paramCount, nsXPTCVariant * s,
+                     uint64_t * gpregs, double * fpregs)
 {
-    PRUint32 nr_gpr = 1; // skip one GP register for 'that'
-    PRUint32 nr_fpr = 0;
-    PRUint64 value;
+    uint32_t nr_gpr = 1; // skip one GP register for 'that'
+    uint32_t nr_fpr = 0;
+    uint64_t value;
 
-    for (uint32 i = 0; i < paramCount; i++, s++) {
+    for (uint32_t i = 0; i < paramCount; i++, s++) {
         if (s->IsPtrData())
-            value = (PRUint64) s->ptr;
+            value = (uint64_t) s->ptr;
         else {
             switch (s->type) {
             case nsXPTType::T_FLOAT:                                break;
@@ -99,7 +67,7 @@ invoke_copy_to_stack(PRUint64 * d, PRUint32 paramCount, nsXPTCVariant * s,
             case nsXPTType::T_BOOL:   value = s->val.b;             break;
             case nsXPTType::T_CHAR:   value = s->val.c;             break;
             case nsXPTType::T_WCHAR:  value = s->val.wc;            break;
-            default:                  value = (PRUint64) s->val.p;  break;
+            default:                  value = (uint64_t) s->val.p;  break;
             }
         }
 
@@ -132,10 +100,10 @@ invoke_copy_to_stack(PRUint64 * d, PRUint32 paramCount, nsXPTCVariant * s,
 }
 
 EXPORT_XPCOM_API(nsresult)
-NS_InvokeByIndex_P(nsISupports * that, PRUint32 methodIndex,
-                 PRUint32 paramCount, nsXPTCVariant * params)
+NS_InvokeByIndex_P(nsISupports * that, uint32_t methodIndex,
+                 uint32_t paramCount, nsXPTCVariant * params)
 {
-    PRUint32 nr_gpr, nr_fpr, nr_stack;
+    uint32_t nr_gpr, nr_fpr, nr_stack;
     invoke_count_words(paramCount, params, nr_gpr, nr_fpr, nr_stack);
     
     // Stack, if used, must be 16-bytes aligned
@@ -143,8 +111,8 @@ NS_InvokeByIndex_P(nsISupports * that, PRUint32 methodIndex,
         nr_stack = (nr_stack + 1) & ~1;
 
     // Load parameters to stack, if necessary
-    PRUint64 *stack = (PRUint64 *) __builtin_alloca(nr_stack * 8);
-    PRUint64 gpregs[GPR_COUNT];
+    uint64_t *stack = (uint64_t *) __builtin_alloca(nr_stack * 8);
+    uint64_t gpregs[GPR_COUNT];
     double fpregs[FPR_COUNT];
     invoke_copy_to_stack(stack, paramCount, params, gpregs, fpregs);
 
@@ -174,12 +142,12 @@ NS_InvokeByIndex_P(nsISupports * that, PRUint32 methodIndex,
     }
     
     // Load GPR registers from gpregs[]
-    register PRUint64 a0 asm("rdi");
-    register PRUint64 a1 asm("rsi");
-    register PRUint64 a2 asm("rdx");
-    register PRUint64 a3 asm("rcx");
-    register PRUint64 a4 asm("r8");
-    register PRUint64 a5 asm("r9");
+    register uint64_t a0 asm("rdi");
+    register uint64_t a1 asm("rsi");
+    register uint64_t a2 asm("rdx");
+    register uint64_t a3 asm("rcx");
+    register uint64_t a4 asm("r8");
+    register uint64_t a5 asm("r9");
     
     switch (nr_gpr) {
 #define ARG_GPR(N) \
@@ -189,7 +157,7 @@ NS_InvokeByIndex_P(nsISupports * that, PRUint32 methodIndex,
         ARG_GPR(3);
         ARG_GPR(2);
         ARG_GPR(1);
-    case 1: a0 = (PRUint64) that;
+    case 1: a0 = (uint64_t) that;
     case 0:;
 #undef ARG_GPR
     }
@@ -200,11 +168,11 @@ NS_InvokeByIndex_P(nsISupports * that, PRUint32 methodIndex,
         "x" (d4), "x" (d5), "x" (d6), "x" (d7));
     
     // Get pointer to method
-    PRUint64 methodAddress = *((PRUint64 *)that);
+    uint64_t methodAddress = *((uint64_t *)that);
     methodAddress += 8 * methodIndex;
-    methodAddress = *((PRUint64 *)methodAddress);
+    methodAddress = *((uint64_t *)methodAddress);
     
-    typedef PRUint32 (*Method)(PRUint64, PRUint64, PRUint64, PRUint64, PRUint64, PRUint64);
-    PRUint32 result = ((Method)methodAddress)(a0, a1, a2, a3, a4, a5);
+    typedef nsresult (*Method)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t);
+    nsresult result = ((Method)methodAddress)(a0, a1, a2, a3, a4, a5);
     return result;
 }

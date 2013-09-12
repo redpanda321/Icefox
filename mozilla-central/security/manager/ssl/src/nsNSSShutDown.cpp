@@ -1,42 +1,11 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Kai Engert <kaie@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsNSSShutDown.h"
 #include "nsCOMPtr.h"
+
+using namespace mozilla;
 
 #ifdef PR_LOGGING
 extern PRLogModuleInfo* gPIPNSSLog;
@@ -46,7 +15,7 @@ struct ObjectHashEntry : PLDHashEntryHdr {
   nsNSSShutDownObject *obj;
 };
 
-PR_STATIC_CALLBACK(PRBool)
+static bool
 ObjectSetMatchEntry(PLDHashTable *table, const PLDHashEntryHdr *hdr,
                          const void *key)
 {
@@ -54,13 +23,13 @@ ObjectSetMatchEntry(PLDHashTable *table, const PLDHashEntryHdr *hdr,
   return entry->obj == static_cast<const nsNSSShutDownObject*>(key);
 }
 
-PR_STATIC_CALLBACK(PRBool)
+static bool
 ObjectSetInitEntry(PLDHashTable *table, PLDHashEntryHdr *hdr,
                      const void *key)
 {
   ObjectHashEntry *entry = static_cast<ObjectHashEntry*>(hdr);
   entry->obj = const_cast<nsNSSShutDownObject*>(static_cast<const nsNSSShutDownObject*>(key));
-  return PR_TRUE;
+  return true;
 }
 
 static PLDHashTableOps gSetOps = {
@@ -74,36 +43,32 @@ static PLDHashTableOps gSetOps = {
   ObjectSetInitEntry
 };
 
-nsNSSShutDownList *nsNSSShutDownList::singleton = nsnull;
+nsNSSShutDownList *nsNSSShutDownList::singleton = nullptr;
 
 nsNSSShutDownList::nsNSSShutDownList()
+:mListLock("nsNSSShutDownList.mListLock")
 {
-  mListLock = PR_NewLock();
   mActiveSSLSockets = 0;
-  mPK11LogoutCancelObjects.ops = nsnull;
-  mObjects.ops = nsnull;
-  PL_DHashTableInit(&mObjects, &gSetOps, nsnull,
+  mPK11LogoutCancelObjects.ops = nullptr;
+  mObjects.ops = nullptr;
+  PL_DHashTableInit(&mObjects, &gSetOps, nullptr,
                     sizeof(ObjectHashEntry), 16);
-  PL_DHashTableInit(&mPK11LogoutCancelObjects, &gSetOps, nsnull,
+  PL_DHashTableInit(&mPK11LogoutCancelObjects, &gSetOps, nullptr,
                     sizeof(ObjectHashEntry), 16);
 }
 
 nsNSSShutDownList::~nsNSSShutDownList()
 {
-  if (mListLock) {
-    PR_DestroyLock(mListLock);
-    mListLock = nsnull;
-  }
   if (mObjects.ops) {
     PL_DHashTableFinish(&mObjects);
-    mObjects.ops = nsnull;
+    mObjects.ops = nullptr;
   }
   if (mPK11LogoutCancelObjects.ops) {
     PL_DHashTableFinish(&mPK11LogoutCancelObjects);
-    mPK11LogoutCancelObjects.ops = nsnull;
+    mPK11LogoutCancelObjects.ops = nullptr;
   }
   PR_ASSERT(this == singleton);
-  singleton = nsnull;
+  singleton = nullptr;
 }
 
 void nsNSSShutDownList::remember(nsNSSShutDownObject *o)
@@ -112,9 +77,8 @@ void nsNSSShutDownList::remember(nsNSSShutDownObject *o)
     return;
   
   PR_ASSERT(o);
-  PR_Lock(singleton->mListLock);
+  MutexAutoLock lock(singleton->mListLock);
     PL_DHashTableOperate(&singleton->mObjects, o, PL_DHASH_ADD);
-  PR_Unlock(singleton->mListLock);
 }
 
 void nsNSSShutDownList::forget(nsNSSShutDownObject *o)
@@ -123,9 +87,8 @@ void nsNSSShutDownList::forget(nsNSSShutDownObject *o)
     return;
   
   PR_ASSERT(o);
-  PR_Lock(singleton->mListLock);
-    PL_DHashTableOperate(&singleton->mObjects, o, PL_DHASH_REMOVE);
-  PR_Unlock(singleton->mListLock);
+  MutexAutoLock lock(singleton->mListLock);
+  PL_DHashTableOperate(&singleton->mObjects, o, PL_DHASH_REMOVE);
 }
 
 void nsNSSShutDownList::remember(nsOnPK11LogoutCancelObject *o)
@@ -134,9 +97,8 @@ void nsNSSShutDownList::remember(nsOnPK11LogoutCancelObject *o)
     return;
   
   PR_ASSERT(o);
-  PR_Lock(singleton->mListLock);
-    PL_DHashTableOperate(&singleton->mPK11LogoutCancelObjects, o, PL_DHASH_ADD);
-  PR_Unlock(singleton->mListLock);
+  MutexAutoLock lock(singleton->mListLock);
+  PL_DHashTableOperate(&singleton->mPK11LogoutCancelObjects, o, PL_DHASH_ADD);
 }
 
 void nsNSSShutDownList::forget(nsOnPK11LogoutCancelObject *o)
@@ -145,9 +107,8 @@ void nsNSSShutDownList::forget(nsOnPK11LogoutCancelObject *o)
     return;
   
   PR_ASSERT(o);
-  PR_Lock(singleton->mListLock);
-    PL_DHashTableOperate(&singleton->mPK11LogoutCancelObjects, o, PL_DHASH_REMOVE);
-  PR_Unlock(singleton->mListLock);
+  MutexAutoLock lock(singleton->mListLock);
+  PL_DHashTableOperate(&singleton->mPK11LogoutCancelObjects, o, PL_DHASH_REMOVE);
 }
 
 void nsNSSShutDownList::trackSSLSocketCreate()
@@ -155,9 +116,8 @@ void nsNSSShutDownList::trackSSLSocketCreate()
   if (!singleton)
     return;
   
-  PR_Lock(singleton->mListLock);
-    ++singleton->mActiveSSLSockets;
-  PR_Unlock(singleton->mListLock);
+  MutexAutoLock lock(singleton->mListLock);
+  ++singleton->mActiveSSLSockets;
 }
 
 void nsNSSShutDownList::trackSSLSocketClose()
@@ -165,47 +125,41 @@ void nsNSSShutDownList::trackSSLSocketClose()
   if (!singleton)
     return;
   
-  PR_Lock(singleton->mListLock);
-    --singleton->mActiveSSLSockets;
-  PR_Unlock(singleton->mListLock);
+  MutexAutoLock lock(singleton->mListLock);
+  --singleton->mActiveSSLSockets;
 }
   
-PRBool nsNSSShutDownList::areSSLSocketsActive()
+bool nsNSSShutDownList::areSSLSocketsActive()
 {
   if (!singleton) {
-    // I'd rather prefer to be pessimistic and return PR_TRUE.
+    // I'd rather prefer to be pessimistic and return true.
     // However, maybe we will get called at a time when the singleton
-    // has already been freed, and returning PR_TRUE would bring up an 
+    // has already been freed, and returning true would bring up an 
     // unnecessary warning.
-    return PR_FALSE;
+    return false;
   }
   
-  PRBool retval;
-  PR_Lock(singleton->mListLock);
-    retval = (singleton->mActiveSSLSockets > 0);
-  PR_Unlock(singleton->mListLock);
-
-  return retval;
+  MutexAutoLock lock(singleton->mListLock);
+  return (singleton->mActiveSSLSockets > 0);
 }
 
 nsresult nsNSSShutDownList::doPK11Logout()
 {
     PR_LOG(gPIPNSSLog, PR_LOG_DEBUG, ("canceling all open SSL sockets to disallow future IO\n"));
-  // During our iteration we will set a bunch of PRBools to PR_TRUE.
-  // Nobody else ever modifies that PRBool, only we do.
+  // During our iteration we will set a bunch of PRBools to true.
+  // Nobody else ever modifies that bool, only we do.
   // We only must ensure that our objects do not go away.
   // This is guaranteed by holding the list lock.
 
-  PR_Lock(mListLock);
-    PL_DHashTableEnumerate(&mPK11LogoutCancelObjects, doPK11LogoutHelper, 0);
-  PR_Unlock(mListLock);
+  MutexAutoLock lock(singleton->mListLock);
+  PL_DHashTableEnumerate(&mPK11LogoutCancelObjects, doPK11LogoutHelper, 0);
 
   return NS_OK;
 }
 
-PLDHashOperator PR_CALLBACK
+PLDHashOperator
 nsNSSShutDownList::doPK11LogoutHelper(PLDHashTable *table, 
-  PLDHashEntryHdr *hdr, PRUint32 number, void *arg)
+  PLDHashEntryHdr *hdr, uint32_t number, void *arg)
 {
   ObjectHashEntry *entry = static_cast<ObjectHashEntry*>(hdr);
 
@@ -219,16 +173,16 @@ nsNSSShutDownList::doPK11LogoutHelper(PLDHashTable *table,
   return PL_DHASH_NEXT;
 }
 
-PRBool nsNSSShutDownList::isUIActive()
+bool nsNSSShutDownList::isUIActive()
 {
-  PRBool canDisallow = mActivityState.ifPossibleDisallowUI(nsNSSActivityState::test_only);
-  PRBool bIsUIActive = !canDisallow;
+  bool canDisallow = mActivityState.ifPossibleDisallowUI(nsNSSActivityState::test_only);
+  bool bIsUIActive = !canDisallow;
   return bIsUIActive;
 }
 
-PRBool nsNSSShutDownList::ifPossibleDisallowUI()
+bool nsNSSShutDownList::ifPossibleDisallowUI()
 {
-  PRBool isNowDisallowed = mActivityState.ifPossibleDisallowUI(nsNSSActivityState::do_it_for_real);
+  bool isNowDisallowed = mActivityState.ifPossibleDisallowUI(nsNSSActivityState::do_it_for_real);
   return isNowDisallowed;
 }
 
@@ -247,37 +201,34 @@ nsresult nsNSSShutDownList::evaporateAllNSSResources()
   PR_LOG(gPIPNSSLog, PR_LOG_DEBUG, ("now evaporating NSS resources\n"));
   int removedCount;
   do {
-    PR_Lock(mListLock);
-      removedCount = PL_DHashTableEnumerate(&mObjects, evaporateAllNSSResourcesHelper, 0);
-    PR_Unlock(mListLock);
+    MutexAutoLock lock(mListLock);
+    removedCount = PL_DHashTableEnumerate(&mObjects, evaporateAllNSSResourcesHelper, 0);
   } while (removedCount > 0);
 
   mActivityState.releaseCurrentThreadActivityRestriction();
   return NS_OK;
 }
 
-PLDHashOperator PR_CALLBACK
+PLDHashOperator
 nsNSSShutDownList::evaporateAllNSSResourcesHelper(PLDHashTable *table, 
-  PLDHashEntryHdr *hdr, PRUint32 number, void *arg)
+  PLDHashEntryHdr *hdr, uint32_t number, void *arg)
 {
-    ObjectHashEntry *entry = static_cast<ObjectHashEntry*>(hdr);
-    PR_Unlock(singleton->mListLock);
-
-  entry->obj->shutdown(nsNSSShutDownObject::calledFromList);
-
-    PR_Lock(singleton->mListLock);
-
-    // Never free more than one entry, because other threads might be calling
-    // us and remove themselves while we are iterating over the list,
-    // and the behaviour of changing the list while iterating is undefined.
-    return (PLDHashOperator)(PL_DHASH_STOP | PL_DHASH_REMOVE);
+  ObjectHashEntry *entry = static_cast<ObjectHashEntry*>(hdr);
+  {
+    MutexAutoUnlock unlock(singleton->mListLock);
+    entry->obj->shutdown(nsNSSShutDownObject::calledFromList);
+  }
+  // Never free more than one entry, because other threads might be calling
+  // us and remove themselves while we are iterating over the list,
+  // and the behaviour of changing the list while iterating is undefined.
+  return (PLDHashOperator)(PL_DHASH_STOP | PL_DHASH_REMOVE);
 }
 
 nsNSSShutDownList *nsNSSShutDownList::construct()
 {
   if (singleton) {
     // we should never ever be called twice
-    return nsnull;
+    return nullptr;
   }
 
   singleton = new nsNSSShutDownList();
@@ -285,173 +236,129 @@ nsNSSShutDownList *nsNSSShutDownList::construct()
 }
 
 nsNSSActivityState::nsNSSActivityState()
-:mNSSActivityStateLock(nsnull), 
- mNSSActivityChanged(nsnull),
+:mNSSActivityStateLock("nsNSSActivityState.mNSSActivityStateLock"), 
+ mNSSActivityChanged(mNSSActivityStateLock,
+                     "nsNSSActivityState.mNSSActivityStateLock"),
  mNSSActivityCounter(0),
  mBlockingUICounter(0),
- mIsUIForbidden(PR_FALSE),
- mNSSRestrictedThread(nsnull)
+ mIsUIForbidden(false),
+ mNSSRestrictedThread(nullptr)
 {
-  mNSSActivityStateLock = PR_NewLock();
-  if (!mNSSActivityStateLock)
-    return;
-
-  mNSSActivityChanged = PR_NewCondVar(mNSSActivityStateLock);
 }
 
 nsNSSActivityState::~nsNSSActivityState()
 {
-  if (mNSSActivityChanged) {
-    PR_DestroyCondVar(mNSSActivityChanged);
-    mNSSActivityChanged = nsnull;
-  }
-
-  if (mNSSActivityStateLock) {
-    PR_DestroyLock(mNSSActivityStateLock);
-    mNSSActivityStateLock = nsnull;
-  }
 }
 
 void nsNSSActivityState::enter()
 {
-  PR_Lock(mNSSActivityStateLock);
+  MutexAutoLock lock(mNSSActivityStateLock);
 
-    while (mNSSRestrictedThread && mNSSRestrictedThread != PR_GetCurrentThread()) {
-      PR_WaitCondVar(mNSSActivityChanged, PR_INTERVAL_NO_TIMEOUT);
-    }
+  while (mNSSRestrictedThread && mNSSRestrictedThread != PR_GetCurrentThread()) {
+    mNSSActivityChanged.Wait();
+  }
 
-    ++mNSSActivityCounter;
-  
-  PR_Unlock(mNSSActivityStateLock);
+  ++mNSSActivityCounter;
 }
 
 void nsNSSActivityState::leave()
 {
-  PR_Lock(mNSSActivityStateLock);
+  MutexAutoLock lock(mNSSActivityStateLock);
 
-    --mNSSActivityCounter;
+  --mNSSActivityCounter;
 
-    if (!mNSSActivityCounter) {
-      PR_NotifyAllCondVar(mNSSActivityChanged);
-    }
-
-  PR_Unlock(mNSSActivityStateLock);
+  mNSSActivityChanged.NotifyAll();
 }
 
 void nsNSSActivityState::enterBlockingUIState()
 {
-  PR_Lock(mNSSActivityStateLock);
+  MutexAutoLock lock(mNSSActivityStateLock);
 
-    ++mBlockingUICounter;
-
-  PR_Unlock(mNSSActivityStateLock);
+  ++mBlockingUICounter;
 }
 
 void nsNSSActivityState::leaveBlockingUIState()
 {
-  PR_Lock(mNSSActivityStateLock);
+  MutexAutoLock lock(mNSSActivityStateLock);
 
-    --mBlockingUICounter;
-
-  PR_Unlock(mNSSActivityStateLock);
+  --mBlockingUICounter;
 }
 
-PRBool nsNSSActivityState::isBlockingUIActive()
+bool nsNSSActivityState::isBlockingUIActive()
 {
-  PRBool retval;
-
-  PR_Lock(mNSSActivityStateLock);
-    retval = (mBlockingUICounter > 0);
-  PR_Unlock(mNSSActivityStateLock);
-
-  return retval;
+  MutexAutoLock lock(mNSSActivityStateLock);
+  return (mBlockingUICounter > 0);
 }
 
-PRBool nsNSSActivityState::isUIForbidden()
+bool nsNSSActivityState::isUIForbidden()
 {
-  PRBool retval;
-  
-  PR_Lock(mNSSActivityStateLock);
-    retval = mIsUIForbidden;
-  PR_Unlock(mNSSActivityStateLock);
-
-  return retval;
+  MutexAutoLock lock(mNSSActivityStateLock);
+  return mIsUIForbidden;
 }
 
-PRBool nsNSSActivityState::ifPossibleDisallowUI(RealOrTesting rot)
+bool nsNSSActivityState::ifPossibleDisallowUI(RealOrTesting rot)
 {
-  PRBool retval = PR_FALSE;
+  bool retval = false;
+  MutexAutoLock lock(mNSSActivityStateLock);
 
-  PR_Lock(mNSSActivityStateLock);
+  // Checking and disallowing the UI must be done atomically.
 
-    // Checking and disallowing the UI must be done atomically.
-
-    if (!mBlockingUICounter) {
-      // No UI is currently shown, we are able to evaporate.
-      retval = PR_TRUE;
-      if (rot == do_it_for_real) {
-        // Remember to disallow UI.
-        mIsUIForbidden = PR_TRUE;
+  if (!mBlockingUICounter) {
+    // No UI is currently shown, we are able to evaporate.
+    retval = true;
+    if (rot == do_it_for_real) {
+      // Remember to disallow UI.
+      mIsUIForbidden = true;
         
-        // to clear the "forbidden" state,
-        // one must either call 
-        // restrictActivityToCurrentThread() + releaseCurrentThreadActivityRestriction()
-        // or cancel the operation by calling
-        // unprepareCurrentThreadRestriction()
-      }
+      // to clear the "forbidden" state,
+      // one must either call 
+      // restrictActivityToCurrentThread() + releaseCurrentThreadActivityRestriction()
+      // or cancel the operation by calling
+      // unprepareCurrentThreadRestriction()
     }
-  
-  PR_Unlock(mNSSActivityStateLock);
-
+  }
   return retval;
 }
 
 void nsNSSActivityState::allowUI()
 {
-  PR_Lock(mNSSActivityStateLock);
+  MutexAutoLock lock(mNSSActivityStateLock);
 
-    mIsUIForbidden = PR_FALSE;
-  
-  PR_Unlock(mNSSActivityStateLock);
+  mIsUIForbidden = false;
 }
 
 PRStatus nsNSSActivityState::restrictActivityToCurrentThread()
 {
   PRStatus retval = PR_FAILURE;
-
-  PR_Lock(mNSSActivityStateLock);
+  MutexAutoLock lock(mNSSActivityStateLock);
   
-    if (!mBlockingUICounter) {
-      while (0 < mNSSActivityCounter && !mBlockingUICounter) {
-        PR_WaitCondVar(mNSSActivityChanged, PR_TicksPerSecond());
-      }
-      
-      if (mBlockingUICounter) {
-        // This should never happen.
-        // If we arrive here, our logic is broken.
-        PR_ASSERT(0);
-      }
-      else {
-        mNSSRestrictedThread = PR_GetCurrentThread();
-        retval = PR_SUCCESS;
-      }
+  if (!mBlockingUICounter) {
+    while (0 < mNSSActivityCounter && !mBlockingUICounter) {
+      mNSSActivityChanged.Wait(PR_TicksPerSecond());
     }
-  
-  PR_Unlock(mNSSActivityStateLock);
+      
+    if (mBlockingUICounter) {
+      // This should never happen.
+      // If we arrive here, our logic is broken.
+      PR_ASSERT(0);
+    }
+    else {
+      mNSSRestrictedThread = PR_GetCurrentThread();
+      retval = PR_SUCCESS;
+    }
+  }
 
   return retval;
 }
 
 void nsNSSActivityState::releaseCurrentThreadActivityRestriction()
 {
-  PR_Lock(mNSSActivityStateLock);
+  MutexAutoLock lock(mNSSActivityStateLock);
 
-    mNSSRestrictedThread = nsnull;
-    mIsUIForbidden = PR_FALSE;
+  mNSSRestrictedThread = nullptr;
+  mIsUIForbidden = false;
 
-    PR_NotifyAllCondVar(mNSSActivityChanged);
-
-  PR_Unlock(mNSSActivityStateLock);
+  mNSSActivityChanged.NotifyAll();
 }
 
 nsNSSShutDownPreventionLock::nsNSSShutDownPreventionLock()
@@ -490,11 +397,11 @@ nsPSMUITracker::~nsPSMUITracker()
   state->leaveBlockingUIState();
 }
 
-PRBool nsPSMUITracker::isUIForbidden()
+bool nsPSMUITracker::isUIForbidden()
 {
   nsNSSActivityState *state = nsNSSShutDownList::getActivityState();
   if (!state)
-    return PR_FALSE;
+    return false;
 
   return state->isUIForbidden();
 }

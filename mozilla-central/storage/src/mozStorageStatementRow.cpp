@@ -1,42 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  * vim: sw=2 ts=2 et lcs=trail\:.,tab\:>~ :
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Oracle Corporation code.
- *
- * The Initial Developer of the Original Code is
- *  Oracle Corporation
- * Portions created by the Initial Developer are Copyright (C) 2004
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Vladimir Vukicevic <vladimir.vukicevic@oracle.com>
- *   Shawn Wilsher <me@shawnwilsher.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsMemory.h"
 #include "nsString.h"
@@ -45,7 +11,6 @@
 #include "mozStorageStatement.h"
 
 #include "jsapi.h"
-#include "jsdate.h"
 
 namespace mozilla {
 namespace storage {
@@ -80,17 +45,19 @@ StatementRow::GetProperty(nsIXPConnectWrappedNative *aWrapper,
                           JSObject *aScopeObj,
                           jsid aId,
                           jsval *_vp,
-                          PRBool *_retval)
+                          bool *_retval)
 {
   NS_ENSURE_TRUE(mStatement, NS_ERROR_NOT_INITIALIZED);
 
   if (JSID_IS_STRING(aId)) {
-    nsDependentCString jsid(::JS_GetStringBytes(JSID_TO_STRING(aId)));
+    ::JSAutoByteString idBytes(aCtx, JSID_TO_STRING(aId));
+    NS_ENSURE_TRUE(!!idBytes, NS_ERROR_OUT_OF_MEMORY);
+    nsDependentCString jsid(idBytes.ptr());
 
-    PRUint32 idx;
+    uint32_t idx;
     nsresult rv = mStatement->GetColumnIndex(jsid, &idx);
     NS_ENSURE_SUCCESS(rv, rv);
-    PRInt32 type;
+    int32_t type;
     rv = mStatement->GetTypeOfIndex(idx, &type);
     NS_ENSURE_SUCCESS(rv, rv);
 
@@ -99,40 +66,37 @@ StatementRow::GetProperty(nsIXPConnectWrappedNative *aWrapper,
       double dval;
       rv = mStatement->GetDouble(idx, &dval);
       NS_ENSURE_SUCCESS(rv, rv);
-      if (!::JS_NewNumberValue(aCtx, dval, _vp)) {
-        *_retval = PR_FALSE;
-        return NS_OK;
-      }
+      *_vp = ::JS_NumberValue(dval);
     }
     else if (type == mozIStorageValueArray::VALUE_TYPE_TEXT) {
-      PRUint32 bytes;
+      uint32_t bytes;
       const jschar *sval = reinterpret_cast<const jschar *>(
         static_cast<mozIStorageStatement *>(mStatement)->
           AsSharedWString(idx, &bytes)
       );
       JSString *str = ::JS_NewUCStringCopyN(aCtx, sval, bytes / 2);
       if (!str) {
-        *_retval = PR_FALSE;
+        *_retval = false;
         return NS_OK;
       }
       *_vp = STRING_TO_JSVAL(str);
     }
     else if (type == mozIStorageValueArray::VALUE_TYPE_BLOB) {
-      PRUint32 length;
-      const PRUint8 *blob = static_cast<mozIStorageStatement *>(mStatement)->
+      uint32_t length;
+      const uint8_t *blob = static_cast<mozIStorageStatement *>(mStatement)->
         AsSharedBlob(idx, &length);
-      JSObject *obj = ::JS_NewArrayObject(aCtx, length, nsnull);
+      JSObject *obj = ::JS_NewArrayObject(aCtx, length, nullptr);
       if (!obj) {
-        *_retval = PR_FALSE;
+        *_retval = false;
         return NS_OK;
       }
       *_vp = OBJECT_TO_JSVAL(obj);
 
       // Copy the blob over to the JS array.
-      for (PRUint32 i = 0; i < length; i++) {
+      for (uint32_t i = 0; i < length; i++) {
         jsval val = INT_TO_JSVAL(blob[i]);
         if (!::JS_SetElement(aCtx, aScopeObj, i, &val)) {
-          *_retval = PR_FALSE;
+          *_retval = false;
           return NS_OK;
         }
       }
@@ -153,19 +117,20 @@ StatementRow::NewResolve(nsIXPConnectWrappedNative *aWrapper,
                          JSContext *aCtx,
                          JSObject *aScopeObj,
                          jsid aId,
-                         PRUint32 aFlags,
+                         uint32_t aFlags,
                          JSObject **_objp,
-                         PRBool *_retval)
+                         bool *_retval)
 {
   NS_ENSURE_TRUE(mStatement, NS_ERROR_NOT_INITIALIZED);
   // We do not throw at any point after this because we want to allow the
   // prototype chain to be checked for the property.
 
   if (JSID_IS_STRING(aId)) {
-    JSString *str = JSID_TO_STRING(aId);
-    nsDependentCString name(::JS_GetStringBytes(str));
+    ::JSAutoByteString idBytes(aCtx, JSID_TO_STRING(aId));
+    NS_ENSURE_TRUE(!!idBytes, NS_ERROR_OUT_OF_MEMORY);
+    nsDependentCString name(idBytes.ptr());
 
-    PRUint32 idx;
+    uint32_t idx;
     nsresult rv = mStatement->GetColumnIndex(name, &idx);
     if (NS_FAILED(rv)) {
       // It's highly likely that the name doesn't exist, so let the JS engine
@@ -175,10 +140,8 @@ StatementRow::NewResolve(nsIXPConnectWrappedNative *aWrapper,
       return NS_OK;
     }
 
-    *_retval = ::JS_DefineUCProperty(aCtx, aScopeObj, ::JS_GetStringChars(str),
-                                     ::JS_GetStringLength(str),
-                                     JSVAL_VOID,
-                                     nsnull, nsnull, 0);
+    *_retval = ::JS_DefinePropertyById(aCtx, aScopeObj, aId, JSVAL_VOID,
+                                     nullptr, nullptr, 0);
     *_objp = aScopeObj;
     return NS_OK;
   }

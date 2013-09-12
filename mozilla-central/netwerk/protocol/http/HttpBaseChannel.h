@@ -1,42 +1,9 @@
 /* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set sw=2 ts=8 et tw=80 : */
 
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- *  The Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Daniel Witte <dwitte@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef mozilla_net_HttpBaseChannel_h
 #define mozilla_net_HttpBaseChannel_h
@@ -48,40 +15,25 @@
 #include "nsHttpRequestHead.h"
 #include "nsHttpResponseHead.h"
 #include "nsHttpConnectionInfo.h"
+#include "nsIEncodedChannel.h"
 #include "nsIHttpChannel.h"
 #include "nsIHttpChannelInternal.h"
 #include "nsIUploadChannel.h"
 #include "nsIUploadChannel2.h"
 #include "nsIProgressEventSink.h"
 #include "nsIURI.h"
+#include "nsIStringEnumerator.h"
 #include "nsISupportsPriority.h"
 #include "nsIApplicationCache.h"
 #include "nsIResumableChannel.h"
-
-#define DIE_WITH_ASYNC_OPEN_MSG()                                              \
-  do {                                                                         \
-    fprintf(stderr,                                                            \
-            "*&*&*&*&*&*&*&**&*&&*& FATAL ERROR: '%s' "                        \
-            "called after AsyncOpen: %s +%d",                                  \
-            __FUNCTION__, __FILE__, __LINE__);                                 \
-    NS_ABORT();                                                                \
-    return NS_ERROR_NOT_IMPLEMENTED;                                           \
-  } while (0)
-
-#define ENSURE_CALLED_BEFORE_ASYNC_OPEN()                                      \
-  if (mIsPending)                                                              \
-    DIE_WITH_ASYNC_OPEN_MSG();                                                 \
-  if (mWasOpened)                                                              \
-    DIE_WITH_ASYNC_OPEN_MSG();                                                 \
-  NS_ENSURE_TRUE(!mIsPending, NS_ERROR_IN_PROGRESS);                           \
-  NS_ENSURE_TRUE(!mWasOpened, NS_ERROR_ALREADY_OPENED);
+#include "nsITraceableChannel.h"
+#include "nsILoadContext.h"
+#include "mozilla/net/NeckoCommon.h"
+#include "nsThreadUtils.h"
+#include "PrivateBrowsingChannel.h"
 
 namespace mozilla {
 namespace net {
-
-typedef enum { eUploadStream_null = -1,
-               eUploadStream_hasNoHeaders = 0,
-               eUploadStream_hasHeaders = 1 } UploadStreamInfoType;
 
 /*
  * This class is a partial implementation of nsIHttpChannel.  It contains code
@@ -91,26 +43,32 @@ typedef enum { eUploadStream_null = -1,
  *   the way to the HTTP channel.
  */
 class HttpBaseChannel : public nsHashPropertyBag
+                      , public nsIEncodedChannel
                       , public nsIHttpChannel
                       , public nsIHttpChannelInternal
                       , public nsIUploadChannel
                       , public nsIUploadChannel2
                       , public nsISupportsPriority
                       , public nsIResumableChannel
+                      , public nsITraceableChannel
+                      , public PrivateBrowsingChannel<HttpBaseChannel>
 {
 public:
   NS_DECL_ISUPPORTS_INHERITED
   NS_DECL_NSIUPLOADCHANNEL
   NS_DECL_NSIUPLOADCHANNEL2
+  NS_DECL_NSITRACEABLECHANNEL
 
   HttpBaseChannel();
   virtual ~HttpBaseChannel();
 
-  virtual nsresult Init(nsIURI *aURI, PRUint8 aCaps, nsProxyInfo *aProxyInfo);
+  virtual nsresult Init(nsIURI *aURI, uint32_t aCaps, nsProxyInfo *aProxyInfo,
+                        uint32_t aProxyResolveFlags,
+                        nsIURI *aProxyURI);
 
   // nsIRequest
   NS_IMETHOD GetName(nsACString& aName);
-  NS_IMETHOD IsPending(PRBool *aIsPending);
+  NS_IMETHOD IsPending(bool *aIsPending);
   NS_IMETHOD GetStatus(nsresult *aStatus);
   NS_IMETHOD GetLoadGroup(nsILoadGroup **aLoadGroup);
   NS_IMETHOD SetLoadGroup(nsILoadGroup *aLoadGroup);
@@ -129,10 +87,19 @@ public:
   NS_IMETHOD SetContentType(const nsACString& aContentType);
   NS_IMETHOD GetContentCharset(nsACString& aContentCharset);
   NS_IMETHOD SetContentCharset(const nsACString& aContentCharset);
-  NS_IMETHOD GetContentDisposition(nsACString& aContentDisposition);
-  NS_IMETHOD GetContentLength(PRInt64 *aContentLength);
-  NS_IMETHOD SetContentLength(PRInt64 aContentLength);
+  NS_IMETHOD GetContentDisposition(uint32_t *aContentDisposition);
+  NS_IMETHOD SetContentDisposition(uint32_t aContentDisposition);
+  NS_IMETHOD GetContentDispositionFilename(nsAString& aContentDispositionFilename);
+  NS_IMETHOD SetContentDispositionFilename(const nsAString& aContentDispositionFilename);
+  NS_IMETHOD GetContentDispositionHeader(nsACString& aContentDispositionHeader);
+  NS_IMETHOD GetContentLength(int64_t *aContentLength);
+  NS_IMETHOD SetContentLength(int64_t aContentLength);
   NS_IMETHOD Open(nsIInputStream **aResult);
+
+  // nsIEncodedChannel
+  NS_IMETHOD GetApplyConversion(bool *value);
+  NS_IMETHOD SetApplyConversion(bool value);
+  NS_IMETHOD GetContentEncodings(nsIUTF8StringEnumerator** aEncodings);
 
   // HttpBaseChannel::nsIHttpChannel
   NS_IMETHOD GetRequestMethod(nsACString& aMethod);
@@ -141,44 +108,106 @@ public:
   NS_IMETHOD SetReferrer(nsIURI *referrer);
   NS_IMETHOD GetRequestHeader(const nsACString& aHeader, nsACString& aValue);
   NS_IMETHOD SetRequestHeader(const nsACString& aHeader, 
-                              const nsACString& aValue, PRBool aMerge);
+                              const nsACString& aValue, bool aMerge);
   NS_IMETHOD VisitRequestHeaders(nsIHttpHeaderVisitor *visitor);
   NS_IMETHOD GetResponseHeader(const nsACString &header, nsACString &value);
   NS_IMETHOD SetResponseHeader(const nsACString& header, 
-                               const nsACString& value, PRBool merge);
+                               const nsACString& value, bool merge);
   NS_IMETHOD VisitResponseHeaders(nsIHttpHeaderVisitor *visitor);
-  NS_IMETHOD GetAllowPipelining(PRBool *value);
-  NS_IMETHOD SetAllowPipelining(PRBool value);
-  NS_IMETHOD GetRedirectionLimit(PRUint32 *value);
-  NS_IMETHOD SetRedirectionLimit(PRUint32 value);
-  NS_IMETHOD IsNoStoreResponse(PRBool *value);
-  NS_IMETHOD IsNoCacheResponse(PRBool *value);
-  NS_IMETHOD GetResponseStatus(PRUint32 *aValue);
+  NS_IMETHOD GetAllowPipelining(bool *value);
+  NS_IMETHOD SetAllowPipelining(bool value);
+  NS_IMETHOD GetRedirectionLimit(uint32_t *value);
+  NS_IMETHOD SetRedirectionLimit(uint32_t value);
+  NS_IMETHOD IsNoStoreResponse(bool *value);
+  NS_IMETHOD IsNoCacheResponse(bool *value);
+  NS_IMETHOD GetResponseStatus(uint32_t *aValue);
   NS_IMETHOD GetResponseStatusText(nsACString& aValue);
-  NS_IMETHOD GetRequestSucceeded(PRBool *aValue);
+  NS_IMETHOD GetRequestSucceeded(bool *aValue);
 
   // nsIHttpChannelInternal
   NS_IMETHOD GetDocumentURI(nsIURI **aDocumentURI);
   NS_IMETHOD SetDocumentURI(nsIURI *aDocumentURI);
-  NS_IMETHOD GetRequestVersion(PRUint32 *major, PRUint32 *minor);
-  NS_IMETHOD GetResponseVersion(PRUint32 *major, PRUint32 *minor);
+  NS_IMETHOD GetRequestVersion(uint32_t *major, uint32_t *minor);
+  NS_IMETHOD GetResponseVersion(uint32_t *major, uint32_t *minor);
   NS_IMETHOD SetCookie(const char *aCookieHeader);
-  NS_IMETHOD GetForceAllowThirdPartyCookie(PRBool *aForce);
-  NS_IMETHOD SetForceAllowThirdPartyCookie(PRBool aForce);
-  NS_IMETHOD GetCanceled(PRBool *aCanceled);
+  NS_IMETHOD GetForceAllowThirdPartyCookie(bool *aForce);
+  NS_IMETHOD SetForceAllowThirdPartyCookie(bool aForce);
+  NS_IMETHOD GetCanceled(bool *aCanceled);
+  NS_IMETHOD GetChannelIsForDownload(bool *aChannelIsForDownload);
+  NS_IMETHOD SetChannelIsForDownload(bool aChannelIsForDownload);
+  NS_IMETHOD SetCacheKeysRedirectChain(nsTArray<nsCString> *cacheKeys);
+  NS_IMETHOD GetLocalAddress(nsACString& addr);
+  NS_IMETHOD GetLocalPort(int32_t* port);
+  NS_IMETHOD GetRemoteAddress(nsACString& addr);
+  NS_IMETHOD GetRemotePort(int32_t* port);
+  NS_IMETHOD GetAllowSpdy(bool *aAllowSpdy);
+  NS_IMETHOD SetAllowSpdy(bool aAllowSpdy);
+  NS_IMETHOD GetLoadAsBlocking(bool *aLoadAsBlocking);
+  NS_IMETHOD SetLoadAsBlocking(bool aLoadAsBlocking);
+  NS_IMETHOD GetLoadUnblocked(bool *aLoadUnblocked);
+  NS_IMETHOD SetLoadUnblocked(bool aLoadUnblocked);
+  
+  inline void CleanRedirectCacheChainIfNecessary()
+  {
+      mRedirectedCachekeys = nullptr;
+  }
+  NS_IMETHOD HTTPUpgrade(const nsACString & aProtocolName,
+                         nsIHttpUpgradeListener *aListener); 
 
   // nsISupportsPriority
-  NS_IMETHOD GetPriority(PRInt32 *value);
-  NS_IMETHOD AdjustPriority(PRInt32 delta);
+  NS_IMETHOD GetPriority(int32_t *value);
+  NS_IMETHOD AdjustPriority(int32_t delta);
 
   // nsIResumableChannel
   NS_IMETHOD GetEntityID(nsACString& aEntityID);
 
+  class nsContentEncodings : public nsIUTF8StringEnumerator
+    {
+    public:
+        NS_DECL_ISUPPORTS
+        NS_DECL_NSIUTF8STRINGENUMERATOR
+
+        nsContentEncodings(nsIHttpChannel* aChannel, const char* aEncodingHeader);
+        virtual ~nsContentEncodings();
+        
+    private:
+        nsresult PrepareForNext(void);
+        
+        // We do not own the buffer.  The channel owns it.
+        const char* mEncodingHeader;
+        const char* mCurStart;  // points to start of current header
+        const char* mCurEnd;  // points to end of current header
+        
+        // Hold a ref to our channel so that it can't go away and take the
+        // header with it.
+        nsCOMPtr<nsIHttpChannel> mChannel;
+        
+        bool mReady;
+    };
+
+    nsHttpResponseHead * GetResponseHead() const { return mResponseHead; }
+    nsHttpRequestHead * GetRequestHead() { return &mRequestHead; }
+
+    const PRNetAddr& GetSelfAddr() { return mSelfAddr; }
+    const PRNetAddr& GetPeerAddr() { return mPeerAddr; }
+
+public: /* Necko internal use only... */
+
 protected:
+
+  // Handle notifying listener, removing from loadgroup if request failed.
+  void     DoNotifyListener();
+  virtual void DoNotifyListenerCleanup() = 0;
+
+  // drop reference to listener, its callbacks, and the progress sink
+  void ReleaseListeners();
+
+  nsresult ApplyContentConversions();
+
   void AddCookiesToRequest();
   virtual nsresult SetupReplacementChannel(nsIURI *,
                                            nsIChannel *,
-                                           PRBool preserveMethod);
+                                           bool preserveMethod);
 
   // Helper function to simplify getting notification callbacks.
   template <class T>
@@ -188,6 +217,8 @@ protected:
                                   NS_GET_TEMPLATE_IID(T),
                                   getter_AddRefs(aResult));
   }
+
+  friend class PrivateBrowsingChannel<HttpBaseChannel>;
 
   nsCOMPtr<nsIURI>                  mURI;
   nsCOMPtr<nsIURI>                  mOriginalURI;
@@ -205,34 +236,143 @@ protected:
   nsCOMPtr<nsIInputStream>          mUploadStream;
   nsAutoPtr<nsHttpResponseHead>     mResponseHead;
   nsRefPtr<nsHttpConnectionInfo>    mConnectionInfo;
+  nsCOMPtr<nsIProxyInfo>            mProxyInfo;
 
   nsCString                         mSpec; // ASCII encoded URL spec
   nsCString                         mContentTypeHint;
   nsCString                         mContentCharsetHint;
   nsCString                         mUserSetCookieHeader;
 
+  PRNetAddr                         mSelfAddr;
+  PRNetAddr                         mPeerAddr;
+
+  // HTTP Upgrade Data
+  nsCString                        mUpgradeProtocol;
+  nsCOMPtr<nsIHttpUpgradeListener> mUpgradeProtocolCallback;
+
   // Resumable channel specific data
   nsCString                         mEntityID;
-  PRUint64                          mStartPos;
+  uint64_t                          mStartPos;
 
   nsresult                          mStatus;
-  PRUint32                          mLoadFlags;
-  PRInt16                           mPriority;
-  PRUint8                           mCaps;
-  PRUint8                           mRedirectionLimit;
+  uint32_t                          mLoadFlags;
+  uint32_t                          mCaps;
+  int16_t                           mPriority;
+  uint8_t                           mRedirectionLimit;
 
-  PRUint32                          mCanceled                   : 1;
-  PRUint32                          mIsPending                  : 1;
-  PRUint32                          mWasOpened                  : 1;
-  PRUint32                          mResponseHeadersModified    : 1;
-  PRUint32                          mAllowPipelining            : 1;
-  PRUint32                          mForceAllowThirdPartyCookie : 1;
-  PRUint32                          mUploadStreamHasHeaders     : 1;
-  PRUint32                          mInheritApplicationCache    : 1;
-  PRUint32                          mChooseApplicationCache     : 1;
-  PRUint32                          mLoadedFromApplicationCache : 1;
+  uint32_t                          mApplyConversion            : 1;
+  uint32_t                          mCanceled                   : 1;
+  uint32_t                          mIsPending                  : 1;
+  uint32_t                          mWasOpened                  : 1;
+  // if 1 all "http-on-{opening|modify|etc}-request" observers have been called
+  uint32_t                          mRequestObserversCalled     : 1;
+  uint32_t                          mResponseHeadersModified    : 1;
+  uint32_t                          mAllowPipelining            : 1;
+  uint32_t                          mForceAllowThirdPartyCookie : 1;
+  uint32_t                          mUploadStreamHasHeaders     : 1;
+  uint32_t                          mInheritApplicationCache    : 1;
+  uint32_t                          mChooseApplicationCache     : 1;
+  uint32_t                          mLoadedFromApplicationCache : 1;
+  uint32_t                          mChannelIsForDownload       : 1;
+  uint32_t                          mTracingEnabled             : 1;
+  // True if timing collection is enabled
+  uint32_t                          mTimingEnabled              : 1;
+  uint32_t                          mAllowSpdy                  : 1;
+  uint32_t                          mLoadAsBlocking             : 1;
+  uint32_t                          mLoadUnblocked              : 1;
+
+  // Current suspension depth for this channel object
+  uint32_t                          mSuspendCount;
+
+  nsAutoPtr<nsTArray<nsCString> >   mRedirectedCachekeys;
+
+  uint32_t                          mProxyResolveFlags;
+  nsCOMPtr<nsIURI>                  mProxyURI;
+
+  uint32_t                          mContentDispositionHint;
+  nsAutoPtr<nsString>               mContentDispositionFilename;
 };
 
+// Share some code while working around C++'s absurd inability to handle casting
+// of member functions between base/derived types.
+// - We want to store member function pointer to call at resume time, but one
+//   such function--HandleAsyncAbort--we want to share between the
+//   nsHttpChannel/HttpChannelChild.  Can't define it in base class, because
+//   then we'd have to cast member function ptr between base/derived class
+//   types.  Sigh...
+template <class T>
+class HttpAsyncAborter
+{
+public:
+  HttpAsyncAborter(T *derived) : mThis(derived), mCallOnResume(0) {}
+
+  // Aborts channel: calls OnStart/Stop with provided status, removes channel
+  // from loadGroup.
+  nsresult AsyncAbort(nsresult status);
+
+  // Does most the actual work.
+  void HandleAsyncAbort();
+
+  // AsyncCall calls a member function asynchronously (via an event).
+  // retval isn't refcounted and is set only when event was successfully
+  // posted, the event is returned for the purpose of cancelling when needed
+  nsresult AsyncCall(void (T::*funcPtr)(),
+                     nsRunnableMethod<T> **retval = nullptr);
+private:
+  T *mThis;
+
+protected:
+  // Function to be called at resume time
+  void (T::* mCallOnResume)(void);
+};
+
+template <class T>
+nsresult HttpAsyncAborter<T>::AsyncAbort(nsresult status)
+{
+  LOG(("HttpAsyncAborter::AsyncAbort [this=%p status=%x]\n", mThis, status));
+
+  mThis->mStatus = status;
+  mThis->mIsPending = false;
+
+  // if this fails?  Callers ignore our return value anyway....
+  return AsyncCall(&T::HandleAsyncAbort);
+}
+
+// Each subclass needs to define its own version of this (which just calls this
+// base version), else we wind up casting base/derived member function ptrs
+template <class T>
+inline void HttpAsyncAborter<T>::HandleAsyncAbort()
+{
+  NS_PRECONDITION(!mCallOnResume, "How did that happen?");
+
+  if (mThis->mSuspendCount) {
+    LOG(("Waiting until resume to do async notification [this=%p]\n",
+         mThis));
+    mCallOnResume = &T::HandleAsyncAbort;
+    return;
+  }
+
+  mThis->DoNotifyListener();
+
+  // finally remove ourselves from the load group.
+  if (mThis->mLoadGroup)
+    mThis->mLoadGroup->RemoveRequest(mThis, nullptr, mThis->mStatus);
+}
+
+template <class T>
+nsresult HttpAsyncAborter<T>::AsyncCall(void (T::*funcPtr)(),
+                                   nsRunnableMethod<T> **retval)
+{
+  nsresult rv;
+
+  nsRefPtr<nsRunnableMethod<T> > event = NS_NewRunnableMethod(mThis, funcPtr);
+  rv = NS_DispatchToCurrentThread(event);
+  if (NS_SUCCEEDED(rv) && retval) {
+    *retval = event;
+  }
+
+  return rv;
+}
 
 } // namespace net
 } // namespace mozilla

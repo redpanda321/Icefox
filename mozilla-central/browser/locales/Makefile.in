@@ -1,45 +1,13 @@
 # vim:set ts=8 sw=8 sts=8 noet:
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is the Mozilla Browser code.
-#
-# The Initial Developer of the Original Code is
-# Benjamin Smedberg <bsmedberg@covad.net>
-# Portions created by the Initial Developer are Copyright (C) 2004
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DEPTH		= ../..
+DEPTH		= @DEPTH@
 topsrcdir	= @top_srcdir@
 srcdir		= @srcdir@
 VPATH		= @srcdir@
-relativesrcdir = browser/locales
+relativesrcdir = @relativesrcdir@
 
 include $(DEPTH)/config/autoconf.mk
 
@@ -72,8 +40,6 @@ SUBMAKEFILES += \
 # This makefile uses variable overrides from the libs-% target to
 # build non-default locales to non-default dist/ locations. Be aware!
 
-APP_VERSION := $(shell cat $(srcdir)/../config/version.txt)
-
 PWD := $(CURDIR)
 
 # These are defaulted to be compatible with the files the wget-en-US target
@@ -86,8 +52,7 @@ RETRIEVE_WINDOWS_INSTALLER = 1
 
 MOZ_LANGPACK_EID=langpack-$(AB_CD)@firefox.mozilla.org
 
-PREF_JS_EXPORTS = $(firstword $(wildcard $(LOCALE_SRCDIR)/firefox-l10n.js) \
-                       $(srcdir)/en-US/firefox-l10n.js )
+PREF_JS_EXPORTS = $(call MERGE_FILE,firefox-l10n.js)
 
 ifneq (,$(filter cocoa,$(MOZ_WIDGET_TOOLKIT)))
 MOZ_PKG_MAC_DSSTORE=$(_ABS_DIST)/branding/dsstore
@@ -103,6 +68,12 @@ UNINSTALLER_PACKAGE_HOOK = $(RM) -r $(STAGEDIST)/uninstall; \
     $(RM) $(_ABS_DIST)/l10n-stage/setup.exe; \
     cp ../installer/windows/l10ngen/setup.exe $(_ABS_DIST)/l10n-stage; \
     $(NULL)
+
+STUB_HOOK = $(NSINSTALL) -D "$(_ABS_DIST)/$(PKG_INST_PATH)"; \
+    $(RM) "$(_ABS_DIST)/$(PKG_INST_PATH)$(PKG_STUB_BASENAME).exe"; \
+    cp ../installer/windows/l10ngen/stub.exe "$(_ABS_DIST)/$(PKG_INST_PATH)$(PKG_STUB_BASENAME).exe"; \
+    chmod 0755 "$(_ABS_DIST)/$(PKG_INST_PATH)$(PKG_STUB_BASENAME).exe"; \
+    $(NULL)
 endif
 
 include $(topsrcdir)/config/rules.mk
@@ -116,18 +87,14 @@ $(DIST)/branding:
 
 libs::
 	@if test -f "$(LOCALE_SRCDIR)/existing-profile-defaults.js"; then \
-	  $(PERL) $(topsrcdir)/config/preprocessor.pl $(PREF_PPFLAGS) $(DEFINES) $(ACDEFINES) $(XULPPFLAGS) \
+	  $(PYTHON) $(topsrcdir)/config/Preprocessor.py $(PREF_PPFLAGS) $(DEFINES) $(ACDEFINES) $(XULPPFLAGS) \
 	    $(LOCALE_SRCDIR)/existing-profile-defaults.js > $(FINAL_TARGET)/defaults/existing-profile-defaults.js; \
 	fi
 install::
 	@if test -f "$(LOCALE_SRCDIR)/existing-profile-defaults.js"; then \
-	  $(PERL) $(topsrcdir)/config/preprocessor.pl $(PREF_PPFLAGS) $(DEFINES) $(ACDEFINES) $(XULPPFLAGS) \
+	  $(PYTHON) $(topsrcdir)/config/Preprocessor.py $(PREF_PPFLAGS) $(DEFINES) $(ACDEFINES) $(XULPPFLAGS) \
 	    $(LOCALE_SRCDIR)/existing-profile-defaults.js > $(DESTDIR)$(mozappdir)/defaults/existing-profile-defaults.js; \
 	fi
-
-README_FILES = \
-	README.txt \
-	$(NULL)
 
 PROFILE_FILES = \
 	localstore.rdf \
@@ -135,18 +102,6 @@ PROFILE_FILES = \
 	$(NULL)
 
 PROFILE_CHROME = userChrome-example.css userContent-example.css
-
-libs:: $(addprefix $(LOCALE_SRCDIR)/,$(README_FILES))
-ifeq ($(OS_ARCH),WINNT)
-	$(EXIT_ON_ERROR) \
-	for file in $^; do \
-	  $(PERL) -pe 's/(?<!\r)\n/\r\n/g;' < $$file > $(FINAL_TARGET)/`basename $$file`; \
-	done
-else
-ifneq ($(OS_ARCH),OS2)
-	$(SYSINSTALL) $(IFLAGS1) $^ $(FINAL_TARGET)
-endif
-endif
 
 NO_JA_JP_MAC_AB_CD := $(if $(filter ja-JP-mac, $(AB_CD)),ja,$(AB_CD))
 
@@ -163,7 +118,7 @@ libs:: $(FINAL_TARGET)/defaults/profile/bookmarks.html ;
 libs:: $(addprefix generic/profile/,$(PROFILE_FILES))
 	$(SYSINSTALL) $(IFLAGS1) $^ $(FINAL_TARGET)/defaults/profile
 
-libs:: $(addprefix $(LOCALE_SRCDIR)/profile/chrome/,$(PROFILE_CHROME))
+libs:: $(call MERGE_FILES,$(addprefix profile/chrome/,$(PROFILE_CHROME)))
 	$(SYSINSTALL) $(IFLAGS1) $^ $(FINAL_TARGET)/defaults/profile/chrome
 
 install:: $(DESTDIR)$(mozappdir)/defaults/profile/bookmarks.html ;
@@ -171,61 +126,72 @@ install:: $(DESTDIR)$(mozappdir)/defaults/profile/bookmarks.html ;
 install:: $(addprefix generic/profile/,$(PROFILE_FILES))
 	$(SYSINSTALL) $(IFLAGS1) $^ $(DESTDIR)$(mozappdir)/defaults/profile
 
-install:: $(addprefix $(LOCALE_SRCDIR)/profile/chrome/,$(PROFILE_CHROME))
+install:: $(call MERGE_FILES,$(addprefix profile/chrome/,$(PROFILE_CHROME)))
 	$(SYSINSTALL) $(IFLAGS1) $^ $(DESTDIR)$(mozappdir)/defaults/profile/chrome
 
-SEARCH_PLUGINS = $(shell cat $(LOCALE_SRCDIR)/searchplugins/list.txt)
+SEARCH_PLUGINS = $(shell cat $(call MERGE_FILE,/searchplugins/list.txt))
 
 libs:: $(addsuffix .xml,$(SEARCH_PLUGINS))
-	$(SYSINSTALL) $(IFLAGS1) $^ $(FINAL_TARGET)/searchplugins
+	$(NSINSTALL) -D $(FINAL_TARGET)/searchplugins
+	for SEARCH_PLUGIN in $^; do\
+	  SEARCH_PLUGIN_BASE=`basename $$SEARCH_PLUGIN`;\
+	  $(PYTHON) $(topsrcdir)/config/Preprocessor.py $(DEFINES) $(ACDEFINES) \
+	    $$SEARCH_PLUGIN > $(FINAL_TARGET)/searchplugins/$$SEARCH_PLUGIN_BASE; \
+	done
 
 install:: $(addsuffix .xml,$(SEARCH_PLUGINS))
-	$(SYSINSTALL) $(IFLAGS1) $^ $(DESTDIR)$(mozappdir)/searchplugins
+	$(NSINSTALL) -D $(DESTDIR)$(mozappdir)/searchplugins
+	for i in $^; do \
+	  SEARCH_PLUGIN_BASE=`basename $$SEARCH_PLUGIN`;\
+	  $(PYTHON) $(topsrcdir)/config/Preprocessor.py $(DEFINES) $(ACDEFINES) \
+	    $$SEARCH_PLUGIN > $(DESTDIR)$(mozappdir)/searchplugins/$$SEARCH_PLUGIN_BASE; \
+	done
 
 
 libs-%:
 	$(NSINSTALL) -D $(DIST)/install
-	@$(MAKE) -C ../../toolkit/locales libs-$* BOTH_MANIFESTS=1
-	@$(MAKE) -C ../../services/sync/locales AB_CD=$* XPI_NAME=locale-$* BOTH_MANIFESTS=1
-	@$(MAKE) -C ../../extensions/spellcheck/locales AB_CD=$* XPI_NAME=locale-$* BOTH_MANIFESTS=1
-	@$(MAKE) libs AB_CD=$* XPI_NAME=locale-$* PREF_DIR=defaults/pref BOTH_MANIFESTS=1
-	@$(MAKE) -C $(DEPTH)/$(MOZ_BRANDING_DIRECTORY)/locales AB_CD=$* XPI_NAME=locale-$* BOTH_MANIFESTS=1
+	@$(MAKE) -C ../../toolkit/locales libs-$*
+	@$(MAKE) -C ../../services/sync/locales AB_CD=$* XPI_NAME=locale-$*
+	@$(MAKE) -C ../../extensions/spellcheck/locales AB_CD=$* XPI_NAME=locale-$*
+	@$(MAKE) -C ../../intl/locales AB_CD=$* XPI_NAME=locale-$*
+	@$(MAKE) libs AB_CD=$* XPI_NAME=locale-$* PREF_DIR=$(PREF_DIR)
+	@$(MAKE) -C $(DEPTH)/$(MOZ_BRANDING_DIRECTORY)/locales AB_CD=$* XPI_NAME=locale-$*
 
-
-repackage-win32-installer: WIN32_INSTALLER_OUT="$(_ABS_DIST)/$(PKG_INST_PATH)$(PKG_INST_BASENAME).exe"
-repackage-win32-installer: $(WIN32_INSTALLER_IN) $(SUBMAKEFILES)
+repackage-win32-installer: WIN32_INSTALLER_OUT=$(_ABS_DIST)/$(PKG_INST_PATH)$(PKG_INST_BASENAME).exe
+repackage-win32-installer: $(call ESCAPE_WILDCARD,$(WIN32_INSTALLER_IN)) $(SUBMAKEFILES) libs-$(AB_CD)
 	@echo "Repackaging $(WIN32_INSTALLER_IN) into $(WIN32_INSTALLER_OUT)."
 	$(MAKE) -C $(DEPTH)/$(MOZ_BRANDING_DIRECTORY) export
 	$(MAKE) -C ../installer/windows CONFIG_DIR=l10ngen l10ngen/setup.exe l10ngen/7zSD.sfx
 	$(MAKE) repackage-zip \
 	  AB_CD=$(AB_CD) \
 	  MOZ_PKG_FORMAT=SFX7Z \
-	  ZIP_IN=$(WIN32_INSTALLER_IN) \
-	  ZIP_OUT=$(WIN32_INSTALLER_OUT) \
+	  ZIP_IN="$(WIN32_INSTALLER_IN)" \
+	  ZIP_OUT="$(WIN32_INSTALLER_OUT)" \
 	  SFX_HEADER="$(PWD)/../installer/windows/l10ngen/7zSD.sfx \
 	              $(topsrcdir)/browser/installer/windows/app.tag"
 
 ifeq (WINNT,$(OS_ARCH))
-repackage-win32-installer-%: $(WIN32_INSTALLER_IN) libs-%
-	@$(MAKE) repackage-win32-installer AB_CD=$* WIN32_INSTALLER_IN=$(WIN32_INSTALLER_IN)
+repackage-win32-installer-%: $(STAGEDIST)
+	@$(MAKE) repackage-win32-installer AB_CD=$* WIN32_INSTALLER_IN="$(WIN32_INSTALLER_IN)"
+
+repackage-zip-%: repackage-win32-installer-%
 else
 repackage-win32-installer-%: ;
 endif
 
-ifneq (,$(filter cocoa,$(MOZ_WIDGET_TOOLKIT)))
-STAGEDIST = $(_ABS_DIST)/l10n-stage/$(MOZ_PKG_APPNAME)/$(_APPNAME)/Contents/MacOS
-else
-STAGEDIST = $(_ABS_DIST)/l10n-stage/$(MOZ_PKG_DIR)
-endif
 
 clobber-zip:
 	$(RM) $(STAGEDIST)/chrome/$(AB_CD).jar \
 	  $(STAGEDIST)/chrome/$(AB_CD).manifest \
-	  $(STAGEDIST)/defaults/pref/firefox-l10n.js
+	  $(STAGEDIST)/webapprt/chrome/$(AB_CD).jar \
+	  $(STAGEDIST)/webapprt/chrome/$(AB_CD).manifest \
+	  $(STAGEDIST)/$(PREF_DIR)/firefox-l10n.js
 	$(RM) -rf  $(STAGEDIST)/searchplugins \
 	  $(STAGEDIST)/dictionaries \
+	  $(STAGEDIST)/hyphenation \
 	  $(STAGEDIST)/defaults/profile \
-	  $(STAGEDIST)/chrome/$(AB_CD)
+	  $(STAGEDIST)/chrome/$(AB_CD) \
+	  $(STAGEDIST)/webapprt/chrome/$(AB_CD)
 
 
 langpack: langpack-$(AB_CD)
@@ -238,17 +204,19 @@ installers-%: clobber-% langpack-% repackage-win32-installer-% repackage-zip-%
 	@echo "repackaging done"
 
 ifdef MOZ_UPDATER
-libs:: $(addprefix $(LOCALE_SRCDIR)/,updater/updater.ini)
+# Note that we want updater.ini to be in the top directory, not the browser/
+# subdirectory, because that's where the updater is installed and runs.
+libs:: $(call MERGE_FILE,updater/updater.ini) $(call mkdir_deps,$(DIST)/bin)
 ifeq ($(OS_ARCH),WINNT)
 	cat $< $(srcdir)/../installer/windows/nsis/updater_append.ini | \
 	  sed -e "s/^InfoText=/Info=/" -e "s/^TitleText=/Title=/" | \
 	  sed -e "s/%MOZ_APP_DISPLAYNAME%/$(MOZ_APP_DISPLAYNAME)/" > \
-	  $(FINAL_TARGET)/updater.ini
+	  $(DIST)/bin/updater.ini
 else
 	cat $< | \
 	  sed -e "s/^InfoText=/Info=/" -e "s/^TitleText=/Title=/" | \
 	  sed -e "s/%MOZ_APP_DISPLAYNAME%/$(MOZ_APP_DISPLAYNAME)/" > \
-	  $(FINAL_TARGET)/updater.ini
+	  $(DIST)/bin/updater.ini
 endif
 endif
 
@@ -256,7 +224,6 @@ ifdef MOZ_CRASHREPORTER
 libs:: crashreporter-override.ini
 	$(SYSINSTALL) $(IFLAGS1) $^ $(FINAL_TARGET)
 endif
-
 
 ident:
 	@printf "fx_revision "
@@ -266,66 +233,20 @@ ident:
 	@$(PYTHON) $(topsrcdir)/config/printconfigsetting.py \
 	    $(STAGEDIST)/application.ini App BuildID
 
-#These make targets call prepare-repackages by setting different UPLOAD_DIR
-prepare-upload-latest-%:
-	@$(MAKE) prepare-repackages-$* UPLOAD_DIR=$(DIST)/upload/latest
-
-prepare-upload-dated-%:
-	@$(MAKE) prepare-repackages-$* UPLOAD_DIR=$(DIST)/upload/`date "+%Y-%m-%d-%H"`-$(MOZ_PKG_APPNAME)$(MOZ_APP_VERSION)-l10n
-
-#Each platform uploads their xpi files to different folders
-ifeq (Linux, $(OS_ARCH))
-XPI_DESTINATION = linux-xpi
-endif
-ifeq (Darwin, $(OS_ARCH))
-XPI_DESTINATION = mac-xpi
-endif
-ifeq (WINNT, $(OS_ARCH))
-XPI_DESTINATION = windows-xpi
-endif
-
-# This target will generate a UPLOAD_DIR folder with
-# l10n repackages in the way that we offer l10n nightlies
-#  1) ./ the binary
-#  2) ./{linux,mac,windows}-xpi/locale.xpi
-prepare-repackages-%:
-ifndef XPI_DESTINATION
-	$(error XPI_DESTINATION not defined; \
-	This is the folder where the xpi files will be moved to)
-endif
-ifndef UPLOAD_DIR
-	$(error UPLOAD_DIR not defined)
-endif
-	$(NSINSTALL) -D $(UPLOAD_DIR)
-	$(NSINSTALL) -D $(UPLOAD_DIR)/$(XPI_DESTINATION)
-# Move the langpack
-	mv $(DIST)/install/firefox-$(MOZ_APP_VERSION).$*.langpack.xpi \
-	   $(UPLOAD_DIR)/$(XPI_DESTINATION)/$*.xpi
-# Move the repackage
-	mv $(DIST)/firefox-$(MOZ_APP_VERSION).$*.* \
-	   $(UPLOAD_DIR)/.
-# Move the windows installer
-ifeq (WINNT, $(OS_ARCH))
-	mv $(DIST)/install/sea/firefox-$(MOZ_APP_VERSION).$*.win32.installer.exe \
-	   $(UPLOAD_DIR)/.
-endif
-# Set the permissions that the folders will have in ftp once uploaded
-	chmod -vR 775 $(UPLOAD_DIR)
-
-l10n-upload-%: AB_CD=$*
-l10n-upload-%:
-	$(PYTHON) $(topsrcdir)/build/upload.py --base-path $(DIST) "$(DIST)/$(PACKAGE)" $(DIST)/$(LANGPACK)
-ifdef MOZ_MAKE_COMPLETE_MAR
-	$(PYTHON) $(topsrcdir)/build/upload.py --base-path $(DIST) $(DIST)/$(COMPLETE_MAR) $(call QUOTED_WILDCARD,$(wildcard $(DIST)/$(PARTIAL_MAR)))
-endif
-ifneq (,$(filter WINNT WINCE,$(OS_ARCH)))
-	$(PYTHON) $(topsrcdir)/build/upload.py --base-path $(DIST) "$(INSTALLER_PACKAGE)"
-endif
-
-
 merge-%:
 ifdef LOCALE_MERGEDIR
 	$(RM) -rf $(LOCALE_MERGEDIR)
 	MACOSX_DEPLOYMENT_TARGET= compare-locales -m $(LOCALE_MERGEDIR) $(srcdir)/l10n.ini $(L10NBASEDIR) $*
 endif
 	@echo
+
+# test target, depends on make package
+# try to repack x-test, with just toolkit/defines.inc being there
+l10n-check:: INNER_UNMAKE_PACKAGE=true
+l10n-check::
+	$(RM) -rf x-test
+	$(NSINSTALL) -D x-test/toolkit
+	echo "#define MOZ_LANG_TITLE Just testing" > x-test/toolkit/defines.inc
+	$(MAKE) installers-x-test L10NBASEDIR="$(PWD)" LOCALE_MERGEDIR="$(PWD)/mergedir"
+	cd $(DIST)/l10n-stage && $(UNMAKE_PACKAGE)
+	cd $(DIST)/l10n-stage && test $$(cat $(STAGEPATH)$(MOZ_PKG_DIR)$(_BINPATH)/update.locale) = x-test

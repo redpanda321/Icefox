@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include <stdio.h>
 #include <signal.h>
 
@@ -72,7 +40,7 @@ static NS_DEFINE_CID(kEventQueueServiceCID, NS_EVENTQUEUESERVICE_CID);
 
 static PRTime gElapsedTime;
 static int gKeepRunning = 1;
-static nsIEventQueue* gEventQ = nsnull;
+static nsIEventQueue* gEventQ = nullptr;
 
 //
 //----------------------------------------------------------------------------
@@ -106,13 +74,13 @@ NS_IMETHODIMP
 TestListener::OnDataAvailable(nsIRequest* request,
                               nsISupports* context,
                               nsIInputStream *aIStream, 
-                              PRUint32 aSourceOffset,
-                              PRUint32 aLength)
+                              uint64_t aSourceOffset,
+                              uint32_t aLength)
 {
-    LOG(("TestListener::OnDataAvailable [offset=%u length=%u]\n",
+    LOG(("TestListener::OnDataAvailable [offset=%llu length=%u]\n",
         aSourceOffset, aLength));
     char buf[1025];
-    PRUint32 amt;
+    uint32_t amt;
     while (1) {
         aIStream->Read(buf, 1024, &amt);
         if (amt == 0)
@@ -151,9 +119,9 @@ public:
 
 protected:
     char    *mData;
-    PRUint32 mOffset;
-    PRUint32 mDataLen;   
-    PRUint32 mRequestCount;
+    uint32_t mOffset;
+    uint32_t mDataLen;   
+    uint32_t mRequestCount;
 };
 
 NS_IMPL_ISUPPORTS2(TestProvider,
@@ -191,7 +159,7 @@ TestProvider::OnStopRequest(nsIRequest* request, nsISupports* context,
 
 NS_IMETHODIMP
 TestProvider::OnDataWritable(nsIRequest *request, nsISupports *context,
-                             nsIOutputStream *output, PRUint32 offset, PRUint32 count)
+                             nsIOutputStream *output, uint32_t offset, uint32_t count)
 {
     LOG(("TestProvider::OnDataWritable [offset=%u, count=%u]\n", offset, count));
 
@@ -199,8 +167,8 @@ TestProvider::OnDataWritable(nsIRequest *request, nsISupports *context,
     if (mRequestCount == 5)
         return NS_BASE_STREAM_CLOSED;
 
-    PRUint32 writeCount, amount;
-    amount = PR_MIN(count, mDataLen - mOffset);
+    uint32_t writeCount, amount;
+    amount = NS_MIN(count, mDataLen - mOffset);
     nsresult rv = output->Write(mData + mOffset, amount, &writeCount);
     if (NS_SUCCEEDED(rv)) {
         printf("wrote %u bytes\n", writeCount);
@@ -223,14 +191,14 @@ nsresult
 WriteRequest(nsIOutputStream *os, const char *request)
 {
     LOG(("WriteRequest [request=%s]\n", request));
-    PRUint32 n;
+    uint32_t n;
     return os->Write(request, strlen(request), &n);
 }
 
 nsresult
 ReadResponse(nsIInputStream *is)
 {
-    PRUint32 bytesRead;
+    uint32_t bytesRead;
     char buf[2048];
     do {
         is->Read(buf, sizeof(buf), &bytesRead);
@@ -316,7 +284,7 @@ main(int argc, char* argv[])
 
     // Create the socket transport...
     nsCOMPtr<nsITransport> transport;
-    rv = sts->CreateTransport(hostName, port, nsnull, -1, 0, 0, getter_AddRefs(transport));
+    rv = sts->CreateTransport(hostName, port, nullptr, -1, 0, 0, getter_AddRefs(transport));
     if (NS_FAILED(rv)) {
         NS_WARNING("failed to create: socket transport!");
         return rv;
@@ -326,12 +294,12 @@ main(int argc, char* argv[])
 
     nsCOMPtr<nsIRequest> writeRequest, readRequest;
 
-    rv = transport->AsyncWrite(new TestProvider(buffer), nsnull, 0, 0, 0, getter_AddRefs(writeRequest));
+    rv = transport->AsyncWrite(new TestProvider(buffer), nullptr, 0, 0, 0, getter_AddRefs(writeRequest));
     if (NS_FAILED(rv)) {
         NS_WARNING("failed calling: AsyncWrite!");
         return rv;
     }
-    rv = transport->AsyncRead(new TestListener(), nsnull, 0, 0, 0, getter_AddRefs(readRequest));
+    rv = transport->AsyncRead(new TestListener(), nullptr, 0, 0, 0, getter_AddRefs(readRequest));
     if (NS_FAILED(rv)) {
         NS_WARNING("failed calling: AsyncWrite!");
         return rv;
@@ -346,7 +314,7 @@ main(int argc, char* argv[])
 
     PRTime endTime; 
     endTime = PR_Now();
-    LOG(("Elapsed time: %d\n", (PRInt32)(endTime/1000UL - gElapsedTime/1000UL)));
+    LOG(("Elapsed time: %d\n", (int32_t)(endTime/1000UL - gElapsedTime/1000UL)));
 
     sts->Shutdown();
     return 0;

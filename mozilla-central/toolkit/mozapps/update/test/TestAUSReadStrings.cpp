@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is Mozilla Foundation
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Robert Strong <robert.bugzilla@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
  * This binary tests the updater's ReadStrings ini parser and should run in a
@@ -46,6 +14,8 @@
   #define NS_tsnprintf _snwprintf
   #define NS_T(str) L ## str
   #define PATH_SEPARATOR_CHAR L'\\'
+  // On Windows, argv[0] can also have forward slashes instead
+  #define ALT_PATH_SEPARATOR_CHAR L'/'
 #else
   #include <unistd.h>
   #define NS_main main
@@ -65,8 +35,9 @@
 
 #include "updater/resource.h"
 #include "updater/progressui.h"
-#include "../../readstrings/readstrings.h"
-#include "../../readstrings/errors.h"
+#include "common/readstrings.h"
+#include "common/errors.h"
+#include "mozilla/Util.h"
 
 #ifndef MAXPATHLEN
 # ifdef PATH_MAX
@@ -83,6 +54,8 @@
 #endif
 
 #define TEST_NAME "Updater ReadStrings"
+
+using namespace mozilla;
 
 static int gFailCount = 0;
 
@@ -125,6 +98,11 @@ int NS_main(int argc, NS_tchar **argv)
   StringTable testStrings;
 
   NS_tchar *slash = NS_tstrrchr(argv[0], PATH_SEPARATOR_CHAR);
+#ifdef ALT_PATH_SEPARATOR_CHAR
+  NS_tchar *altslash = NS_tstrrchr(argv[0], ALT_PATH_SEPARATOR_CHAR);
+  slash = (slash > altslash) ? slash : altslash;
+#endif // ALT_PATH_SEPARATOR_CHAR
+
   if (!slash) {
     fail("%s | unable to find platform specific path separator (check 1)", TEST_NAME);
     return 20;
@@ -133,7 +111,7 @@ int NS_main(int argc, NS_tchar **argv)
   *(++slash) = '\0';
   // Test success when the ini file exists with both Title and Info in the
   // Strings section and the values for Title and Info.
-  NS_tsnprintf(inifile, sizeof(inifile), NS_T("%sTestAUSReadStrings1.ini"), argv[0]);
+  NS_tsnprintf(inifile, ArrayLength(inifile), NS_T("%sTestAUSReadStrings1.ini"), argv[0]);
   retval = ReadStrings(inifile, &testStrings);
   if (retval == OK) {
     if (strcmp(testStrings.title, "Title Test - \xD0\x98\xD1\x81\xD0\xBF\xD1\x8B" \
@@ -163,7 +141,7 @@ int NS_main(int argc, NS_tchar **argv)
 
   // Test failure when the ini file exists without Title and with Info in the
   // Strings section.
-  NS_tsnprintf(inifile, sizeof(inifile), NS_T("%sTestAUSReadStrings2.ini"), argv[0]);
+  NS_tsnprintf(inifile, ArrayLength(inifile), NS_T("%sTestAUSReadStrings2.ini"), argv[0]);
   retval = ReadStrings(inifile, &testStrings);
   if (retval != PARSE_ERROR) {
     rv = 24;
@@ -172,7 +150,7 @@ int NS_main(int argc, NS_tchar **argv)
 
   // Test failure when the ini file exists with Title and without Info in the
   // Strings section.
-  NS_tsnprintf(inifile, sizeof(inifile), NS_T("%sTestAUSReadStrings3.ini"), argv[0]);
+  NS_tsnprintf(inifile, ArrayLength(inifile), NS_T("%sTestAUSReadStrings3.ini"), argv[0]);
   retval = ReadStrings(inifile, &testStrings);
   if (retval != PARSE_ERROR) {
     rv = 25;
@@ -180,7 +158,7 @@ int NS_main(int argc, NS_tchar **argv)
   }
 
   // Test failure when the ini file doesn't exist
-  NS_tsnprintf(inifile, sizeof(inifile), NS_T("%sTestAUSReadStringsBogus.ini"), argv[0]);
+  NS_tsnprintf(inifile, ArrayLength(inifile), NS_T("%sTestAUSReadStringsBogus.ini"), argv[0]);
   retval = ReadStrings(inifile, &testStrings);
   if (retval != READ_ERROR) {
     rv = 26;
@@ -188,7 +166,7 @@ int NS_main(int argc, NS_tchar **argv)
   }
 
   // Test reading a non-default section name
-  NS_tsnprintf(inifile, sizeof(inifile), NS_T("%sTestAUSReadStrings3.ini"), argv[0]);
+  NS_tsnprintf(inifile, ArrayLength(inifile), NS_T("%sTestAUSReadStrings3.ini"), argv[0]);
   retval = ReadStrings(inifile, "Title\0", 1, &testStrings.title, "BogusSection2");
   if (retval == OK) {
     if (strcmp(testStrings.title, "Bogus Title") != 0) {

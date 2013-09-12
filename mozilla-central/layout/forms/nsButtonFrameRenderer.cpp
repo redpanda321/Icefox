@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "nsButtonFrameRenderer.h"
-#include "nsIRenderingContext.h"
 #include "nsCSSRendering.h"
 #include "nsPresContext.h"
 #include "nsGkAtoms.h"
@@ -45,6 +12,8 @@
 #include "nsDisplayList.h"
 #include "nsITheme.h"
 #include "nsThemeConstants.h"
+#include "nsEventStates.h"
+#include "mozilla/dom/Element.h"
 
 #define ACTIVE   "active"
 #define HOVER    "hover"
@@ -74,7 +43,7 @@ nsButtonFrameRenderer::GetFrame()
 }
 
 void
-nsButtonFrameRenderer::SetDisabled(PRBool aDisabled, PRBool notify)
+nsButtonFrameRenderer::SetDisabled(bool aDisabled, bool notify)
 {
   if (aDisabled)
     mFrame->GetContent()->SetAttr(kNameSpaceID_None, nsGkAtoms::disabled, EmptyString(),
@@ -83,12 +52,11 @@ nsButtonFrameRenderer::SetDisabled(PRBool aDisabled, PRBool notify)
     mFrame->GetContent()->UnsetAttr(kNameSpaceID_None, nsGkAtoms::disabled, notify);
 }
 
-PRBool
+bool
 nsButtonFrameRenderer::isDisabled() 
 {
-  // get the content
-  return mFrame->GetContent()->HasAttr(kNameSpaceID_None,
-                                       nsGkAtoms::disabled);
+  return mFrame->GetContent()->AsElement()->
+    State().HasState(NS_EVENT_STATE_DISABLED);
 }
 
 class nsDisplayButtonBoxShadowOuter : public nsDisplayItem {
@@ -105,21 +73,22 @@ public:
 #endif  
   
   virtual void Paint(nsDisplayListBuilder* aBuilder,
-                     nsIRenderingContext* aCtx);
-  virtual nsRect GetBounds(nsDisplayListBuilder* aBuilder);
+                     nsRenderingContext* aCtx);
+  virtual nsRect GetBounds(nsDisplayListBuilder* aBuilder, bool* aSnap);
   NS_DISPLAY_DECL_NAME("ButtonBoxShadowOuter", TYPE_BUTTON_BOX_SHADOW_OUTER)
 private:
   nsButtonFrameRenderer* mBFR;
 };
 
 nsRect
-nsDisplayButtonBoxShadowOuter::GetBounds(nsDisplayListBuilder* aBuilder) {
-  return mFrame->GetOverflowRect() + ToReferenceFrame();
+nsDisplayButtonBoxShadowOuter::GetBounds(nsDisplayListBuilder* aBuilder, bool* aSnap) {
+  *aSnap = false;
+  return mFrame->GetVisualOverflowRectRelativeToSelf() + ToReferenceFrame();
 }
 
 void
 nsDisplayButtonBoxShadowOuter::Paint(nsDisplayListBuilder* aBuilder,
-                                     nsIRenderingContext* aCtx) {
+                                     nsRenderingContext* aCtx) {
   nsRect frameRect = nsRect(ToReferenceFrame(), mFrame->GetSize());
 
   nsRect buttonRect;
@@ -147,11 +116,19 @@ public:
     aOutFrames->AppendElement(mFrame);
   }
   virtual void Paint(nsDisplayListBuilder* aBuilder,
-                     nsIRenderingContext* aCtx);
+                     nsRenderingContext* aCtx);
+  virtual nsRect GetBounds(nsDisplayListBuilder* aBuilder, bool* aSnap);
   NS_DISPLAY_DECL_NAME("ButtonBorderBackground", TYPE_BUTTON_BORDER_BACKGROUND)
 private:
   nsButtonFrameRenderer* mBFR;
 };
+
+nsRect
+nsDisplayButtonBorderBackground::GetBounds(nsDisplayListBuilder* aBuilder, bool* aSnap) {
+  *aSnap = false;
+  return aBuilder->IsForEventDelivery() ? nsRect(ToReferenceFrame(), mFrame->GetSize())
+          : mFrame->GetVisualOverflowRectRelativeToSelf() + ToReferenceFrame();
+}
 
 class nsDisplayButtonForeground : public nsDisplayItem {
 public:
@@ -167,14 +144,14 @@ public:
 #endif  
 
   virtual void Paint(nsDisplayListBuilder* aBuilder,
-                     nsIRenderingContext* aCtx);
+                     nsRenderingContext* aCtx);
   NS_DISPLAY_DECL_NAME("ButtonForeground", TYPE_BUTTON_FOREGROUND)
 private:
   nsButtonFrameRenderer* mBFR;
 };
 
 void nsDisplayButtonBorderBackground::Paint(nsDisplayListBuilder* aBuilder,
-                                            nsIRenderingContext* aCtx)
+                                            nsRenderingContext* aCtx)
 {
   NS_ASSERTION(mFrame, "No frame?");
   nsPresContext* pc = mFrame->PresContext();
@@ -186,7 +163,7 @@ void nsDisplayButtonBorderBackground::Paint(nsDisplayListBuilder* aBuilder,
 }
 
 void nsDisplayButtonForeground::Paint(nsDisplayListBuilder* aBuilder,
-                                      nsIRenderingContext* aCtx)
+                                      nsRenderingContext* aCtx)
 {
   nsPresContext *presContext = mFrame->PresContext();
   const nsStyleDisplay *disp = mFrame->GetStyleDisplay();
@@ -219,7 +196,7 @@ nsButtonFrameRenderer::DisplayButton(nsDisplayListBuilder* aBuilder,
 
 void
 nsButtonFrameRenderer::PaintOutlineAndFocusBorders(nsPresContext* aPresContext,
-          nsIRenderingContext& aRenderingContext,
+          nsRenderingContext& aRenderingContext,
           const nsRect& aDirtyRect,
           const nsRect& aRect)
 {
@@ -254,10 +231,10 @@ nsButtonFrameRenderer::PaintOutlineAndFocusBorders(nsPresContext* aPresContext,
 
 void
 nsButtonFrameRenderer::PaintBorderAndBackground(nsPresContext* aPresContext,
-          nsIRenderingContext& aRenderingContext,
+          nsRenderingContext& aRenderingContext,
           const nsRect& aDirtyRect,
           const nsRect& aRect,
-          PRUint32 aBGFlags)
+          uint32_t aBGFlags)
 
 {
   // get the button rect this is inside the focus and outline rects
@@ -307,7 +284,7 @@ nsButtonFrameRenderer::GetButtonOuterFocusBorderAndPadding()
     if (!mOuterFocusStyle->GetStylePadding()->GetPadding(result)) {
       NS_NOTYETIMPLEMENTED("percentage padding");
     }
-    result += mOuterFocusStyle->GetStyleBorder()->GetActualBorder();
+    result += mOuterFocusStyle->GetStyleBorder()->GetComputedBorder();
   }
 
   return result;
@@ -346,7 +323,7 @@ nsButtonFrameRenderer::GetButtonInnerFocusBorderAndPadding()
     if (!mInnerFocusStyle->GetStylePadding()->GetPadding(result)) {
       NS_NOTYETIMPLEMENTED("percentage padding");
     }
-    result += mInnerFocusStyle->GetStyleBorder()->GetActualBorder();
+    result += mInnerFocusStyle->GetStyleBorder()->GetComputedBorder();
   }
 
   return result;
@@ -383,7 +360,7 @@ nsButtonFrameRenderer::ReResolveStyles(nsPresContext* aPresContext)
 }
 
 nsStyleContext*
-nsButtonFrameRenderer::GetStyleContext(PRInt32 aIndex) const
+nsButtonFrameRenderer::GetStyleContext(int32_t aIndex) const
 {
   switch (aIndex) {
   case NS_BUTTON_RENDERER_FOCUS_INNER_CONTEXT_INDEX:
@@ -391,12 +368,12 @@ nsButtonFrameRenderer::GetStyleContext(PRInt32 aIndex) const
   case NS_BUTTON_RENDERER_FOCUS_OUTER_CONTEXT_INDEX:
     return mOuterFocusStyle;
   default:
-    return nsnull;
+    return nullptr;
   }
 }
 
 void 
-nsButtonFrameRenderer::SetStyleContext(PRInt32 aIndex, nsStyleContext* aStyleContext)
+nsButtonFrameRenderer::SetStyleContext(int32_t aIndex, nsStyleContext* aStyleContext)
 {
   switch (aIndex) {
   case NS_BUTTON_RENDERER_FOCUS_INNER_CONTEXT_INDEX:

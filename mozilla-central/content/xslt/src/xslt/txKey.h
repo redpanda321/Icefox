@@ -1,45 +1,12 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is TransforMiiX XSLT processor code.
- *
- * The Initial Developer of the Original Code is
- * Jonas Sicking.
- * Portions created by the Initial Developer are Copyright (C) 2003
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Jonas Sicking <jonas@sicking.cc>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef txKey_h__
 #define txKey_h__
 
-#include "nsDoubleHashtable.h"
+#include "nsTHashtable.h"
 #include "txNodeSet.h"
 #include "txList.h"
 #include "txXSLTPatterns.h"
@@ -53,7 +20,7 @@ class txKeyValueHashKey
 {
 public:
     txKeyValueHashKey(const txExpandedName& aKeyName,
-                      PRInt32 aRootIdentifier,
+                      int32_t aRootIdentifier,
                       const nsAString& aKeyValue)
         : mKeyName(aKeyName),
           mKeyValue(aKeyValue),
@@ -63,59 +30,78 @@ public:
 
     txExpandedName mKeyName;
     nsString mKeyValue;
-    PRInt32 mRootIdentifier;
+    int32_t mRootIdentifier;
 };
 
 struct txKeyValueHashEntry : public PLDHashEntryHdr
 {
-    txKeyValueHashEntry(const void* aKey)
-        : mKey(*static_cast<const txKeyValueHashKey*>(aKey)),
-          mNodeSet(new txNodeSet(nsnull))
-    {
-    }
+public:
+    typedef const txKeyValueHashKey& KeyType;
+    typedef const txKeyValueHashKey* KeyTypePointer;
 
-    // @see nsDoubleHashtable.h
-    PRBool MatchEntry(const void* aKey) const;
-    static PLDHashNumber HashKey(const void* aKey);
+    txKeyValueHashEntry(KeyTypePointer aKey)
+        : mKey(*aKey),
+          mNodeSet(new txNodeSet(nullptr)) { }
+
+    txKeyValueHashEntry(const txKeyValueHashEntry& entry)
+        : mKey(entry.mKey),
+          mNodeSet(entry.mNodeSet) { }
+
+    bool KeyEquals(KeyTypePointer aKey) const;
+
+    static KeyTypePointer KeyToPointer(KeyType aKey) { return &aKey; }
+
+    static PLDHashNumber HashKey(KeyTypePointer aKey);
+
+    enum { ALLOW_MEMMOVE = true };
     
     txKeyValueHashKey mKey;
     nsRefPtr<txNodeSet> mNodeSet;
 };
 
-DECL_DHASH_WRAPPER(txKeyValueHash, txKeyValueHashEntry, txKeyValueHashKey&)
+typedef nsTHashtable<txKeyValueHashEntry> txKeyValueHash;
 
 class txIndexedKeyHashKey
 {
 public:
     txIndexedKeyHashKey(txExpandedName aKeyName,
-                        PRInt32 aRootIdentifier)
+                        int32_t aRootIdentifier)
         : mKeyName(aKeyName),
           mRootIdentifier(aRootIdentifier)
     {
     }
 
     txExpandedName mKeyName;
-    PRInt32 mRootIdentifier;
+    int32_t mRootIdentifier;
 };
 
 struct txIndexedKeyHashEntry : public PLDHashEntryHdr
 {
-    txIndexedKeyHashEntry(const void* aKey)
-        : mKey(*static_cast<const txIndexedKeyHashKey*>(aKey)),
-          mIndexed(PR_FALSE)
-    {
-    }
+public:
+    typedef const txIndexedKeyHashKey& KeyType;
+    typedef const txIndexedKeyHashKey* KeyTypePointer;
 
-    // @see nsDoubleHashtable.h
-    PRBool MatchEntry(const void* aKey) const;
-    static PLDHashNumber HashKey(const void* aKey);
+    txIndexedKeyHashEntry(KeyTypePointer aKey)
+        : mKey(*aKey),
+          mIndexed(false) { }
+
+    txIndexedKeyHashEntry(const txIndexedKeyHashEntry& entry)
+        : mKey(entry.mKey),
+          mIndexed(entry.mIndexed) { }
+
+    bool KeyEquals(KeyTypePointer aKey) const;
+
+    static KeyTypePointer KeyToPointer(KeyType aKey) { return &aKey; }
+
+    static PLDHashNumber HashKey(KeyTypePointer aKey);
+
+    enum { ALLOW_MEMMOVE = true };
 
     txIndexedKeyHashKey mKey;
-    PRBool mIndexed;
+    bool mIndexed;
 };
 
-DECL_DHASH_WRAPPER(txIndexedKeyHash, txIndexedKeyHashEntry,
-                   txIndexedKeyHashKey&)
+typedef nsTHashtable<txIndexedKeyHashEntry> txIndexedKeyHash;
 
 /**
  * Class holding all <xsl:key>s of a particular expanded name in the
@@ -132,9 +118,9 @@ public:
      * Adds a match/use pair.
      * @param aMatch  match-pattern
      * @param aUse    use-expression
-     * @return PR_FALSE if an error occurred, PR_TRUE otherwise
+     * @return false if an error occurred, true otherwise
      */
-    PRBool addKey(nsAutoPtr<txPattern> aMatch, nsAutoPtr<Expr> aUse);
+    bool addKey(nsAutoPtr<txPattern> aMatch, nsAutoPtr<Expr> aUse);
 
     /**
      * Indexes a subtree and adds it to the hash of key values
@@ -202,7 +188,7 @@ public:
     nsresult getKeyNodes(const txExpandedName& aKeyName,
                          const txXPathNode& aRoot,
                          const nsAString& aKeyValue,
-                         PRBool aIndexIfNotFound,
+                         bool aIndexIfNotFound,
                          txExecutionState& aEs,
                          txNodeSet** aResult);
 

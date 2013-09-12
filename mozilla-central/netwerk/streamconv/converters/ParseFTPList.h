@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org Code.
- *
- * The Initial Developer of the Original Code is
- * Cyrus Patel <cyp@fb14.uni-mainz.de>.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Doug Turner <dougt@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "nspr.h"
 
 /* ParseFTPList() parses lines from an FTP LIST command.
@@ -98,26 +65,29 @@
 
 struct list_state
 {
-  void           *magic;        /* to determine if previously initialized */
+  list_state() {
+    memset(this, 0, sizeof(*this));
+  }
+
   PRTime         now_time;      /* needed for year determination */
   PRExplodedTime now_tm;        /* needed for year determination */
-  PRInt32        lstyle;        /* LISTing style */
-  PRInt32        parsed_one;    /* returned anything yet? */
+  int32_t        lstyle;        /* LISTing style */
+  int32_t        parsed_one;    /* returned anything yet? */
   char           carry_buf[84]; /* for VMS multiline */
-  PRUint32       carry_buf_len; /* length of name in carry_buf */
-  PRUint32       numlines;      /* number of lines seen */
+  uint32_t       carry_buf_len; /* length of name in carry_buf */
+  uint32_t       numlines;      /* number of lines seen */
 };
 
 struct list_result
 {
-  PRInt32           fe_type;      /* 'd'(dir) or 'l'(link) or 'f'(file) */
+  int32_t           fe_type;      /* 'd'(dir) or 'l'(link) or 'f'(file) */
   const char *      fe_fname;     /* pointer to filename */
-  PRUint32          fe_fnlen;     /* length of filename */
+  uint32_t          fe_fnlen;     /* length of filename */
   const char *      fe_lname;     /* pointer to symlink name */
-  PRUint32          fe_lnlen;     /* length of symlink name */
+  uint32_t          fe_lnlen;     /* length of symlink name */
   char              fe_size[40];  /* size of file in bytes (<= (2^128 - 1)) */
   PRExplodedTime    fe_time;      /* last-modified time */
-  PRInt32           fe_cinfs;     /* file system is definitely case insensitive */
+  int32_t           fe_cinfs;     /* file system is definitely case insensitive */
                                   /* (converting all-upcase names may be desirable) */
 };
 

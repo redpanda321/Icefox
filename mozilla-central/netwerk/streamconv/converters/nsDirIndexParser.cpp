@@ -1,45 +1,11 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998-2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Chris Waterson           <waterson@netscape.com>
- *   Robert John Churchill    <rjc@netscape.com>
- *   Pierre Phaneuf           <pp@ludusdesign.com>
- *   Bradley Baetz            <bbaetz@cs.mcgill.ca>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* This parsing code originally lived in xpfe/components/directory/ - bbaetz */
+
+#include "mozilla/Util.h"
 
 #include "prprf.h"
 
@@ -56,6 +22,8 @@
 #include "nsIPrefBranch.h"
 #include "nsIPrefLocalizedString.h"
 
+using namespace mozilla;
+
 NS_IMPL_ISUPPORTS3(nsDirIndexParser,
                    nsIRequestObserver,
                    nsIStreamListener,
@@ -67,8 +35,8 @@ nsDirIndexParser::nsDirIndexParser() {
 nsresult
 nsDirIndexParser::Init() {
   mLineStart = 0;
-  mHasDescription = PR_FALSE;
-  mFormat = nsnull;
+  mHasDescription = false;
+  mFormat = nullptr;
 
   // get default charset to be used for directory listings (fallback to
   // ISO-8859-1 if pref is unavailable).
@@ -153,7 +121,7 @@ NS_IMETHODIMP
 nsDirIndexParser::OnStopRequest(nsIRequest *aRequest, nsISupports *aCtxt,
                                 nsresult aStatusCode) {
   // Finish up
-  if (mBuf.Length() > (PRUint32) mLineStart) {
+  if (mBuf.Length() > (uint32_t) mLineStart) {
     ProcessData(aRequest, aCtxt);
   }
 
@@ -168,7 +136,7 @@ nsDirIndexParser::gFieldTable[] = {
   { "Last-Modified", FIELD_LASTMODIFIED },
   { "Content-Type", FIELD_CONTENTTYPE },
   { "File-Type", FIELD_FILETYPE },
-  { nsnull, FIELD_UNKNOWN }
+  { nullptr, FIELD_UNKNOWN }
 };
 
 nsrefcnt nsDirIndexParser::gRefCntParser = 0;
@@ -178,8 +146,6 @@ nsresult
 nsDirIndexParser::ParseFormat(const char* aFormatStr) {
   // Parse a "200" format line, and remember the fields and their
   // ordering in mFormat. Multiple 200 lines stomp on each other.
-
-  delete[] mFormat;
 
   // Lets find out how many elements we have.
   // easier to do this then realloc
@@ -192,7 +158,7 @@ nsDirIndexParser::ParseFormat(const char* aFormatStr) {
     ++num;
     // There are a maximum of six allowed header fields (doubled plus
     // terminator, just in case) -- Bug 443299
-    if (num > (2 * NS_ARRAY_LENGTH(gFieldTable)))
+    if (num > (2 * ArrayLength(gFieldTable)))
       return NS_ERROR_UNEXPECTED;
 
     if (! *pos)
@@ -203,9 +169,10 @@ nsDirIndexParser::ParseFormat(const char* aFormatStr) {
 
   } while (*pos);
 
+  delete[] mFormat;
   mFormat = new int[num+1];
   // Prevent NULL Deref - Bug 443299 
-  if (mFormat == nsnull)
+  if (mFormat == nullptr)
     return NS_ERROR_OUT_OF_MEMORY;
   mFormat[num] = -1;
   
@@ -217,8 +184,8 @@ nsDirIndexParser::ParseFormat(const char* aFormatStr) {
     if (! *aFormatStr)
       break;
 
-    nsCAutoString name;
-    PRInt32     len = 0;
+    nsAutoCString name;
+    int32_t     len = 0;
     while (aFormatStr[len] && !nsCRT::IsAsciiSpace(PRUnichar(aFormatStr[len])))
       ++len;
     name.SetCapacity(len + 1);
@@ -230,7 +197,7 @@ nsDirIndexParser::ParseFormat(const char* aFormatStr) {
 
     // All tokens are case-insensitive - http://www.mozilla.org/projects/netlib/dirindexformat.html
     if (name.LowerCaseEqualsLiteral("description"))
-      mHasDescription = PR_TRUE;
+      mHasDescription = true;
     
     for (Field* i = gFieldTable; i->mName; ++i) {
       if (name.EqualsIgnoreCase(i->mName)) {
@@ -257,9 +224,9 @@ nsDirIndexParser::ParseData(nsIDirIndex *aIdx, char* aDataStr) {
 
   nsresult rv = NS_OK;
 
-  nsCAutoString filename;
+  nsAutoCString filename;
 
-  for (PRInt32 i = 0; mFormat[i] != -1; ++i) {
+  for (int32_t i = 0; mFormat[i] != -1; ++i) {
     // If we've exhausted the data before we run out of fields, just
     // bail.
     if (! *aDataStr)
@@ -295,19 +262,19 @@ nsDirIndexParser::ParseData(nsIDirIndex *aIdx, char* aDataStr) {
       // don't unescape at this point, so that UnEscapeAndConvert() can
       filename = value;
       
-      PRBool  success = PR_FALSE;
+      bool    success = false;
       
       nsAutoString entryuri;
       
       if (gTextToSubURI) {
-        PRUnichar   *result = nsnull;
+        PRUnichar   *result = nullptr;
         if (NS_SUCCEEDED(rv = gTextToSubURI->UnEscapeAndConvert(mEncoding.get(), filename.get(),
                                                                 &result)) && (result)) {
           if (*result) {
             aIdx->SetLocation(filename.get());
             if (!mHasDescription)
               aIdx->SetDescription(result);
-            success = PR_TRUE;
+            success = true;
           }
           NS_Free(result);
         } else {
@@ -333,19 +300,19 @@ nsDirIndexParser::ParseData(nsIDirIndex *aIdx, char* aDataStr) {
       break;
     case FIELD_CONTENTLENGTH:
       {
-        PRInt64 len;
-        PRInt32 status = PR_sscanf(value, "%lld", &len);
+        int64_t len;
+        int32_t status = PR_sscanf(value, "%lld", &len);
         if (status == 1)
           aIdx->SetSize(len);
         else
-          aIdx->SetSize(LL_MAXUINT); // LL_MAXUINT means unknown
+          aIdx->SetSize(UINT64_MAX); // UINT64_MAX means unknown
       }
       break;
     case FIELD_LASTMODIFIED:
       {
         PRTime tm;
         nsUnescape(value);
-        if (PR_ParseTimeString(value, PR_FALSE, &tm) == PR_SUCCESS) {
+        if (PR_ParseTimeString(value, false, &tm) == PR_SUCCESS) {
           aIdx->SetLastModified(tm);
         }
       }
@@ -378,12 +345,12 @@ nsDirIndexParser::ParseData(nsIDirIndex *aIdx, char* aDataStr) {
 NS_IMETHODIMP
 nsDirIndexParser::OnDataAvailable(nsIRequest *aRequest, nsISupports *aCtxt,
                                   nsIInputStream *aStream,
-                                  PRUint32 aSourceOffset,
-                                  PRUint32 aCount) {
+                                  uint64_t aSourceOffset,
+                                  uint32_t aCount) {
   if (aCount < 1)
     return NS_OK;
   
-  PRInt32 len = mBuf.Length();
+  int32_t len = mBuf.Length();
   
   // Ensure that our mBuf has capacity to hold the data we're about to
   // read.
@@ -392,7 +359,7 @@ nsDirIndexParser::OnDataAvailable(nsIRequest *aRequest, nsISupports *aCtxt,
 
   // Now read the data into our buffer.
   nsresult rv;
-  PRUint32 count;
+  uint32_t count;
   rv = aStream->Read(mBuf.BeginWriting() + len, aCount, &count);
   if (NS_FAILED(rv)) return rv;
 
@@ -409,18 +376,18 @@ nsDirIndexParser::ProcessData(nsIRequest *aRequest, nsISupports *aCtxt) {
   if (!mListener)
     return NS_ERROR_FAILURE;
   
-  PRInt32     numItems = 0;
+  int32_t     numItems = 0;
   
-  while(PR_TRUE) {
+  while(true) {
     ++numItems;
     
-    PRInt32             eol = mBuf.FindCharInSet("\n\r", mLineStart);
+    int32_t             eol = mBuf.FindCharInSet("\n\r", mLineStart);
     if (eol < 0)        break;
     mBuf.SetCharAt(PRUnichar('\0'), eol);
     
     const char  *line = mBuf.get() + mLineStart;
     
-    PRInt32 lineLen = eol - mLineStart;
+    int32_t lineLen = eol - mLineStart;
     mLineStart = eol + 1;
     
     if (lineLen >= 4) {

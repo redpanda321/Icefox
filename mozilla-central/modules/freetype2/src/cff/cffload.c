@@ -4,8 +4,7 @@
 /*                                                                         */
 /*    OpenType and CFF data/program tables loader (body).                  */
 /*                                                                         */
-/*  Copyright 1996-2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,   */
-/*            2010 by                                                      */
+/*  Copyright 1996-2011 by                                                 */
 /*  David Turner, Robert Wilhelm, and Werner Lemberg.                      */
 /*                                                                         */
 /*  This file is part of the FreeType project, and may only be used,       */
@@ -387,7 +386,7 @@
   {
     FT_Error   error     = CFF_Err_Ok;
     FT_Memory  memory    = idx->stream->memory;
-    FT_Byte**  t;
+    FT_Byte**  t = NULL;
     FT_Byte*   new_bytes = NULL;
 
 
@@ -517,6 +516,18 @@
 
           } while ( off2 == 0 && element < idx->count );
         }
+      }
+
+      /* XXX: should check off2 does not exceed the end of this entry; */
+      /*      at present, only truncate off2 at the end of this stream */
+      if ( off2 > stream->size + 1                    ||
+           idx->data_offset > stream->size - off2 + 1 )
+      {
+        FT_ERROR(( "cff_index_access_element:"
+                   " offset to next entry (%d)"
+                   " exceeds the end of stream (%d)\n",
+                   off2, stream->size - idx->data_offset + 1 ));
+        off2 = stream->size - idx->data_offset + 1;
       }
 
       /* access element */
@@ -779,11 +790,12 @@
       goto Exit;
 
     for ( i = 0; i < num_glyphs; i++ )
+    {
       if ( charset->sids[i] > max_cid )
         max_cid = charset->sids[i];
-    max_cid++;
+    }
 
-    if ( FT_NEW_ARRAY( charset->cids, max_cid ) )
+    if ( FT_NEW_ARRAY( charset->cids, (FT_ULong)max_cid + 1 ) )
       goto Exit;
 
     /* When multiple GIDs map to the same CID, we choose the lowest */
@@ -807,7 +819,7 @@
     FT_UInt  result = 0;
 
 
-    if ( cid < charset->max_cid )
+    if ( cid <= charset->max_cid )
       result = charset->cids[cid];
 
     return result;
@@ -881,20 +893,7 @@
             goto Exit;
 
           for ( j = 1; j < num_glyphs; j++ )
-          {
-            FT_UShort sid = FT_GET_USHORT();
-
-
-            /* this constant is given in the CFF specification */
-            if ( sid < 65000L )
-              charset->sids[j] = sid;
-            else
-            {
-              FT_TRACE0(( "cff_charset_load:"
-                          " invalid SID value %d set to zero\n", sid ));
-              charset->sids[j] = 0;
-            }
-          }
+            charset->sids[j] = FT_GET_USHORT();
 
           FT_FRAME_EXIT();
         }
@@ -927,20 +926,12 @@
                 goto Exit;
             }
 
-            /* check whether the range contains at least one valid glyph; */
-            /* the constant is given in the CFF specification             */
-            if ( glyph_sid >= 65000L )
-            {
-              FT_ERROR(( "cff_charset_load: invalid SID range\n" ));
-              error = CFF_Err_Invalid_File_Format;
-              goto Exit;
-            }
-
             /* try to rescue some of the SIDs if `nleft' is too large */
-            if ( nleft > 65000L - 1L || glyph_sid >= 65000L - nleft )
+            if ( glyph_sid > 0xFFFFL - nleft )
             {
-              FT_ERROR(( "cff_charset_load: invalid SID range trimmed\n" ));
-              nleft = ( FT_UInt )( 65000L - 1L - glyph_sid );
+              FT_ERROR(( "cff_charset_load: invalid SID range trimmed"
+                         " nleft=%d -> %d\n", nleft, 0xFFFFL - glyph_sid ));
+              nleft = ( FT_UInt )( 0xFFFFL - glyph_sid );
             }
 
             /* Fill in the range of sids -- `nleft + 1' glyphs. */
@@ -1277,9 +1268,7 @@
           if ( gid != 0 )
           {
             encoding->codes[j] = (FT_UShort)gid;
-
-            if ( encoding->count < j + 1 )
-              encoding->count = j + 1;
+            encoding->count    = j + 1;
           }
           else
           {
@@ -1347,7 +1336,10 @@
 
     error = cff_index_access_element( idx, font_index, &dict, &dict_len );
     if ( !error )
+    {
+      FT_TRACE4(( " top dictionary:\n" ));
       error = cff_parser_run( &parser, dict, dict + dict_len );
+    }
 
     cff_index_forget_element( idx, &dict );
 
@@ -1376,6 +1368,7 @@
            FT_FRAME_ENTER( font->font_dict.private_size )                 )
         goto Exit;
 
+      FT_TRACE4(( " private dictionary:\n" ));
       error = cff_parser_run( &parser,
                               (FT_Byte*)stream->cursor,
                               (FT_Byte*)stream->limit );
@@ -1465,7 +1458,7 @@
          font->header_size      < 4 ||
          font->absolute_offsize > 4 )
     {
-      FT_TRACE2(( "[not a CFF font header]\n" ));
+      FT_TRACE2(( "  not a CFF font header\n" ));
       error = CFF_Err_Unknown_File_Format;
       goto Exit;
     }
@@ -1504,6 +1497,7 @@
       goto Exit;
 
     /* now, parse the top-level font dictionary */
+    FT_TRACE4(( "parsing top-level\n" ));
     error = cff_subfont_load( &font->top_font,
                               &font->font_dict_index,
                               face_index,
@@ -1524,7 +1518,7 @@
     if ( dict->cid_registry != 0xFFFFU )
     {
       CFF_IndexRec  fd_index;
-      CFF_SubFont   sub;
+      CFF_SubFont   sub = NULL;
       FT_UInt       idx;
 
 
@@ -1556,6 +1550,7 @@
       for ( idx = 0; idx < fd_index.count; idx++ )
       {
         sub = font->subfonts[idx];
+        FT_TRACE4(( "parsing subfont %u\n", idx ));
         error = cff_subfont_load( sub, &fd_index, idx,
                                   stream, base_offset, library );
         if ( error )
@@ -1581,7 +1576,7 @@
     if ( dict->charstrings_offset == 0 )
     {
       FT_ERROR(( "cff_font_load: no charstrings offset\n" ));
-      error = CFF_Err_Unknown_File_Format;
+      error = CFF_Err_Invalid_File_Format;
       goto Exit;
     }
 

@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the string bundle override service.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corp.
- * Portions created by the Initial Developer are Copyright (C) 2002
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Alec Flett <alecf@netscape.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #include "nsStringBundleTextOverride.h"
@@ -52,7 +19,7 @@ static NS_DEFINE_CID(kPersistentPropertiesCID, NS_IPERSISTENTPROPERTIES_CID);
 class URLPropertyElement : public nsIPropertyElement
 {
 public:
-    URLPropertyElement(nsIPropertyElement *aRealElement, PRUint32 aURLLength) :
+    URLPropertyElement(nsIPropertyElement *aRealElement, uint32_t aURLLength) :
         mRealElement(aRealElement),
         mURLLength(aURLLength)
     { }
@@ -63,7 +30,7 @@ public:
     
 private:
     nsCOMPtr<nsIPropertyElement> mRealElement;
-    PRUint32 mURLLength;
+    uint32_t mURLLength;
 };
 
 NS_IMPL_ISUPPORTS1(URLPropertyElement, nsIPropertyElement)
@@ -165,7 +132,7 @@ nsStringBundleTextOverride::Init()
 
     customStringsFile->AppendNative(NS_LITERAL_CSTRING("custom-strings.txt"));
 
-    PRBool exists;
+    bool exists;
     rv = customStringsFile->Exists(&exists);
     if (NS_FAILED(rv) || !exists)
         return NS_ERROR_FAILURE;
@@ -174,7 +141,7 @@ nsStringBundleTextOverride::Init()
     // read in the custom bundle. Keys are in the form
     // chrome://package/locale/foo.properties:keyname
 
-    nsCAutoString customStringsURLSpec;
+    nsAutoCString customStringsURLSpec;
     rv = NS_GetURLSpecFromFile(customStringsFile, customStringsURLSpec);
     if (NS_FAILED(rv)) return rv;
     
@@ -200,7 +167,7 @@ nsStringBundleTextOverride::Init()
     printf("custom-strings.txt contains:\n");
     printf("----------------------------\n");
 
-    PRBool hasMore;
+    bool hasMore;
     enumerator->HasMoreElements(&hasMore);
     do {
         nsCOMPtr<nsISupports> sup;
@@ -208,7 +175,7 @@ nsStringBundleTextOverride::Init()
 
         nsCOMPtr<nsIPropertyElement> prop = do_QueryInterface(sup);
 
-        nsCAutoString key;
+        nsAutoCString key;
         nsAutoString value;
         prop->GetKey(key);
         prop->GetValue(value);
@@ -228,7 +195,7 @@ nsStringBundleTextOverride::GetStringFromName(const nsACString& aURL,
                                               nsAString& aResult)
 {
     // concatenate url#key to get the key to read
-    nsCAutoString combinedURL(aURL + NS_LITERAL_CSTRING("#") + key);
+    nsAutoCString combinedURL(aURL + NS_LITERAL_CSTRING("#") + key);
 
     // persistent properties uses ":" as a delimiter, so escape that character
     combinedURL.ReplaceSubstring(":", "%3A");
@@ -273,15 +240,15 @@ nsPropertyEnumeratorByURL::GetNext(nsISupports **aResult)
     NS_ADDREF(*aResult);
 
     // release it so we don't return it twice
-    mCurrent = nsnull;
+    mCurrent = nullptr;
     
     return NS_OK;
 }
 
 NS_IMETHODIMP
-nsPropertyEnumeratorByURL::HasMoreElements(PRBool * aResult)
+nsPropertyEnumeratorByURL::HasMoreElements(bool * aResult)
 {
-    PRBool hasMore;
+    bool hasMore;
     mOuter->HasMoreElements(&hasMore);
     while (hasMore) {
 
@@ -291,7 +258,7 @@ nsPropertyEnumeratorByURL::HasMoreElements(PRBool * aResult)
         mCurrent = do_QueryInterface(supports);
 
         if (mCurrent) {
-            nsCAutoString curKey;
+            nsAutoCString curKey;
             mCurrent->GetKey(curKey);
         
             if (StringBeginsWith(curKey, mURL))
@@ -302,9 +269,9 @@ nsPropertyEnumeratorByURL::HasMoreElements(PRBool * aResult)
     }
 
     if (!hasMore)
-        mCurrent = PR_FALSE;
+        mCurrent = nullptr;
     
-    *aResult = mCurrent ? PR_TRUE : PR_FALSE;
+    *aResult = mCurrent ? true : false;
     
     return NS_OK;
 }

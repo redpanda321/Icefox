@@ -1,48 +1,12 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Google Suggest Autocomplete Implementation for Firefox.
- *
- * The Initial Developer of the Original Code is Google Inc.
- * Portions created by the Initial Developer are Copyright (C) 2006
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Ben Goodger <beng@google.com>
- *   Mike Connor <mconnor@mozilla.com>
- *   Joe Hughes  <joe@retrovirus.com>
- *   Pamela Greene <pamg.bugs@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 const SEARCH_RESPONSE_SUGGESTION_JSON = "application/x-suggestions+json";
 
 const BROWSER_SUGGEST_PREF = "browser.search.suggest.enabled";
 const XPCOM_SHUTDOWN_TOPIC              = "xpcom-shutdown";
 const NS_PREFBRANCH_PREFCHANGE_TOPIC_ID = "nsPref:changed";
-const SEARCH_BUNDLE = "chrome://global/locale/search/search.properties";
 
 const Cc = Components.classes;
 const Ci = Components.interfaces;
@@ -55,174 +19,8 @@ const HTTP_BAD_GATEWAY           = 502;
 const HTTP_SERVICE_UNAVAILABLE   = 503;
 
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
-
-/**
- * SuggestAutoCompleteResult contains the results returned by the Suggest
- * service - it implements nsIAutoCompleteResult and is used by the auto-
- * complete controller to populate the front end.
- * @constructor
- */
-function SuggestAutoCompleteResult(searchString,
-                                   searchResult,
-                                   defaultIndex,
-                                   errorDescription,
-                                   results,
-                                   comments,
-                                   formHistoryResult) {
-  this._searchString = searchString;
-  this._searchResult = searchResult;
-  this._defaultIndex = defaultIndex;
-  this._errorDescription = errorDescription;
-  this._results = results;
-  this._comments = comments;
-  this._formHistResult = formHistoryResult;
-}
-SuggestAutoCompleteResult.prototype = {
-  /**
-   * The user's query string
-   * @private
-   */
-  _searchString: "",
-
-  /**
-   * The result code of this result object, see |get searchResult| for possible
-   * values.
-   * @private
-   */
-  _searchResult: 0,
-
-  /**
-   * The default item that should be entered if none is selected
-   * @private
-   */
-  _defaultIndex: 0,
-
-  /**
-   * The reason the search failed
-   * @private
-   */
-  _errorDescription: "",
-
-  /**
-   * The list of words returned by the Suggest Service
-   * @private
-   */
-  _results: [],
-
-  /**
-   * The list of Comments (number of results - or page titles) returned by the
-   * Suggest Service.
-   * @private
-   */
-  _comments: [],
-
-  /**
-   * A reference to the form history nsIAutocompleteResult that we're wrapping.
-   * We use this to forward removeEntryAt calls as needed.
-   */
-  _formHistResult: null,
-
-  /**
-   * @return the user's query string
-   */
-  get searchString() {
-    return this._searchString;
-  },
-
-  /**
-   * @return the result code of this result object, either:
-   *         RESULT_IGNORED   (invalid searchString)
-   *         RESULT_FAILURE   (failure)
-   *         RESULT_NOMATCH   (no matches found)
-   *         RESULT_SUCCESS   (matches found)
-   */
-  get searchResult() {
-    return this._searchResult;
-  },
-
-  /**
-   * @return the default item that should be entered if none is selected
-   */
-  get defaultIndex() {
-    return this._defaultIndex;
-  },
-
-  /**
-   * @return the reason the search failed
-   */
-  get errorDescription() {
-    return this._errorDescription;
-  },
-
-  /**
-   * @return the number of results
-   */
-  get matchCount() {
-    return this._results.length;
-  },
-
-  /**
-   * Retrieves a result
-   * @param  index    the index of the result requested
-   * @return          the result at the specified index
-   */
-  getValueAt: function(index) {
-    return this._results[index];
-  },
-
-  /**
-   * Retrieves a comment (metadata instance)
-   * @param  index    the index of the comment requested
-   * @return          the comment at the specified index
-   */
-  getCommentAt: function(index) {
-    return this._comments[index];
-  },
-
-  /**
-   * Retrieves a style hint specific to a particular index.
-   * @param  index    the index of the style hint requested
-   * @return          the style hint at the specified index
-   */
-  getStyleAt: function(index) {
-    if (!this._comments[index])
-      return null;  // not a category label, so no special styling
-
-    if (index == 0)
-      return "suggestfirst";  // category label on first line of results
-
-    return "suggesthint";   // category label on any other line of results
-  },
-
-  /**
-   * Retrieves an image url.
-   * @param  index    the index of the image url requested
-   * @return          the image url at the specified index
-   */
-  getImageAt: function(index) {
-    return "";
-  },
-
-  /**
-   * Removes a result from the resultset
-   * @param  index    the index of the result to remove
-   */
-  removeValueAt: function(index, removeFromDatabase) {
-    // Forward the removeValueAt call to the underlying result if we have one
-    // Note: this assumes that the form history results were added to the top
-    // of our arrays.
-    if (removeFromDatabase && this._formHistResult &&
-        index < this._formHistResult.matchCount) {
-      // Delete the history result from the DB
-      this._formHistResult.removeValueAt(index, true);
-    }
-    this._results.splice(index, 1);
-    this._comments.splice(index, 1);
-  },
-
-  // nsISupports
-  QueryInterface: XPCOMUtils.generateQI([Ci.nsIAutoCompleteResult])
-};
+Cu.import("resource://gre/modules/nsFormAutoCompleteResult.jsm");
+Cu.import("resource://gre/modules/Services.jsm");
 
 /**
  * SuggestAutoComplete is a base class that implements nsIAutoCompleteSearch
@@ -239,31 +37,18 @@ SuggestAutoComplete.prototype = {
 
   _init: function() {
     this._addObservers();
-    this._loadSuggestPref();
+    this._suggestEnabled = Services.prefs.getBoolPref(BROWSER_SUGGEST_PREF);
   },
 
-  /**
-   * this._strings is the string bundle for message internationalization.
-   */
-  get _strings() {
-    if (!this.__strings) {
-      var sbs = Cc["@mozilla.org/intl/stringbundle;1"].
-                getService(Ci.nsIStringBundleService);
-
-      this.__strings = sbs.createBundle(SEARCH_BUNDLE);
-    }
-    return this.__strings;
+  get _suggestionLabel() {
+    delete this._suggestionLabel;
+    let bundle = Services.strings.createBundle("chrome://global/locale/search/search.properties");
+    return this._suggestionLabel = bundle.GetStringFromName("suggestion_label");
   },
-  __strings: null,
 
   /**
    * Search suggestions will be shown if this._suggestEnabled is true.
    */
-  _loadSuggestPref: function SAC_loadSuggestPref() {
-    var prefService = Cc["@mozilla.org/preferences-service;1"].
-                      getService(Ci.nsIPrefBranch);
-    this._suggestEnabled = prefService.getBoolPref(BROWSER_SUGGEST_PREF);
-  },
   _suggestEnabled: null,
 
   /*************************************************************************
@@ -553,7 +338,7 @@ SuggestAutoComplete.prototype = {
 
     // if we have any suggestions, put a label at the top
     if (comments.length > 0)
-      comments[0] = this._strings.GetStringFromName("suggestion_label");
+      comments[0] = this._suggestionLabel;
 
     // now put the history results above the suggestions
     var finalResults = historyResults.concat(results);
@@ -577,11 +362,12 @@ SuggestAutoComplete.prototype = {
   onResultsReady: function(searchString, results, comments,
                            formHistoryResult) {
     if (this._listener) {
-      var result = new SuggestAutoCompleteResult(
+      var result = new FormAutoCompleteResult(
           searchString,
           Ci.nsIAutoCompleteResult.RESULT_SUCCESS,
           0,
           "",
+          results,
           results,
           comments,
           formHistoryResult);
@@ -613,9 +399,37 @@ SuggestAutoComplete.prototype = {
     if (!previousResult)
       this._formHistoryResult = null;
 
-    var searchService = Cc["@mozilla.org/browser/search-service;1"].
-                        getService(Ci.nsIBrowserSearchService);
+    var formHistorySearchParam = searchParam.split("|")[0];
 
+    // Receive the information about the privacy mode of the window to which
+    // this search box belongs.  The front-end's search.xml bindings passes this
+    // information in the searchParam parameter.  The alternative would have
+    // been to modify nsIAutoCompleteSearch to add an argument to startSearch
+    // and patch all of autocomplete to be aware of this, but the searchParam
+    // argument is already an opaque argument, so this solution is hopefully
+    // less hackish (although still gross.)
+    var privacyMode = (searchParam.split("|")[1] == "private");
+
+    // Start search immediately if possible, otherwise once the search
+    // service is initialized
+    if (Services.search.isInitialized) {
+      this._triggerSearch(searchString, formHistorySearchParam, listener, privacyMode);
+      return;
+    }
+
+    Services.search.init((function startSearch_cb(aResult) {
+      if (!Components.isSuccessCode(aResult)) {
+        Cu.reportError("Could not initialize search service, bailing out: " + aResult);
+        return;
+      }
+      this._triggerSearch(searchString, formHistorySearchParam, listener, privacyMode);
+    }).bind(this));
+  },
+
+  /**
+   * Actual implementation of search.
+   */
+  _triggerSearch: function(searchString, searchParam, listener, privacyMode) {
     // If there's an existing request, stop it. There is no smart filtering
     // here as there is when looking through history/form data because the
     // result set returned by the server is different for every typed value -
@@ -625,7 +439,7 @@ SuggestAutoComplete.prototype = {
 
     this._listener = listener;
 
-    var engine = searchService.currentEngine;
+    var engine = Services.search.currentEngine;
 
     this._checkForEngineSwitch(engine);
 
@@ -651,6 +465,9 @@ SuggestAutoComplete.prototype = {
     var method = (submission.postData ? "POST" : "GET");
     this._request.open(method, this._suggestURI.spec, true);
     this._request.channel.notificationCallbacks = new SearchSuggestLoadListener();
+    if (this._request.channel instanceof Ci.nsIPrivateBrowsingChannel) {
+      this._request.channel.setPrivate(privacyMode);
+    }
 
     var self = this;
     function onReadyStateChange() {
@@ -682,7 +499,7 @@ SuggestAutoComplete.prototype = {
   observe: function SAC_observe(aSubject, aTopic, aData) {
     switch (aTopic) {
       case NS_PREFBRANCH_PREFCHANGE_TOPIC_ID:
-        this._loadSuggestPref();
+        this._suggestEnabled = Services.prefs.getBoolPref(BROWSER_SUGGEST_PREF);
         break;
       case XPCOM_SHUTDOWN_TOPIC:
         this._removeObservers();
@@ -691,23 +508,15 @@ SuggestAutoComplete.prototype = {
   },
 
   _addObservers: function SAC_addObservers() {
-    var prefService2 = Cc["@mozilla.org/preferences-service;1"].
-                       getService(Ci.nsIPrefBranch2);
-    prefService2.addObserver(BROWSER_SUGGEST_PREF, this, false);
+    Services.prefs.addObserver(BROWSER_SUGGEST_PREF, this, false);
 
-    var os = Cc["@mozilla.org/observer-service;1"].
-             getService(Ci.nsIObserverService);
-    os.addObserver(this, XPCOM_SHUTDOWN_TOPIC, false);
+    Services.obs.addObserver(this, XPCOM_SHUTDOWN_TOPIC, false);
   },
 
   _removeObservers: function SAC_removeObservers() {
-    var prefService2 = Cc["@mozilla.org/preferences-service;1"].
-                       getService(Ci.nsIPrefBranch2);
-    prefService2.removeObserver(BROWSER_SUGGEST_PREF, this);
+    Services.prefs.removeObserver(BROWSER_SUGGEST_PREF, this);
 
-    var os = Cc["@mozilla.org/observer-service;1"].
-             getService(Ci.nsIObserverService);
-    os.removeObserver(this, XPCOM_SHUTDOWN_TOPIC);
+    Services.obs.removeObserver(this, XPCOM_SHUTDOWN_TOPIC);
   },
 
   // nsISupports
@@ -756,4 +565,4 @@ SearchSuggestAutoComplete.prototype = {
 };
 
 var component = [SearchSuggestAutoComplete];
-var NSGetFactory = XPCOMUtils.generateNSGetFactory(component);
+this.NSGetFactory = XPCOMUtils.generateNSGetFactory(component);

@@ -1,52 +1,68 @@
 /* -*- Mode: C++; tab-width: 20; indent-tabs-mode: nil; c-basic-offset: 4 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Corporation code.
- *
- * The Initial Developer of the Original Code is Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2008-2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Jonathan Kew <jfkthame@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef GFXPLATFORMFONTLIST_H_
 #define GFXPLATFORMFONTLIST_H_
 
 #include "nsDataHashtable.h"
 #include "nsRefPtrHashtable.h"
-#include "nsHashSets.h"
+#include "nsTHashtable.h"
 
 #include "gfxFontUtils.h"
 #include "gfxFont.h"
 #include "gfxPlatform.h"
 
-#include "mozilla/FunctionTimer.h"
+#include "nsIMemoryReporter.h"
+#include "mozilla/Attributes.h"
+
+class CharMapHashKey : public PLDHashEntryHdr
+{
+public:
+    typedef gfxCharacterMap* KeyType;
+    typedef const gfxCharacterMap* KeyTypePointer;
+
+    CharMapHashKey(const gfxCharacterMap *aCharMap) :
+        mCharMap(const_cast<gfxCharacterMap*>(aCharMap))
+    {
+        MOZ_COUNT_CTOR(CharMapHashKey);
+    }
+    CharMapHashKey(const CharMapHashKey& toCopy) :
+        mCharMap(toCopy.mCharMap)
+    {
+        MOZ_COUNT_CTOR(CharMapHashKey);
+    }
+    ~CharMapHashKey()
+    {
+        MOZ_COUNT_DTOR(CharMapHashKey);
+    }
+
+    gfxCharacterMap* GetKey() const { return mCharMap; }
+
+    bool KeyEquals(const gfxCharacterMap *aCharMap) const {
+        NS_ASSERTION(!aCharMap->mBuildOnTheFly && !mCharMap->mBuildOnTheFly,
+                     "custom cmap used in shared cmap hashtable");
+        // cmaps built on the fly never match
+        if (aCharMap->mHash != mCharMap->mHash)
+        {
+            return false;
+        }
+        return mCharMap->Equals(aCharMap);
+    }
+
+    static const gfxCharacterMap* KeyToPointer(gfxCharacterMap *aCharMap) {
+        return aCharMap;
+    }
+    static PLDHashNumber HashKey(const gfxCharacterMap *aCharMap) {
+        return aCharMap->mHash;
+    }
+
+    enum { ALLOW_MEMMOVE = true };
+
+protected:
+    gfxCharacterMap *mCharMap;
+};
 
 // gfxPlatformFontList is an abstract class for the global font list on the system;
 // concrete subclasses for each platform implement the actual interface to the system fonts.
@@ -56,6 +72,14 @@
 
 // Much of this is based on the old gfxQuartzFontCache, but adapted for use on all platforms.
 
+struct FontListSizes {
+    uint32_t mFontListSize; // size of the font list and dependent objects
+                            // (font family and face names, etc), but NOT
+                            // including the font table cache and the cmaps
+    uint32_t mFontTableCacheSize; // memory used for the gfxFontEntry table caches
+    uint32_t mCharMapsSize; // memory used for cmap coverage info
+};
+
 class gfxPlatformFontList : protected gfxFontInfoLoader
 {
 public:
@@ -64,41 +88,48 @@ public:
     }
 
     static nsresult Init() {
-        NS_TIME_FUNCTION;
-
         NS_ASSERTION(!sPlatformFontList, "What's this doing here?");
-        sPlatformFontList = gfxPlatform::GetPlatform()->CreatePlatformFontList();
-        if (!sPlatformFontList) return NS_ERROR_OUT_OF_MEMORY;
-        sPlatformFontList->InitFontList();
+        gfxPlatform::GetPlatform()->CreatePlatformFontList();
+        if (!sPlatformFontList) {
+            return NS_ERROR_OUT_OF_MEMORY;
+        }
         return NS_OK;
     }
 
     static void Shutdown() {
         delete sPlatformFontList;
-        sPlatformFontList = nsnull;
+        sPlatformFontList = nullptr;
     }
+
+    virtual ~gfxPlatformFontList();
+
+    // initialize font lists
+    virtual nsresult InitFontList();
 
     void GetFontList (nsIAtom *aLangGroup,
                       const nsACString& aGenericFamily,
                       nsTArray<nsString>& aListOfFonts);
 
-    virtual PRBool ResolveFontName(const nsAString& aFontName,
+    virtual bool ResolveFontName(const nsAString& aFontName,
                                    nsAString& aResolvedFontName);
 
     void UpdateFontList() { InitFontList(); }
 
     void ClearPrefFonts() { mPrefFonts.Clear(); }
 
-    void GetFontFamilyList(nsTArray<nsRefPtr<gfxFontFamily> >& aFamilyArray);
+    virtual void GetFontFamilyList(nsTArray<nsRefPtr<gfxFontFamily> >& aFamilyArray);
 
-    gfxFontEntry* FindFontForChar(const PRUint32 aCh, gfxFont *aPrevFont);
+    virtual gfxFontEntry*
+    SystemFindFontForChar(const uint32_t aCh,
+                          int32_t aRunScript,
+                          const gfxFontStyle* aStyle);
 
     // TODO: make this virtual, for lazily adding to the font list
-    gfxFontFamily* FindFamily(const nsAString& aFamily);
+    virtual gfxFontFamily* FindFamily(const nsAString& aFamily);
 
-    gfxFontEntry* FindFontForFamily(const nsAString& aFamily, const gfxFontStyle* aStyle, PRBool& aNeedsBold);
+    gfxFontEntry* FindFontForFamily(const nsAString& aFamily, const gfxFontStyle* aStyle, bool& aNeedsBold);
 
-    PRBool GetPrefFontFamilyEntries(eFontPrefLang aLangGroup, nsTArray<nsRefPtr<gfxFontFamily> > *array);
+    bool GetPrefFontFamilyEntries(eFontPrefLang aLangGroup, nsTArray<nsRefPtr<gfxFontFamily> > *array);
     void SetPrefFontFamilyEntries(eFontPrefLang aLangGroup, nsTArray<nsRefPtr<gfxFontFamily> >& array);
 
     // name lookup table methods
@@ -109,13 +140,12 @@ public:
 
     void AddPostscriptName(gfxFontEntry *aFontEntry, nsAString& aPostscriptName);
 
-    PRBool NeedFullnamePostscriptNames() { return mNeedFullnamePostscriptNames; }
+    bool NeedFullnamePostscriptNames() { return mNeedFullnamePostscriptNames; }
 
     // pure virtual functions, to be provided by concrete subclasses
 
-    // get the system default font
-    virtual gfxFontEntry* GetDefaultFont(const gfxFontStyle* aStyle,
-                                         PRBool& aNeedsBold) = 0;
+    // get the system default font family
+    virtual gfxFontFamily* GetDefaultFont(const gfxFontStyle* aStyle) = 0;
 
     // look up a font by name on the host platform
     virtual gfxFontEntry* LookupLocalFont(const gfxProxyFontEntry *aProxyEntry,
@@ -124,15 +154,38 @@ public:
     // create a new platform font from downloaded data (@font-face)
     // this method is responsible to ensure aFontData is NS_Free()'d
     virtual gfxFontEntry* MakePlatformFont(const gfxProxyFontEntry *aProxyEntry,
-                                           const PRUint8 *aFontData,
-                                           PRUint32 aLength) = 0;
+                                           const uint8_t *aFontData,
+                                           uint32_t aLength) = 0;
 
     // get the standard family name on the platform for a given font name
     // (platforms may override, eg Mac)
-    virtual PRBool GetStandardFamilyName(const nsAString& aFontName, nsAString& aFamilyName);
+    virtual bool GetStandardFamilyName(const nsAString& aFontName, nsAString& aFamilyName);
+
+    virtual void SizeOfExcludingThis(nsMallocSizeOfFun aMallocSizeOf,
+                                     FontListSizes*    aSizes) const;
+    virtual void SizeOfIncludingThis(nsMallocSizeOfFun aMallocSizeOf,
+                                     FontListSizes*    aSizes) const;
+
+    // search for existing cmap that matches the input
+    // return the input if no match is found
+    gfxCharacterMap* FindCharMap(gfxCharacterMap *aCmap);
+
+    // add a cmap to the shared cmap set
+    gfxCharacterMap* AddCmap(const gfxCharacterMap *aCharMap);
+
+    // remove the cmap from the shared cmap set
+    void RemoveCmap(const gfxCharacterMap *aCharMap);
 
 protected:
-    gfxPlatformFontList(PRBool aNeedFullnamePostscriptNames = PR_TRUE);
+    class MemoryReporter MOZ_FINAL
+        : public nsIMemoryMultiReporter
+    {
+    public:
+        NS_DECL_ISUPPORTS
+        NS_DECL_NSIMEMORYMULTIREPORTER
+    };
+
+    gfxPlatformFontList(bool aNeedFullnamePostscriptNames = true);
 
     static gfxPlatformFontList *sPlatformFontList;
 
@@ -140,8 +193,22 @@ protected:
                                                nsRefPtr<gfxFontFamily>& aFamilyEntry,
                                                void* userArg);
 
-    // initialize font lists
-    virtual void InitFontList();
+    // returns default font for a given character, null otherwise
+    gfxFontEntry* CommonFontFallback(const uint32_t aCh,
+                                     int32_t aRunScript,
+                                     const gfxFontStyle* aMatchStyle,
+                                     gfxFontFamily** aMatchedFamily);
+
+    // search fonts system-wide for a given character, null otherwise
+    virtual gfxFontEntry* GlobalFontFallback(const uint32_t aCh,
+                                             int32_t aRunScript,
+                                             const gfxFontStyle* aMatchStyle,
+                                             uint32_t& aCmapCount,
+                                             gfxFontFamily** aMatchedFamily);
+
+    // whether system-based font fallback is used or not
+    // if system fallback is used, no need to load all cmaps
+    virtual bool UsesSystemFallback() { return false; }
 
     // separate initialization for reading in name tables, since this is expensive
     void InitOtherFamilyNames();
@@ -175,8 +242,15 @@ protected:
 
     // gfxFontInfoLoader overrides, used to load in font cmaps
     virtual void InitLoader();
-    virtual PRBool RunLoader();
+    virtual bool RunLoader();
     virtual void FinishLoader();
+
+    // used by memory reporter to accumulate sizes of family names in the hash
+    static size_t
+    SizeOfFamilyNameEntryExcludingThis(const nsAString&               aKey,
+                                       const nsRefPtr<gfxFontFamily>& aFamily,
+                                       nsMallocSizeOfFun              aMallocSizeOf,
+                                       void*                          aUserArg);
 
     // canonical family name ==> family entry (unique, one name per family entry)
     nsRefPtrHashtable<nsStringHashKey, gfxFontFamily> mFontFamilies;
@@ -186,13 +260,13 @@ protected:
     nsRefPtrHashtable<nsStringHashKey, gfxFontFamily> mOtherFamilyNames;
 
     // flag set after InitOtherFamilyNames is called upon first name lookup miss
-    PRPackedBool mOtherFamilyNamesInitialized;
+    bool mOtherFamilyNamesInitialized;
 
     // flag set after fullname and Postcript name lists are populated
-    PRPackedBool mFaceNamesInitialized;
+    bool mFaceNamesInitialized;
 
     // whether these are needed for a given platform
-    PRPackedBool mNeedFullnamePostscriptNames;
+    bool mNeedFullnamePostscriptNames;
 
     // fullname ==> font entry (unique, one name per font entry)
     nsRefPtrHashtable<nsStringHashKey, gfxFontEntry> mFullnames;
@@ -209,15 +283,19 @@ protected:
 
     // the family to use for U+FFFD fallback, to avoid expensive search every time
     // on pages with lots of problems
-    nsString mReplacementCharFallbackFamily;
+    nsRefPtr<gfxFontFamily> mReplacementCharFallbackFamily;
 
-    nsStringHashSet mBadUnderlineFamilyNames;
+    nsTHashtable<nsStringHashKey> mBadUnderlineFamilyNames;
+
+    // character map data shared across families
+    // contains weak ptrs to cmaps shared by font entry objects
+    nsTHashtable<CharMapHashKey> mSharedCmaps;
 
     // data used as part of the font cmap loading process
     nsTArray<nsRefPtr<gfxFontFamily> > mFontFamiliesToLoad;
-    PRUint32 mStartIndex;
-    PRUint32 mIncrement;
-    PRUint32 mNumFamilies;
+    uint32_t mStartIndex;
+    uint32_t mIncrement;
+    uint32_t mNumFamilies;
 };
 
 #endif /* GFXPLATFORMFONTLIST_H_ */

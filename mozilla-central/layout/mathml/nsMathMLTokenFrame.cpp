@@ -1,52 +1,17 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- * 
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- * 
- * The Original Code is Mozilla MathML Project.
- * 
- * The Initial Developer of the Original Code is
- * The University of Queensland.
- * Portions created by the Initial Developer are Copyright (C) 1999
- * the Initial Developer. All Rights Reserved.
- * 
- * Contributor(s): 
- *   Roger B. Sidje <rbs@maths.uq.edu.au>
- *   Karl Tomlinson <karlt+@karlt.net>, Mozilla Corporation
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsCOMPtr.h"
 #include "nsFrame.h"
 #include "nsPresContext.h"
 #include "nsStyleContext.h"
 #include "nsStyleConsts.h"
-#include "nsIRenderingContext.h"
-#include "nsIFontMetrics.h"
 #include "nsContentUtils.h"
 #include "nsCSSFrameConstructor.h"
 #include "nsMathMLTokenFrame.h"
+#include "nsTextFrame.h"
 
 nsIFrame*
 NS_NewMathMLTokenFrame(nsIPresShell* aPresShell, nsStyleContext* aContext)
@@ -60,6 +25,22 @@ nsMathMLTokenFrame::~nsMathMLTokenFrame()
 {
 }
 
+NS_IMETHODIMP
+nsMathMLTokenFrame::InheritAutomaticData(nsIFrame* aParent)
+{
+  // let the base class get the default from our parent
+  nsMathMLContainerFrame::InheritAutomaticData(aParent);
+
+  if (mContent->Tag() != nsGkAtoms::mspace_) {
+    // see if the directionality attribute is there
+    nsMathMLFrame::FindAttrDirectionality(mContent, mPresentationData);
+  }
+
+  ProcessTextData();
+
+  return NS_OK;
+}
+
 eMathMLFrameType
 nsMathMLTokenFrame::GetMathMLFrameType()
 {
@@ -69,15 +50,15 @@ nsMathMLTokenFrame::GetMathMLFrameType()
   }
 
   // for <mi>, distinguish between italic and upright...
-  // Don't use nsMathMLFrame::GetAttribute for mathvariant or fontstyle as
-  // default values are not inherited.
   nsAutoString style;
   // mathvariant overrides fontstyle
   // http://www.w3.org/TR/2003/REC-MathML2-20031021/chapter3.html#presm.deprecatt
   mContent->GetAttr(kNameSpaceID_None,
                     nsGkAtoms::_moz_math_fontstyle_, style) ||
-    mContent->GetAttr(kNameSpaceID_None, nsGkAtoms::mathvariant_, style) ||
-    mContent->GetAttr(kNameSpaceID_None, nsGkAtoms::fontstyle_, style);
+    GetAttribute(mContent, mPresentationData.mstyle, nsGkAtoms::mathvariant_,
+                 style) ||
+    GetAttribute(mContent, mPresentationData.mstyle, nsGkAtoms::fontstyle_,
+                 style);
 
   if (style.EqualsLiteral("italic") || style.EqualsLiteral("bold-italic") ||
       style.EqualsLiteral("script") || style.EqualsLiteral("bold-script") ||
@@ -87,7 +68,8 @@ nsMathMLTokenFrame::GetMathMLFrameType()
   }
   else if(style.EqualsLiteral("invariant")) {
     nsAutoString data;
-    nsContentUtils::GetNodeTextContent(mContent, PR_FALSE, data);
+    nsContentUtils::GetNodeTextContent(mContent, false, data);
+    data.CompressWhitespace();
     eMATHVARIANT variant = nsMathMLOperators::LookupInvariantChar(data);
 
     switch (variant) {
@@ -105,46 +87,59 @@ nsMathMLTokenFrame::GetMathMLFrameType()
   return eMathMLFrameType_UprightIdentifier;
 }
 
-static void
-CompressWhitespace(nsIContent* aContent)
+void
+nsMathMLTokenFrame::ForceTrimChildTextFrames()
 {
-  PRUint32 numKids = aContent->GetChildCount();
-  for (PRUint32 kid = 0; kid < numKids; kid++) {
-    nsIContent* cont = aContent->GetChildAt(kid);
-    if (cont && cont->IsNodeOfType(nsINode::eTEXT)) {
-      nsAutoString text;
-      cont->AppendTextTo(text);
-      text.CompressWhitespace();
-      cont->SetText(text, PR_FALSE); // not meant to be used if notify is needed
+  // Set flags on child text frames to force them to trim their leading and
+  // trailing whitespaces.
+  for (nsIFrame* childFrame = GetFirstPrincipalChild(); childFrame;
+       childFrame = childFrame->GetNextSibling()) {
+    if (childFrame->GetType() == nsGkAtoms::textFrame) {
+      childFrame->AddStateBits(TEXT_FORCE_TRIM_WHITESPACE);
     }
   }
 }
 
 NS_IMETHODIMP
-nsMathMLTokenFrame::Init(nsIContent*      aContent,
-                         nsIFrame*        aParent,
-                         nsIFrame*        aPrevInFlow)
-{
-  // leading and trailing whitespace doesn't count -- bug 15402
-  // brute force removal for people who do <mi> a </mi> instead of <mi>a</mi>
-  // XXX the best fix is to skip these in nsTextFrame
-  CompressWhitespace(aContent);
-
-  // let the base class do its Init()
-  return nsMathMLContainerFrame::Init(aContent, aParent, aPrevInFlow);
-}
-
-NS_IMETHODIMP
-nsMathMLTokenFrame::SetInitialChildList(nsIAtom*        aListName,
+nsMathMLTokenFrame::SetInitialChildList(ChildListID     aListID,
                                         nsFrameList&    aChildList)
 {
   // First, let the base class do its work
-  nsresult rv = nsMathMLContainerFrame::SetInitialChildList(aListName, aChildList);
+  nsresult rv = nsMathMLContainerFrame::SetInitialChildList(aListID, aChildList);
   if (NS_FAILED(rv))
     return rv;
 
-  SetQuotes(PR_FALSE);
+  ForceTrimChildTextFrames();
+
   ProcessTextData();
+  return rv;
+}
+
+NS_IMETHODIMP
+nsMathMLTokenFrame::AppendFrames(ChildListID aListID,
+                                 nsFrameList& aChildList)
+{
+  nsresult rv = nsMathMLContainerFrame::AppendFrames(aListID, aChildList);
+  if (NS_FAILED(rv))
+    return rv;
+
+  ForceTrimChildTextFrames();
+
+  return rv;
+}
+
+NS_IMETHODIMP
+nsMathMLTokenFrame::InsertFrames(ChildListID aListID,
+                                 nsIFrame* aPrevFrame,
+                                 nsFrameList& aChildList)
+{
+  nsresult rv = nsMathMLContainerFrame::InsertFrames(aListID, aPrevFrame,
+                                                     aChildList);
+  if (NS_FAILED(rv))
+    return rv;
+
+  ForceTrimChildTextFrames();
+
   return rv;
 }
 
@@ -159,10 +154,10 @@ nsMathMLTokenFrame::Reflow(nsPresContext*          aPresContext,
   // initializations needed for empty markup like <mtag></mtag>
   aDesiredSize.width = aDesiredSize.height = 0;
   aDesiredSize.ascent = 0;
-  aDesiredSize.mBoundingMetrics.Clear();
+  aDesiredSize.mBoundingMetrics = nsBoundingMetrics();
 
   nsSize availSize(aReflowState.ComputedWidth(), NS_UNCONSTRAINEDSIZE);
-  nsIFrame* childFrame = GetFirstChild(nsnull);
+  nsIFrame* childFrame = GetFirstPrincipalChild();
   while (childFrame) {
     // ask our children to compute their bounding metrics
     nsHTMLReflowMetrics childDesiredSize(aDesiredSize.mFlags
@@ -174,7 +169,7 @@ nsMathMLTokenFrame::Reflow(nsPresContext*          aPresContext,
     //NS_ASSERTION(NS_FRAME_IS_COMPLETE(aStatus), "bad status");
     if (NS_FAILED(rv)) {
       // Call DidReflow() for the child frames we successfully did reflow.
-      DidReflowChildren(GetFirstChild(nsnull), childFrame);
+      DidReflowChildren(GetFirstPrincipalChild(), childFrame);
       return rv;
     }
 
@@ -197,25 +192,24 @@ nsMathMLTokenFrame::Reflow(nsPresContext*          aPresContext,
 // pass, it is not computed here because our children may be text frames
 // that do not implement the GetBoundingMetrics() interface.
 /* virtual */ nsresult
-nsMathMLTokenFrame::Place(nsIRenderingContext& aRenderingContext,
-                          PRBool               aPlaceOrigin,
+nsMathMLTokenFrame::Place(nsRenderingContext& aRenderingContext,
+                          bool                 aPlaceOrigin,
                           nsHTMLReflowMetrics& aDesiredSize)
 {
-  mBoundingMetrics.Clear();
-  for (nsIFrame* childFrame = GetFirstChild(nsnull); childFrame;
+  mBoundingMetrics = nsBoundingMetrics();
+  for (nsIFrame* childFrame = GetFirstPrincipalChild(); childFrame;
        childFrame = childFrame->GetNextSibling()) {
     nsHTMLReflowMetrics childSize;
     GetReflowAndBoundingMetricsFor(childFrame, childSize,
-                                   childSize.mBoundingMetrics, nsnull);
+                                   childSize.mBoundingMetrics, nullptr);
     // compute and cache the bounding metrics
     mBoundingMetrics += childSize.mBoundingMetrics;
   }
 
-  nsCOMPtr<nsIFontMetrics> fm =
-    PresContext()->GetMetricsFor(GetStyleFont()->mFont);
-  nscoord ascent, descent;
-  fm->GetMaxAscent(ascent);
-  fm->GetMaxDescent(descent);
+  nsRefPtr<nsFontMetrics> fm;
+  nsLayoutUtils::GetFontMetricsForFrame(this, getter_AddRefs(fm));
+  nscoord ascent = fm->MaxAscent();
+  nscoord descent = fm->MaxDescent();
 
   aDesiredSize.mBoundingMetrics = mBoundingMetrics;
   aDesiredSize.width = mBoundingMetrics.width;
@@ -225,7 +219,7 @@ nsMathMLTokenFrame::Place(nsIRenderingContext& aRenderingContext,
 
   if (aPlaceOrigin) {
     nscoord dy, dx = 0;
-    for (nsIFrame* childFrame = GetFirstChild(nsnull); childFrame;
+    for (nsIFrame* childFrame = GetFirstPrincipalChild(); childFrame;
          childFrame = childFrame->GetNextSibling()) {
       nsHTMLReflowMetrics childSize;
       GetReflowAndBoundingMetricsFor(childFrame, childSize,
@@ -233,7 +227,7 @@ nsMathMLTokenFrame::Place(nsIRenderingContext& aRenderingContext,
 
       // place and size the child; (dx,0) makes the caret happy - bug 188146
       dy = childSize.height == 0 ? 0 : aDesiredSize.ascent - childSize.ascent;
-      FinishReflowChild(childFrame, PresContext(), nsnull, childSize, dx, dy, 0);
+      FinishReflowChild(childFrame, PresContext(), nullptr, childSize, dx, dy, 0);
       dx += childSize.width;
     }
   }
@@ -253,20 +247,6 @@ nsMathMLTokenFrame::MarkIntrinsicWidthsDirty()
   nsMathMLContainerFrame::MarkIntrinsicWidthsDirty();
 }
 
-NS_IMETHODIMP
-nsMathMLTokenFrame::AttributeChanged(PRInt32         aNameSpaceID,
-                                     nsIAtom*        aAttribute,
-                                     PRInt32         aModType)
-{
-  if (nsGkAtoms::lquote_ == aAttribute ||
-      nsGkAtoms::rquote_ == aAttribute) {
-    SetQuotes(PR_TRUE);
-  }
-
-  return nsMathMLContainerFrame::
-         AttributeChanged(aNameSpaceID, aAttribute, aModType);
-}
-
 void
 nsMathMLTokenFrame::ProcessTextData()
 {
@@ -282,7 +262,7 @@ nsMathMLTokenFrame::ProcessTextData()
 ///////////////////////////////////////////////////////////////////////////
 // For <mi>, if the content is not a single character, turn the font to
 // normal (this function will also query attributes from the mstyle hierarchy)
-// Returns PR_TRUE if there is a style change.
+// Returns true if there is a style change.
 //
 // http://www.w3.org/TR/2003/REC-MathML2-20031021/chapter3.html#presm.commatt
 //
@@ -306,24 +286,25 @@ nsMathMLTokenFrame::ProcessTextData()
 //   (non-slanted) for all tokens except mi. ... (The deprecated fontslant
 //   attribute also behaves this way.)"
 
-PRBool
+bool
 nsMathMLTokenFrame::SetTextStyle()
 {
   if (mContent->Tag() != nsGkAtoms::mi_)
-    return PR_FALSE;
+    return false;
 
   if (!mFrames.FirstChild())
-    return PR_FALSE;
+    return false;
 
   // Get the text content that we enclose and its length
   nsAutoString data;
-  nsContentUtils::GetNodeTextContent(mContent, PR_FALSE, data);
-  PRInt32 length = data.Length();
+  nsContentUtils::GetNodeTextContent(mContent, false, data);
+  data.CompressWhitespace();
+  int32_t length = data.Length();
   if (!length)
-    return PR_FALSE;
+    return false;
 
   nsAutoString fontstyle;
-  PRBool isSingleCharacter =
+  bool isSingleCharacter =
     length == 1 ||
     (length == 2 && NS_IS_HIGH_SURROGATE(data[0]));
   if (isSingleCharacter &&
@@ -333,8 +314,11 @@ nsMathMLTokenFrame::SetTextStyle()
   }
   else {
     // Attributes override the default behavior.
-    if (!(mContent->HasAttr(kNameSpaceID_None, nsGkAtoms::mathvariant_) ||
-          mContent->HasAttr(kNameSpaceID_None, nsGkAtoms::fontstyle_))) {
+    nsAutoString value;
+    if (!(GetAttribute(mContent, mPresentationData.mstyle,
+                       nsGkAtoms::mathvariant_, value) ||
+          GetAttribute(mContent, mPresentationData.mstyle,
+                       nsGkAtoms::fontstyle_, value))) {
       if (!isSingleCharacter) {
         fontstyle.AssignLiteral("normal");
       }
@@ -356,69 +340,17 @@ nsMathMLTokenFrame::SetTextStyle()
   if (fontstyle.IsEmpty()) {
     if (mContent->HasAttr(kNameSpaceID_None, nsGkAtoms::_moz_math_fontstyle_)) {
       mContent->UnsetAttr(kNameSpaceID_None, nsGkAtoms::_moz_math_fontstyle_,
-                          PR_FALSE);
-      return PR_TRUE;
+                          false);
+      return true;
     }
   }
   else if (!mContent->AttrValueIs(kNameSpaceID_None,
                                   nsGkAtoms::_moz_math_fontstyle_,
                                   fontstyle, eCaseMatters)) {
     mContent->SetAttr(kNameSpaceID_None, nsGkAtoms::_moz_math_fontstyle_,
-                      fontstyle, PR_FALSE);
-    return PR_TRUE;
+                      fontstyle, false);
+    return true;
   }
 
-  return PR_FALSE;
-}
-
-///////////////////////////////////////////////////////////////////////////
-// For <ms>, it is assumed that the mathml.css file contains two rules:
-// ms:before { content: open-quote; }
-// ms:after { content: close-quote; }
-// With these two rules, the frame construction code will
-// create inline frames that contain text frames which themselves
-// contain the text content of the quotes.
-// So the main idea in this code is to see if there are lquote and 
-// rquote attributes. If these are there, we ovewrite the default
-// quotes in the text frames.
-// XXX this is somewhat bogus, we probably should map lquote and rquote
-// to 'content' style rules
-//
-// But what if the mathml.css file wasn't loaded? 
-// We also check that we are not relying on null pointers...
-
-static void
-SetQuote(nsIFrame* aFrame, nsString& aValue, PRBool aNotify)
-{
-  if (!aFrame)
-    return;
-
-  nsIFrame* textFrame = aFrame->GetFirstChild(nsnull);
-  if (!textFrame)
-    return;
-
-  nsIContent* quoteContent = textFrame->GetContent();
-  if (!quoteContent->IsNodeOfType(nsINode::eTEXT))
-    return;
-
-  quoteContent->SetText(aValue, aNotify);
-}
-
-void
-nsMathMLTokenFrame::SetQuotes(PRBool aNotify)
-{
-  if (mContent->Tag() != nsGkAtoms::ms_)
-    return;
-
-  nsAutoString value;
-  // lquote
-  if (GetAttribute(mContent, mPresentationData.mstyle,
-                   nsGkAtoms::lquote_, value)) {
-    SetQuote(nsLayoutUtils::GetBeforeFrame(this), value, aNotify);
-  }
-  // rquote
-  if (GetAttribute(mContent, mPresentationData.mstyle,
-                   nsGkAtoms::rquote_, value)) {
-    SetQuote(nsLayoutUtils::GetAfterFrame(this), value, aNotify);
-  }
+  return false;
 }

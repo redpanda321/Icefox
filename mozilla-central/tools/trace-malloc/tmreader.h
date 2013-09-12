@@ -1,51 +1,18 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is tmreader.h/tmreader.c code, released
- * July 7, 2000.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Brendan Eich, 7-July-2000
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef tmreader_h___
 #define tmreader_h___
 
-#include "prtypes.h"
 #include "plhash.h"
 #include "nsTraceMalloc.h"
 #include "plarena.h"
 
-PR_BEGIN_EXTERN_C
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct tmreader     tmreader;
 typedef struct tmevent      tmevent;
@@ -59,41 +26,41 @@ typedef struct tmmethodnode tmmethodnode;
 
 struct tmevent {
     char            type;
-    uint32          serial;
+    uint32_t        serial;
     union {
         char        *libname;
         char        *srcname;
         struct {
-            uint32  library;
-            uint32  filename;
-            uint32  linenumber;
-            char    *name;
+            uint32_t  library;
+            uint32_t  filename;
+            uint32_t  linenumber;
+            char      *name;
         } method;
         struct {
-            uint32  parent;
-            uint32  method;
-            uint32  offset;
+            uint32_t  parent;
+            uint32_t  method;
+            uint32_t  offset;
         } site;
         struct {
-            uint32  interval; /* in ticks */
-            uint32  ptr;
-            uint32  size;
-            uint32  oldserial;
-            uint32  oldptr;
-            uint32  oldsize;
-            uint32  cost;     /* in ticks */
+            uint32_t  interval; /* in ticks */
+            uint32_t  ptr;
+            uint32_t  size;
+            uint32_t  oldserial;
+            uint32_t  oldptr;
+            uint32_t  oldsize;
+            uint32_t  cost;     /* in ticks */
         } alloc;
         struct {
             nsTMStats tmstats;
-            uint32  calltree_maxkids_parent;
-            uint32  calltree_maxstack_top;
+            uint32_t  calltree_maxkids_parent;
+            uint32_t  calltree_maxstack_top;
         } stats;
     } u;
 };
 
 struct tmcounts {
-    uint32          direct;     /* things allocated by this node's code */
-    uint32          total;      /* direct + things from all descendents */
+    uint32_t          direct;     /* things allocated by this node's code */
+    uint32_t          total;      /* direct + things from all descendents */
 };
 
 struct tmallcounts {
@@ -118,13 +85,13 @@ struct tmgraphnode {
 struct tmmethodnode {
     tmgraphnode   graphnode;
     char          *sourcefile;
-    uint32        linenumber;
+    uint32_t      linenumber;
 };
 
 #define tmgraphnode_name(node)  ((char*) (node)->entry.value)
 #define tmmethodnode_name(node)  ((char*) (node)->graphnode.entry.value)
 
-#define tmlibrary_serial(lib)   ((uint32) (lib)->entry.key)
+#define tmlibrary_serial(lib)   ((uint32_t) (lib)->entry.key)
 #define tmcomponent_name(comp)  ((const char*) (comp)->entry.key)
 #define filename_name(hashentry) ((char*)hashentry->value)
 
@@ -158,7 +125,7 @@ struct tmcallsite {
     tmcallsite      *siblings;  /* other sites reached from parent */
     tmcallsite      *kids;      /* sites reached from here */
     tmmethodnode    *method;    /* method node in tmr->methods graph */
-    uint32          offset;     /* pc offset from start of method */
+    uint32_t        offset;     /* pc offset from start of method */
     tmallcounts     allocs;
     tmallcounts     frees;
     void            *data;      /* tmreader clients can stick arbitrary
@@ -176,7 +143,7 @@ struct tmreader {
     PLHashTable     *callsites;
     PLArenaPool     arena;
     tmcallsite      calltree_root;
-    uint32          ticksPerSec;
+    uint32_t        ticksPerSec;
 };
 
 typedef void (*tmeventhandler)(tmreader *tmr, tmevent *event);
@@ -193,11 +160,11 @@ extern int          tmreader_eventloop(tmreader *tmr, const char *filename,
                                        tmeventhandler eventhandler);
 
 /* Map serial number or name to graphnode or callsite. */
-extern tmgraphnode  *tmreader_library(tmreader *tmr, uint32 serial);
-extern tmgraphnode  *tmreader_filename(tmreader *tmr, uint32 serial);
+extern tmgraphnode  *tmreader_library(tmreader *tmr, uint32_t serial);
+extern tmgraphnode  *tmreader_filename(tmreader *tmr, uint32_t serial);
 extern tmgraphnode  *tmreader_component(tmreader *tmr, const char *name);
-extern tmmethodnode  *tmreader_method(tmreader *tmr, uint32 serial);
-extern tmcallsite   *tmreader_callsite(tmreader *tmr, uint32 serial);
+extern tmmethodnode  *tmreader_method(tmreader *tmr, uint32_t serial);
+extern tmcallsite   *tmreader_callsite(tmreader *tmr, uint32_t serial);
 
 /*
  * Connect node 'from' to node 'to' with an edge, if there isn't one already
@@ -217,6 +184,8 @@ extern tmcallsite   *tmreader_callsite(tmreader *tmr, uint32 serial);
 extern int tmgraphnode_connect(tmgraphnode *from, tmgraphnode *to,
                                tmcallsite *site);
 
-PR_END_EXTERN_C
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* tmreader_h___ */

@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license 
+ *  Use of this source code is governed by a BSD-style license
  *  that can be found in the LICENSE file in the root of the source
  *  tree. An additional intellectual property rights grant can be found
- *  in the file PATENTS.  All contributing project authors may 
+ *  in the file PATENTS.  All contributing project authors may
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
@@ -18,12 +18,13 @@
 extern "C"
 {
 #endif
-#include "type_aliases.h"
 #include "vpx_scale/yv12config.h"
 #include "ppflags.h"
 #include "vpx_ports/mem.h"
+#include "vpx/vpx_codec.h"
 
-    typedef void   *VP8D_PTR;
+    struct VP8D_COMP;
+
     typedef struct
     {
         int     Width;
@@ -31,6 +32,8 @@ extern "C"
         int     Version;
         int     postprocess;
         int     max_threads;
+        int     error_concealment;
+        int     input_fragments;
     } VP8D_CONFIG;
     typedef enum
     {
@@ -46,19 +49,19 @@ extern "C"
 
     void vp8dx_initialize(void);
 
-    void vp8dx_set_setting(VP8D_PTR comp, VP8D_SETTING oxst, int x);
+    void vp8dx_set_setting(struct VP8D_COMP* comp, VP8D_SETTING oxst, int x);
 
-    int vp8dx_get_setting(VP8D_PTR comp, VP8D_SETTING oxst);
+    int vp8dx_get_setting(struct VP8D_COMP* comp, VP8D_SETTING oxst);
 
-    int vp8dx_receive_compressed_data(VP8D_PTR comp, unsigned long size, const unsigned char *dest, INT64 time_stamp);
-    int vp8dx_get_raw_frame(VP8D_PTR comp, YV12_BUFFER_CONFIG *sd, INT64 *time_stamp, INT64 *time_end_stamp, int deblock_level,  int noise_level, int flags);
+    int vp8dx_receive_compressed_data(struct VP8D_COMP* comp, unsigned long size, const unsigned char *dest, int64_t time_stamp);
+    int vp8dx_get_raw_frame(struct VP8D_COMP* comp, YV12_BUFFER_CONFIG *sd, int64_t *time_stamp, int64_t *time_end_stamp, vp8_ppflags_t *flags);
 
-    int vp8dx_get_reference(VP8D_PTR comp, VP8_REFFRAME ref_frame_flag, YV12_BUFFER_CONFIG *sd);
-    int vp8dx_set_reference(VP8D_PTR comp, VP8_REFFRAME ref_frame_flag, YV12_BUFFER_CONFIG *sd);
+    vpx_codec_err_t vp8dx_get_reference(struct VP8D_COMP* comp, VP8_REFFRAME ref_frame_flag, YV12_BUFFER_CONFIG *sd);
+    vpx_codec_err_t vp8dx_set_reference(struct VP8D_COMP* comp, VP8_REFFRAME ref_frame_flag, YV12_BUFFER_CONFIG *sd);
 
-    VP8D_PTR vp8dx_create_decompressor(VP8D_CONFIG *oxcf);
+    struct VP8D_COMP* vp8dx_create_decompressor(VP8D_CONFIG *oxcf);
 
-    void vp8dx_remove_decompressor(VP8D_PTR comp);
+    void vp8dx_remove_decompressor(struct VP8D_COMP* comp);
 
 #ifdef __cplusplus
 }

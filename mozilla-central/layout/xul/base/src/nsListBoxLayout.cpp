@@ -1,46 +1,11 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   David W. Hyatt (hyatt@netscape.com) (Original Author)
- *   Joe Hewitt (hewitt@netscape.com)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsListBoxLayout.h"
 
 #include "nsListBoxBodyFrame.h"
-#include "nsIFrame.h"
 #include "nsBox.h"
 #include "nsBoxLayoutState.h"
 #include "nsIScrollableFrame.h"
@@ -53,10 +18,10 @@ nsListBoxLayout::nsListBoxLayout() : nsGridRowGroupLayout()
 {
 }
 
-////////// nsIBoxLayout //////////////
+////////// nsBoxLayout //////////////
 
 nsSize
-nsListBoxLayout::GetPrefSize(nsIBox* aBox, nsBoxLayoutState& aBoxLayoutState)
+nsListBoxLayout::GetPrefSize(nsIFrame* aBox, nsBoxLayoutState& aBoxLayoutState)
 {
   nsSize pref = nsGridRowGroupLayout::GetPrefSize(aBox, aBoxLayoutState);
 
@@ -82,7 +47,7 @@ nsListBoxLayout::GetPrefSize(nsIBox* aBox, nsBoxLayoutState& aBoxLayoutState)
 }
 
 nsSize
-nsListBoxLayout::GetMinSize(nsIBox* aBox, nsBoxLayoutState& aBoxLayoutState)
+nsListBoxLayout::GetMinSize(nsIFrame* aBox, nsBoxLayoutState& aBoxLayoutState)
 {
   nsSize minSize = nsGridRowGroupLayout::GetMinSize(aBox, aBoxLayoutState);
 
@@ -108,7 +73,7 @@ nsListBoxLayout::GetMinSize(nsIBox* aBox, nsBoxLayoutState& aBoxLayoutState)
 }
 
 nsSize
-nsListBoxLayout::GetMaxSize(nsIBox* aBox, nsBoxLayoutState& aBoxLayoutState)
+nsListBoxLayout::GetMaxSize(nsIFrame* aBox, nsBoxLayoutState& aBoxLayoutState)
 {
   nsSize maxSize = nsGridRowGroupLayout::GetMaxSize(aBox, aBoxLayoutState);
 
@@ -128,7 +93,7 @@ nsListBoxLayout::GetMaxSize(nsIBox* aBox, nsBoxLayoutState& aBoxLayoutState)
 }
 
 NS_IMETHODIMP
-nsListBoxLayout::Layout(nsIBox* aBox, nsBoxLayoutState& aState)
+nsListBoxLayout::Layout(nsIFrame* aBox, nsBoxLayoutState& aState)
 {
   return LayoutInternal(aBox, aState);
 }
@@ -140,9 +105,9 @@ nsListBoxLayout::Layout(nsIBox* aBox, nsBoxLayoutState& aState)
  * Called to layout our our children. Does no frame construction
  */
 NS_IMETHODIMP
-nsListBoxLayout::LayoutInternal(nsIBox* aBox, nsBoxLayoutState& aState)
+nsListBoxLayout::LayoutInternal(nsIFrame* aBox, nsBoxLayoutState& aState)
 {
-  PRInt32 redrawStart = -1;
+  int32_t redrawStart = -1;
 
   // Get the start y position.
   nsListBoxBodyFrame* body = static_cast<nsListBoxBodyFrame*>(aBox);
@@ -163,7 +128,7 @@ nsListBoxLayout::LayoutInternal(nsIBox* aBox, nsBoxLayoutState& aState)
   nscoord yOffset = body->GetYPosition();
   
   if (availableHeight <= 0) {
-    PRBool fixed = (body->GetFixedRowSize() != -1);
+    bool fixed = (body->GetFixedRowSize() != -1);
     if (fixed)
       availableHeight = 10;
     else
@@ -171,7 +136,7 @@ nsListBoxLayout::LayoutInternal(nsIBox* aBox, nsBoxLayoutState& aState)
   }
 
   // run through all our currently created children
-  nsIBox* box = body->GetChildBox();
+  nsIFrame* box = body->GetChildBox();
 
   // if the reason is resize or initial we must relayout.
   nscoord rowHeight = body->GetRowHeightAppUnits();
@@ -201,7 +166,7 @@ nsListBoxLayout::LayoutInternal(nsIBox* aBox, nsBoxLayoutState& aState)
     } else {
       // if the child did not need to be relayed out. Then its easy.
       // Place the child by just grabbing its rect and adjusting the y.
-      PRInt32 newPos = yOffset+margin.top;
+      int32_t newPos = yOffset+margin.top;
 
       // are we pushing down or pulling up any rows?
       // Then we may have to redraw everything below the moved 
@@ -232,9 +197,7 @@ nsListBoxLayout::LayoutInternal(nsIBox* aBox, nsBoxLayoutState& aState)
   // before them then redraw everything under the inserted rows. The inserted
   // rows will automatically be redrawn because the were marked dirty on insertion.
   if (redrawStart > -1) {
-    nsRect bounds(aBox->GetRect());
-    nsRect tempRect(0,redrawStart,bounds.width, bounds.height - redrawStart);
-    aBox->Redraw(aState, &tempRect);
+    aBox->Redraw(aState);
   }
 
   return NS_OK;
@@ -242,9 +205,9 @@ nsListBoxLayout::LayoutInternal(nsIBox* aBox, nsBoxLayoutState& aState)
 
 // Creation Routines ///////////////////////////////////////////////////////////////////////
 
-already_AddRefed<nsIBoxLayout> NS_NewListBoxLayout()
+already_AddRefed<nsBoxLayout> NS_NewListBoxLayout()
 {
-  nsIBoxLayout* layout = new nsListBoxLayout();
+  nsBoxLayout* layout = new nsListBoxLayout();
   NS_IF_ADDREF(layout);
   return layout;
 } 

@@ -5,7 +5,6 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=143220
 -->
 <head>
   <title>Test for Bug 143220</title>
-  <script type="text/javascript" src="/MochiKit/packed.js"></script>
   <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
   <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
 </head>
@@ -25,11 +24,11 @@ https://bugzilla.mozilla.org/show_bug.cgi?id=143220
 var leafName;
 var fullPath;
 
+
 function initVals() {
-  netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-  var dirSvc = Components.classes["@mozilla.org/file/directory_service;1"]
-                         .getService(Components.interfaces.nsIProperties);
-  var file = dirSvc.get("XpcomLib", Components.interfaces.nsILocalFile);
+  var dirSvc = SpecialPowers.Cc["@mozilla.org/file/directory_service;1"]
+                            .getService(SpecialPowers.Ci.nsIProperties);
+  var file = dirSvc.get("XpcomLib", SpecialPowers.Ci.nsILocalFile);
   isnot(file, null, "Must have file here");
 
   leafName = file.leafName;
@@ -37,15 +36,13 @@ function initVals() {
 }
 
 function initControl1() {
-  netscape.security.PrivilegeManager.enablePrivilege("UniversalFileRead");
-  $("i1").value = fullPath;
-  is($("i1").value, fullPath, "Should have set full path 1");
+  SpecialPowers.wrap($("i1")).value = fullPath;
+  is(SpecialPowers.wrap($("i1")).value, fullPath, "Should have set full path 1");
 }
 
 function initControl2() {
-  netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-  $("i2").value = fullPath;
-  is($("i2").value, fullPath, "Should have set full path 2");
+  SpecialPowers.wrap($("i2")).value = fullPath;
+  is(SpecialPowers.wrap($("i2")).value, fullPath, "Should have set full path 2");
 }
 
 initVals();

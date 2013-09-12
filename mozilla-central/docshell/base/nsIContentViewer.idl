@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 #include "nsISupports.idl"
 
 interface nsIDOMDocument;
@@ -9,13 +13,21 @@ interface nsIPrintSettings;
 class nsIWidget;
 class nsIDocument;
 struct nsIntRect;
+class nsIPresShell;
+class nsPresContext;
+class nsIView;
+class nsDOMNavigationTiming;
 %}
 
 [ptr] native nsIWidgetPtr(nsIWidget);
 [ptr] native nsIDocumentPtr(nsIDocument);
 [ref] native nsIntRectRef(nsIntRect);
+[ptr] native nsIPresShellPtr(nsIPresShell);
+[ptr] native nsPresContextPtr(nsPresContext);
+[ptr] native nsIViewPtr(nsIView);
+[ptr] native nsDOMNavigationTimingPtr(nsDOMNavigationTiming);
 
-[scriptable, uuid(e2e5dd7d-8140-4fc5-b2c3-3a3b4f946fc7)]
+[scriptable, builtinclass, uuid(b9d92b8b-5623-4079-ae11-36bb341f322e)]
 interface nsIContentViewer : nsISupports
 {
 
@@ -25,7 +37,7 @@ interface nsIContentViewer : nsISupports
   attribute nsISupports container;
 
   void loadStart(in nsISupports aDoc);
-  void loadComplete(in unsigned long aStatus);
+  void loadComplete(in nsresult aStatus);
 
   /**
    * Checks if the document wants to prevent unloading by firing beforeunload on
@@ -122,15 +134,46 @@ interface nsIContentViewer : nsISupports
    */
   void clearHistoryEntry();
 
-  /*
+  /**
    * Change the layout to view the document with page layout (like print preview), but
    * dynamic and editable (like Galley layout).
-  */
-  void setPageMode(in PRBool aPageMode, in nsIPrintSettings aPrintSettings);
+   */
+  void setPageMode(in boolean aPageMode, in nsIPrintSettings aPrintSettings);
 
   /**
    * Get the history entry that this viewer will save itself into when
    * destroyed.  Can return null
    */
   readonly attribute nsISHEntry historyEntry;
+
+  /**
+   * Indicates when we're in a state where content shouldn't be allowed to
+   * trigger a tab-modal prompt (as opposed to a window-modal prompt) because
+   * we're part way through some operation (eg beforeunload) that shouldn't be
+   * rentrant if the user closes the tab while the prompt is showing.
+   * See bug 613800.
+   */
+  readonly attribute boolean isTabModalPromptAllowed;
+
+  /**
+   * Returns whether this content viewer is in a hidden state.
+   */
+  readonly attribute boolean isHidden;
+
+  [noscript] readonly attribute nsIPresShellPtr presShell;
+  [noscript] readonly attribute nsPresContextPtr presContext;
+  // aDocument must not be null.
+  [noscript] void setDocumentInternal(in nsIDocumentPtr aDocument,
+                                      in boolean aForceReuseInnerWindow);
+  /**
+   * Find the view to use as the container view for MakeWindow. Returns
+   * null if this will be the root of a view manager hierarchy. In that
+   * case, if mParentWidget is null then this document should not even
+   * be displayed.
+   */
+  [noscript,notxpcom,nostdcall] nsIViewPtr findContainerView();
+  /**
+   * Set collector for navigation timing data (load, unload events).
+   */
+  [noscript,notxpcom,nostdcall] void setNavigationTiming(in nsDOMNavigationTimingPtr aTiming);
 };
