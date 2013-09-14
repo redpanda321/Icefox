@@ -1,8 +1,8 @@
- port firefox to ios4 device
+ port firefox to ios6 device
 
 1,require
 
-  xcode ( only  iPhoneOS4.0.sdk can run! be careful !)
+  xcode 4.6.3 (   IOS6.1 sdk )  (device test without license  : http://www.solomoz.com/topics/8)
 
 
 2 get source code
@@ -14,32 +14,33 @@
 
    chmod -R a+x /Icefox/mozilla-central
    cd /Icefox/mozilla-central
-   cp ./build/iphone-simulator-mozconfig .mozconfig
-   make -f client.mk build
-   cd ../iphone-simulator-debug
+   cp ./mozconfig-simulator-opt-sdk6.1 .mozconfig
+   ./mach build
+   cd ../obj-iPhoneSimulator-opt-6.1
    make package
-   iphonesim launch /Icefox/iphone-simulator-debug/dist/firefox/TumucumaqueDebug.app
+   waxsim  /Applications/Fennec.app
    
 
 
-4,for  device 
+4,for  device (need sign,use sign-debug)
 
    chmod -R a+x /Icefox/mozilla-central
    cd /Icefox/mozilla-central
-   cp ./build/iphone-device-mozconfig .mozconfig
-   make -f client.mk build
-   cd ../iphone-device-debug
+   cp ./mozconfig-device-opt-sdk6.1 .mozconfig
+   ./mach build
+   cd ../obj-iPhoneOS-opt-6.1
    make package
-   gdb  /Icefox/iphone-device-debug/dist/firefox/TumucumaqueDebug.app
+   gdb  /Applications/Fennec.app
    gdb run
    
 
 5, todo
 
-    support IOS 5.0  device
+    support IOS 7.0  device
 
 6, contact me
 
     msn : redpanda321@hotmail.com
-
+    qq : 12070132@qq.com
+    weixin: tony888000
   
