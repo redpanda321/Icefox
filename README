@@ -1,16 +1,16 @@
- port firefox to ios6 device
+ Port firefox to ios6 device
 
-1.require
+1.Requirement
 
   xcode 4.6.3 (   IOS6.1 sdk )  (device test without license  )
 
 
-2.get source code
+2.Get source code
 
   git clone  git://github.com/redpanda321/Icefox.git
   
 
-3.for simulator 
+3.For simulator 
 
    chmod -R a+x /Icefox/mozilla-central
    cd /Icefox/mozilla-central
@@ -22,7 +22,7 @@
    
 
 
-4.for  device (need sign,use sign-debug)
+4.For  device (need sign,use sign-debug)
 
    chmod -R a+x /Icefox/mozilla-central
    cd /Icefox/mozilla-central
@@ -34,11 +34,11 @@
    gdb run
    
 
-5. todo
+5. Todo
 
     support IOS 7.0  device
 
-6. contact me
+6. Contact me
 
     msn : redpanda321@hotmail.com
     qq : 12070132@qq.com
